@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { chatTools, type AppUIMessage, type AppTools } from '@shared/chatAi';
 import { cleanAssistantText, getParametricText } from '@shared/parametricParts';
@@ -326,16 +327,18 @@ function jsonResponse(body: unknown, status: number) {
 const THINKING_BUDGET_TOKENS = 9000;
 const PARAMETRIC_MAX_OUTPUT_TOKENS = 64000;
 
-type ChatProvider = 'anthropic' | 'google' | 'openrouter';
+type ChatProvider = 'anthropic' | 'google' | 'openrouter' | 'local';
 
 function providerFor(modelId: string): ChatProvider {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('google/')) return 'google';
+  if (modelId.startsWith('local/')) return 'local';
   return 'openrouter';
 }
 
 type AnthropicProvider = ReturnType<typeof createAnthropic>;
 type GoogleProvider = ReturnType<typeof createGoogleGenerativeAI>;
+type LocalProvider = ReturnType<typeof createOpenAICompatible>;
 
 // The Vercel AI SDK's Anthropic provider expects ANTHROPIC_BASE_URL to already
 // include the "/v1" path segment (its built-in default is
@@ -355,12 +358,14 @@ type ChatProviders = {
   anthropic: () => AnthropicProvider;
   google: () => GoogleProvider;
   openrouter: () => ReturnType<typeof createOpenRouter>;
+  local: () => LocalProvider;
 };
 
 function createChatProviders(): ChatProviders {
   let anthropic: AnthropicProvider | undefined;
   let google: GoogleProvider | undefined;
   let openrouter: ReturnType<typeof createOpenRouter> | undefined;
+  let local: LocalProvider | undefined;
   return {
     anthropic: () => {
       if (!anthropic) {
@@ -383,6 +388,14 @@ function createChatProviders(): ChatProviders {
         apiKey: requiredEnv('OPENROUTER_API_KEY'),
       });
       return openrouter;
+    },
+    local: () => {
+      local ??= createOpenAICompatible({
+        name: 'local',
+        baseURL: env('LOCAL_LLM_BASE_URL') || 'http://localhost:11434/v1',
+        apiKey: env('LOCAL_LLM_API_KEY') || 'ollama',
+      });
+      return local;
     },
   };
 }
@@ -454,6 +467,22 @@ function buildChatModel(
           },
         },
       },
+    };
+  }
+
+  if (modelId.startsWith('local/')) {
+    const id = modelId.slice('local/'.length);
+    return {
+      model: providers.local()(id),
+      providerOptions: thinking
+        ? {
+            openai: {
+              ...(hasCappedThinkingBudget
+                ? { reasoning: { max_tokens: thinkingBudget } }
+                : {}),
+            },
+          }
+        : undefined,
     };
   }
 

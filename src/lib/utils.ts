@@ -318,6 +318,54 @@ export const PARAMETRIC_MODELS: ModelConfig[] = [
     supportsThinking: true,
     supportsVision: false,
   },
+  {
+    id: 'local/qwen-coder-96k',
+    name: 'Qwen 3 Coder 30B 96k (Local)',
+    description:
+      'Qwen3-Coder-30B via llama-swap/llama.cpp — 96k context, flash-attn, full GPU',
+    provider: 'Local',
+    supportsTools: true,
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    id: 'local/qwen-coder-128k',
+    name: 'Qwen 3 Coder 30B 128k (Local)',
+    description:
+      'Qwen3-Coder-30B via llama-swap/llama.cpp — 128k context, flash-attn',
+    provider: 'Local',
+    supportsTools: true,
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    id: 'local/qwen-coder-262k',
+    name: 'Qwen 3 Coder 30B 262k (Local)',
+    description:
+      'Qwen3-Coder-30B via llama-swap/llama.cpp — 262k context, fewer GPU layers',
+    provider: 'Local',
+    supportsTools: true,
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    id: 'local/ollama-qwen3-coder',
+    name: 'Qwen 3 Coder 30B (Ollama)',
+    description: 'Qwen3-Coder-30B from Ollama — 32k context, full GPU',
+    provider: 'Local',
+    supportsTools: true,
+    supportsThinking: true,
+    supportsVision: false,
+  },
+  {
+    id: 'local/ollama-devstral',
+    name: 'Devstral Small 2 24B (Ollama)',
+    description: 'Devstral-Small-2-24B from Ollama — 32k context, full GPU',
+    provider: 'Local',
+    supportsTools: true,
+    supportsThinking: true,
+    supportsVision: false,
+  },
 ];
 
 export const CREATIVE_MODELS: ModelConfig[] = [

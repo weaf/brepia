@@ -50,7 +50,14 @@ export function ssoClaims(user: User | null) {
 // Fallback values keep the client constructable so imports don't throw
 // when env vars are missing. The app should gate on isSupabaseConfigMissing
 // and avoid making real requests in this state.
-const supabaseUrl = rawSupabaseUrl || 'http://localhost';
 const supabaseKey = rawSupabaseKey || 'public-anon-key';
+
+// Use the current page origin so Supabase requests go to the same host the
+// app is served from — works with Cloudflare Tunnel, localhost, etc.
+// Falls back to the env var (http://localhost:18000 for server-side use).
+const supabaseUrl =
+  typeof window !== 'undefined'
+    ? window.location.origin
+    : rawSupabaseUrl || 'http://localhost';
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey);

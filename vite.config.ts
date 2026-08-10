@@ -2,12 +2,79 @@ import { sentryVitePlugin } from '@sentry/vite-plugin';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { nitro } from 'nitro/vite';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
 const appBase = '/cadam';
 const normalizedAppBase = appBase.replace(/\/$/, '');
+
+function supabaseProxyPlugin(): Plugin {
+  return {
+    name: 'supabase-proxy',
+    configureServer(server) {
+      const agent = new http.Agent({ keepAlive: true });
+      server.middlewares.use((req, res, next) => {
+        if (!req.url) return next();
+        if (
+          !req.url.startsWith('/auth') &&
+          !req.url.startsWith('/rest') &&
+          !req.url.startsWith('/storage')
+        ) {
+          return next();
+        }
+
+        const targetPath = req.url;
+        const bodyChunks: Buffer[] = [];
+        req.on('data', (chunk) => bodyChunks.push(chunk));
+        req.on('end', () => {
+          const body = Buffer.concat(bodyChunks);
+          const options = {
+            hostname: 'localhost',
+            port: 18000,
+            path: targetPath,
+            method: req.method,
+            headers: {
+              ...req.headers,
+              host: 'localhost:18000',
+              connection: 'keep-alive',
+            },
+            agent,
+            timeout: 30000,
+          };
+          const proxyReq = http.request(options, (proxyRes) => {
+            const statusCode = proxyRes.statusCode ?? 502;
+            const chunks: Buffer[] = [];
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
+            proxyRes.on('end', () => {
+              const responseBody = Buffer.concat(chunks);
+              res.writeHead(statusCode, proxyRes.headers);
+              res.end(responseBody);
+            });
+          });
+          proxyReq.on('timeout', () => {
+            proxyReq.destroy();
+            res.statusCode = 504;
+            res.end('Supabase proxy timeout');
+          });
+          proxyReq.on('error', (err) => {
+            console.error(
+              '[supabase-proxy]',
+              req.method,
+              targetPath,
+              err.message,
+            );
+            res.statusCode = 502;
+            res.end(`Supabase proxy error: ${err.message}`);
+          });
+          if (body.length > 0) proxyReq.write(body);
+          proxyReq.end();
+        });
+      });
+    },
+  };
+}
 
 function serveOpenScadWasmInDev(): Plugin {
   return {
@@ -44,6 +111,7 @@ export default defineConfig({
   base: appBase,
   plugins: [
     serveOpenScadWasmInDev(),
+    supabaseProxyPlugin(),
     tanstackStart({
       router: {
         basepath: normalizedAppBase,
@@ -111,6 +179,7 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false,
+    allowedHosts: ['alpine.0r4cl3.se'],
   },
   optimizeDeps: {
     exclude: ['@zip.js/zip.js', 'three', 'three-stdlib', '@sentry/vite-plugin'],
