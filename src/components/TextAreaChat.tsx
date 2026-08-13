@@ -24,6 +24,7 @@ import {
   parametricModelSupportsVision,
 } from '@/lib/utils';
 import { CreativeModel, MeshFileType, Model } from '@shared/types';
+import type { ModelConfig } from '@/types/misc';
 import type { AppUIMessage } from '@shared/chatAi';
 import { imageFilePartUrl } from '@shared/imageRefs';
 import {
@@ -652,12 +653,48 @@ function TextAreaChat({
     },
   };
 
+  const [dynamicOpenCodeModels, setDynamicOpenCodeModels] = useState<
+    ModelConfig[] | null
+  >(null);
+
+  // Dynamic model list from the local OpenCode installation. Only meaningful
+  // in parametric mode — creative mode uses quality presets.
+  useEffect(() => {
+    if (type === 'creative') return;
+    let cancelled = false;
+    apiJson('/opencode/models')
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) {
+          setDynamicOpenCodeModels(data as ModelConfig[]);
+        }
+      })
+      .catch(() => {
+        // OpenCode server unreachable — the picker falls back to the
+        // built-in static model list.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [type]);
+
   const memoizedModels = useMemo(() => {
     if (type === 'creative') {
       return CREATIVE_MODELS;
     }
-    return PARAMETRIC_MODELS;
-  }, [type]);
+    const localBareIds = new Set(
+      PARAMETRIC_MODELS.filter((m) => m.id.startsWith('local/')).map((m) =>
+        m.id.slice('local/'.length),
+      ),
+    );
+    const opencodeModels = dynamicOpenCodeModels ?? [];
+    const merged = [
+      ...PARAMETRIC_MODELS,
+      ...opencodeModels.filter(
+        (m) => !localBareIds.has(m.id.slice('opencode/'.length)),
+      ),
+    ];
+    return merged;
+  }, [type, dynamicOpenCodeModels]);
 
   // ------------------------------------------------------------
   // Placeholder – Typed-out Animation

@@ -36,6 +36,7 @@ import {
   resolveDanglingToolParts,
 } from './chatToolPersistence';
 import { handleMeshRequest } from './mesh';
+import { opencodeChatModel } from './opencode';
 import { getAnonSupabaseClient } from './supabaseClient';
 
 /**
@@ -327,12 +328,18 @@ function jsonResponse(body: unknown, status: number) {
 const THINKING_BUDGET_TOKENS = 9000;
 const PARAMETRIC_MAX_OUTPUT_TOKENS = 64000;
 
-type ChatProvider = 'anthropic' | 'google' | 'openrouter' | 'local';
+type ChatProvider =
+  | 'anthropic'
+  | 'google'
+  | 'openrouter'
+  | 'local'
+  | 'opencode';
 
 function providerFor(modelId: string): ChatProvider {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('google/')) return 'google';
   if (modelId.startsWith('local/')) return 'local';
+  if (modelId.startsWith('opencode/')) return 'opencode';
   return 'openrouter';
 }
 
@@ -484,6 +491,12 @@ function buildChatModel(
           }
         : undefined,
     };
+  }
+
+  if (modelId.startsWith('opencode/')) {
+    // OpenCode decides reasoning internally per model; the `thinking` flag
+    // only affects direct-provider calls.
+    return { model: opencodeChatModel(modelId) };
   }
 
   throw new Error(`Unsupported chat model ${modelId}`);

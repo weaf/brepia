@@ -22,6 +22,8 @@ const PROVIDER_ICONS: Record<string, React.ReactNode> = {
   ),
   'Moonshot AI': <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />,
   'Z.AI': <path d="M5 4h14v2.9l-9.55 10.2H19V20H5v-2.9l9.55-10.2H5z" />,
+  // Command-prompt chevron: the OpenCode CLI's own mark.
+  OpenCode: <path d="M7 4.5 5 6.5l5 5.5-5 5.5 2 2 7-7.5zM16 17h4v2.5h-4z" />,
 };
 
 interface ProviderLogoProps {
