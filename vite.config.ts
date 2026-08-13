@@ -32,12 +32,12 @@ function supabaseProxyPlugin(): Plugin {
           const body = Buffer.concat(bodyChunks);
           const options = {
             hostname: 'localhost',
-            port: 18000,
+            port: 54321,
             path: targetPath,
             method: req.method,
             headers: {
               ...req.headers,
-              host: 'localhost:18000',
+              host: 'localhost:54321',
               connection: 'keep-alive',
             },
             agent,
@@ -179,7 +179,8 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false,
-    allowedHosts: ['alpine.0r4cl3.se'],
+    host: true,
+    allowedHosts: ['alpine.0r4cl3.se', 'db.noty.se'],
   },
   optimizeDeps: {
     exclude: ['@zip.js/zip.js', 'three', 'three-stdlib', '@sentry/vite-plugin'],
