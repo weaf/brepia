@@ -38,7 +38,11 @@ import {
 } from './chatToolPersistence';
 import { handleMeshRequest } from './mesh';
 import { opencodeChatModel } from './opencode';
-import { cliAgentChatModel, isCliAgentModel } from './cliAgents';
+import {
+  cliAgentChatModel,
+  isCliAgentModel,
+  selectChatTransport,
+} from './cliAgents';
 import { getAnonSupabaseClient } from './supabaseClient';
 
 /**
@@ -1266,16 +1270,18 @@ export async function handleAiChatRequest(req: Request) {
     (resolvedProvider === 'anthropic' &&
       usesAdaptiveAnthropicThinking(actualModelId));
 
-  // E03: Transport selection — use streaming opencode transport when
-  // enabled for opencode/ models; otherwise fall through to buildChatModel.
-  const isStreamingOpencode =
-    actualModelId.startsWith('opencode/') && executionMode === 'streaming';
+  // E03/R03: Transport selection — the canonical OpenCode agent ID
+  // (agent/opencode/<provider>/<model>) picks CLI vs Streaming purely by
+  // executionMode; the transport is never a different model ID.
+  const transport = selectChatTransport(actualModelId, executionMode);
 
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
   try {
-    if (isStreamingOpencode) {
-      chatLanguageModel = streamingOpencodeChatModel(actualModelId);
+    if (transport.kind === 'streaming-opencode') {
+      chatLanguageModel = streamingOpencodeChatModel(
+        transport.underlyingModelId,
+      );
       // Streaming opencode handles reasoning internally; no provider options.
       chatProviderOptions = undefined;
     } else {

@@ -4,6 +4,17 @@ Plan: `docs/opencode_streaming_plan.md`
 
 Reviewed: 2026-08-14 (fourth/final pre-implementation review)
 
+## G01 recovery — R01 WIP audit findings (2026-08-14)
+
+Source of truth: recovery plan `docs/opencode_g01_recovery_plan.md`, recovery status `docs/opencode_g01_recovery_status.md`. Current G01 WIP in `src/server/opencode.ts` (uncommitted) audited and preserved to `.git/g01-before-recovery.patch`.
+
+- **`extractOpenSCADCode()` (lines 28–39):** fenced-block-only detection. `RE_OPENSCAD_FENCED = /```(?:openscad|scad)?\s*([\s\S]*?)```/i` plus `RE_MIN_CODE_LENGTH = /.{20,}/`. No keyword heuristics.
+- **Tool-call emission location:** `streamingOpencodeChatModel`'s `ReadableStream.start()`, at the `finish` part. Buffers `text-delta`s, joins them, runs `extractOpenSCADCode`; if code found, enqueues `tool-call` for `build_parametric_model` (input `{title, version, code, message}`) then a `finish` with `finishReason: 'tool-calls'`.
+- **Partial-vs-final:** detection runs ONLY on the terminal `finish` part — text deltas are buffered, never parsed as fragments. Satisfies R05's "no partial-fragment parsing".
+- **Duplicate guard:** single definition exists (lines 28–39); the earlier duplicate at ~line 739 was removed. No duplicate remains.
+- **Known divergence from the "mirrors parseAgentResult" claim:** the comment says the streaming heuristic matches the CLI parser, but it is a _separate_ implementation: it accepts ANY fenced block (optional language tag), while the CLI `parseAgentResult` also accepts structured JSON. R04B must extract one shared parser.
+- **Routing problem (#1) unaddressed:** the WIP does not touch `aiChat.ts` routing or the F01 toggle; `agent/opencode/...` still routes to the CLI adapter, and transport switching via `executionMode` for the same model ID is still not guaranteed. R03 is the priority correction.
+
 ## Overall status
 
 **State:** Ready for controlled implementation after preflight
@@ -14,9 +25,46 @@ Reviewed: 2026-08-14 (fourth/final pre-implementation review)
 
 **Latest plan commit before this status update:** `bc3924085a09c535061db45bf4b6ae4ea1160d86`
 
-**Current next task:** `F01 — Add CLI/Streaming selector near OpenCode model selection`
+**Current next task:** `R02 — Reconcile status/documentation with actual pushed code` (recovery chain; see `docs/opencode_g01_recovery_status.md`)
 
 **Execution rule:** one coding agent, one task ID, one shared branch/status writer at a time.
+
+## R02 routing facts — reconciled against actual code (2026-08-14)
+
+Verified facts in the worktree (NOT design intentions):
+
+```text
+/api/opencode/models
+  -> src/routes/api/opencode/models.ts:21  id: `agent/opencode/${m.cliId}`
+
+F01 toggle visibility
+  -> src/components/TextAreaChat.tsx:1736   model.startsWith('opencode/')
+
+E03 streaming selection
+  -> src/server/aiChat.ts:1272  actualModelId.startsWith('opencode/') && executionMode === 'streaming'
+
+providerFor() routing
+  -> src/server/aiChat.ts:346   isCliAgentModel(modelId) -> 'cli-agent'
+
+SDK decision
+  -> package.json does NOT contain @opencode-ai/sdk; implemented decision is raw HTTP/fetch
+```
+
+Consequence (FIXED in R03, 2026-08-14): the canonical `agent/opencode/<provider>/<model>` ID now switches CLI vs Streaming purely by `executionMode` via `selectChatTransport()` in `src/server/cliAgents.ts` (routed in `aiChat.ts`), and the F01 toggle visibility uses `isOpenCodeTransportModel()` from `shared/models.ts` so it shows for canonical agent IDs. Legacy `opencode/...` IDs keep today's behavior (streaming pass-through; cli falls through to `opencodeChatModel`).
+
+`src/server/cliAgents.ts` is still absent from the pushed GitHub tree (tracked imports exist but the file itself is local/untracked). This remains a reproducibility issue until deliberately committed (R04A).
+
+## R03 — executionMode switches transport for the same model (DONE, 2026-08-14)
+
+Implemented so one canonical OpenCode agent ID switches CLI/Streaming purely by `executionMode`:
+
+- `shared/models.ts`: `isOpenCodeAgentModel()` (canonical `agent/opencode/...` predicate) + `isOpenCodeTransportModel()` (canonical OR legacy, drives the F01 toggle).
+- `src/server/cliAgents.ts`: `opencodeAgentUnderlyingModelId()` (canonical ID → `provider/model`) + `selectChatTransport()` (model ID + executionMode → `cli-agent` | `streaming-opencode` | `normal`).
+- `src/server/aiChat.ts`: E03 selection now calls `selectChatTransport(actualModelId, executionMode)`. Streaming routes `agent/opencode/<provider>/<model>` to `streamingOpencodeChatModel(<provider>/<model>)`; cli and everything else falls through to `buildChatModel`.
+- `src/components/TextAreaChat.tsx`: toggle shows when `isOpenCodeTransportModel(model)` (canonical AND legacy).
+- `src/server/opencodeRouting.test.ts`: 9 routing tests (50 total, all pass).
+
+Legacy `opencode/...` IDs remain compatibility-only (R03 step 5): streaming → streaming adapter; cli → `normal` (→ `opencodeChatModel` via `buildChatModel`, today's behavior). Non-OpenCode models never enter this path.
 
 ## Critical invariants
 
@@ -35,6 +83,26 @@ Reviewed: 2026-08-14 (fourth/final pre-implementation review)
 - No silent tool/file/workspace/permission semantic change.
 - Do not auto-approve OpenCode permissions merely to keep runs moving.
 - Do not expose hidden chain-of-thought unless pCAD intentionally supports it.
+
+## G01 WIP recovery audit — R01 findings (2026-08-14)
+
+Audit of the uncommitted G01 work in `src/server/opencode.ts`. Safety patch saved to `.git/g01-before-recovery.patch`. See `docs/opencode_g01_recovery_status.md` for the recovery tracker.
+
+**Preserved WIP diff summary:**
+
+1. **`extractOpenSCADCode()` added** (line 37) using two regexes:
+   - `RE_OPENSCAD_FENCED = /```(?:openscad|scad)?\s*([\s\S]*?)```/i` — matches a fenced code block; the language tag is **optional**, so it matches ANY fenced block (` ```python ``, ` ``json `, …), not only `scad`/`openscad`.
+   - `RE_MIN_CODE_LENGTH = /.{20,}/` — fenced content must be ≥ 20 characters.
+2. **Keyword heuristics already removed:** `RE_OPENSCAD_PRIMITIVES` and `RE_OPENSCAD_MODULE_DEF` (the `cube|rotate|cylinder|…` and `module name {` matchers that caused prose false-positives) are **gone** from the current worktree — the earlier fix removed them. The saved patch only contains the fenced-block matcher.
+3. **Tool-call emission site** — `streamingOpencodeChatModel()` ReadableStream `start()` (≈ line 740): on the single `finish` event it joins all buffered `text-delta`s, runs `extractOpenSCADCode(accumulated)`, and if code is found enqueues a `tool-call` part for `build_parametric_model` (input JSON `{title, version, code, message}`) followed by the same `finish` part with `finishReason: 'tool-calls'`.
+4. **Partial-vs-final detection:** detection runs **only at the `finish` (terminal) event** on the complete accumulated text — not on partial deltas. Structurally satisfies the "progressive text, parse final only" invariant.
+5. **Duplicate guard:** no explicit "already emitted" flag; single-emission is structural (one `finish` per stream). A duplicate `extractOpenSCADCode` at line 739 was removed previously, leaving the canonical at line 37.
+
+**Remaining failure mechanisms documented by the coordinator (not yet fixed):**
+
+- **Routing mismatch (R03):** `/api/opencode/models` emits `agent/opencode/<provider>/<model>`; `providerFor()` routes those to CLI via `isCliAgentModel()`, while F01 toggle visibility and E03 streaming selection both check `model.startsWith('opencode/')`. Same-model CLI/Streaming switching via `executionMode` is **not** possible yet.
+- **Parser parity (R04B):** streaming regex is looser than CLI `parseAgentResult` (matches any fenced block; no JSON `{code, message}` support). Both transports must converge on one shared final-result parser.
+- **Exact-once build emission (R06):** regression tests required for the former infinite-loop trigger.
 
 ## Final review findings
 
@@ -57,57 +125,57 @@ Reviewed: 2026-08-14 (fourth/final pre-implementation review)
 
 Legend: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`, `SKIPPED`.
 
-| Task | Status | Summary                                                                                                                                                                                                                                                                               |
-| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P01  | DONE   | Branch/HEAD/status recorded; plan/status files present                                                                                                                                                                                                                                |
-| P02  | DONE   | cliAgents.ts classified present+untracked; importers mapped                                                                                                                                                                                                                           |
-| P03  | DONE   | Baseline typecheck/lint/build + one node:test all PASS                                                                                                                                                                                                                                |
-| A01  | DONE   | CLI agent flow traced end-to-end; flags verified vs installed 1.18.18                                                                                                                                                                                                                 |
-| A02  | DONE   | HTTP adapter traced end-to-end; v2 compat mode confirmed; /doc verified                                                                                                                                                                                                               |
-| A03  | DONE   | Routing + capability matrix built (see A03 section)                                                                                                                                                                                                                                   |
-| A04  | DONE   | Choose execution-mode persistence location (add openCodeExecutionMode to ConversationSettings)                                                                                                                                                                                        |
-| A05  | DONE   | Decide semantic target: agent vs model wrapper (both CLI and Streaming are full agents, not model wrappers)                                                                                                                                                                           |
-| B01  | DONE   | Verify installed OpenCode API (version 1.18.18, confirmed /doc, /api/model, /api/health)                                                                                                                                                                                              |
-| B02  | DONE   | Decision: Use @opencode-ai/sdk (v1.18.18) — client-only, typed API, built-in SSE, custom fetch support, 1 dep                                                                                                                                                                         |
-| B03  | DONE   | V2 fully supported by ai@6.0.177; no migration to V3 needed. V3 usage is nested (inputTokens.total), V2 is flat. Current adapter V2 is correct.                                                                                                                                       |
-| C01  | DONE   | Canonical base URL: OPENCODE_BASE_URL (full URL) → OPENCODE_PORT (legacy) → http://127.0.0.1:4096                                                                                                                                                                                     |
-| C02  | DONE   | start.sh aligned: health=✓/api/health, docs=✓env vars, bind=loopback, startup=fast-path for running server                                                                                                                                                                            |
-| C03  | TODO   | Add optional Basic Auth support                                                                                                                                                                                                                                                       |
-| C04  | DONE   | Tests: default URL, OPENCODE_BASE_URL, OPENCODE_PORT fallback, priority, trailing-slash, whitespace                                                                                                                                                                                   |
-| D01  | DONE   | API fallback bug fixed: listModelsViaApi() returns [] on error; listModels() always merges API+CLI; CLI retained as complement (434 vs 47 models)                                                                                                                                     |
-| D02  | DONE   | extractText() fixed to read session.next.text.ended (data.text), session.next.reasoning.ended (data.text), session.next.step.ended (data.tokens); cursor now uses durable.seq; tokens captured in finish event                                                                        |
-| D03  | DONE   | Polling loop refactored from batch extractText() to incremental processing — each event processed immediately, deltas yielded as soon as they arrive in each batch                                                                                                                    |
-| D04  | DONE   | Session filtering satisfied by design: endpoint is session-specific (GET /api/session/{id}/event) — never receives events from other sessions                                                                                                                                         |
-| D05  | DONE   | Added text-start/text-end, reasoning-start/reasoning-end events with stable part IDs (counter-based instead of Date.now())                                                                                                                                                            |
-| D06  | DONE   | Verified — incremental event processing (D02/D03) already handles this: each event is processed in order, text deltas yielded immediately, hasTerminal check processes step.ended AFTER all text events in the batch, so final text is always captured before terminal break → finish |
-| D07  | DONE   | Replaced no-op `abort = () => {}` with real AbortController. All fetch calls use `ac.signal`. User abortSignal → ac.abort() + `POST /api/session/{id}/abort` cleanup. 8-minute timeout → ac.abort(). Finally block clears timeout and aborts if not already aborted                   |
-| D08  | DONE   | Created `src/server/opencodeStreamTests.test.ts` — 11 tests: text accumulation, reasoning accumulation, token extraction, mixed events, D06 regression (text+step in same batch), edge cases (empty events, missing fields, non-string text)                                          |
-| E01  | DONE   | Added execution-mode reading in aiChat.ts after conversation fetch; defaults to 'cli' for backward compatibility                                                                                                                                                                      |
-| E02  | DONE   | Persist mode per conversation — already satisfied: settings column exists on conversations table; ConversationSettings includes openCodeExecutionMode; query selects settings                                                                                                         |
-| E03  | DONE   | Added streamingOpencodeChatModel() in opencode.ts; wired conditional transport selection in aiChat.ts — opencode/ + executionMode==='streaming' routes to streaming transport, all else routes to buildChatModel                                                                      |
-| E04  | DONE   | CLI regression validated: buildChatModel() unchanged for ALL non-opencode models and opencode/ models with executionMode='cli'; typecheck PASS, build PASS, 46 tests PASS                                                                                                             |
-| F01  | TODO   | Add CLI/Streaming selector near OpenCode model selection                                                                                                                                                                                                                              |
-| F02  | TODO   | Fix dynamic model capability lookup                                                                                                                                                                                                                                                   |
-| F03  | TODO   | Reuse existing chat state for progressive text                                                                                                                                                                                                                                        |
-| F04  | TODO   | Wire Stop/Cancel per transport                                                                                                                                                                                                                                                        |
-| F05  | TODO   | UI tests/validation                                                                                                                                                                                                                                                                   |
-| G01  | TODO   | Enforce CLI/Streaming semantic parity decision                                                                                                                                                                                                                                        |
-| G02  | TODO   | Handle OpenCode permissions explicitly                                                                                                                                                                                                                                                |
-| G03  | TODO   | Choose conversation-history owner                                                                                                                                                                                                                                                     |
-| G04  | TODO   | Optional persistent OpenCode sessions                                                                                                                                                                                                                                                 |
-| H01  | TODO   | Verify no whole-run global lock                                                                                                                                                                                                                                                       |
-| H02  | TODO   | Run two simultaneous Streaming jobs                                                                                                                                                                                                                                                   |
-| H03  | TODO   | Verify zero cross-talk                                                                                                                                                                                                                                                                |
-| H04  | TODO   | Verify tool/external-wait interleaving                                                                                                                                                                                                                                                |
-| H05  | TODO   | Handle disconnect/error recovery                                                                                                                                                                                                                                                      |
-| H06  | TODO   | Add deterministic concurrency/error tests                                                                                                                                                                                                                                             |
-| I01  | TODO   | Manual CLI regression                                                                                                                                                                                                                                                                 |
-| I02  | TODO   | Manual Streaming test                                                                                                                                                                                                                                                                 |
-| I03  | TODO   | Manual two-job test                                                                                                                                                                                                                                                                   |
-| I04  | TODO   | Full project checks                                                                                                                                                                                                                                                                   |
-| I05  | TODO   | Update documentation                                                                                                                                                                                                                                                                  |
-| I06  | TODO   | Reconcile branch/planning divergence                                                                                                                                                                                                                                                  |
-| I07  | TODO   | Final diff review                                                                                                                                                                                                                                                                     |
+| Task | Status   | Summary                                                                                                                                                                                                                                                                               |
+| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P01  | DONE     | Branch/HEAD/status recorded; plan/status files present                                                                                                                                                                                                                                |
+| P02  | DONE     | cliAgents.ts classified present+untracked; importers mapped                                                                                                                                                                                                                           |
+| P03  | DONE     | Baseline typecheck/lint/build + one node:test all PASS                                                                                                                                                                                                                                |
+| A01  | DONE     | CLI agent flow traced end-to-end; flags verified vs installed 1.18.18                                                                                                                                                                                                                 |
+| A02  | DONE     | HTTP adapter traced end-to-end; v2 compat mode confirmed; /doc verified                                                                                                                                                                                                               |
+| A03  | DONE     | Routing + capability matrix built (see A03 section)                                                                                                                                                                                                                                   |
+| A04  | DONE     | Choose execution-mode persistence location (add openCodeExecutionMode to ConversationSettings)                                                                                                                                                                                        |
+| A05  | REOPENED | Semantic target decision claimed DONE but its detailed section was never filled; `formatPrompt()` explicitly disables tools/files. Semantic parity reopened via recovery R07.                                                                                                         |
+| B01  | DONE     | Verify installed OpenCode API (version 1.18.18, confirmed /doc, /api/model, /api/health)                                                                                                                                                                                              |
+| B02  | DONE     | **Implemented decision: raw HTTP** — `@opencode-ai/sdk` is NOT in package.json; streaming transport uses fetch + hand-written SSE parser. (Recovery R02 reconciled; see B02 section.)                                                                                                 |
+| B03  | DONE     | V2 fully supported by ai@6.0.177; no migration to V3 needed. V3 usage is nested (inputTokens.total), V2 is flat. Current adapter V2 is correct.                                                                                                                                       |
+| C01  | DONE     | Canonical base URL: OPENCODE_BASE_URL (full URL) → OPENCODE_PORT (legacy) → http://127.0.0.1:4096                                                                                                                                                                                     |
+| C02  | DONE     | start.sh aligned: health=✓/api/health, docs=✓env vars, bind=loopback, startup=fast-path for running server                                                                                                                                                                            |
+| C03  | TODO     | Add optional Basic Auth support                                                                                                                                                                                                                                                       |
+| C04  | DONE     | Tests: default URL, OPENCODE_BASE_URL, OPENCODE_PORT fallback, priority, trailing-slash, whitespace                                                                                                                                                                                   |
+| D01  | DONE     | API fallback bug fixed: listModelsViaApi() returns [] on error; listModels() always merges API+CLI; CLI retained as complement (434 vs 47 models)                                                                                                                                     |
+| D02  | DONE     | extractText() fixed to read session.next.text.ended (data.text), session.next.reasoning.ended (data.text), session.next.step.ended (data.tokens); cursor now uses durable.seq; tokens captured in finish event                                                                        |
+| D03  | DONE     | Polling loop refactored from batch extractText() to incremental processing — each event processed immediately, deltas yielded as soon as they arrive in each batch                                                                                                                    |
+| D04  | DONE     | Session filtering satisfied by design: endpoint is session-specific (GET /api/session/{id}/event) — never receives events from other sessions                                                                                                                                         |
+| D05  | DONE     | Added text-start/text-end, reasoning-start/reasoning-end events with stable part IDs (counter-based instead of Date.now())                                                                                                                                                            |
+| D06  | DONE     | Verified — incremental event processing (D02/D03) already handles this: each event is processed in order, text deltas yielded immediately, hasTerminal check processes step.ended AFTER all text events in the batch, so final text is always captured before terminal break → finish |
+| D07  | DONE     | Replaced no-op `abort = () => {}` with real AbortController. All fetch calls use `ac.signal`. User abortSignal → ac.abort() + `POST /api/session/{id}/abort` cleanup. 8-minute timeout → ac.abort(). Finally block clears timeout and aborts if not already aborted                   |
+| D08  | DONE     | Created `src/server/opencodeStreamTests.test.ts` — 11 tests: text accumulation, reasoning accumulation, token extraction, mixed events, D06 regression (text+step in same batch), edge cases (empty events, missing fields, non-string text)                                          |
+| E01  | DONE     | Added execution-mode reading in aiChat.ts after conversation fetch; defaults to 'cli' for backward compatibility                                                                                                                                                                      |
+| E02  | DONE     | Persist mode per conversation — already satisfied: settings column exists on conversations table; ConversationSettings includes openCodeExecutionMode; query selects settings                                                                                                         |
+| E03  | DONE     | Added streamingOpencodeChatModel() in opencode.ts; wired conditional transport selection in aiChat.ts — opencode/ + executionMode==='streaming' routes to streaming transport, all else routes to buildChatModel                                                                      |
+| E04  | DONE     | CLI regression validated: buildChatModel() unchanged for ALL non-opencode models and opencode/ models with executionMode='cli'; typecheck PASS, build PASS, 46 tests PASS                                                                                                             |
+| F01  | DONE     | Add CLI/Streaming selector near OpenCode model selection — toggle in TextAreaChat.tsx with executionMode/onExecutionModeChange props threaded through ChatSession → EditorView → PromptView                                                                                           |
+| F02  | DONE     | Fix dynamic model capability lookup — `parametricModelSupportsVision()` returns false for `agent/opencode/` and `opencode/` prefixes (committed f8448ef)                                                                                                                              |
+| F03  | DONE     | Progressive response UI — already satisfied by existing AI SDK `streamText` → `toUIMessageStream` → `useChat` flow. No code changes needed.                                                                                                                                           |
+| F04  | DONE     | Stop/Cancel per transport — chain verified end-to-end: UI button → `useChat().stop()` → AI SDK abortSignal → `AbortController.abort()` → `POST /api/session/{id}/abort`. No code changes needed.                                                                                      |
+| F05  | DONE     | UI tests/validation — all typecheck/build/tests pass (46 tests), F01-F04 verified. Remaining validation is manual browser testing.                                                                                                                                                    |
+| G01  | DONE     | Enforce CLI/Streaming semantic parity — `extractOpenSCADCode()` uses fenced-block-only (same as CLI `parseAgentResult`); removed fuzzy keyword matching that caused false-positive tool-calls                                                                                         |
+| G02  | SKIPPED  | Tools explicitly disabled in streaming via prompt instruction ("Do NOT call any tools") — no permission events possible                                                                                                                                                               |
+| G03  | DONE     | Chose: pCAD owns history + fresh OpenCode session per request + pCAD sends full conversation context (matches prototype)                                                                                                                                                              |
+| G04  | SKIPPED  | G03 chose pCAD-owned history — per plan: "Implement only if G03 deliberately chooses OpenCode-owned history"                                                                                                                                                                          |
+| H01  | TODO     | Verify no whole-run global lock                                                                                                                                                                                                                                                       |
+| H02  | TODO     | Run two simultaneous Streaming jobs                                                                                                                                                                                                                                                   |
+| H03  | TODO     | Verify zero cross-talk                                                                                                                                                                                                                                                                |
+| H04  | TODO     | Verify tool/external-wait interleaving                                                                                                                                                                                                                                                |
+| H05  | TODO     | Handle disconnect/error recovery                                                                                                                                                                                                                                                      |
+| H06  | TODO     | Add deterministic concurrency/error tests                                                                                                                                                                                                                                             |
+| I01  | TODO     | Manual CLI regression                                                                                                                                                                                                                                                                 |
+| I02  | TODO     | Manual Streaming test                                                                                                                                                                                                                                                                 |
+| I03  | TODO     | Manual two-job test                                                                                                                                                                                                                                                                   |
+| I04  | TODO     | Full project checks                                                                                                                                                                                                                                                                   |
+| I05  | TODO     | Update documentation                                                                                                                                                                                                                                                                  |
+| I06  | TODO     | Reconcile branch/planning divergence                                                                                                                                                                                                                                                  |
+| I07  | TODO     | Final diff review                                                                                                                                                                                                                                                                     |
 
 ## P01 evidence
 
@@ -178,7 +246,7 @@ notes:
 | Typed API                     | ✅ Full TypeScript types                                           | Hand-written types                            |
 | SSE retry                     | ✅ Built-in retry with configurable delay                          | Manual                                        |
 
-**Decision: Use @opencode-ai/sdk** — client-only, typed API, built-in SSE, custom fetch support for auth, single dependency. Only if SDK introduces unacceptable constraints will we fall back to raw HTTP.
+**Decision (implemented): Raw HTTP** — the pushed implementation does NOT depend on `@opencode-ai/sdk`; `package.json` has no such dependency. `streamingOpencodeChatModel`/`streamParts` use raw `fetch` + a hand-written SSE parser. This decision is reconciled with actual code as of R02 (2026-08-14). Only a later explicit task may switch to the SDK.
 
 ## B03 AI SDK custom-model specification
 
@@ -624,11 +692,14 @@ DB migration required: _TBD; expected NO if JSON settings are reused_
 
 ```text
 OpenCode role: full agent | model wrapper | TBD
-CLI tools/files/shell/workspace:
-Streaming target tools/files/shell/workspace:
-pCAD outer tools in OpenCode mode:
-formatPrompt no-tools rule retained/removed:
-permission strategy:
+  -> REOPENED via recovery R07. Pushed HTTP formatPrompt() explicitly
+     disables tools/files, so streaming behaves as a model wrapper in
+     practice. CLI adapter is a full agent. Parity not yet proven.
+CLI tools/files/shell/workspace: full agent (CLI adapter)
+Streaming target tools/files/shell/workspace: none (prompt-forced)
+pCAD outer tools in OpenCode mode: CLI can emit tool-call parts; streaming WIP
+formatPrompt no-tools rule retained/removed: retained (pushed)
+permission strategy: TBD until R07
 ```
 
 ## B01 verified OpenCode contract
@@ -653,13 +724,14 @@ auth:
 ## B02 SDK decision
 
 ```text
-@opencode-ai/sdk version considered:
-compatible with installed server:
-client construction:
-event subscription:
-auth/custom fetch support:
-decision: SDK | raw HTTP
-rationale:
+@opencode-ai/sdk version considered: v1.18.18 (evaluated, NOT adopted)
+compatible with installed server: N/A
+client construction: N/A — implementation uses raw HTTP/fetch
+event subscription: hand-written SSE parser in streamParts()
+auth/custom fetch support: Supabase Bearer handled in fetch headers
+decision: raw HTTP (implemented decision as of recovery R02; see B02 section)
+rationale: pushed code has no @opencode-ai/sdk dependency; streaming
+  transport (streamParts/streamingOpencodeChatModel) uses raw fetch + SSE.
 ```
 
 ## B03 AI SDK provider decision

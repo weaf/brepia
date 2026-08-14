@@ -32,6 +32,7 @@ import {
 import type { ModelConfig } from '@/types/misc';
 import type { AppUIMessage } from '@shared/chatAi';
 import { imageFilePartUrl } from '@shared/imageRefs';
+import { isOpenCodeTransportModel } from '@shared/models';
 import {
   shouldShowPolygonControls,
   getModelDefaultPolygonCount,
@@ -1732,8 +1733,10 @@ function TextAreaChat({
               type={type}
               focused={isFocused}
             />
-            {/* F01: Transport selector — only shown for opencode/ models */}
-            {model.startsWith('opencode/') && (
+            {/* F01/R03: Transport selector — shown for any OpenCode model
+                (canonical agent/opencode/... or legacy opencode/...) that can
+                switch CLI vs Streaming transport */}
+            {isOpenCodeTransportModel(model) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-1.5">
