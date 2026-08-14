@@ -693,3 +693,121 @@ export function opencodeChatModel(appModelId: string): LanguageModelV2 {
     },
   };
 }
+
+export function streamingOpencodeChatModel(
+  appModelId: string,
+): LanguageModelV2 {
+  return {
+    specificationVersion: 'v2',
+    provider: 'opencode',
+    modelId: appModelId,
+    supportedUrls: {},
+    async doStream(options) {
+      const gen = streamParts(
+        appModelId,
+        formatPrompt(options.prompt),
+        options,
+      );
+      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+        async start(controller) {
+          try {
+            for await (const part of gen) {
+              controller.enqueue(part);
+            }
+          } finally {
+            controller.close();
+          }
+        },
+      });
+      return {
+        stream,
+        request: {},
+        response: {},
+        usage: USAGE(),
+        abort: () => {
+          options.abortSignal?.dispatchEvent(new Event('abort'));
+        },
+      };
+    },
+    async doGenerate(options) {
+      const result = await this.doStream(options);
+      const parts: LanguageModelV2StreamPart[] = [];
+      const reader = result.stream.getReader();
+      try {
+        let done = false;
+        while (!done) {
+          const { done: d, value } = await reader.read();
+          done = d;
+          if (value) parts.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      const texts = parts
+        .filter(
+          (
+            p,
+          ): p is Extract<LanguageModelV2StreamPart, { type: 'text-delta' }> =>
+            p.type === 'text-delta',
+        )
+        .map((p) => p.delta);
+      const reasonings = parts
+        .filter(
+          (
+            p,
+          ): p is Extract<
+            LanguageModelV2StreamPart,
+            { type: 'reasoning-delta' }
+          > => p.type === 'reasoning-delta',
+        )
+        .map((p) => p.delta);
+
+      let finish:
+        | Extract<LanguageModelV2StreamPart, { type: 'finish' }>
+        | undefined;
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (parts[i].type === 'finish') {
+          finish = parts[i] as Extract<
+            LanguageModelV2StreamPart,
+            { type: 'finish' }
+          >;
+          break;
+        }
+      }
+      let errorPart:
+        | Extract<LanguageModelV2StreamPart, { type: 'error' }>
+        | undefined;
+      for (const p of parts) {
+        if (p.type === 'error') {
+          errorPart = p as Extract<
+            LanguageModelV2StreamPart,
+            { type: 'error' }
+          >;
+          break;
+        }
+      }
+      if (errorPart) throw errorPart.error;
+
+      const content: LanguageModelV2Content[] = [];
+      if (reasonings.length)
+        content.push({ type: 'reasoning', text: reasonings.join('') });
+      if (texts.length) content.push({ type: 'text', text: texts.join('') });
+
+      return {
+        content,
+        finishReason: finish?.finishReason ?? 'stop',
+        usage: finish?.usage ?? USAGE(),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        request: {},
+        response: {
+          id: 'opencode',
+          model: appModelId,
+          timestamp: new Date(Date.now()),
+          headers: {},
+          body: undefined,
+        },
+        warnings: [],
+      };
+    },
+  };
+}

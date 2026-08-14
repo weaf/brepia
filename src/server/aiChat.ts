@@ -7,6 +7,7 @@ import { cleanAssistantText, getParametricText } from '@shared/parametricParts';
 import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
 import { normalizeConversationSuggestions } from '@shared/suggestions';
 import { normalizeModelId } from '@shared/models';
+import { streamingOpencodeChatModel } from '@/server/opencode';
 import type { Conversation, Message, MeshFileType, Model } from '@shared/types';
 import {
   convertToModelMessages,
@@ -307,7 +308,7 @@ type ChatBody = {
 
 type ConversationAccess = Pick<
   Conversation,
-  'id' | 'type' | 'user_id' | 'current_message_leaf_id'
+  'id' | 'type' | 'user_id' | 'current_message_leaf_id' | 'settings'
 >;
 
 function isChatBody(value: unknown): value is ChatBody {
@@ -1058,7 +1059,7 @@ export async function handleAiChatRequest(req: Request) {
 
   const { data: conversation, error: conversationError } = await supabaseClient
     .from('conversations')
-    .select('id, type, user_id, current_message_leaf_id')
+    .select('id, type, user_id, current_message_leaf_id, settings')
     .eq('id', rawBody.conversationId)
     .eq('user_id', user.id)
     .single()
@@ -1074,6 +1075,12 @@ export async function handleAiChatRequest(req: Request) {
       400,
     );
   }
+
+  // E01: Read the execution mode for this conversation (defaults to 'cli'
+  // for backward compatibility). This determines whether opencode/ models
+  // use the CLI transport or the HTTP/SSE streaming transport.
+  const executionMode: 'cli' | 'streaming' =
+    conversation.settings?.openCodeExecutionMode ?? 'cli';
 
   // Pre-flight balance gate. A chat costs at least 1 billing token, so a
   // total of 0 means we cannot let the stream start. We don't try to
@@ -1259,12 +1266,23 @@ export async function handleAiChatRequest(req: Request) {
     (resolvedProvider === 'anthropic' &&
       usesAdaptiveAnthropicThinking(actualModelId));
 
+  // E03: Transport selection — use streaming opencode transport when
+  // enabled for opencode/ models; otherwise fall through to buildChatModel.
+  const isStreamingOpencode =
+    actualModelId.startsWith('opencode/') && executionMode === 'streaming';
+
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
   try {
-    const built = buildChatModel(actualModelId, providers, thinkingEnabled);
-    chatLanguageModel = built.model;
-    chatProviderOptions = built.providerOptions;
+    if (isStreamingOpencode) {
+      chatLanguageModel = streamingOpencodeChatModel(actualModelId);
+      // Streaming opencode handles reasoning internally; no provider options.
+      chatProviderOptions = undefined;
+    } else {
+      const built = buildChatModel(actualModelId, providers, thinkingEnabled);
+      chatLanguageModel = built.model;
+      chatProviderOptions = built.providerOptions;
+    }
   } catch (error) {
     logError(error, {
       functionName: 'ai-chat',
