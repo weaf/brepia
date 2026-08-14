@@ -196,6 +196,26 @@ function ConversationEditor() {
         ? 'quality'
         : 'openai/gpt-5.6-sol',
   );
+  const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
+    conversation.settings?.openCodeExecutionMode ?? 'cli',
+  );
+
+  const handleExecutionModeChange = useCallback(
+    (newMode: 'cli' | 'streaming') => {
+      setExecutionMode(newMode);
+      updateConversation?.({
+        ...conversation,
+        settings: {
+          ...(typeof conversation.settings === 'object' &&
+          conversation.settings !== null
+            ? conversation.settings
+            : {}),
+          openCodeExecutionMode: newMode,
+        },
+      });
+    },
+    [conversation, updateConversation],
+  );
   const [activePreview, setActivePreview] = useState<ActivePreview>(null);
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [currentOutput, setCurrentOutput] = useState<Blob | undefined>();
@@ -708,6 +728,8 @@ function ConversationEditor() {
             model={model}
             setModel={updateSelectedModel}
             isDisabled={totalTokens <= 0}
+            executionMode={executionMode}
+            onExecutionModeChange={handleExecutionModeChange}
             onSendParts={handleSendParts}
             onRetry={handleRetry}
             onEdit={handleEdit}

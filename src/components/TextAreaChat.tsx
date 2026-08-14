@@ -23,7 +23,12 @@ import {
   PARAMETRIC_MODELS,
   parametricModelSupportsVision,
 } from '@/lib/utils';
-import { CreativeModel, MeshFileType, Model } from '@shared/types';
+import {
+  ConversationSettings,
+  CreativeModel,
+  MeshFileType,
+  Model,
+} from '@shared/types';
 import type { ModelConfig } from '@/types/misc';
 import type { AppUIMessage } from '@shared/chatAi';
 import { imageFilePartUrl } from '@shared/imageRefs';
@@ -49,6 +54,7 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { ModelSelector } from '@/components/ModelSelector';
 import { Button } from '@/components/ui/button';
@@ -84,7 +90,12 @@ interface TextAreaChatProps {
   conversation: {
     id: string;
     user_id: string;
+    settings?: ConversationSettings;
   };
+  /** Current execution mode for this conversation ('cli' | 'streaming'). */
+  executionMode?: 'cli' | 'streaming';
+  /** Called when the execution mode is toggled. Persists to conversation settings. */
+  onExecutionModeChange?: (mode: 'cli' | 'streaming') => void;
 }
 
 // SVG Icon component for the quads/polys toggle
@@ -474,6 +485,8 @@ function TextAreaChat({
   showFullLabels = false,
   onTypeChange,
   conversation,
+  executionMode = 'cli',
+  onExecutionModeChange,
 }: TextAreaChatProps) {
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1719,6 +1732,37 @@ function TextAreaChat({
               type={type}
               focused={isFocused}
             />
+            {/* F01: Transport selector — only shown for opencode/ models */}
+            {model.startsWith('opencode/') && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-adam-neutral-400">
+                      CLI
+                    </span>
+                    <Switch
+                      checked={executionMode === 'streaming'}
+                      onCheckedChange={(checked) => {
+                        const newMode = checked ? 'streaming' : 'cli';
+                        // Prefer the explicit callback from the parent.
+                        // The parent (EditorView/ChatSession) handles DB
+                        // persistence via useConversation().
+                        onExecutionModeChange?.(newMode);
+                      }}
+                      disabled={!!(isLoading || disabled)}
+                    />
+                    <span className="text-[10px] text-adam-neutral-400">
+                      Stream
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {executionMode === 'streaming'
+                    ? 'Streaming mode: real-time incremental text'
+                    : 'CLI mode: batch response after completion'}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {/* Enhanced submit button */}
             {isLoading && stopGenerating ? (
               <Tooltip>

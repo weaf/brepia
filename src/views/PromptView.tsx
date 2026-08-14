@@ -327,6 +327,7 @@ export function PromptView() {
                   showPromptGenerator={true}
                   showFullLabels={true}
                   onTypeChange={handleTypeChange}
+                  executionMode="cli"
                 />
               </SelectedItemsContext.Provider>
               <div className="relative">

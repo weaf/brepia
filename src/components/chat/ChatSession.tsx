@@ -49,6 +49,10 @@ interface ChatSessionProps {
   setModel: (model: Model) => void;
   /** True when the token budget is exhausted; locks the input + retry. */
   isDisabled: boolean;
+  /** Current execution mode for this conversation ('cli' | 'streaming'). */
+  executionMode?: 'cli' | 'streaming';
+  /** Called when the execution mode is toggled. Persists to conversation settings. */
+  onExecutionModeChange?: (mode: 'cli' | 'streaming') => void;
 
   // Action handlers — each does its DB writes in the parent and returns
   // the data ChatSession needs to keep `chat.messages` in sync. See the
@@ -145,6 +149,8 @@ export function ChatSession({
   model,
   setModel,
   isDisabled,
+  executionMode = 'cli',
+  onExecutionModeChange,
   onSendParts,
   onRetry,
   onEdit,
@@ -988,6 +994,8 @@ export function ChatSession({
           model={model}
           setModel={setModel}
           conversation={conversation}
+          executionMode={executionMode}
+          onExecutionModeChange={onExecutionModeChange}
         />
       </div>
     </>
