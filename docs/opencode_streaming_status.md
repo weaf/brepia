@@ -14,7 +14,7 @@ Reviewed: 2026-08-14 (fourth/final pre-implementation review)
 
 **Latest plan commit before this status update:** `bc3924085a09c535061db45bf4b6ae4ea1160d86`
 
-**Current next task:** `E01 — Add execution-mode type + default`
+**Current next task:** `F01 — Add CLI/Streaming selector near OpenCode model selection`
 
 **Execution rule:** one coding agent, one task ID, one shared branch/status writer at a time.
 
@@ -82,10 +82,10 @@ Legend: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`, `SKIPPED`.
 | D06  | DONE   | Verified — incremental event processing (D02/D03) already handles this: each event is processed in order, text deltas yielded immediately, hasTerminal check processes step.ended AFTER all text events in the batch, so final text is always captured before terminal break → finish |
 | D07  | DONE   | Replaced no-op `abort = () => {}` with real AbortController. All fetch calls use `ac.signal`. User abortSignal → ac.abort() + `POST /api/session/{id}/abort` cleanup. 8-minute timeout → ac.abort(). Finally block clears timeout and aborts if not already aborted                   |
 | D08  | DONE   | Created `src/server/opencodeStreamTests.test.ts` — 11 tests: text accumulation, reasoning accumulation, token extraction, mixed events, D06 regression (text+step in same batch), edge cases (empty events, missing fields, non-string text)                                          |
-| E01  | TODO   | Add execution-mode type + default                                                                                                                                                                                                                                                     |
-| E02  | TODO   | Persist mode per conversation                                                                                                                                                                                                                                                         |
-| E03  | TODO   | Add minimal transport selection boundary                                                                                                                                                                                                                                              |
-| E04  | TODO   | CLI regression validation                                                                                                                                                                                                                                                             |
+| E01  | DONE   | Added execution-mode reading in aiChat.ts after conversation fetch; defaults to 'cli' for backward compatibility                                                                                                                                                                      |
+| E02  | DONE   | Persist mode per conversation — already satisfied: settings column exists on conversations table; ConversationSettings includes openCodeExecutionMode; query selects settings                                                                                                         |
+| E03  | DONE   | Added streamingOpencodeChatModel() in opencode.ts; wired conditional transport selection in aiChat.ts — opencode/ + executionMode==='streaming' routes to streaming transport, all else routes to buildChatModel                                                                      |
+| E04  | DONE   | CLI regression validated: buildChatModel() unchanged for ALL non-opencode models and opencode/ models with executionMode='cli'; typecheck PASS, build PASS, 46 tests PASS                                                                                                             |
 | F01  | TODO   | Add CLI/Streaming selector near OpenCode model selection                                                                                                                                                                                                                              |
 | F02  | TODO   | Fix dynamic model capability lookup                                                                                                                                                                                                                                                   |
 | F03  | TODO   | Reuse existing chat state for progressive text                                                                                                                                                                                                                                        |
