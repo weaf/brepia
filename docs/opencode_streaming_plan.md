@@ -1,99 +1,143 @@
 # OpenCode CLI + Streaming Implementation Plan
 
+Reviewed: 2026-08-14
+
 Status tracking: see `docs/opencode_streaming_status.md`.
 
 ## Goal
 
-Keep the existing OpenCode CLI integration intact and add a second selectable OpenCode execution mode that uses OpenCode server/API streaming.
+Preserve the OpenCode CLI execution path and add a selectable OpenCode streaming execution path backed by `opencode serve`.
 
 The user must be able to choose between:
 
-- `CLI` — current implementation, preserved.
-- `Streaming` — persistent OpenCode server/API with live response updates.
+- `CLI` — OpenCode executed through the CLI path.
+- `Streaming` — OpenCode executed through the HTTP server/API with live events/text.
 
-Do not replace or remove the existing CLI implementation.
+The transport choice must not silently change the intended OpenCode agent behavior.
+
+## Current repository facts — read before coding
+
+These facts were found during the 2026-08-14 review and are the reason this plan starts with a preflight phase.
+
+1. The OpenCode implementation currently lives on branch `local-dev-continue`, not on `master`.
+2. `local-dev-continue` was reviewed at commit `01336488828a003e8870efa8229ae9e1dbcc8003`.
+3. `src/server/opencode.ts` already contains an HTTP/streaming prototype. Do **not** build a second streaming stack beside it without first auditing/reusing it.
+4. The branch imports `src/server/cliAgents.ts` from `src/server/aiChat.ts` and `src/routes/api/opencode/models.ts`, but that file was not present in the pushed branch during review. It may exist uncommitted in the local worktree. Never overwrite or discard an untracked/local version.
+5. `start.sh` starts OpenCode on port `4096`, while the reviewed `src/server/opencode.ts` defaults to port `14096`. This must be unified before streaming is considered reliable.
+6. The reviewed HTTP prototype uses `/api/...` OpenCode paths. Current public OpenCode documentation uses paths such as `/global/health`, `/session`, `/session/:id/prompt_async`, `/session/:id/abort`, and `/event`. The **installed OpenCode server's `/doc` endpoint is authoritative** for this project; verify it before changing API code.
+7. The current HTTP prototype creates a new OpenCode session for each request and formats the pCAD conversation into a prompt. Do not later reuse an OpenCode session while also resending the full pCAD transcript, because that would duplicate conversation history.
+8. The reviewed `formatPrompt()` explicitly tells the HTTP OpenCode path not to use tools/files. Treat agent/tool semantics as a separate compatibility concern; transport work must not silently change them.
+9. Some `.cursor/rules/*` documentation is older than the current TanStack/route architecture. Read repository rules, but when a rule conflicts with current code/package configuration, record the discrepancy and follow the current working code unless the rule is clearly normative.
 
 ## Working rules for coding agents
 
-1. Work on **one task ID at a time**.
-2. Read this plan and `docs/opencode_streaming_status.md` before changing code.
-3. Inspect the current implementation before editing the files named in a task. File names in this plan are architectural hints, not permission to assume stale structure.
-4. Keep each change small enough to understand in one context window.
-5. Do not perform unrelated refactors.
-6. Preserve CLI behavior unless a task explicitly changes it.
-7. After each task, run the smallest relevant validation first.
-8. Update the status file after a task is completed.
-9. If tests fail for reasons caused by the task, stop and fix them before continuing.
-10. If the repository differs from this plan, adapt minimally and record the difference in the status file.
+1. Work on **exactly one task ID per run**.
+2. Read this plan and `docs/opencode_streaming_status.md` before editing code.
+3. The first commands of every run must establish repository state:
+
+```bash
+git branch --show-current
+git status --short
+git log -1 --oneline
+```
+
+4. Work on `local-dev-continue` for this feature unless the status file explicitly changes the target branch.
+5. Never discard, reset, overwrite, or clean uncommitted/untracked user work.
+6. Especially protect any local/untracked `src/server/cliAgents.ts`.
+7. Inspect the current files named by the task before modifying them. The plan is a roadmap, not proof that file contents are unchanged.
+8. Keep each task small enough for a local 35B-class model to understand in one context window.
+9. Do not perform unrelated refactors.
+10. Preserve working CLI behavior unless a task explicitly changes the CLI transport.
 11. Do not add a global lock around an entire OpenCode agent run.
-12. Do not call llama-swap directly from the new streaming transport. pCAD talks to OpenCode; OpenCode talks to its configured model provider.
-13. Do not invent OpenCode endpoints or event names. Verify them against the installed/current OpenCode version before implementation.
+12. pCAD must not call llama-swap directly from this feature. pCAD talks to OpenCode; OpenCode talks to its configured model provider.
+13. Do not invent OpenCode API endpoints or event names. Verify the installed OpenCode version and its `/doc` specification first.
+14. Transport work must not silently enable/disable OpenCode tools, file access, workspace access, or agent behavior. Record and resolve semantic differences explicitly.
+15. Run the smallest relevant validation after the task.
+16. Update `docs/opencode_streaming_status.md` before stopping.
+17. Mark a task `DONE` only when its acceptance condition is met and task-caused validation failures are fixed.
+18. If blocked, mark the task `BLOCKED`, record the exact reason/evidence, and stop. Do not guess around the blocker.
 
 ## Target architecture
 
 ```text
-pCAD UI
-   |
-   v
-OpenCode integration
-   |
-   +-- CLI transport ----------> existing OpenCode CLI implementation
-   |
-   +-- Streaming transport ----> OpenCode server/API
-                                   |
-                                   +-- sessions
-                                   +-- async prompt
-                                   +-- SSE/events
-                                   +-- abort
-                                   |
-                                   v
-                              configured provider
-                                   |
-                                   v
-                               llama-swap
+pCAD UI / existing chat pipeline
+            |
+            v
+     OpenCode transport selector
+            |
+      +-----+------+
+      |            |
+      v            v
+ CLI transport   Streaming transport
+      |            |
+      |            +--> opencode serve
+      |                   |
+      |                   +--> session/message/events/abort
+      |                   |
+      +-------------------+--> OpenCode agent/provider/model
+                                  |
+                                  v
+                              llama-swap
+                                  |
+                                  v
+                              local model
 ```
 
-CLI and streaming should share configuration and application-facing abstractions where that is genuinely useful, but should remain separate transports internally.
+The shared boundary should be small. Do not force CLI and HTTP transports into identical internals where they naturally differ.
 
 ---
 
-# Phase A — Audit current implementation
+# Phase P — Preflight and branch integrity
 
-## A01 — Locate the current OpenCode CLI integration
+No feature implementation is allowed before Phase P is complete.
 
-**Purpose:** establish the exact current code path before refactoring anything.
+## P01 — Confirm branch, worktree, and reviewed head
 
-- [ ] Pull/read latest `master`.
-- [ ] Search for `opencode`, process spawning, CLI command construction, and relevant settings.
-- [ ] Record the files that start OpenCode.
-- [ ] Record where the prompt is built.
-- [ ] Record how workspace/project path is passed.
-- [ ] Record how stdout/stderr is handled.
-- [ ] Record how cancellation currently works.
+**Purpose:** ensure the coding agent is modifying the branch that actually contains the OpenCode work.
 
-**Output:** add findings under A01 in the status file.
+- [ ] Run the three repository-state commands from the working rules.
+- [ ] Confirm branch is `local-dev-continue`.
+- [ ] Record current HEAD in the status file.
+- [ ] Record all modified/untracked files without changing them.
+- [ ] Confirm both plan/status docs are readable in this branch.
 
-**Code changes:** none unless needed only to fix documentation mistakes.
+**Acceptance:** branch/worktree state is documented; no user files changed.
 
-## A02 — Trace CLI response flow to UI
+## P02 — Resolve the `cliAgents.ts` discrepancy
 
-- [ ] Identify where the CLI result enters application state.
-- [ ] Identify chat/message state types.
-- [ ] Identify any existing streaming or incremental message-update logic.
-- [ ] Identify existing tool/reasoning/status UI components.
+**Audit only. Do not recreate the file yet.**
 
-**Output:** short data-flow note in the status file.
+- [ ] Check whether `src/server/cliAgents.ts` exists locally.
+- [ ] Check `git status --short` for an untracked/modified version.
+- [ ] Confirm every import/reference to `cliAgents`.
+- [ ] If a local file exists, inspect and preserve it exactly.
+- [ ] If it is absent, record that the pushed branch has unresolved imports.
 
-## A03 — Trace settings persistence
+**Acceptance:** status file says one of: `present+tracked`, `present+untracked/modified`, or `absent` and lists importing files.
 
-- [ ] Find where local/user settings are stored.
-- [ ] Find existing provider/model settings UI.
-- [ ] Choose the correct place for OpenCode execution mode.
-- [ ] Record persistence mechanism.
+## P03 — Establish a valid CLI compatibility baseline
 
-## A04 — Confirm baseline
+Only run after P02.
 
-Run the repository's normal checks before implementation:
+If `cliAgents.ts` exists locally:
+
+- [ ] Treat it as user work.
+- [ ] Do not rewrite it merely to match this plan.
+- [ ] Validate how it invokes OpenCode CLI and which model IDs it owns.
+
+If `cliAgents.ts` is genuinely absent:
+
+- [ ] Inspect the current routing and recent commit intent.
+- [ ] Implement only the smallest CLI transport needed to satisfy the existing imports and intended OpenCode CLI mode.
+- [ ] Use the installed `opencode run --help` as the CLI contract.
+- [ ] Prefer structured CLI output such as `--format json` when the existing architecture requires parsing.
+- [ ] Do not modify the HTTP streaming transport in this task.
+
+**Acceptance:** the CLI path exists as an explicit, testable compatibility baseline and the project no longer has unresolved `cliAgents` imports caused by this feature.
+
+## P04 — Baseline validation
+
+Run:
 
 ```bash
 npm run typecheck
@@ -101,275 +145,324 @@ npm run lint
 npm run build
 ```
 
-- [ ] Record baseline result.
-- [ ] Record any pre-existing failures separately.
+Also inspect how existing `node:test` files are run in this repository and execute a small relevant existing test if practical.
 
-**Phase A done when:** current CLI architecture, UI flow, settings flow, and baseline validation are documented.
+- [ ] Record PASS/FAIL for every command.
+- [ ] Separate pre-existing failures from task-caused failures.
+- [ ] Do not fix unrelated failures in this task.
+
+**Phase P done when:** correct branch confirmed, CLI baseline accounted for, and baseline validation is recorded.
 
 ---
 
-# Phase B — Add execution-mode configuration
+# Phase A — Map existing OpenCode behavior
 
-## B01 — Add the execution mode type
+## A01 — Trace CLI routing end-to-end
 
-Add a small typed representation, conceptually:
+- [ ] Identify user-facing model IDs routed to the CLI transport.
+- [ ] Identify the selector/routing function in `aiChat.ts` or current equivalent.
+- [ ] Identify CLI command construction.
+- [ ] Identify workspace/directory handling.
+- [ ] Identify stdout/event parsing.
+- [ ] Identify cancellation behavior.
+- [ ] Record the flow in the status file.
+
+**Code changes:** none.
+
+## A02 — Trace the existing HTTP/streaming prototype
+
+- [ ] Read `src/server/opencode.ts` or its current replacement.
+- [ ] Record model discovery behavior.
+- [ ] Record session creation behavior.
+- [ ] Record prompt submission behavior.
+- [ ] Record event reading/parsing behavior.
+- [ ] Record text/reasoning delta generation.
+- [ ] Record abort behavior.
+
+**Code changes:** none.
+
+## A03 — Trace model discovery and picker flow
+
+- [ ] Trace `/api/opencode/models` or current route.
+- [ ] Trace dynamic model merge in `TextAreaChat` or current component.
+- [ ] Record ID prefixes used for CLI vs HTTP/OpenCode models.
+- [ ] Record any Codex entries separately.
+
+**Code changes:** none.
+
+## A04 — Trace settings persistence
+
+- [ ] Identify current settings persistence mechanism.
+- [ ] Identify the most appropriate existing settings UI location.
+- [ ] Decide where one OpenCode execution-mode value should live.
+- [ ] Record the decision; do not implement it yet.
+
+## A05 — Document agent/tool semantics baseline
+
+For both current transports, record whether the path allows:
+
+- [ ] OpenCode tools.
+- [ ] file reads/writes.
+- [ ] shell execution.
+- [ ] workspace/project context.
+- [ ] pCAD tool calls.
+- [ ] conversational-only behavior.
+
+Do not change these semantics in this task.
+
+**Phase A done when:** CLI, HTTP prototype, picker/routing, settings, and behavioral semantics are documented before refactoring.
+
+---
+
+# Phase B — Add selectable execution mode
+
+## B01 — Define the execution-mode type
+
+Add a small type following existing conventions, conceptually:
 
 ```ts
-type OpenCodeMode = 'cli' | 'streaming'
+type OpenCodeExecutionMode = 'cli' | 'streaming'
 ```
 
-- [ ] Follow existing type conventions.
-- [ ] Do not implement streaming yet.
+No transport behavior changes yet.
 
-## B02 — Add default mode
+## B02 — Add the backward-compatible default
 
-- [ ] Default to `cli` for backward compatibility.
-- [ ] Keep current behavior unchanged when no explicit setting exists.
+- [ ] Default to `cli` unless current verified behavior makes another default necessary.
+- [ ] Missing/old settings resolve deterministically.
 
-## B03 — Persist mode selection
+## B03 — Persist the mode
 
-- [ ] Store the selected mode through the existing settings mechanism.
-- [ ] Read it on application startup.
-- [ ] Avoid adding a second settings system.
+- [ ] Use the existing settings persistence mechanism found in A04.
+- [ ] Do not create a second settings store.
 
-## B04 — Add focused tests for setting behavior
+## B04 — Add the mode selector UI
 
-- [ ] Default resolves to CLI.
-- [ ] Streaming value can be stored.
-- [ ] Stored value is restored correctly.
+- [ ] Reuse existing UI components.
+- [ ] Labels clearly distinguish `CLI` and `Streaming`.
+- [ ] User can tell which mode is active.
 
-**Phase B done when:** pCAD has a persisted `cli | streaming` setting while all OpenCode execution still uses CLI.
+## B05 — Test setting and selector behavior
 
----
+- [ ] Default is correct.
+- [ ] CLI can be selected.
+- [ ] Streaming can be selected.
+- [ ] Selection survives reload/reinitialization according to existing settings behavior.
 
-# Phase C — Add mode selector UI
+## B06 — Validate Phase B
 
-## C01 — Add selector to existing settings UI
+- [ ] Relevant focused validation.
+- [ ] `npm run typecheck`.
+- [ ] Build if UI routing/types changed broadly.
 
-- [ ] Reuse an existing select/radio/toggle component.
-- [ ] Labels should clearly say `CLI` and `Streaming` or `OpenCode CLI` and `OpenCode Streaming`.
-- [ ] Do not create a new settings page unless necessary.
-
-## C02 — Wire selector to persisted setting
-
-- [ ] Changing the selector updates the setting.
-- [ ] Reload preserves the selected value.
-
-## C03 — Keep active mode visible where useful
-
-- [ ] Ensure the user can determine which OpenCode mode is active.
-- [ ] Do not add noisy duplicate indicators.
-
-## C04 — Validate UI-only change
-
-- [ ] Typecheck.
-- [ ] Relevant UI tests if available.
-- [ ] Build.
-
-**Phase C done when:** mode can be selected and persisted, even though both modes may still route to the current implementation temporarily.
+**Phase B done when:** the user can persistently choose a mode, but transport internals have not been broadly rewritten.
 
 ---
 
-# Phase D — Create a small shared OpenCode boundary
+# Phase C — Introduce the smallest shared transport boundary
 
-## D01 — Define the minimum application-facing OpenCode interface
+## C01 — Define minimal application-facing operations
 
-Inspect current code first. Prefer a small interface that can support both transports.
-
-Conceptually it may cover:
+Inspect current call sites first. The boundary should expose only what pCAD needs, for example:
 
 ```text
-send/run prompt
-cancel active run
-report execution events/result
+execute/send prompt
+stream/emit result parts
+cancel
 ```
 
-Do not over-generalize.
+Do not design a general agent framework.
 
-## D02 — Wrap the existing CLI path
+## C02 — Put the existing CLI path behind the boundary
 
-- [ ] Route current CLI execution through the shared boundary.
-- [ ] Keep command construction and behavior unchanged.
-- [ ] Avoid rewriting working CLI internals.
+- [ ] Preserve current command/options/output semantics.
+- [ ] Keep the change mechanical and small.
 
-## D03 — Add transport selection
+## C03 — Put the existing HTTP prototype behind the boundary
 
-- [ ] `cli` selects existing CLI transport.
-- [ ] `streaming` may return a clear `not implemented` result at this stage.
-- [ ] No silent fallback.
+- [ ] Reuse `src/server/opencode.ts` instead of duplicating it.
+- [ ] Do not modernize endpoints in this task.
 
-## D04 — Regression-test CLI transport
+## C04 — Route by execution mode
 
-- [ ] Existing CLI command/path behavior remains correct.
-- [ ] Existing errors remain useful.
-- [ ] Existing cancellation remains intact.
+- [ ] `cli` selects CLI transport.
+- [ ] `streaming` selects HTTP transport.
+- [ ] No silent fallback between modes.
 
-**Phase D done when:** the app can select an OpenCode transport without changing CLI semantics.
+## C05 — CLI regression validation
+
+- [ ] Existing CLI model can still be selected.
+- [ ] Existing CLI request still runs.
+- [ ] CLI failure remains visible.
+- [ ] CLI cancellation remains functional if already supported.
+
+**Phase C done when:** both transport implementations have a small common selection point and CLI still behaves as before.
 
 ---
 
-# Phase E — OpenCode server configuration and health
+# Phase D — Unify OpenCode server configuration
 
-## E01 — Add server URL configuration
+## D01 — Choose one canonical server URL setting
 
-Default conceptually to:
+Prefer a single base URL such as:
 
 ```text
 http://127.0.0.1:4096
 ```
 
-- [ ] Use the project's existing config/env pattern.
-- [ ] Keep one canonical source for the URL.
+- [ ] Follow existing env/config conventions.
+- [ ] Do not hard-code conflicting ports in multiple modules.
 
-## E02 — Add optional settings UI for server URL if appropriate
+## D02 — Align `start.sh`, server client, and env template
 
-- [ ] Only if the current settings architecture supports this cleanly.
-- [ ] Otherwise use env/config and document it.
+- [ ] `start.sh` and application client use the same default.
+- [ ] Document the env variable in `.env.local.template`.
+- [ ] Preserve loopback binding by default.
 
-## E03 — Implement a minimal health/connectivity check
+## D03 — Add health check using verified installed API
 
-- [ ] Verify server availability using the current OpenCode API.
-- [ ] Distinguish unavailable server from malformed response.
+- [ ] Prefer the installed OpenCode health endpoint from `/doc`.
+- [ ] Return useful unavailable/version information.
 
-## E04 — Add health tests
+## D04 — Account for optional OpenCode server authentication
 
-- [ ] Available server.
-- [ ] Connection refused.
-- [ ] Unexpected response.
+- [ ] If `OPENCODE_SERVER_PASSWORD`/username is configured, ensure the pCAD server client can use the same credentials or document the required setup.
+- [ ] Do not expose credentials to browser code.
+- [ ] Do not add authentication if it is not configured/needed locally.
 
-**Phase E done when:** pCAD can determine whether the configured OpenCode server is reachable.
+## D05 — Test config/health behavior
 
----
+- [ ] default URL.
+- [ ] configured URL.
+- [ ] unavailable server.
+- [ ] auth configuration if implemented.
 
-# Phase F — Minimal OpenCode server client
-
-## F01 — Verify current OpenCode API contract
-
-Before coding:
-
-- [ ] Confirm session-create endpoint.
-- [ ] Confirm asynchronous prompt endpoint.
-- [ ] Confirm abort endpoint.
-- [ ] Confirm event/SSE endpoint.
-- [ ] Confirm relevant event payload structure.
-- [ ] Record exact verified endpoints/event names in the status file.
-
-## F02 — Implement session creation
-
-- [ ] Create one OpenCode session.
-- [ ] Parse/store session ID.
-- [ ] Use typed responses.
-
-## F03 — Implement asynchronous prompt submission
-
-- [ ] Submit a prompt to an existing session.
-- [ ] Do not wait synchronously for the complete agent answer.
-
-## F04 — Implement abort API call
-
-- [ ] Add only if supported by verified API.
-- [ ] Aborting a run must not automatically delete its session.
-
-## F05 — Unit-test HTTP client
-
-- [ ] Create session success/failure.
-- [ ] Prompt success/failure.
-- [ ] Abort success/failure if implemented.
-
-**Phase F done when:** a mocked OpenCode server can create a session and accept an asynchronous prompt without SSE yet.
+**Phase D done when:** one server URL/health mechanism is used consistently.
 
 ---
 
-# Phase G — SSE/event transport
+# Phase E — Verify the installed OpenCode API contract
 
-## G01 — Open one event stream
+This phase is deliberately separate from implementation.
 
-- [ ] Connect to the verified OpenCode SSE/event endpoint.
-- [ ] Parse SSE frames correctly.
-- [ ] Handle normal disconnect.
+## E01 — Record installed OpenCode version
 
-## G02 — Extract session identity
+Run:
 
-- [ ] Determine how session identity appears in actual events.
-- [ ] Route events by verified session identity.
+```bash
+opencode --version
+```
 
-## G03 — Handle unknown events safely
+Record exact output.
 
-- [ ] Ignore or log unsupported events without crashing.
-- [ ] Do not expose raw event objects directly to React components.
+## E02 — Inspect installed OpenAPI spec
 
-## G04 — Add reconnect policy
+With the configured server running, inspect:
 
-- [ ] Keep it simple.
-- [ ] Avoid infinite tight reconnect loops.
-- [ ] SSE loss must not delete the OpenCode session.
+```text
+GET <base-url>/doc
+```
 
-## G05 — Unit-test event parser
+Record actual paths and request shapes relevant to this feature.
 
-- [ ] Multiple frames.
-- [ ] Partial chunks if relevant to implementation.
-- [ ] Unknown event.
-- [ ] Disconnect.
-- [ ] Session A/B events remain distinguishable.
+## E03 — Record required API operations
 
-**Phase G done when:** pCAD can consume and route OpenCode events without updating chat UI yet.
+At minimum verify the installed equivalents of:
+
+- [ ] health.
+- [ ] provider/model discovery.
+- [ ] create session.
+- [ ] async prompt/message submission.
+- [ ] event/SSE stream.
+- [ ] abort session/run.
+
+## E04 — Compare prototype against installed API
+
+Create a short migration table in the status file:
+
+```text
+current code path -> installed path -> action needed
+```
+
+Do not change runtime code in E01–E04.
+
+**Phase E done when:** streaming implementation can be changed from evidence, not guessed endpoints.
 
 ---
 
-# Phase H — Internal pCAD event adapter
+# Phase F — Modernize the streaming client in small steps
 
-## H01 — Define a small internal event model
+Only use endpoints verified in Phase E.
 
-Use only events needed by pCAD, conceptually:
+## F01 — Fix provider/model discovery
+
+- [ ] Replace stale model/provider endpoint usage if needed.
+- [ ] Preserve CLI model discovery fallback only if it remains useful.
+- [ ] Keep model IDs stable where possible.
+
+## F02 — Fix session creation
+
+- [ ] Use verified create-session request shape.
+- [ ] Do not add persistent-session history behavior yet.
+
+## F03 — Fix asynchronous prompt submission
+
+- [ ] Use verified async endpoint/request shape.
+- [ ] Include model/agent/parts fields only as required by installed API and intended behavior.
+
+## F04 — Implement one real SSE/event stream
+
+- [ ] Use the verified event endpoint.
+- [ ] Read streaming response incrementally rather than repeatedly downloading an entire event response unless the installed API explicitly requires polling.
+- [ ] Parse SSE framing correctly.
+
+## F05 — Route events by session identity
+
+- [ ] Extract session ID from verified event shape.
+- [ ] Ignore unrelated session events.
+- [ ] Keep simultaneous sessions isolated.
+
+## F06 — Implement verified abort
+
+- [ ] Abort the active streaming OpenCode session/run.
+- [ ] Do not delete the session unless explicitly intended.
+
+## F07 — Add focused streaming-client tests
+
+Use the repository's existing test conventions; do not introduce a new test framework just for this feature.
+
+- [ ] session creation.
+- [ ] async prompt submission.
+- [ ] SSE parsing.
+- [ ] event session filtering.
+- [ ] abort.
+- [ ] server error.
+
+**Phase F done when:** the existing HTTP prototype speaks the installed OpenCode API correctly.
+
+---
+
+# Phase G — Stabilize pCAD event adaptation
+
+## G01 — Define a small internal event model
+
+Represent only what the existing pCAD UI needs, conceptually:
 
 ```text
 text update
-status
- tool start
- tool finish
+reasoning/status update
+tool/activity update
 error
 complete
 ```
 
-Names should follow current project conventions.
+Names must follow project conventions.
 
-## H02 — Map verified OpenCode events
+## G02 — Map text updates without duplication
 
-- [ ] Map text/message updates.
-- [ ] Map useful tool/activity events.
-- [ ] Map errors.
-- [ ] Map completion.
+First determine whether OpenCode emits deltas, snapshots, or both.
 
-## H03 — Keep transport details isolated
-
-- [ ] React/chat code consumes pCAD events, not raw OpenCode API payloads.
-
-## H04 — Unit-test mappings
-
-- [ ] Text event.
-- [ ] Tool event.
-- [ ] Error.
-- [ ] Completion.
-
-**Phase H done when:** OpenCode-specific event details are isolated in one adapter layer.
-
----
-
-# Phase I — Stream text into the existing chat UI
-
-## I01 — Create/update the active assistant message
-
-- [ ] Reuse current chat state machinery.
-- [ ] Do not create a second chat-message store.
-
-## I02 — Handle incremental text correctly
-
-Determine whether verified OpenCode events are deltas, snapshots, or both.
-
-- [ ] Delta handling does not lose text.
-- [ ] Snapshot handling does not duplicate text.
-
-Example acceptance check:
+Acceptance example:
 
 ```text
 Hello
@@ -377,237 +470,226 @@ Hello world
 Hello world!
 ```
 
-must result in exactly:
+must end as exactly:
 
 ```text
 Hello world!
 ```
 
-## I03 — Mark completion
+## G03 — Map completion and errors
 
-- [ ] Stop streaming state when OpenCode signals completion.
-- [ ] Preserve final message in the same format as existing chat messages.
+- [ ] Completion is deterministic.
+- [ ] Partial text can survive an error where appropriate.
 
-## I04 — Handle text-stream error
+## G04 — Map useful agent activity only
 
-- [ ] Preserve already-received text where appropriate.
-- [ ] Show a useful error state.
+- [ ] Reuse existing pCAD tool/reasoning/status UI concepts where available.
+- [ ] Avoid raw event JSON in React components.
+- [ ] Do not expose hidden reasoning content unless the existing product intentionally supports it.
 
-## I05 — Add focused tests
+## G05 — Unit-test event mapping
 
-- [ ] Delta sequence.
-- [ ] Snapshot sequence.
-- [ ] Completion.
-- [ ] Mid-stream error.
-- [ ] No duplicate text.
+- [ ] delta sequence.
+- [ ] snapshot sequence.
+- [ ] completion.
+- [ ] error.
+- [ ] unknown event.
 
-**Phase I done when:** the assistant response visibly grows in the existing pCAD UI.
-
----
-
-# Phase J — Show useful agent activity
-
-## J01 — Identify existing activity/tool UI
-
-- [ ] Reuse it if possible.
-
-## J02 — Map tool start/finish
-
-- [ ] Show concise activity only.
-- [ ] Avoid dumping raw commands/events unless existing UX explicitly does so.
-
-## J03 — Show waiting/working state if supported
-
-- [ ] Only based on actual available events/state.
-
-## J04 — Keep assistant text primary
-
-- [ ] Activity indicators must not replace streamed answer text.
-
-**Phase J done when:** the user can see useful high-level agent activity without event noise.
+**Phase G done when:** OpenCode API details are isolated from the UI and text cannot duplicate during streaming.
 
 ---
 
-# Phase K — Session lifecycle
+# Phase H — Wire streaming into the existing chat UI
 
-## K01 — Choose where OpenCode session ID belongs
+## H01 — Reuse existing assistant-message state
 
-- [ ] Map one pCAD streaming conversation to one OpenCode session.
-- [ ] Follow current conversation-state architecture.
+- [ ] Do not create a parallel chat store.
+- [ ] Create/update the active assistant message through existing mechanisms.
 
-## K02 — Reuse session for follow-up prompts
+## H02 — Show progressive text
 
-- [ ] First prompt creates session.
-- [ ] Following prompts reuse it.
+- [ ] Text appears while OpenCode is running.
+- [ ] Markdown/rendering behavior remains consistent with normal chat.
 
-## K03 — Recover from missing/expired session
+## H03 — Show completion/error state
 
-- [ ] Detect invalid session.
-- [ ] Provide deterministic recovery behavior.
-- [ ] Do not silently mix histories.
+- [ ] Loading state ends correctly.
+- [ ] Useful error is visible.
+- [ ] Partial response is handled deliberately.
 
-## K04 — Separate CLI and streaming state
+## H04 — Wire Stop/Cancel by transport
 
-- [ ] CLI mode must not accidentally consume a streaming session ID.
-- [ ] Switching mode must not corrupt either path.
+- [ ] CLI uses CLI cancellation.
+- [ ] Streaming uses verified OpenCode abort.
+- [ ] Stop does not silently switch transport.
 
-## K05 — Add lifecycle tests
+## H05 — Validate UI streaming
 
-- [ ] New conversation creates session.
-- [ ] Follow-up reuses session.
-- [ ] Separate conversation gets separate session.
-- [ ] Missing session handling.
+- [ ] focused tests where available.
+- [ ] typecheck.
+- [ ] build.
 
-**Phase K done when:** streaming conversations maintain proper OpenCode continuity.
-
----
-
-# Phase L — Cancellation
-
-## L01 — Preserve CLI cancellation
-
-- [ ] Verify existing CLI stop behavior after transport refactor.
-
-## L02 — Wire streaming cancellation
-
-- [ ] Existing Stop/Cancel UI selects transport-specific abort behavior.
-- [ ] Use verified OpenCode abort API.
-
-## L03 — Continue after cancellation
-
-- [ ] Session remains usable if OpenCode supports this.
-- [ ] Send a new prompt after abort in manual/integration test.
-
-## L04 — Tests
-
-- [ ] CLI cancel.
-- [ ] Streaming abort.
-- [ ] Abort error.
-- [ ] Continue session after abort where supported.
-
-**Phase L done when:** Stop works correctly in both execution modes.
+**Phase H done when:** switching to Streaming produces a progressive response in the existing pCAD chat UI.
 
 ---
 
-# Phase M — Concurrency and event isolation
+# Phase I — Concurrency and event isolation
 
-This phase is important for local llama-swap usage.
+This phase preserves the useful behavior of llama-swap with `--parallel 1`: several agents may exist while only one model inference request runs at a time.
 
-## M01 — Ensure there is no whole-run global model lock
+## I01 — Verify no whole-run global lock
 
-- [ ] Search for new locking/serialization introduced by this feature.
-- [ ] Remove whole-agent-run locking unless independently required by pCAD.
+- [ ] Search all new transport code for application-level serialization.
+- [ ] Do not reserve the model for an entire OpenCode agent run.
 
-## M02 — Two streaming sessions
+## I02 — Run two streaming sessions concurrently
 
-- [ ] Start session A.
-- [ ] Start session B.
-- [ ] Both may remain active at application level.
+- [ ] Session A can remain active.
+- [ ] Session B can also submit work.
 
-## M03 — Verify event isolation
+## I03 — Verify zero cross-talk
 
-- [ ] A text never updates B conversation.
-- [ ] B text never updates A conversation.
-- [ ] Tool/status events remain session-scoped.
+- [ ] A text/status never updates B conversation.
+- [ ] B text/status never updates A conversation.
 
-## M04 — Verify tool-wait interleaving
+## I04 — Test tool-wait interleaving
 
-Desired behavior with llama.cpp `--parallel 1`:
+Desired application-level behavior:
 
 ```text
-A: LLM request
-A: waits on tool
-B: LLM request
-B: waits on tool
-A: next LLM request
+A: model request
+A: tool/external wait
+B: model request
+B: tool/external wait
+A: next model request
 ```
 
-pCAD must not reserve the model for A for the lifetime of the entire agent run.
+pCAD must not prevent B from reaching OpenCode merely because A's overall task is still active.
 
-## M05 — Automated concurrency test
+## I05 — Add deterministic interleaving test
 
-- [ ] Mock interleaved A/B SSE events.
-- [ ] Verify correct routing and final messages.
+- [ ] Mock/interleave A/B events.
+- [ ] Verify correct routing and final text.
 
-**Phase M done when:** multiple OpenCode sessions can make progress without cross-streaming or app-level whole-run locking.
+**Phase I done when:** multiple OpenCode jobs coexist without event mixing or whole-run locking.
 
 ---
 
-# Phase N — Error handling and recovery
+# Phase J — Decide conversation-history ownership
 
-## N01 — Streaming server unavailable
+Do not skip this phase. It prevents duplicated context and wasted tokens.
 
-- [ ] Clear error with configured URL.
-- [ ] Suggest starting server or selecting CLI.
-- [ ] Do not silently fall back to CLI.
+## J01 — Document current history behavior
 
-## N02 — Prompt submission failure
+Confirm whether each transport currently sends:
 
-- [ ] Surface useful error.
-- [ ] Leave conversation in a recoverable state.
+- full pCAD transcript,
+- only newest user turn,
+- or relies on an existing OpenCode session history.
 
-## N03 — SSE connection loss
+## J02 — Choose one history owner for Streaming
 
-- [ ] Handle without deleting conversation/session.
-- [ ] Reconnect according to the simple policy from G04.
+Recommended initial low-risk choice:
 
-## N04 — Unexpected event payload
+```text
+pCAD owns conversation history
++ one OpenCode session per pCAD request
++ pCAD sends required current transcript/context
+```
+
+This matches the reviewed prototype and avoids hidden OpenCode state.
+
+Optional later choice:
+
+```text
+OpenCode owns conversation history
++ persistent OpenCode session per pCAD conversation
++ pCAD sends only the new turn/context delta
+```
+
+## J03 — Enforce the anti-duplication invariant
+
+Never combine:
+
+```text
+persistent/reused OpenCode session
++ resend full pCAD transcript every prompt
+```
+
+Add a test or clear assertion around whichever strategy is chosen.
+
+## J04 — Optional persistent-session implementation
+
+Only implement this task if J02 deliberately chooses OpenCode-owned persistent history. Otherwise mark J04 `SKIPPED` with rationale.
+
+**Phase J done when:** history ownership is explicit, tested, and non-duplicating. Persistent sessions are not required for initial feature completion.
+
+---
+
+# Phase K — Error handling and recovery
+
+## K01 — Streaming server unavailable
+
+- [ ] Clear error includes configured server location where safe.
+- [ ] User can select CLI manually.
+- [ ] No silent automatic fallback.
+
+## K02 — SSE disconnect/reconnect
+
+- [ ] No tight reconnect loop.
+- [ ] Existing conversation state is not destroyed.
+- [ ] Recovery behavior is deterministic.
+
+## K03 — Malformed/unknown event
 
 - [ ] Defensive parsing.
 - [ ] No application crash.
 
-## N05 — Server-side agent error
+## K04 — CLI process failure
 
-- [ ] Surface useful error/status.
-- [ ] Preserve received answer text where sensible.
+- [ ] Non-zero exit/timeout remains clear.
+- [ ] Streaming work has not degraded CLI errors.
 
-## N06 — Tests
+## K05 — Test error paths
 
-- [ ] Connection refused.
-- [ ] Prompt error.
+- [ ] server unavailable.
+- [ ] prompt/API failure.
 - [ ] SSE disconnect.
-- [ ] Malformed event.
-- [ ] Agent error.
+- [ ] malformed event.
+- [ ] CLI failure.
 
-**Phase N done when:** expected failure modes are explicit and recoverable.
+**Phase K done when:** expected failure modes are visible and recoverable without mixing transports.
 
 ---
 
-# Phase O — Full validation and documentation
+# Phase L — Final validation and documentation
 
-## O01 — CLI regression test
+## L01 — Manual CLI regression
 
-Manually verify current CLI workflow remains functional.
+- [ ] Select CLI.
+- [ ] Run a normal OpenCode task.
+- [ ] Verify response.
+- [ ] Verify Stop/Cancel if supported.
 
-- [ ] New CLI task.
-- [ ] Output displayed correctly.
-- [ ] Error path.
-- [ ] Stop/cancel.
+## L02 — Manual Streaming test
 
-## O02 — Streaming manual test
+- [ ] Select Streaming.
+- [ ] Run a normal OpenCode task.
+- [ ] Verify progressive text.
+- [ ] Verify completion.
+- [ ] Verify Stop/Cancel.
 
-Start OpenCode server using the syntax supported by the installed version, conceptually:
-
-```bash
-opencode serve --hostname 127.0.0.1 --port 4096
-```
-
-- [ ] Connect from pCAD.
-- [ ] Start streaming prompt.
-- [ ] Observe progressive text.
-- [ ] Send follow-up in same conversation.
-- [ ] Verify same OpenCode session.
-
-## O03 — Two-session manual test
+## L03 — Manual two-session test
 
 - [ ] Start A.
-- [ ] Let A enter a tool/external wait.
-- [ ] Start B.
-- [ ] Confirm B can progress.
-- [ ] Confirm A later resumes.
-- [ ] Confirm no mixed UI events.
+- [ ] While A waits on tool/external work, start B.
+- [ ] Verify B can progress.
+- [ ] Verify A later continues.
+- [ ] Verify no cross-talk.
 
-## O04 — Run project validation
+## L04 — Full project validation
+
+Run:
 
 ```bash
 npm run typecheck
@@ -615,55 +697,61 @@ npm run lint
 npm run build
 ```
 
-Run any relevant repository tests as well.
+Run relevant existing/new Node tests using the repository's established command.
 
-## O05 — Update documentation
+## L05 — Documentation
 
 Document:
 
 - [ ] CLI mode.
 - [ ] Streaming mode.
-- [ ] Mode selector.
-- [ ] OpenCode server configuration.
-- [ ] How to start OpenCode server.
-- [ ] Troubleshooting.
-- [ ] Session behavior.
-- [ ] Concurrency behavior.
+- [ ] mode selector.
+- [ ] server URL/auth configuration.
+- [ ] how to start `opencode serve`.
+- [ ] history-ownership decision.
+- [ ] concurrency behavior.
+- [ ] troubleshooting.
 
-## O06 — Final diff review
+## L06 — Final diff review
 
+- [ ] CLI path still exists.
+- [ ] No duplicate streaming implementation was added beside reusable code.
+- [ ] No stale `/api/...` assumptions remain unless verified by installed `/doc`.
+- [ ] One canonical OpenCode server URL/config path.
+- [ ] No direct llama-swap dependency in pCAD OpenCode transport.
+- [ ] No whole-agent-run global lock.
+- [ ] No persistent-session + full-history duplication.
+- [ ] No silent tool/agent semantic change.
 - [ ] No unrelated refactors.
-- [ ] No direct llama-swap dependency added to pCAD streaming transport.
-- [ ] CLI code still present.
-- [ ] No global whole-run lock.
-- [ ] No hard-coded server URL spread across multiple modules.
-
-**Phase O done when:** both modes are usable, validated, documented, and CLI compatibility is preserved.
 
 ---
 
 # Definition of Done
 
-- [ ] Existing OpenCode CLI implementation remains available and functional.
+- [ ] Work was performed on the intended feature branch and user work was preserved.
+- [ ] Existing OpenCode CLI transport is available and functional.
 - [ ] User can select `CLI` or `Streaming`.
-- [ ] Selection persists.
-- [ ] Streaming communicates through OpenCode server/API.
-- [ ] Streaming response appears progressively in existing pCAD chat UI.
-- [ ] OpenCode events are adapted behind a clean boundary.
-- [ ] Streaming conversation reuses its OpenCode session.
-- [ ] Stop/cancel works in both modes.
-- [ ] Multiple streaming sessions can coexist.
-- [ ] Tool waiting in one session does not create an app-level lock blocking another.
-- [ ] Events never cross between sessions/conversations.
-- [ ] Server/API failures are handled clearly.
-- [ ] Normal automated tests do not require a live model/GPU.
+- [ ] Mode selection persists.
+- [ ] Streaming reuses/modernizes the existing OpenCode HTTP prototype rather than adding a duplicate stack.
+- [ ] Streaming uses endpoints verified against the installed OpenCode `/doc`.
+- [ ] One canonical local server URL is used, defaulting to loopback unless explicitly configured otherwise.
+- [ ] Streaming text appears progressively in the existing pCAD chat UI.
+- [ ] Text is not duplicated when event shapes are snapshots/deltas.
+- [ ] Stop/Cancel works appropriately in both transports.
+- [ ] Multiple OpenCode sessions/jobs can coexist at application level.
+- [ ] Session events never cross between pCAD conversations.
+- [ ] pCAD does not globally lock the model for a whole agent run.
+- [ ] Conversation-history ownership is explicit and cannot duplicate history.
+- [ ] CLI and Streaming do not silently differ in tool/workspace semantics; any intentional difference is documented.
+- [ ] Server/API/CLI failures are handled clearly.
+- [ ] Normal automated tests do not require llama-swap, a model, or GPU.
 - [ ] `npm run typecheck` passes or only documented pre-existing failures remain.
 - [ ] `npm run lint` passes or only documented pre-existing failures remain.
 - [ ] `npm run build` passes or only documented pre-existing failures remain.
 - [ ] Documentation is updated.
 
-## Recommended instruction to a coding agent
+## Standard prompt for a coding-agent run
 
-Use this short instruction for each iteration:
+Use this exact style for each iteration:
 
-> Read `docs/opencode_streaming_plan.md` and `docs/opencode_streaming_status.md`. Implement only the next uncompleted task ID. Inspect current repository code before editing. Keep the change minimal, preserve OpenCode CLI behavior, run task-relevant validation, update the status file with files changed/tests/results, and stop after that task. Do not start the following task in the same run.
+> Read `docs/opencode_streaming_plan.md` and `docs/opencode_streaming_status.md`. Work only on the `Current next task` from the status file. First run `git branch --show-current`, `git status --short`, and `git log -1 --oneline`; never discard or overwrite uncommitted/untracked user files. Inspect the current code needed for that task, and for OpenCode HTTP/CLI behavior trust the installed `opencode --version`, `opencode ... --help`, and server `/doc` over assumptions in the plan. Implement only that one task, run the smallest relevant validation, update the status file with evidence/files/tests/result, set the next task only if this task is DONE, then stop. Do not start another task in the same run.
