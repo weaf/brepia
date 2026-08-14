@@ -88,6 +88,11 @@ export type ConversationSettings = {
    * `src/server/aiChat.ts`.
    */
   suggestions?: string[];
+  /**
+   * Execution mode for OpenCode agents: 'cli' for traditional CLI transport,
+   * 'streaming' for HTTP/SSE streaming transport. Defaults to 'cli' if not set.
+   */
+  openCodeExecutionMode?: 'cli' | 'streaming';
 } | null;
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
