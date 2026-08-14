@@ -6,6 +6,7 @@ import {
   requireUser,
 } from '@/server/api';
 import { opencodeModels } from '@/server/opencode';
+import { configuredCodexModels } from '@/server/cliAgents';
 
 export const Route = createFileRoute('/api/opencode/models')({
   server: {
@@ -15,16 +16,18 @@ export const Route = createFileRoute('/api/opencode/models')({
         try {
           await requireUser(request);
           const models = await opencodeModels();
-          return json(
-            models.map((m) => ({
-              id: `opencode/${m.bareID}`,
-              name: m.name,
-              description: `OpenCode · ${m.providerID}`,
-              provider: 'OpenCode',
-              supportsTools: false,
+          return json([
+            ...models.map((m) => ({
+              id: `agent/opencode/${m.cliId}`,
+              name: `OpenCode · ${m.name}`,
+              description: `OpenCode agent via ${m.providerID}`,
+              provider: 'OpenCode Agent',
+              supportsTools: true,
               supportsThinking: false,
+              supportsVision: false,
             })),
-          );
+            ...configuredCodexModels(),
+          ]);
         } catch (err) {
           return json(
             {

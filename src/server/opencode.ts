@@ -47,20 +47,34 @@ function humanName(bareID: string): string {
 
 /**
  * Fetch models from `GET /api/model` (opencode serve HTTP API).
- * Falls back to `opencode models` CLI if the server is unreachable.
+ * The API only returns models from providers active in the project
+ * (e.g. llama-swap, morph, opencode). CLI `opencode models` returns
+ * ALL registered providers (432 models vs 47 from the API).
+ * We merge: API models by ID, then CLI models that aren't already
+ * present, so the full model list is available.
  */
 async function listModels(): Promise<OpenCodeModelInfo[]> {
   if (modelsCache && Date.now() - modelsCache.at < MODELS_CACHE_TTL_MS) {
     return modelsCache.models;
   }
-  const models = await listModelsViaApi();
-  modelsCache = { at: Date.now(), models };
-  return models;
+  // API gives us models with rich names; CLI gives us all providers.
+  const apiModels = await listModelsViaApi();
+  const cliModels = await listModelsViaCli();
+  // Use API models as the primary source (they have proper names).
+  // Supplement with CLI models that aren't already covered by the API.
+  const apiCliIds = new Set(apiModels.map((m) => m.cliId));
+  const merged = [
+    ...apiModels,
+    ...cliModels.filter((m) => !apiCliIds.has(m.cliId)),
+  ];
+  modelsCache = { at: Date.now(), models: merged };
+  return merged;
 }
 
 interface OpenCodeModelItem {
   id: string;
   providerID: string;
+  name?: string;
 }
 
 async function listModelsViaApi(): Promise<OpenCodeModelInfo[]> {
@@ -76,7 +90,9 @@ async function listModelsViaApi(): Promise<OpenCodeModelInfo[]> {
         cliId: `${m.providerID}/${m.id}`,
         providerID: m.providerID,
         bareID: m.id,
-        name: humanName(m.id),
+        // Prefer the real name from opencode's /api/model response.
+        // Falls back to humanName() for providers that don't include a name.
+        name: m.name || humanName(m.id),
       }));
   } catch (err) {
     logError(err, {
@@ -258,7 +274,7 @@ function extractText(events: SSEEvent[]): { text: string; reasoning: string } {
  * 3. GET /api/session/{id}/event (SSE) — read until step.ended or step.failed
  */
 async function* streamParts(
-  bareId: string,
+  modelId: string,
   prompt: string,
   options: LanguageModelV2CallOptions,
 ): AsyncGenerator<LanguageModelV2StreamPart> {
@@ -266,6 +282,12 @@ async function* streamParts(
   let abort = () => {};
   try {
     const apiUrl = opencodeApiUrl();
+    // Parse providerID from the full modelId (e.g. "opencode/big-pickle" or
+    // "llama-swap/qwen3.6-35b-mtp-128k"). Opencode models use "opencode",
+    // llama-swap / morph models use their respective providerID.
+    const slash = modelId.indexOf('/');
+    const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
+    const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
 
     // Step 1: Create session with model
     options.abortSignal?.addEventListener('abort', abort, { once: true });
@@ -277,7 +299,7 @@ async function* streamParts(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: { providerID: 'opencode', id: bareId },
+          model: { providerID, id: bareId },
         }),
         signal: options.abortSignal,
       });
@@ -436,11 +458,6 @@ async function* streamParts(
 }
 
 export function opencodeChatModel(appModelId: string): LanguageModelV2 {
-  // Strip the "opencode/" prefix to get the bare model id
-  const bareId = appModelId.startsWith('opencode/')
-    ? appModelId.slice('opencode/'.length)
-    : appModelId;
-
   return {
     specificationVersion: 'v2',
     provider: 'opencode',
@@ -448,7 +465,9 @@ export function opencodeChatModel(appModelId: string): LanguageModelV2 {
     supportedUrls: {},
     async doStream(options) {
       const prompt = formatPrompt(options.prompt);
-      const gen = streamParts(bareId, prompt, options);
+      // Pass full modelId (e.g. "opencode/big-pickle" or
+      // "llama-swap/qwen3.6-35b-mtp-128k") — streamParts parses it.
+      const gen = streamParts(appModelId, prompt, options);
       const stream = new ReadableStream<LanguageModelV2StreamPart>({
         async start(controller) {
           try {
@@ -543,7 +562,7 @@ export function opencodeChatModel(appModelId: string): LanguageModelV2 {
         request: {},
         response: {
           id: 'opencode',
-          model: bareId,
+          model: appModelId,
           timestamp: new Date(Date.now()),
           headers: {},
           body: undefined,

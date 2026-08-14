@@ -27,7 +27,7 @@ import imageType from 'image-type';
 import { z } from 'zod';
 import { billing, BillingClientError } from './billingClient';
 import { corsHeaders, isRecord } from './api';
-import { env, requiredEnv } from './env';
+import { env } from './env';
 import { logError } from './serverLog';
 import {
   decidePersistAction,
@@ -37,6 +37,7 @@ import {
 } from './chatToolPersistence';
 import { handleMeshRequest } from './mesh';
 import { opencodeChatModel } from './opencode';
+import { cliAgentChatModel, isCliAgentModel } from './cliAgents';
 import { getAnonSupabaseClient } from './supabaseClient';
 
 /**
@@ -333,13 +334,15 @@ type ChatProvider =
   | 'google'
   | 'openrouter'
   | 'local'
-  | 'opencode';
+  | 'opencode'
+  | 'cli-agent';
 
 function providerFor(modelId: string): ChatProvider {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('google/')) return 'google';
   if (modelId.startsWith('local/')) return 'local';
   if (modelId.startsWith('opencode/')) return 'opencode';
+  if (isCliAgentModel(modelId)) return 'cli-agent';
   return 'openrouter';
 }
 
@@ -376,24 +379,29 @@ function createChatProviders(): ChatProviders {
   return {
     anthropic: () => {
       if (!anthropic) {
+        const key = env('ANTHROPIC_API_KEY');
         const baseURL = normalizedAnthropicBaseURL();
         anthropic = createAnthropic({
-          apiKey: requiredEnv('ANTHROPIC_API_KEY'),
+          apiKey: key,
           ...(baseURL ? { baseURL } : {}),
         });
       }
       return anthropic;
     },
     google: () => {
-      google ??= createGoogleGenerativeAI({
-        apiKey: requiredEnv('GOOGLE_API_KEY'),
-      });
+      if (!google) {
+        google = createGoogleGenerativeAI({
+          apiKey: env('GOOGLE_API_KEY'),
+        });
+      }
       return google;
     },
     openrouter: () => {
-      openrouter ??= createOpenRouter({
-        apiKey: requiredEnv('OPENROUTER_API_KEY'),
-      });
+      if (!openrouter) {
+        openrouter = createOpenRouter({
+          apiKey: env('OPENROUTER_API_KEY'),
+        });
+      }
       return openrouter;
     },
     local: () => {
@@ -497,6 +505,10 @@ function buildChatModel(
     // OpenCode decides reasoning internally per model; the `thinking` flag
     // only affects direct-provider calls.
     return { model: opencodeChatModel(modelId) };
+  }
+
+  if (isCliAgentModel(modelId)) {
+    return { model: cliAgentChatModel(modelId) };
   }
 
   throw new Error(`Unsupported chat model ${modelId}`);

@@ -681,19 +681,8 @@ function TextAreaChat({
     if (type === 'creative') {
       return CREATIVE_MODELS;
     }
-    const localBareIds = new Set(
-      PARAMETRIC_MODELS.filter((m) => m.id.startsWith('local/')).map((m) =>
-        m.id.slice('local/'.length),
-      ),
-    );
     const opencodeModels = dynamicOpenCodeModels ?? [];
-    const merged = [
-      ...PARAMETRIC_MODELS,
-      ...opencodeModels.filter(
-        (m) => !localBareIds.has(m.id.slice('opencode/'.length)),
-      ),
-    ];
-    return merged;
+    return [...PARAMETRIC_MODELS, ...opencodeModels];
   }, [type, dynamicOpenCodeModels]);
 
   // ------------------------------------------------------------
