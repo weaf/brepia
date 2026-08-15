@@ -554,7 +554,7 @@ async function* streamParts(
     while (!state.isTerminal && !state.isErrored) {
       const eventsUrl = new URL(`${apiUrl}/api/session/${sessionId}/event`);
       if (state.cursor > 0) {
-        eventsUrl.searchParams.set('cursor', String(state.cursor));
+        eventsUrl.searchParams.set('after', String(state.cursor));
       }
 
       const eventRes = await fetch(eventsUrl.toString(), {
