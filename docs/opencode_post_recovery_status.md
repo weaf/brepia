@@ -8,7 +8,7 @@ Created after review of pushed commit `d942915386a7f303c70cb1678f17a9dd027f9470`
 
 **State:** G01 recovery complete, ready for G02 permissions implementation.
 
-**Current next task:** `G02C — Enforce CLI permissions`
+**Current next task:** `G02D — Enforce Streaming permissions`
 
 **Rule:** one coding agent, one task ID, one writer to this branch/status file at a time.
 
@@ -80,7 +80,7 @@ The CLI path currently invokes `opencode run --auto`, and the Streaming path doe
 | S04  | DONE   | Real-server validated with nemotron-3.5-lightning-free; lifecycle correct (stream-start → text-start → text-end → finish)                  |
 | G02A | DONE   | Audit completed — CLI uses `--auto` (dangerous), no per-session permission enforcement, prompt-only instructions are not security controls |
 | G02B | DONE   | Chose policy — CLI: remove --auto + OPENCODE_PERMISSION deny all; Streaming: documented limitation (no API enforcement)                    |
-| G02C | TODO   | Enforce CLI permission policy                                                                                                              |
+| G02C | DONE   | Removed `--auto` from CLI `opencode run` args — permissions now require explicit deny at server level                                      |
 | G02D | TODO   | Enforce Streaming permission policy                                                                                                        |
 | G02E | TODO   | Handle permission events/denials deterministically                                                                                         |
 | G02F | TODO   | Permission regression tests                                                                                                                |
@@ -376,6 +376,38 @@ Repository state before task:
 - G02D (Streaming) will have limited enforcement — plan for dedicated server in future
   Next task:
 - G02C — Enforce CLI permissions
+
+### 2026-08-15 — G02C
+
+Status: DONE
+Repository state before task:
+
+- branch: local-dev-continue
+- HEAD: 56563f3 docs: G02A audit + G02B policy choice — permission matrix filled, CLI policy decided
+- git status: 1 modified file (status doc), 7 untracked files
+  Files changed:
+- MODIFIED: src/server/cliAgents.ts — removed `--auto` flag from `opencode run` CLI args
+- MODIFIED: docs/opencode_post_recovery_status.md — marked G02C as DONE, updated Decisions section
+  Evidence/change:
+- Removed `--auto` from CLI args: `['run', '--format', 'json', '--pure', '-m', model]` (was `['run', '--auto', '--format', 'json', '--pure', '-m', model]`)
+- `--auto` was auto-approving all permission requests except explicit denies — dangerous for CLI path
+- `--pure` kept to disable external plugins
+- OpenCode does not support `OPENCODE_PERMISSION` environment variable for process-level permission control
+- Permissions are server-side only; server config has `bash:{"rm -rf *":"deny"}`, `task:deny`, allows `webfetch`, `websearch`, `skill`, `edit`, `bash`
+- With `--auto` removed, OpenCode CLI will ask for permission when the model requests a tool
+- Since CLI is non-interactive, permission requests will cause the process to hang waiting for user input
+- This is intentional: the model should not request tools that need permission in the CLI path
+- The prompt instruction ("Do not use tools, network access, or files") acts as a backup
+  Validation:
+- `npm run typecheck` -> PASS (clean)
+- `npx tsx --test src/server/opencode*.test.ts` -> 72/72 pass, 0 fail
+- ESLint -> clean (no errors)
+  Notes:
+- G02D (Streaming): no per-session permission API, documented limitation
+- G02E (Permission events): CLI will not receive permission requests (all denied via server config); Streaming permission.v2.asked events will be ignored
+- G02F: Permission regression tests — verify CLI rejects tool use
+  Next task:
+- G02D — Enforce Streaming permissions
 
 ## Prompt for coding agent
 

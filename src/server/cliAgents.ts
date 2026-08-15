@@ -244,7 +244,7 @@ async function invokeAgent(
     const instruction = `${prompt}\n\nReturn only JSON with exactly these keys: {"code":"complete OpenSCAD source or empty string","message":"short user-facing status"}. For a CAD request, put the complete runnable OpenSCAD program in code. Do not use tools, network access, or files; work only from this conversation.`;
     const args =
       agent === 'opencode'
-        ? ['run', '--auto', '--format', 'json', '--pure', '-m', model]
+        ? ['run', '--format', 'json', '--pure', '-m', model]
         : [
             'exec',
             '--skip-git-repo-check',
