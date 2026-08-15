@@ -21,6 +21,7 @@ import type {
   LanguageModelV2Usage,
 } from '@ai-sdk/provider';
 import { env } from './env';
+import { parseAgentResult, type AgentResult } from './opencodeAgentResult';
 
 const TIMEOUT_MS = 8 * 60_000;
 
@@ -230,31 +231,6 @@ function promptText(prompt: LanguageModelV2Prompt): string {
     if (text) messages.push(`${message.role}: ${text}`);
   }
   return messages.join('\n\n');
-}
-
-type AgentResult = { code?: string; message: string };
-
-function parseAgentResult(text: string): AgentResult {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1] ?? text;
-  try {
-    const parsed = JSON.parse(fenced.trim()) as {
-      code?: unknown;
-      message?: unknown;
-    };
-    const code =
-      typeof parsed.code === 'string' && parsed.code.trim()
-        ? parsed.code.trim()
-        : undefined;
-    return {
-      code,
-      message: typeof parsed.message === 'string' ? parsed.message : '',
-    };
-  } catch {
-    const code = /```(?:scad|openscad)?\s*([\s\S]*?)```/i
-      .exec(text)?.[1]
-      ?.trim();
-    return { code, message: code ? 'Model generated.' : text.trim() };
-  }
 }
 
 async function invokeAgent(

@@ -98,11 +98,12 @@ Audit of the uncommitted G01 work in `src/server/opencode.ts`. Safety patch save
 4. **Partial-vs-final detection:** detection runs **only at the `finish` (terminal) event** on the complete accumulated text — not on partial deltas. Structurally satisfies the "progressive text, parse final only" invariant.
 5. **Duplicate guard:** no explicit "already emitted" flag; single-emission is structural (one `finish` per stream). A duplicate `extractOpenSCADCode` at line 739 was removed previously, leaving the canonical at line 37.
 
-**Remaining failure mechanisms documented by the coordinator (not yet fixed):**
+**Remaining failure mechanisms — RESOLVED by the G01 recovery chain (R01–R08, all DONE):**
 
-- **Routing mismatch (R03):** `/api/opencode/models` emits `agent/opencode/<provider>/<model>`; `providerFor()` routes those to CLI via `isCliAgentModel()`, while F01 toggle visibility and E03 streaming selection both check `model.startsWith('opencode/')`. Same-model CLI/Streaming switching via `executionMode` is **not** possible yet.
-- **Parser parity (R04B):** streaming regex is looser than CLI `parseAgentResult` (matches any fenced block; no JSON `{code, message}` support). Both transports must converge on one shared final-result parser.
-- **Exact-once build emission (R06):** regression tests required for the former infinite-loop trigger.
+- ~~**Routing mismatch (R03):** `/api/opencode/models` emits `agent/opencode/<provider>/<model>`; `providerFor()` routes those to CLI via `isCliAgentModel()`, while F01 toggle visibility and E03 streaming selection both check `model.startsWith('opencode/')`. Same-model CLI/Streaming switching via `executionMode` is **not** possible yet.~~ → **R03 DONE** — `selectChatTransport()` in `cliAgents.ts` switches CLI/Streaming purely via `executionMode` for the canonical `agent/opencode/...` ID; F01 toggle shows for both canonical and legacy forms (`isOpenCodeTransportModel`).
+- ~~**Parser parity (R04B):** streaming regex is looser than CLI `parseAgentResult` (matches any fenced block; no JSON `{code, message}` support). Both transports must converge on one shared final-result parser.~~ → **R04B DONE** — shared `parseAgentResult` in `src/server/opencodeAgentResult.ts` (JSON `{code,message}` + fenced scad, prose never produces a build), imported by BOTH transports.
+- ~~**Exact-once build emission (R06):** regression tests required for the former infinite-loop trigger.~~ → **R05+R06 DONE** — `finishWithParametricToolCall()` in the shared module transforms the terminal finish only; 13 regression tests lock "prose with cube/rotate/cylinder → zero build calls".
+- **R08 gate (2026-08-15):** typecheck PASS, lint PASS, build PASS, 75/75 tests PASS, and all three manual same-model tests PASSED against the live opencode server (CLI → valid artifact; Streaming → exactly 1 build tool-call; prose-only → 0 tool-calls). **G01 recovery COMPLETE; G02 unblocked.**
 
 ## Final review findings
 

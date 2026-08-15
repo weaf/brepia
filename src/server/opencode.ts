@@ -9,6 +9,7 @@ import {
 } from '@ai-sdk/provider';
 import { spawn } from 'node:child_process';
 import { env } from './env';
+import { finishWithParametricToolCall } from './opencodeAgentResult';
 import { logError } from './serverLog';
 
 const USAGE = (): LanguageModelV2Usage => ({
@@ -711,8 +712,26 @@ export function streamingOpencodeChatModel(
       const stream = new ReadableStream<LanguageModelV2StreamPart>({
         async start(controller) {
           try {
+            const textDeltas: string[] = [];
             for await (const part of gen) {
-              controller.enqueue(part);
+              if (part.type === 'text-delta') {
+                textDeltas.push(part.delta);
+              }
+              if (part.type === 'finish') {
+                // R05: progressive text (already streamed per-delta above)
+                // is separated from final artifact detection.  Only the
+                // complete terminal result is parsed — exactly once — via
+                // the shared final-result handler shared with the CLI path.
+                const accumulated = textDeltas.join('');
+                for (const out of finishWithParametricToolCall(
+                  accumulated,
+                  part,
+                )) {
+                  controller.enqueue(out);
+                }
+              } else {
+                controller.enqueue(part);
+              }
             }
           } finally {
             controller.close();
