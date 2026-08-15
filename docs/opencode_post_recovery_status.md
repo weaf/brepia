@@ -543,10 +543,18 @@ I05 (Documentation): DONE — `docs/INTEGRATION.md` created
 - Covers: CLI vs Streaming, selector persistence, OpenCode base URL/auth, server start command, agent/tool semantics, permissions behavior, history ownership, concurrency, troubleshooting
 - Includes file index and recovery status table
 
-I06 (Reconcile branch/planning divergence): TODO — requires fetch/master comparison and merge-hygiene step
-I07 (Final diff review): TODO — requires comprehensive code review
+I06 (Reconcile branch/planning divergence): DONE
 
-Current next task: I06 (Branch reconciliation)
+- master has no commits beyond local-dev-continue (master = ba182f9, merge-base)
+- local-dev-continue contains all recovery work (17+ commits ahead of master)
+- No runtime code divergence to reconcile
+- Plan documents: 7 files totaling ~4,295 lines (see file index in INTEGRATION.md)
+- New INTEGRATION.md consolidates key operational knowledge from all plan/status docs
+- Branch merge would be straightforward (no conflicts expected)
+
+I07 (Final diff review): TODO — requires comprehensive code review before merge
+
+Current next task: I07 (Final diff review) or branch merge to master
 
 Status: DONE
 Repository state before task:
