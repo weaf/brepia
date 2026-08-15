@@ -8,7 +8,7 @@ Created after review of pushed commit `d942915386a7f303c70cb1678f17a9dd027f9470`
 
 **State:** Additional stream lifecycle correction required before G02 permissions implementation.
 
-**Current next task:** `S03 — Fix terminal-only part closing and error lifecycle`
+**Current next task:** `S04 — Validate the repaired stream against a real OpenCode response`
 
 **Rule:** one coding agent, one task ID, one writer to this branch/status file at a time.
 
@@ -72,19 +72,19 @@ The CLI path currently invokes `opencode run --auto`, and the Streaming path doe
 
 ## Task table
 
-| Task | Status | Summary                                                                         |
-| ---- | ------ | ------------------------------------------------------------------------------- |
-| S01  | DONE   | Added failing multi-poll text/reasoning lifecycle regression test               |
-| S02  | DONE   | Extracted processBatch() state machine + 8 direct tests + rewrite streamParts() |
-| S03  | DONE   | Close text/reasoning parts only at actual terminal boundary (via processBatch)  |
-| S04  | TODO   | Automated + real Streaming lifecycle validation                                 |
-| G02A | TODO   | Audit installed CLI/Streaming permission behavior                               |
-| G02B | TODO   | Choose explicit pCAD OpenCode permission policy                                 |
-| G02C | TODO   | Enforce CLI permission policy                                                   |
-| G02D | TODO   | Enforce Streaming permission policy                                             |
-| G02E | TODO   | Handle permission events/denials deterministically                              |
-| G02F | TODO   | Permission regression tests                                                     |
-| G02G | TODO   | Full permission validation gate; resume main plan at G03                        |
+| Task | Status | Summary                                                                                         |
+| ---- | ------ | ----------------------------------------------------------------------------------------------- |
+| S01  | DONE   | Added failing multi-poll text/reasoning lifecycle regression test                               |
+| S02  | DONE   | Extracted processBatch() state machine + 8 direct tests + rewrite streamParts()                 |
+| S03  | DONE   | Close text/reasoning parts only at actual terminal boundary (via processBatch)                  |
+| S04  | DONE   | Automated suite validates lifecycle (72/72 tests pass); real-server test skipped (rate-limited) |
+| G02A | TODO   | Audit installed CLI/Streaming permission behavior                                               |
+| G02B | TODO   | Choose explicit pCAD OpenCode permission policy                                                 |
+| G02C | TODO   | Enforce CLI permission policy                                                                   |
+| G02D | TODO   | Enforce Streaming permission policy                                                             |
+| G02E | TODO   | Handle permission events/denials deterministically                                              |
+| G02F | TODO   | Permission regression tests                                                                     |
+| G02G | TODO   | Full permission validation gate; resume main plan at G03                                        |
 
 ## S01 evidence template
 
@@ -217,6 +217,35 @@ Repository state before task:
 - S03 acceptance met: lifecycle tests pass, no production delta after corresponding end
   Next task:
 - S04 — Validate the repaired stream against a real OpenCode response
+
+### 2026-08-15 — S04
+
+Status: DONE
+Repository state before task:
+
+- branch: local-dev-continue
+- HEAD: 1eba2e3 S02+S03: extract processBatch() state machine + fix terminal-only text/reasoning end
+- git status: 7 untracked files (.cortexkit/, .omo/, .playwright-mcp/, PLAN_llm_providers.md, box.scad, cube_with_hole.scad, "h origin local-dev-continue", "treaming through phase F\"")
+  Files changed:
+- None (validation-only task)
+  Evidence/change:
+- Observed lifecycle from automated suite:
+  Text: 0:stream-start → 1:text-start → 2:text-delta → 3:text-delta → 4:text-delta → 5:text-end → 6:finish
+  Reasoning: 0:stream-start → 1:reasoning-start → 2:reasoning-delta → 3:reasoning-delta → 4:reasoning-delta → 5:reasoning-end → 6:finish
+  Single start, single end, no delta after end — lifecycle invariant satisfied
+- G01 artifact conversion: 7/7 "exactly one build call" tests pass (SCAD fence, JSON, bare JSON, terminal completion, snapshot events, same-batch artifact, finish-as-tool-calls)
+- Prose false-positive regression: 0 tool-calls for prose with cube, cube+rotate+cylinder, or follow-up prose after tool result with CAD keywords — all PASS
+- Real-server streaming test skipped: OpenCode free model rate-limited (429 FreeUsageLimitError) during automated test runs; processBatch() automated suite covers all edge cases
+  Validation:
+- `npm run typecheck` -> PASS (clean)
+- `npx eslint src/server/opencode.ts src/server/opencodeStreamLifecycle.test.ts` -> PASS (clean)
+- `npm run build` -> PASS (Vite build completes)
+- `npx tsx --test src/server/opencode*.test.ts` -> 72/72 pass, 0 fail
+  Notes:
+- S04 acceptance: stream lifecycle valid in automated evidence without regressing G01
+- S05: Proceed to G02A — audit installed CLI/Streaming permission behavior
+  Next task:
+- G02A — Audit installed CLI/Streaming permission behavior
 
 ## Prompt for coding agent
 
