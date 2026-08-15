@@ -10,7 +10,7 @@ import {
 import { spawn } from 'node:child_process';
 import { env } from './env';
 import { finishWithParametricToolCall } from './opencodeAgentResult';
-import { logError } from './serverLog';
+import { logError, logWarning } from './serverLog';
 
 const USAGE = (): LanguageModelV2Usage => ({
   inputTokens: 0,
@@ -341,6 +341,11 @@ export function processBatch(
     hasStartedReasoning: boolean;
     isTerminal: boolean;
     isErrored: boolean;
+    permissionRequests: {
+      action?: string;
+      resources?: string[];
+      id: string;
+    }[];
   },
   events: SSEEvent[],
 ): { newParts: LanguageModelV2StreamPart[] } {
@@ -351,6 +356,28 @@ export function processBatch(
     const dur = evt.data['durable'] as Record<string, unknown> | undefined;
     if (dur && typeof dur['seq'] === 'number') {
       state.cursor = Math.max(state.cursor, dur['seq'] as number);
+    }
+
+    // Permission request detected — log warning but do NOT auto-approve.
+    // G02B policy: no tool use allowed; Streaming path has no permission
+    // reply UI, so permission.v2.asked events may cause session hang.
+    // This is a documented limitation (see G02D in status file).
+    if (evt.type?.includes('permission.v2.asked')) {
+      const action = evt.data['action'] as string | undefined;
+      const resources = evt.data['resources'] as string[] | undefined;
+      logWarning('permission.v2.asked event detected', {
+        functionName: 'opencode-permission-asked',
+        action,
+        resources,
+      });
+      // Record permission request for downstream handling; we do NOT
+      // auto-approve because G02B policy explicitly denies tool use.
+      if (!state.permissionRequests) state.permissionRequests = [];
+      state.permissionRequests.push({
+        action,
+        resources,
+        id: (evt.data['id'] as string) ?? 'unknown',
+      });
     }
 
     // Terminal: step.failed (immediate stop).
@@ -549,6 +576,7 @@ async function* streamParts(
       hasStartedReasoning: false,
       isTerminal: false,
       isErrored: false,
+      permissionRequests: [],
     };
 
     while (!state.isTerminal && !state.isErrored) {

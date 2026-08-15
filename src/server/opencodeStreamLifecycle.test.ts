@@ -332,6 +332,11 @@ function makeState() {
     hasStartedReasoning: false,
     isTerminal: false,
     isErrored: false,
+    permissionRequests: [] as {
+      action?: string;
+      resources?: string[];
+      id: string;
+    }[],
   };
 }
 
@@ -536,5 +541,36 @@ describe('S02 — processBatch() direct', () => {
     );
     assert.ok(!types.includes('text-end'), 'no text-end without text events');
     assert.ok(state.isTerminal, 'step.ended sets isTerminal');
+  });
+
+  it('permission.v2.asked events are logged and recorded', () => {
+    const state = makeState();
+    const { newParts } = processBatch(
+      state,
+      makeBatch([
+        {
+          type: 'session.next.permission.v2.asked',
+          data: {
+            id: 'perm-1',
+            action: 'edit',
+            resources: ['src/app.ts'],
+          },
+        },
+        {
+          type: 'session.next.step.ended',
+          data: { tokens: { input: 5, output: 5 } },
+        },
+      ]),
+    );
+    assert.ok(
+      state.permissionRequests?.length === 1,
+      'permission request recorded',
+    );
+    assert.strictEqual(state.permissionRequests![0].action, 'edit');
+    assert.deepStrictEqual(state.permissionRequests![0].resources, [
+      'src/app.ts',
+    ]);
+    assert.strictEqual(state.permissionRequests![0].id, 'perm-1');
+    assert.strictEqual(newParts.length, 0);
   });
 });

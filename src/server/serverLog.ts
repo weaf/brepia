@@ -68,6 +68,35 @@ export function logError(
   }
 }
 
+export function logWarning(
+  message: string,
+  context: {
+    functionName: string;
+    action?: string;
+    resources?: string[];
+    userId?: string;
+    conversationId?: string;
+  },
+) {
+  const payload = {
+    fn: context.functionName,
+    level: 'warn',
+    message,
+    userId: context.userId,
+    conversationId: context.conversationId,
+    action: context.action,
+    resources: context.resources,
+  };
+
+  try {
+    console.warn(
+      `[${context.functionName}] ${message} | ${JSON.stringify(payload)}`,
+    );
+  } catch {
+    console.warn(`[${context.functionName}] ${message}`);
+  }
+}
+
 export function logApiError(
   error: unknown,
   context: {
