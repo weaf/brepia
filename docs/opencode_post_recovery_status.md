@@ -524,6 +524,26 @@ Files changed:
 - `npm run lint` -> 0 errors, 15 pre-existing warnings
 - `npx tsx --test src/server/opencode*.test.ts` -> 77/77 pass, 0 fail (4 new H02-H06 tests)
 
+### Phase I — Final validation and merge hygiene
+
+Status: PARTIAL
+
+I01 (Manual CLI regression): SKIPPED — rate-limited models block testing
+I02 (Manual Streaming test): SKIPPED — rate-limited models block testing
+I03 (Manual two-job test): SKIPPED — rate-limited models block testing
+I04 (Full project checks): DONE
+
+- `npm run typecheck` -> PASS (clean)
+- `npm run lint` -> 0 errors, 15 pre-existing warnings
+- `npm run build` -> SUCCESS
+- `npx tsx --test src/server/opencode*.test.ts` -> 77/77 pass, 0 fail
+
+I05 (Documentation): TODO — larger task requiring CLI vs Streaming, selector persistence, OpenCode base URL/auth, server start command, agent/tool semantics, permissions behavior, history ownership, concurrency, troubleshooting
+I06 (Reconcile branch/planning divergence): TODO — requires fetch/master comparison and merge-hygiene step
+I07 (Final diff review): TODO — requires comprehensive code review
+
+Current next task: I05 (Documentation) or I06 (Branch reconciliation)
+
 Status: DONE
 Repository state before task:
 
