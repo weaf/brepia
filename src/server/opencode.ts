@@ -484,6 +484,26 @@ export function processBatch(
 }
 
 /**
+ * Interrupt an active OpenCode session via the server API.
+ *
+ * OpenCode 1.18+ uses POST /api/session/{id}/interrupt (not /abort).
+ * "Interrupt active execution owned by this OpenCode process.
+ *  Idle interruption is a no-op."
+ *
+ * This is the canonical server-side cleanup for both user-initiated
+ * Stop (aiChat.ts → options.abortSignal) and the 8-minute timeout.
+ */
+async function interruptSession(
+  apiUrl: string,
+  sessionId: string,
+): Promise<void> {
+  await fetch(`${apiUrl}/api/session/${sessionId}/interrupt`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(3_000),
+  }).catch(() => {});
+}
+
+/**
  * Execute one request through the opencode HTTP API:
  * 1. POST /api/session with model
  * 2. POST /api/session/{id}/prompt
@@ -505,9 +525,10 @@ async function* streamParts(
 
     // Step 1: Create session with model
     let sessionId = '';
-    // 8-minute timeout — aborts streaming; abort handler cleans up OpenCode session
+    // 8-minute timeout — aborts streaming and interrupts server-side execution
     timeout = setTimeout(async () => {
       ac.abort();
+      if (sessionId) await interruptSession(apiUrl, sessionId);
     }, 8 * 60_000);
 
     try {
@@ -530,10 +551,7 @@ async function* streamParts(
         'abort',
         async () => {
           ac.abort();
-          await fetch(`${apiUrl}/api/session/${sessionId}/abort`, {
-            method: 'POST',
-            signal: AbortSignal.timeout(3_000),
-          }).catch(() => {});
+          if (sessionId) await interruptSession(apiUrl, sessionId);
         },
         { once: true },
       );

@@ -308,6 +308,7 @@ type ChatBody = {
   conversationId: string;
   model: Model;
   thinking?: boolean;
+  openCodeExecutionMode?: 'cli' | 'streaming';
 };
 
 type ConversationAccess = Pick<
@@ -320,7 +321,10 @@ function isChatBody(value: unknown): value is ChatBody {
     isRecord(value) &&
     typeof value.conversationId === 'string' &&
     typeof value.model === 'string' &&
-    (value.thinking == null || typeof value.thinking === 'boolean')
+    (value.thinking == null || typeof value.thinking === 'boolean') &&
+    (value.openCodeExecutionMode == null ||
+      value.openCodeExecutionMode === 'cli' ||
+      value.openCodeExecutionMode === 'streaming')
   );
 }
 
@@ -1083,8 +1087,14 @@ export async function handleAiChatRequest(req: Request) {
   // E01: Read the execution mode for this conversation (defaults to 'cli'
   // for backward compatibility). This determines whether opencode/ models
   // use the CLI transport or the HTTP/SSE streaming transport.
+  //
+  // Prefer the explicit `openCodeExecutionMode` sent in the request body
+  // (set by the user's transport toggle) so the current request always
+  // uses the most recent selection even before the DB write completes.
   const executionMode: 'cli' | 'streaming' =
-    conversation.settings?.openCodeExecutionMode ?? 'cli';
+    rawBody.openCodeExecutionMode ??
+    conversation.settings?.openCodeExecutionMode ??
+    'cli';
 
   // Pre-flight balance gate. A chat costs at least 1 billing token, so a
   // total of 0 means we cannot let the stream start. We don't try to

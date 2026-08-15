@@ -55,7 +55,6 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { ModelSelector } from '@/components/ModelSelector';
 import { Button } from '@/components/ui/button';
@@ -1732,31 +1731,47 @@ function TextAreaChat({
               onModelChange={setModel}
               type={type}
               focused={isFocused}
+              className="min-w-0 max-w-[240px]"
             />
             {/* F01/R03: Transport selector — shown for any OpenCode model
                 (canonical agent/opencode/... or legacy opencode/...) that can
-                switch CLI vs Streaming transport */}
+                switch CLI vs Streaming transport. Rendered as a compact
+                two-button segmented control that stays visible even when the
+                model name is long (no w-auto sibling pushes it off-screen). */}
             {isOpenCodeTransportModel(model) && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-adam-neutral-400">
-                      CLI
-                    </span>
-                    <Switch
-                      checked={executionMode === 'streaming'}
-                      onCheckedChange={(checked) => {
-                        const newMode = checked ? 'streaming' : 'cli';
-                        // Prefer the explicit callback from the parent.
-                        // The parent (EditorView/ChatSession) handles DB
-                        // persistence via useConversation().
-                        onExecutionModeChange?.(newMode);
-                      }}
+                  <div className="flex h-8 shrink-0 overflow-hidden rounded-lg border border-[#2a2a2a]">
+                    <button
+                      type="button"
+                      onClick={() => onExecutionModeChange?.('cli')}
                       disabled={!!(isLoading || disabled)}
-                    />
-                    <span className="text-[10px] text-adam-neutral-400">
+                      aria-pressed={executionMode === 'cli'}
+                      className={cn(
+                        'flex items-center px-3 text-xs font-medium transition-colors duration-200',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        executionMode === 'cli'
+                          ? 'bg-adam-blue/15 text-adam-blue'
+                          : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
+                      )}
+                    >
+                      CLI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onExecutionModeChange?.('streaming')}
+                      disabled={!!(isLoading || disabled)}
+                      aria-pressed={executionMode === 'streaming'}
+                      className={cn(
+                        'flex items-center border-l border-[#2a2a2a] px-3 text-xs font-medium transition-colors duration-200',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        executionMode === 'streaming'
+                          ? 'bg-adam-blue/15 text-adam-blue'
+                          : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
+                      )}
+                    >
                       Stream
-                    </span>
+                    </button>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>

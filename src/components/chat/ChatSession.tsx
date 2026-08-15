@@ -221,11 +221,19 @@ export function ChatSession({
           body: {
             conversationId: conversation.id,
             model,
+            openCodeExecutionMode: executionMode,
             ...(body ?? {}),
           },
         }),
       }),
-    [authHeaders, billingAwareFetch, conversation.id, conversation.type, model],
+    [
+      authHeaders,
+      billingAwareFetch,
+      conversation.id,
+      conversation.type,
+      executionMode,
+      model,
+    ],
   );
 
   // ───────────────────────────────────────────────────────────────────────

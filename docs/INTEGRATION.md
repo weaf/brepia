@@ -6,7 +6,7 @@ pCAD integrates with [OpenCode](https://opencode.ai/) as a coding agent backend.
 
 | Path          | Module                    | Invocation                                                  | Protocol                |
 | ------------- | ------------------------- | ----------------------------------------------------------- | ----------------------- |
-| **CLI**       | `src/server/cliAgents.ts` | `opencode run --env deny --pure --format json`              | Stderr → JSON parse     |
+| **CLI**       | `src/server/cliAgents.ts` | `opencode run --pure --format json`                         | Stderr → JSON parse     |
 | **Streaming** | `src/server/opencode.ts`  | `POST /api/session` → `POST /api/session/{id}/prompt` → SSE | HTTP REST + SSE polling |
 
 Both transports wrap the agent output in an AI SDK `LanguageModelV2` interface and emit a `build_parametric_model` tool-call when the final text contains fenced OpenSCAD code.
@@ -17,12 +17,11 @@ Both transports wrap the agent output in an AI SDK `LanguageModelV2` interface a
 
 ### CLI (`cliAgents.ts`)
 
-- **Invocation**: `opencode run --env deny --pure --format json`
+- **Invocation**: `opencode run --pure --format json`
 - **Stdin**: Prompt is written to stdin via a temporary directory
 - **Stdout/stderr**: JSON output goes to stderr (confirmed bug in `opencode run --format json`)
 - **Timeout**: 8 minutes (`TIMEOUT_MS = 8 * 60_000`)
-- **Permission policy**: `--env deny` explicitly denies all tools; `--pure` disables external plugins
-- **No auto-approval**: `--auto` flag was removed during G02C; `--env deny` is the primary security control
+- **Permission policy**: `--pure` disables external plugins. `--auto` flag is NOT passed (prevents auto-approval of tool permissions). The prompt instruction ("Do NOT use tools") is the behavioral guard — this is not a hard enforcement.
 - **Session model**: No persistent sessions — each call spawns a fresh child process and exits
 
 ### Streaming (`opencode.ts`)
@@ -33,7 +32,7 @@ Both transports wrap the agent output in an AI SDK `LanguageModelV2` interface a
   3. `GET /api/session/{id}/event?after={cursor}` — SSE polling until `step.ended` or `step.failed`
 - **Timeout**: 8 minutes (AbortController timeout on session creation)
 - **Session model**: Fresh session per request, no persistent sessions in code
-- **Abort handling**: `options.abortSignal` listener calls `/api/session/{id}/abort`
+- **Abort handling**: `options.abortSignal` listener calls `POST /api/session/{id}/interrupt` (OpenCode 1.18+)
 - **Permission events**: `permission.v2.asked` SSE events are detected and logged but not auto-approved
 
 ### Transport Selection
@@ -59,16 +58,44 @@ The transport selection is persisted per-conversation in `conversation.settings.
 
 **Default**: `'cli'` (for backward compatibility)
 
+**Execution mode precedence** (server-side, aiChat.ts):
+
+1. **Explicit `openCodeExecutionMode` in request body** — user's current UI selection (takes priority)
+2. **Persisted `conversation.settings.openCodeExecutionMode`** — DB fallback for previous requests
+3. **Default `'cli'`** — backward compatibility
+
+The explicit body value eliminates the persistence race: when a user toggles the transport selector, the new value is sent with every request immediately, even before the database write completes. This ensures the server always uses the most recent client-side selection.
+
+**UI — Segmented control** (`src/components/TextAreaChat.tsx`):
+
+The transport selector is a compact two-button segmented control:
+
+```
+┌───────────────┐  ┌───────────────┐
+│  CLI          │  │  Streaming    │  ← inactive (muted text)
+└───────────────┘  └───────────────┘
+
+┌───────────────┐  ┌───────────────┐
+│  CLI          │  │  Streaming    │  ← active (blue highlight)
+└───────────────┘  └───────────────┘
+```
+
+- Each button is fully clickable
+- Active mode is visually highlighted (blue background + text)
+- Compact width: `h-8` with `shrink-0` — never compressed by the flex row
+- ModelSelector constrained to `max-w-[240px]` to prevent overflow on mobile
+
 **UI persistence**:
 
 - `src/views/EditorView.tsx` stores `openCodeExecutionMode` in conversation settings
-- Toggling the mode in the UI updates the setting immediately
+- Toggling the mode in the UI updates the setting immediately (async DB write)
 - The setting survives page reload and session restore
 - Changes to executionMode affect future messages in the conversation
 
 **Server-side persistence**:
 
-- `src/server/aiChat.ts` reads `conversation.settings?.openCodeExecutionMode` at line 1087
+- `src/server/aiChat.ts` reads `conversation.settings?.openCodeExecutionMode` at line ~1087
+- `ChatSession.tsx` sends `openCodeExecutionMode` in every request body via `prepareSendMessagesRequest`
 - Defaults to `'cli'` if not set
 - The value flows through to `selectChatTransport()` at line 1276
 
@@ -189,11 +216,15 @@ Fenced OpenSCAD blocks trigger the `build_parametric_model` tool call:
 
 ### CLI Path
 
-**Primary control**: `--env deny` explicitly denies all tools
+**Actual runtime behavior**: `opencode run --pure --format json` (no `--auto`, no `--env deny`)
 
-- `OPENCODE_PERMISSION` environment variables deny: `bash`, `edit`, `glob`, `grep`, `task`, `external_directory`, `webfetch`, `websearch`, `skill`
 - `--pure` disables external plugins
-- `--auto` flag was removed (it auto-approves all permissions — security risk)
+- `--auto` is NOT passed → prevents auto-approval of tool permissions
+- `--env deny` does NOT exist in OpenCode 1.18.18 (documentation error corrected 2026-08-15)
+- `OPENCODE_PERMISSION` variables are NOT set (documentation error corrected 2026-08-15)
+- **Behavioral guard**: Prompt instruction tells the model not to use tools
+
+**Limitation**: If the model requests a tool (e.g., `bash`, `edit`), the CLI child process will HANG waiting for permission approval. Since it is non-interactive (piped stdio), there is no way to respond to the permission request. The 8-minute timeout will eventually kill the process.
 
 **Secondary control**: Prompt instruction in the agent prompt: "Do NOT call any tools, do NOT read or write any files, and do NOT mention the app's tools"
 
@@ -212,9 +243,10 @@ Fenced OpenSCAD blocks trigger the `build_parametric_model` tool call:
 ### Security Model Summary
 
 ```
-Prompt instruction (NOT enforced)    → secondary control
---env deny (CLI only)                 → primary security control
-permission.v2.asked (detected)       → logged, not auto-approved
+Prompt instruction (NOT enforced)    → secondary control (both CLI + Streaming)
+CLI: --auto NOT passed               → prevents auto-approval (but hangs on tool requests)
+Streaming: no per-session API        → documented limitation
+permission.v2.asked (detected)       → logged, not auto-approved (Streaming only)
 ```
 
 ---
@@ -330,17 +362,18 @@ Two independent `processBatch()` states produce no cross-talk:
 
 ### Permission Denials
 
-**Symptom**: Agent fails with permission denied errors
+**Symptom**: Agent hangs or fails to produce output
 
 **Causes**:
 
-1. `--env deny` is active (expected — this is the security policy)
-2. `OPENCODE_PERMISSION` variables set to deny
+1. CLI: If the model requests a tool (bash, edit, etc.), the non-interactive child process hangs waiting for permission approval (no `--auto` flag, no `OPENCODE_PERMISSION` env vars)
+2. Streaming: Server-level permissions allow tools; model may request them despite prompt instructions
 
 **Fixes**:
 
-1. This is intentional — the agent should not have tool access
-2. If tool access is needed, modify `OPENCODE_PERMISSION` variables (not recommended)
+1. For CLI: The prompt instruction should prevent tool requests. If the model still requests tools, it will hang — the 8-minute timeout will eventually terminate it
+2. For Streaming: The model follows the prompt instruction not to use tools
+3. If intentional tool access is needed: Run a dedicated OpenCode server with appropriate permissions
 
 ### Build / Type Errors
 
@@ -411,7 +444,8 @@ npx tsx --test src/server/opencode*.test.ts
 ### Test Results
 
 ```
-77/77 tests pass, 0 fail
+
+79/79 tests pass, 0 fail
 Typecheck: clean
 Lint: 0 errors, 15 pre-existing warnings
 Build: success
@@ -433,7 +467,7 @@ Build: success
 
 - [x] G02A: Audit CLI/Streaming permission behavior
 - [x] G02B: Policy decision (CLI deny-all, Streaming documented limitation)
-- [x] G02C: Implement CLI permission policy (--auto removed, --env deny)
+- [x] G02C: Remove --auto flag from CLI (no `--env deny` exists in OpenCode 1.18)
 - [x] G02D: Document Streaming permission limitation
 - [x] G02E: Handle permission events deterministically
 - [x] G02F: Permission regression tests
