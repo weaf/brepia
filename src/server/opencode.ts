@@ -236,7 +236,7 @@ export interface SSEEvent {
   data: Record<string, unknown>;
 }
 
-function parseSSE(text: string): SSEEvent[] {
+export function parseSSE(text: string): SSEEvent[] {
   const events: SSEEvent[] = [];
   for (const line of text.split('\n')) {
     const trimmed = line.trimEnd();
@@ -307,6 +307,156 @@ export function extractText(events: SSEEvent[]): {
 }
 
 /**
+ * Process one OpenCode event batch and yield the corresponding AI SDK
+ * stream parts, updating the internal lifecycle state in place.
+ *
+ * This is the production event→stream-part state machine.  The S01/S02
+ * tests exercise it directly via `processBatch()` so they share the same
+ * logic as `streamParts()` (no duplicated parser/reducer).
+ *
+ * State is mutated in-place; `newParts` accumulates the AI SDK parts that
+ * must be yielded to the controller.  `state.isTerminal` and
+ * `state.isErrored` tell the caller whether polling should stop.
+ *
+ * LanguageModelV2 invariant:
+ *   text-start → text-delta* → text-end    (one start, one end, no delta after end)
+ *   reasoning-start → reasoning-delta* → reasoning-end
+ *   Ends are emitted only AFTER all events in the batch have been
+ *   processed and only when the stream is terminal (or errored).
+ */
+export function processBatch(
+  state: {
+    cursor: number;
+    finishReason: LanguageModelV2FinishReason;
+    usage: LanguageModelV2Usage | undefined;
+    totalText: string;
+    yieldedText: string;
+    totalReasoning: string;
+    yieldedReasoning: string;
+    textPartId: number;
+    lastTextPartId: string | undefined;
+    hasStartedText: boolean;
+    reasoningPartId: number;
+    lastReasoningPartId: string | undefined;
+    hasStartedReasoning: boolean;
+    isTerminal: boolean;
+    isErrored: boolean;
+  },
+  events: SSEEvent[],
+): { newParts: LanguageModelV2StreamPart[] } {
+  const newParts: LanguageModelV2StreamPart[] = [];
+
+  for (const evt of events) {
+    // Update cursor (durable sequence number).
+    const dur = evt.data['durable'] as Record<string, unknown> | undefined;
+    if (dur && typeof dur['seq'] === 'number') {
+      state.cursor = Math.max(state.cursor, dur['seq'] as number);
+    }
+
+    // Terminal: step.failed (immediate stop).
+    if (evt.type?.includes('step.failed')) {
+      state.isTerminal = true;
+      state.isErrored = true;
+      state.finishReason = 'error';
+      const errorData = evt.data['error'] as
+        | Record<string, unknown>
+        | undefined;
+      const errMsg = errorData?.['message'] as string | undefined;
+      if (errMsg) {
+        logError(errMsg, {
+          functionName: 'opencode-step-failed',
+          statusCode: 429,
+        });
+        newParts.push({ type: 'error', error: new Error(errMsg) });
+      }
+      // No further processing after error.
+      break;
+    }
+
+    // Terminal: step.ended (collect usage, do not close parts yet).
+    if (evt.type?.includes('step.ended')) {
+      state.isTerminal = true;
+      const tok = evt.data['tokens'] as Record<string, unknown> | undefined;
+      if (tok) {
+        const input = Number(tok['input'] ?? 0);
+        const output = Number(tok['output'] ?? 0);
+        if (input || output) {
+          state.usage = {
+            inputTokens: input,
+            outputTokens: output,
+            totalTokens: input + output,
+          };
+        }
+      }
+    }
+
+    // Text segment.
+    if (
+      evt.type?.includes('text.ended') &&
+      typeof evt.data['text'] === 'string'
+    ) {
+      state.totalText += evt.data['text'] as string;
+      const delta = state.totalText.slice(state.yieldedText.length);
+      if (delta) {
+        if (!state.hasStartedText) {
+          newParts.push({
+            type: 'text-start',
+            id: `text-${++state.textPartId}`,
+          });
+          state.lastTextPartId = `text-${state.textPartId}`;
+          state.hasStartedText = true;
+        }
+        state.yieldedText = state.totalText;
+        newParts.push({
+          type: 'text-delta',
+          id: state.lastTextPartId!,
+          delta,
+        });
+      }
+    }
+
+    // Reasoning segment.
+    if (
+      evt.type?.includes('reasoning.ended') &&
+      typeof evt.data['text'] === 'string'
+    ) {
+      state.totalReasoning += evt.data['text'] as string;
+      const delta = state.totalReasoning.slice(state.yieldedReasoning.length);
+      if (delta) {
+        if (!state.hasStartedReasoning) {
+          newParts.push({
+            type: 'reasoning-start',
+            id: `reasoning-${++state.reasoningPartId}`,
+          });
+          state.lastReasoningPartId = `reasoning-${state.reasoningPartId}`;
+          state.hasStartedReasoning = true;
+        }
+        state.yieldedReasoning = state.totalReasoning;
+        newParts.push({
+          type: 'reasoning-delta',
+          id: state.lastReasoningPartId!,
+          delta,
+        });
+      }
+    }
+  }
+
+  // Close open parts ONLY after processing all events and only when
+  // terminal/errored.  D05: LanguageModelV2 requires text-end/reasoning-end
+  // to close each part; they must come once at terminal, not per poll.
+  if (state.isTerminal || state.isErrored) {
+    if (state.hasStartedText) {
+      newParts.push({ type: 'text-end', id: state.lastTextPartId! });
+    }
+    if (state.hasStartedReasoning) {
+      newParts.push({ type: 'reasoning-end', id: state.lastReasoningPartId! });
+    }
+  }
+
+  return { newParts };
+}
+
+/**
  * Execute one request through the opencode HTTP API:
  * 1. POST /api/session with model
  * 2. POST /api/session/{id}/prompt
@@ -322,16 +472,12 @@ async function* streamParts(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const apiUrl = opencodeApiUrl();
-    // Parse providerID from the full modelId (e.g. "opencode/big-pickle" or
-    // "llama-swap/qwen3.6-35b-mtp-128k"). Opencode models use "opencode",
-    // llama-swap / morph models use their respective providerID.
     const slash = modelId.indexOf('/');
     const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
     const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
 
     // Step 1: Create session with model
     let sessionId = '';
-    let _modelRef: Record<string, string> = {};
     // 8-minute timeout — aborts streaming; abort handler cleans up OpenCode session
     timeout = setTimeout(async () => {
       ac.abort();
@@ -352,11 +498,7 @@ async function* streamParts(
           `session creation failed HTTP ${sessionRes.status}: ${body.slice(0, 300)}`,
         );
       }
-      const sessionJson = await sessionRes.json();
-      sessionId = sessionJson['data']['id'];
-      _modelRef = sessionJson['data']['model'] ?? {};
-      // User abort signal — wire to our AbortController so in-flight fetches
-      // are cancelled and the OpenCode server-side session is cleaned up.
+      sessionId = (await sessionRes.json())['data']['id'];
       options.abortSignal?.addEventListener(
         'abort',
         async () => {
@@ -390,176 +532,59 @@ async function* streamParts(
       );
     }
 
-    // Step 3: Poll SSE events for the response
-    // Opencode uses a polling-based SSE: GET /api/session/{id}/event returns
-    // all events since last poll. We loop polling until step.ended or step.failed.
-    //
-    // Streaming design: process each event incrementally (not batch via
-    // extractText) so that text-reasoning deltas are yielded as soon as they
-    // arrive — critical for D06 (final text before finish) and for a good UX.
-    //
-    // LanguageModelV2 stream lifecycle: stream-start → text-start → text-delta* → text-end → reasoning-start → reasoning-delta* → reasoning-end → finish
-    let lastCursor = 0;
-    let finishReason: LanguageModelV2FinishReason = 'stop';
-    let capturedUsage: LanguageModelV2Usage | undefined;
-    let totalText = '';
-    let totalReasoning = '';
-    let yieldedText = '';
-    let yieldedReasoning = '';
-    // Stable part IDs (LanguageModelV2 requires one ID per text/reasoning part)
-    let textPartId = 0;
-    let lastTextPartId: string | undefined;
-    let reasoningPartId = 0;
-    let lastReasoningPartId: string | undefined;
-    let hasStartedText = false;
-    let hasStartedReasoning = false;
+    // Step 3: Poll SSE events for the response using the shared processBatch helper.
+    const state = {
+      cursor: 0,
+      finishReason: 'stop' as LanguageModelV2FinishReason,
+      usage: undefined as LanguageModelV2Usage | undefined,
+      totalText: '',
+      yieldedText: '',
+      totalReasoning: '',
+      yieldedReasoning: '',
+      textPartId: 0,
+      lastTextPartId: undefined as string | undefined,
+      hasStartedText: false,
+      reasoningPartId: 0,
+      lastReasoningPartId: undefined as string | undefined,
+      hasStartedReasoning: false,
+      isTerminal: false,
+      isErrored: false,
+    };
 
-    try {
-      while (true) {
-        const eventsUrl = new URL(`${apiUrl}/api/session/${sessionId}/event`);
-        if (lastCursor > 0) {
-          eventsUrl.searchParams.set('cursor', String(lastCursor));
-        }
-
-        const eventRes = await fetch(eventsUrl.toString(), {
-          signal: ac.signal,
-        });
-
-        if (!eventRes.ok) {
-          const body = await eventRes.text();
-          throw new Error(
-            `event fetch failed HTTP ${eventRes.status}: ${body.slice(0, 300)}`,
-          );
-        }
-
-        const sseText = await eventRes.text();
-        const events = parseSSE(sseText);
-
-        // Check for terminal event in this batch (step.failed / step.ended).
-        // Two-scan: identify terminal first so step.ended is processed before
-        // finish — critical for D06 (final text before finish).
-        let hasTerminal = false;
-
-        for (const evt of events) {
-          const dur = evt.data['durable'] as
-            | Record<string, unknown>
-            | undefined;
-          if (dur && typeof dur['seq'] === 'number') {
-            lastCursor = Math.max(lastCursor, dur['seq'] as number);
-          }
-
-          if (evt.type?.includes('step.failed')) {
-            hasTerminal = true;
-            const errorData = evt.data['error'] as
-              | Record<string, unknown>
-              | undefined;
-            const errMsg = errorData?.['message'] as string | undefined;
-            if (errMsg) {
-              logError(errMsg, {
-                functionName: 'opencode-step-failed',
-                statusCode: 429,
-              });
-              finishReason = 'error';
-              yield {
-                type: 'error',
-                error: new Error(errMsg),
-              };
-            }
-            return;
-          }
-
-          if (evt.type?.includes('step.ended')) {
-            hasTerminal = true;
-            const tok = evt.data['tokens'] as
-              | Record<string, unknown>
-              | undefined;
-            if (tok) {
-              const input = Number(tok['input'] ?? 0);
-              const output = Number(tok['output'] ?? 0);
-              if (input || output) {
-                capturedUsage = {
-                  inputTokens: input,
-                  outputTokens: output,
-                  totalTokens: input + output,
-                };
-              }
-            }
-          }
-
-          if (
-            evt.type?.includes('text.ended') &&
-            typeof evt.data['text'] === 'string'
-          ) {
-            totalText += evt.data['text'] as string;
-            const delta = totalText.slice(yieldedText.length);
-            if (delta) {
-              if (!hasStartedText) {
-                yield { type: 'text-start', id: `text-${++textPartId}` };
-                lastTextPartId = `text-${textPartId}`;
-                hasStartedText = true;
-              }
-              yieldedText = totalText;
-              yield {
-                type: 'text-delta',
-                id: lastTextPartId!,
-                delta,
-              };
-            }
-          }
-
-          if (
-            evt.type?.includes('reasoning.ended') &&
-            typeof evt.data['text'] === 'string'
-          ) {
-            totalReasoning += evt.data['text'] as string;
-            const delta = totalReasoning.slice(yieldedReasoning.length);
-            if (delta) {
-              if (!hasStartedReasoning) {
-                yield {
-                  type: 'reasoning-start',
-                  id: `reasoning-${++reasoningPartId}`,
-                };
-                lastReasoningPartId = `reasoning-${reasoningPartId}`;
-                hasStartedReasoning = true;
-              }
-              yieldedReasoning = totalReasoning;
-              yield {
-                type: 'reasoning-delta',
-                id: lastReasoningPartId!,
-                delta,
-              };
-            }
-          }
-        }
-
-        // Emit text-end and reasoning-end before breaking on terminal event.
-        // D05: LanguageModelV2 requires text-end/reasoning-end to close each part.
-        if (hasStartedText) {
-          yield { type: 'text-end', id: lastTextPartId! };
-        }
-        if (hasStartedReasoning) {
-          yield { type: 'reasoning-end', id: lastReasoningPartId! };
-        }
-
-        if (hasTerminal) {
-          break;
-        }
-
-        // Brief poll interval — opencode events arrive asynchronously
-        await new Promise((r) => setTimeout(r, 500));
+    while (!state.isTerminal && !state.isErrored) {
+      const eventsUrl = new URL(`${apiUrl}/api/session/${sessionId}/event`);
+      if (state.cursor > 0) {
+        eventsUrl.searchParams.set('cursor', String(state.cursor));
       }
-    } finally {
-      clearTimeout(timeout);
-      // If not already aborted, cancel any in-flight fetch
-      if (!ac.signal.aborted) {
-        ac.abort();
+
+      const eventRes = await fetch(eventsUrl.toString(), {
+        signal: ac.signal,
+      });
+
+      if (!eventRes.ok) {
+        const body = await eventRes.text();
+        throw new Error(
+          `event fetch failed HTTP ${eventRes.status}: ${body.slice(0, 300)}`,
+        );
       }
+
+      const sseText = await eventRes.text();
+      const events = parseSSE(sseText);
+      const { newParts } = processBatch(state, events);
+
+      for (const part of newParts) {
+        yield part;
+      }
+
+      if (state.isTerminal) break;
+
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     yield {
       type: 'finish',
-      finishReason,
-      usage: capturedUsage ?? USAGE(),
+      finishReason: state.finishReason,
+      usage: state.usage ?? USAGE(),
     };
   } catch (err) {
     logError(err, {
@@ -572,7 +597,6 @@ async function* streamParts(
     };
   } finally {
     if (timeout) clearTimeout(timeout);
-    // If not already aborted, cancel any in-flight fetch
     if (!ac.signal.aborted) {
       ac.abort();
     }
