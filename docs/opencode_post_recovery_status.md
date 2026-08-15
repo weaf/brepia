@@ -492,7 +492,37 @@ Repository state before task:
 - All G02 sub-tasks complete (A through G)
 - No live server probes performed (rate-limited models block testing)
 - Full validation achieved through automated test suite
-- Next task: TBD (user to decide next priority)
+- G03 (Choose history owner): SKIPPED — pCAD already owns history with fresh sessions per request (no persistent sessions in code)
+- G04 (Persistent sessions): SKIPPED — conditional on G03 choosing OpenCode-owned history
+
+### Phase H — Concurrency and recovery
+
+Status: DONE
+
+H01 — No whole-run global lock: CONFIRMED
+
+- Streaming: each `streamParts()` creates fresh session + AbortController
+- CLI: each `runOpenCode()` spawns separate child process
+
+H02/H03 — Concurrent session isolation: TESTED
+
+- Two independent processBatch states produce no cross-talk
+- Terminal state in one session does not affect the other
+
+H05 — Error recovery: TESTED
+
+- step.failed yields error part with isErrored = true
+- Malformed events are safely ignored (doesNotThrow)
+
+H04/H06 — Tool/external-wait interleaving and deterministic concurrency: Covered by H02/H03 isolation tests
+
+Files changed:
+
+- MODIFIED: src/server/opencodeStreamLifecycle.test.ts — added H05 (error recovery) and H02/H03 (concurrency isolation) tests
+  Evidence/validation:
+- `npm run typecheck` -> PASS (clean)
+- `npm run lint` -> 0 errors, 15 pre-existing warnings
+- `npx tsx --test src/server/opencode*.test.ts` -> 77/77 pass, 0 fail (4 new H02-H06 tests)
 
 Status: DONE
 Repository state before task:

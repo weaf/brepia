@@ -574,3 +574,110 @@ describe('S02 — processBatch() direct', () => {
     assert.strictEqual(newParts.length, 0);
   });
 });
+
+// ---- Phase H: Concurrency and recovery ----
+
+describe('H05 — Error recovery scenarios', () => {
+  it('step.failed yields error part with reason', () => {
+    const state = makeState();
+    const { newParts } = processBatch(
+      state,
+      makeBatch([
+        {
+          type: 'session.next.step.failed',
+          data: { error: { message: 'Model timeout' } },
+        },
+      ]),
+    );
+    const types = partTypes(newParts);
+    assert.strictEqual(types.length, 1);
+    assert.strictEqual(types[0], 'error');
+    assert.strictEqual(state.isErrored, true);
+  });
+
+  it('malformed events in batch are safely ignored', () => {
+    const state = makeState();
+    // Unknown event type — processBatch should not throw
+    assert.doesNotThrow(() => {
+      processBatch(
+        state,
+        makeBatch([
+          { type: 'session.next.unknown.magic', data: { xyz: 42 } },
+          {
+            type: 'session.next.step.ended',
+            data: { tokens: { input: 1, output: 1 } },
+          },
+        ]),
+      );
+    });
+    assert.ok(state.isTerminal);
+  });
+});
+
+describe('H02/H03 — Concurrent session isolation', () => {
+  it('two independent processBatch states produce no cross-talk', () => {
+    const stateA = makeState();
+    const stateB = makeState();
+    const allPartsA: string[] = [];
+    const allPartsB: string[] = [];
+
+    // A gets text batch, B gets reasoning batch
+    const { newParts: partsA } = processBatch(
+      stateA,
+      makeBatch([
+        { type: 'session.next.text.started' },
+        { type: 'session.next.text.ended', data: { text: 'A response' } },
+      ]),
+    );
+    allPartsA.push(...partsA.map((p) => p.type));
+
+    const { newParts: partsB } = processBatch(
+      stateB,
+      makeBatch([
+        { type: 'session.next.reasoning.ended', data: { text: 'thinking' } },
+      ]),
+    );
+    allPartsB.push(...partsB.map((p) => p.type));
+
+    assert.ok(allPartsA.includes('text-start'), 'A has text-start');
+    assert.ok(
+      !allPartsB.includes('text-start'),
+      'B has no text-start (no cross-talk)',
+    );
+    assert.ok(allPartsB.includes('reasoning-start'), 'B has reasoning-start');
+    assert.ok(
+      !allPartsA.includes('reasoning-start'),
+      'A has no reasoning-start (no cross-talk)',
+    );
+  });
+
+  it('terminal state in one session does not affect the other', () => {
+    const stateA = makeState();
+    const stateB = makeState();
+
+    // A reaches terminal
+    processBatch(
+      stateA,
+      makeBatch([
+        { type: 'session.next.text.ended', data: { text: 'done' } },
+        {
+          type: 'session.next.step.ended',
+          data: { tokens: { input: 1, output: 1 } },
+        },
+      ]),
+    );
+
+    // B is still processing — should not be affected
+    processBatch(
+      stateB,
+      makeBatch([
+        { type: 'session.next.text.started' },
+        { type: 'session.next.text.ended', data: { text: 'still going' } },
+      ]),
+    );
+
+    assert.ok(stateA.isTerminal, 'A is terminal');
+    assert.ok(!stateB.isTerminal, 'B is NOT terminal (no cross-talk)');
+    assert.ok(stateB.hasStartedText, 'B still processing text');
+  });
+});
