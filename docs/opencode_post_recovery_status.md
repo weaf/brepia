@@ -538,11 +538,15 @@ I04 (Full project checks): DONE
 - `npm run build` -> SUCCESS
 - `npx tsx --test src/server/opencode*.test.ts` -> 77/77 pass, 0 fail
 
-I05 (Documentation): TODO — larger task requiring CLI vs Streaming, selector persistence, OpenCode base URL/auth, server start command, agent/tool semantics, permissions behavior, history ownership, concurrency, troubleshooting
+I05 (Documentation): DONE — `docs/INTEGRATION.md` created
+
+- Covers: CLI vs Streaming, selector persistence, OpenCode base URL/auth, server start command, agent/tool semantics, permissions behavior, history ownership, concurrency, troubleshooting
+- Includes file index and recovery status table
+
 I06 (Reconcile branch/planning divergence): TODO — requires fetch/master comparison and merge-hygiene step
 I07 (Final diff review): TODO — requires comprehensive code review
 
-Current next task: I05 (Documentation) or I06 (Branch reconciliation)
+Current next task: I06 (Branch reconciliation)
 
 Status: DONE
 Repository state before task:
