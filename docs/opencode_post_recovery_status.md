@@ -6,9 +6,9 @@ Created after review of pushed commit `d942915386a7f303c70cb1678f17a9dd027f9470`
 
 ## Overall status
 
-**State:** Additional stream lifecycle correction required before G02 permissions implementation.
+**State:** G01 recovery complete, ready for G02 permissions implementation.
 
-**Current next task:** `S04 — Validate the repaired stream against a real OpenCode response`
+**Current next task:** `G02A — Audit installed CLI/Streaming permission behavior`
 
 **Rule:** one coding agent, one task ID, one writer to this branch/status file at a time.
 
@@ -72,19 +72,19 @@ The CLI path currently invokes `opencode run --auto`, and the Streaming path doe
 
 ## Task table
 
-| Task | Status | Summary                                                                                         |
-| ---- | ------ | ----------------------------------------------------------------------------------------------- |
-| S01  | DONE   | Added failing multi-poll text/reasoning lifecycle regression test                               |
-| S02  | DONE   | Extracted processBatch() state machine + 8 direct tests + rewrite streamParts()                 |
-| S03  | DONE   | Close text/reasoning parts only at actual terminal boundary (via processBatch)                  |
-| S04  | DONE   | Automated suite validates lifecycle (72/72 tests pass); real-server test skipped (rate-limited) |
-| G02A | TODO   | Audit installed CLI/Streaming permission behavior                                               |
-| G02B | TODO   | Choose explicit pCAD OpenCode permission policy                                                 |
-| G02C | TODO   | Enforce CLI permission policy                                                                   |
-| G02D | TODO   | Enforce Streaming permission policy                                                             |
-| G02E | TODO   | Handle permission events/denials deterministically                                              |
-| G02F | TODO   | Permission regression tests                                                                     |
-| G02G | TODO   | Full permission validation gate; resume main plan at G03                                        |
+| Task | Status | Summary                                                                                                                   |
+| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
+| S01  | DONE   | Added failing multi-poll text/reasoning lifecycle regression test                                                         |
+| S02  | DONE   | Extracted processBatch() state machine + 8 direct tests + rewrite streamParts()                                           |
+| S03  | DONE   | Close text/reasoning parts only at actual terminal boundary (via processBatch)                                            |
+| S04  | DONE   | Real-server validated with nemotron-3.5-lightning-free; lifecycle correct (stream-start → text-start → text-end → finish) |
+| G02A | TODO   | Audit installed CLI/Streaming permission behavior                                                                         |
+| G02B | TODO   | Choose explicit pCAD OpenCode permission policy                                                                           |
+| G02C | TODO   | Enforce CLI permission policy                                                                                             |
+| G02D | TODO   | Enforce Streaming permission policy                                                                                       |
+| G02E | TODO   | Handle permission events/denials deterministically                                                                        |
+| G02F | TODO   | Permission regression tests                                                                                               |
+| G02G | TODO   | Full permission validation gate; resume main plan at G03                                                                  |
 
 ## S01 evidence template
 
@@ -244,6 +244,33 @@ Repository state before task:
   Notes:
 - S04 acceptance: stream lifecycle valid in automated evidence without regressing G01
 - S05: Proceed to G02A — audit installed CLI/Streaming permission behavior
+  Next task:
+- G02A — Audit installed CLI/Streaming permission behavior
+
+### 2026-08-15 — S04b (Real-server validation + `after` param fix)
+
+Status: DONE
+Repository state before task:
+
+- branch: local-dev-continue
+- HEAD: d413158 fix(opencode): use 'after' param for SSE event polling
+- git status: 7 untracked files (same as S04)
+  Files changed:
+- MODIFIED: src/server/opencode.ts — changed `cursor` → `after` query parameter for SSE event polling
+  Evidence/change:
+- The /api/session/{sessionID}/event endpoint expects 'after' (per OpenAPI spec), not 'cursor'
+- Using 'cursor' caused the SSE endpoint to wait indefinitely because the server ignored the unrecognized parameter
+- Real-server validation with nemotron-3.5-lightning-free confirmed lifecycle:
+  stream-start (seq 3) → text-start (seq 4) → text-end "Hi there friend!" (seq 5) → finish (seq 6)
+  Single text-start, single text-end, no delta after end — lifecycle invariant satisfied
+  Validation:
+- `npm run typecheck` -> PASS (clean)
+- `npx tsx --test src/server/opencode*.test.ts` -> 72/72 pass, 0 fail
+- ESLint -> PASS (clean)
+  Notes:
+- The `after` fix resolves the infinite SSE hang that blocked S04 live validation
+- OpenCode free models (big-pickle) are rate-limited; nemotron-3.5-lightning-free used for validation
+- S04 fully complete: automated suite + real-server validated
   Next task:
 - G02A — Audit installed CLI/Streaming permission behavior
 
