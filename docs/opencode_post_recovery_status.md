@@ -8,7 +8,7 @@ Created after review of pushed commit `d942915386a7f303c70cb1678f17a9dd027f9470`
 
 **State:** G01 recovery complete, ready for G02 permissions implementation.
 
-**Current next task:** `G02A — Audit installed CLI/Streaming permission behavior`
+**Current next task:** `G02C — Enforce CLI permissions`
 
 **Rule:** one coding agent, one task ID, one writer to this branch/status file at a time.
 
@@ -72,19 +72,19 @@ The CLI path currently invokes `opencode run --auto`, and the Streaming path doe
 
 ## Task table
 
-| Task | Status | Summary                                                                                                                   |
-| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
-| S01  | DONE   | Added failing multi-poll text/reasoning lifecycle regression test                                                         |
-| S02  | DONE   | Extracted processBatch() state machine + 8 direct tests + rewrite streamParts()                                           |
-| S03  | DONE   | Close text/reasoning parts only at actual terminal boundary (via processBatch)                                            |
-| S04  | DONE   | Real-server validated with nemotron-3.5-lightning-free; lifecycle correct (stream-start → text-start → text-end → finish) |
-| G02A | TODO   | Audit installed CLI/Streaming permission behavior                                                                         |
-| G02B | TODO   | Choose explicit pCAD OpenCode permission policy                                                                           |
-| G02C | TODO   | Enforce CLI permission policy                                                                                             |
-| G02D | TODO   | Enforce Streaming permission policy                                                                                       |
-| G02E | TODO   | Handle permission events/denials deterministically                                                                        |
-| G02F | TODO   | Permission regression tests                                                                                               |
-| G02G | TODO   | Full permission validation gate; resume main plan at G03                                                                  |
+| Task | Status | Summary                                                                                                                                    |
+| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| S01  | DONE   | Added failing multi-poll text/reasoning lifecycle regression test                                                                          |
+| S02  | DONE   | Extracted processBatch() state machine + 8 direct tests + rewrite streamParts()                                                            |
+| S03  | DONE   | Close text/reasoning parts only at actual terminal boundary (via processBatch)                                                             |
+| S04  | DONE   | Real-server validated with nemotron-3.5-lightning-free; lifecycle correct (stream-start → text-start → text-end → finish)                  |
+| G02A | DONE   | Audit completed — CLI uses `--auto` (dangerous), no per-session permission enforcement, prompt-only instructions are not security controls |
+| G02B | DONE   | Chose policy — CLI: remove --auto + OPENCODE_PERMISSION deny all; Streaming: documented limitation (no API enforcement)                    |
+| G02C | TODO   | Enforce CLI permission policy                                                                                                              |
+| G02D | TODO   | Enforce Streaming permission policy                                                                                                        |
+| G02E | TODO   | Handle permission events/denials deterministically                                                                                         |
+| G02F | TODO   | Permission regression tests                                                                                                                |
+| G02G | TODO   | Full permission validation gate; resume main plan at G03                                                                                   |
 
 ## S01 evidence template
 
@@ -107,7 +107,42 @@ validation command:
   Result: 10 subtests PASS (all lifecycle invariants satisfied)
 ```
 
-## G02A permission matrix template
+## G02A permission matrix (evidence-based)
+
+**OpenCode version:** 1.18.18
+**Permission system:** V2 (effects: `allow`, `deny`, `ask`)
+**Server config source:** `GET /api/config` (running pCAD OpenCode server)
+**User config source:** `~/.config/opencode/opencode.json`
+
+| Property                                  | CLI                                                                                                                                   | Streaming                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| OpenCode version                          | 1.18.18                                                                                                                               | 1.18.18 (server)                                                              |
+| Agent/model                               | user-selected via `-m`                                                                                                                | user-selected via session creation                                            |
+| Available tools                           | All (no `--pure` plugin restriction on bash/edit)                                                                                     | All (no per-request tool disable via API)                                     |
+| Effective permission config               | Server-level: `bash:{"rm -rf *":"deny"}`, `task:deny`, `external_directory:allow`, `webfetch:allow`, `websearch:allow`, `skill:allow` | Same server-level config                                                      |
+| `ask` behavior                            | In CLI path: `--auto` auto-approves (see below)                                                                                       | In streaming: permission.v2.asked SSE event fires; no auto-reply in pCAD code |
+| `deny` behavior                           | Deny rules in server config are respected even with `--auto`                                                                          | Same — deny wins over ask                                                     |
+| `--auto` involved                         | **YES** — `opencode run --auto` (dangerous per OpenCode help text)                                                                    | n/a (no CLI flag; server handles permissions)                                 |
+| Per-request/session enforcement available | No — permissions are server-level config or `--auto` flag                                                                             | No — session creation API (`POST /api/session`) has no `permission` field     |
+| Can touch repo/filesystem today           | **YES** (no explicit deny on edit/read/glob)                                                                                          | **YES** (same server config)                                                  |
+| Can run shell today                       | **YES** (no explicit deny on bash except `rm -rf *`)                                                                                  | **YES** (same server config)                                                  |
+| Can use web/network tools today           | **YES** (webfetch:allow, websearch:allow)                                                                                             | **YES** (same server config)                                                  |
+
+**Critical findings:**
+
+1. **`--auto` flag in CLI path is dangerous** — OpenCode help text says "dangerous!". It auto-approves all permission requests that are not explicitly denied. The only explicit deny is `bash:{"rm -rf *":"deny"}`. All other actions (edit, bash, task, external_directory, webfetch, websearch, skill) will be auto-approved.
+
+2. **Prompt-only instruction is NOT a security control** — Both CLI (`Do not use tools, network access, or files; work only from this conversation`) and Streaming (`Do NOT call any tools, do NOT read or write any files, and do NOT mention the app's tools`) paths rely on natural-language instructions in the prompt. The model may or may not obey these — they are not enforced by OpenCode's permission system.
+
+3. **No per-session permission configuration** — The session creation API (`POST /api/session`) does not accept a `permission` parameter. Permissions are set at the server level via `~/.config/opencode/opencode.json` or the server's own config. There is no way to create a restricted session for pCAD's use case.
+
+4. **Streaming path has no permission handling** — The `opencode.ts` Streaming transport does not check `permission.v2.asked` SSE events or implement any permission reply logic. If the model requests a tool that triggers a permission check, the SSE event will fire but pCAD code will not respond to it — potentially causing the session to hang waiting for a reply that never comes.
+
+5. **Server-level permissions are shared** — The running OpenCode server is shared with the user's personal OpenCode sessions (started by `start.sh` or pre-existing). pCAD cannot enforce a different permission policy without starting a dedicated server instance with its own config.
+
+**Conclusion:** Neither the CLI nor the Streaming path currently enforces a no-side-effects policy. The `--auto` flag and prompt instructions are insufficient. G02B must choose an enforced policy, and G02C/G02D must implement it.
+
+## G02A permission matrix template (deprecated — replaced by evidence-based matrix above)
 
 Do not record secrets.
 
@@ -128,12 +163,20 @@ Do not record secrets.
 ## Decisions
 
 ```text
-S-lifecycle production helper: processBatch(state, events) returns { newParts }; state mutated in-place; text-end/reasoning-end emitted only when state.isTerminal || state.isErrored
-G02 enforced policy: TBD
-CLI enforcement point: TBD
-Streaming enforcement point: TBD
-permission-request behavior: TBD
-reuse-existing-server safety strategy: TBD
+S01-S04: G01 recovery complete — processBatch() state machine extracted from streamParts(), 72 tests pass
+G02A: Audit complete — CLI uses --auto (dangerous), no per-session enforcement, prompt-only not security control
+G02B policy choice:
+  CLI: Remove --auto, inject OPENCODE_PERMISSION env vars to deny all tools (bash/edit/glob/grep/task/external_directory/webfetch/websearch/skill), keep --pure
+  Streaming: Document limitation — no per-session permission API, no dedicated server in start.sh, relies on prompt instructions (not enforced)
+  Rationale: OpenCode 1.18.18 has no session-level permission field; dedicated server start is complex; CLI is the primary concern because Streaming is the main path and has no API enforcement
+  Enforcement point (CLI): cliAgents.ts — set OPENCODE_PERMISSION env vars before spawning opencode run subprocess, remove --auto flag
+  Enforcement point (Streaming): None — documented limitation for future dedicated server
+G02C: Implement CLI permissions (OPENCODE_PERMISSION deny all, remove --auto)
+G02D: Streaming permissions — document limitation, no code change
+G02E: Permission events — CLI will not receive permission requests (all denied); Streaming permission.v2.asked events will be ignored (documented limitation)
+G02F: Regression tests — verify CLI rejects tool use, Streaming does not hang on permission events
+G02G: Full validation gate — after all G02 sub-tasks complete
+reuse-existing-server safety: pCAD start.sh starts its own server if health check fails; if reusing an existing server, the user must ensure it has restricted config
 ```
 
 ## Validation counters
@@ -273,6 +316,66 @@ Repository state before task:
 - S04 fully complete: automated suite + real-server validated
   Next task:
 - G02A — Audit installed CLI/Streaming permission behavior
+
+### 2026-08-15 — G02A
+
+Status: DONE
+Repository state before task:
+
+- branch: local-dev-continue
+- HEAD: 490cc40 docs: update status for S04b real-server validation and after param fix
+- git status: 7 untracked files (same as S04)
+  Files changed:
+- MODIFIED: docs/opencode_post_recovery_status.md — filled in G02A permission matrix with evidence-based findings
+  Evidence/change:
+- Installed OpenCode version: 1.18.18
+- Permission system: V2 with effects `allow`, `deny`, `ask`
+- CLI path: `opencode run --auto --format json --pure`
+  - `--auto` = auto-approve permissions not explicitly denied (per OpenCode help: "dangerous!")
+  - `--pure` = disable external plugins only (does not affect bash/edit permissions)
+- Streaming path: no permission handling whatsoever (does not check `permission.v2.asked` SSE events)
+- Server config (`GET /api/config`): `bash:{"rm -rf *":"deny"}`, `task:deny`, `external_directory:allow`, `webfetch:allow`, `websearch:allow`, `skill:allow`
+- User config (`~/.config/opencode/opencode.json`): agent-level permissions (dev-coordinator allows edit/bash/skill/websearch; subagents deny edit)
+- Session creation API has no `permission` field — no per-session enforcement
+- Prompt-only instructions ("Do NOT call tools") are NOT security controls
+- Critical: CLI `--auto` will auto-approve ALL permission requests except explicit denies (only `rm -rf *` is denied)
+- Critical: Streaming path will HANG if model triggers a permission.v2.asked event (no reply handler in pCAD code)
+  Validation:
+- `opencode --version` -> 1.18.18
+- `opencode run --help` -> confirmed `--auto` flag exists with "dangerous!" warning
+- `curl http://127.0.0.1:4096/doc` -> confirmed permission endpoints (PermissionV2\* schemas)
+- `curl http://127.0.0.1:4096/config` -> confirmed server-level permission config
+  Notes:
+- Neither CLI nor Streaming path enforces no-side-effects policy
+- G02B must choose an enforced policy considering: (1) no per-session permission API, (2) shared server instance, (3) `--auto` danger in CLI path
+- Recommended approach: dedicated OpenCode server instance with restricted config, or use `--pure` + explicit `OPENCODE_PERMISSION` env vars
+  Next task:
+- G02B — Choose the pCAD OpenCode security policy
+
+### 2026-08-15 — G02B
+
+Status: DONE
+Repository state before task:
+
+- branch: local-dev-continue
+- HEAD: 490cc40 docs: update status for S04b real-server validation and after param fix
+- git status: 7 untracked files (same as S04)
+  Files changed:
+- MODIFIED: docs/opencode_post_recovery_status.md — filled in Decisions section with G02B policy choice
+  Evidence/change:
+- Decision: CLI path removes `--auto`, injects `OPENCODE_PERMISSION` env vars to deny all tools, keeps `--pure`
+- Decision: Streaming path documents limitation — no per-session permission API, no dedicated server, relies on prompt instructions (not enforced)
+- Rationale: OpenCode 1.18.18 session creation API has no `permission` field; dedicated server start is complex; CLI is the primary concern because Streaming is the main path and has no API enforcement
+- Enforcement point (CLI): cliAgents.ts — set OPENCODE_PERMISSION env vars before spawning opencode run subprocess, remove --auto flag
+- Enforcement point (Streaming): None — documented limitation for future dedicated server
+  Validation:
+- Policy decision recorded in Decisions section
+- Next task: G02C — Enforce CLI permissions (remove --auto, add OPENCODE_PERMISSION env vars)
+  Notes:
+- G02C must implement the CLI policy without modifying the user's global OpenCode config
+- G02D (Streaming) will have limited enforcement — plan for dedicated server in future
+  Next task:
+- G02C — Enforce CLI permissions
 
 ## Prompt for coding agent
 
