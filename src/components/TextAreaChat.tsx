@@ -1723,7 +1723,7 @@ function TextAreaChat({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ModelSelector
               disabled={isLoading || disabled}
               models={memoizedModels}
@@ -1736,51 +1736,55 @@ function TextAreaChat({
             {/* F01/R03: Transport selector — shown for any OpenCode model
                 (canonical agent/opencode/... or legacy opencode/...) that can
                 switch CLI vs Streaming transport. Rendered as a compact
-                two-button segmented control that stays visible even when the
-                model name is long (no w-auto sibling pushes it off-screen). */}
-            {isOpenCodeTransportModel(model) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex h-8 shrink-0 overflow-hidden rounded-lg border border-[#2a2a2a]">
-                    <button
-                      type="button"
-                      onClick={() => onExecutionModeChange?.('cli')}
-                      disabled={!!(isLoading || disabled)}
-                      aria-pressed={executionMode === 'cli'}
-                      className={cn(
-                        'flex items-center px-3 text-xs font-medium transition-colors duration-200',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
-                        executionMode === 'cli'
-                          ? 'bg-adam-blue/15 text-adam-blue'
-                          : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
-                      )}
-                    >
-                      CLI
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onExecutionModeChange?.('streaming')}
-                      disabled={!!(isLoading || disabled)}
-                      aria-pressed={executionMode === 'streaming'}
-                      className={cn(
-                        'flex items-center border-l border-[#2a2a2a] px-3 text-xs font-medium transition-colors duration-200',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
-                        executionMode === 'streaming'
-                          ? 'bg-adam-blue/15 text-adam-blue'
-                          : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
-                      )}
-                    >
-                      Stream
-                    </button>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {executionMode === 'streaming'
-                    ? 'Streaming mode: real-time incremental text'
-                    : 'CLI mode: batch response after completion'}
-                </TooltipContent>
-              </Tooltip>
-            )}
+                two-button segmented control.
+                On mobile ( < md) it takes the full row below the model
+                selector so it never gets pushed offscreen by long model
+                names. On desktop it stays inline. */}
+            <div className="w-full md:w-auto">
+              {isOpenCodeTransportModel(model) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex h-8 shrink-0 overflow-hidden rounded-lg border border-[#2a2a2a]">
+                      <button
+                        type="button"
+                        onClick={() => onExecutionModeChange?.('cli')}
+                        disabled={!!(isLoading || disabled)}
+                        aria-pressed={executionMode === 'cli'}
+                        className={cn(
+                          'flex items-center px-3 text-xs font-medium transition-colors duration-200',
+                          'disabled:cursor-not-allowed disabled:opacity-50',
+                          executionMode === 'cli'
+                            ? 'bg-adam-blue/15 text-adam-blue'
+                            : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
+                        )}
+                      >
+                        CLI
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onExecutionModeChange?.('streaming')}
+                        disabled={!!(isLoading || disabled)}
+                        aria-pressed={executionMode === 'streaming'}
+                        className={cn(
+                          'flex items-center border-l border-[#2a2a2a] px-3 text-xs font-medium transition-colors duration-200',
+                          'disabled:cursor-not-allowed disabled:opacity-50',
+                          executionMode === 'streaming'
+                            ? 'bg-adam-blue/15 text-adam-blue'
+                            : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
+                        )}
+                      >
+                        Streaming
+                      </button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {executionMode === 'streaming'
+                      ? 'Streaming mode: real-time incremental text'
+                      : 'CLI mode: batch response after completion'}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             {/* Enhanced submit button */}
             {isLoading && stopGenerating ? (
               <Tooltip>

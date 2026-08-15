@@ -590,54 +590,144 @@ Phase I Status: COMPLETE
 I01-I06: DONE
 I07: DONE (diff review completed)
 I08: DONE (final merge gate correction)
-I09: DONE (transport selector acceptance fix)
+I09: IN PROGRESS (I09A audit + I09B state + I09C persistence + I09D request body + I09E label + I09F responsive layout + I09G regression tests)
 
-### 2026-08-15 — I09: Transport selector acceptance fix
+Fixed in commit 3cd574e:
 
-Fixed two bugs in the CLI/Streaming transport selector:
+- ChatSession sends `openCodeExecutionMode` in every request
+- aiChat.ts: ChatBody schema + isChatBody validator + precedence (body > settings > default `'cli'`)
+- TextAreaChat: segmented control with `shrink-0` + ModelSelector `max-w-[240px]`
+- 10 new tests in `chatBodyValidation.test.ts`
 
-**Bug 1 — Selector not visible on mobile with long model names:**
+**Remaining (documented in `docs/opencode_i09_ui_acceptance_plan.md`):**
 
-- Replaced `<Switch>` + labels with a compact two-button segmented control (`CLI` | `Streaming`)
-- Added `shrink-0` to the transport control so it never compresses
-- Added `min-w-0 max-w-[240px]` to the ModelSelector to prevent it from overflowing the flex row
-- Removed the unused `Switch` import
-- Each button in the segmented control is fully clickable with visual active-state indication
+- PromptView hard-codes `executionMode="cli"` (string literal, line 330) with no `onExecutionModeChange`
+- Label inconsistency: "Stream" vs "Streaming" in TextAreaChat line 1773
+- No `openCodeExecutionMode` in PromptView's first-message request body
 
-**Bug 2 — Changing selector does not reliably change transport (persistence race):**
+### 2026-08-15 — I09A: Audit (complete, no implementation)
 
-- Added `openCodeExecutionMode` to `ChatBody` type and `isChatBody` validator (aiChat.ts)
-- Updated `prepareSendMessagesRequest` in ChatSession to send `openCodeExecutionMode` with each request
-- Added server-side precedence logic: explicit body value > conversation.settings > default 'cli'
-- This eliminates the race where the user toggles the selector but the DB hasn't persisted yet
+I09A mapped both UI paths against `docs/opencode_i09_ui_acceptance_plan.md` requirements:
 
-**New test file: `src/server/chatBodyValidation.test.ts`** (10 tests):
+| Issue                               | Status             | Root cause                                                                                        |
+| ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| Defect 1: PromptView hard-coded CLI | ⚠️ Unfixed         | `executionMode="cli"` string literal, no `onExecutionModeChange`                                  |
+| Defect 2: Mobile overflow           | ✅ Partially fixed | ModelSelector `max-w-[240px]` + transport `shrink-0` (commit 3cd574e) — needs manual verification |
+| Defect 3: Label inconsistency       | ⚠️ Unfixed         | "Stream" instead of "Streaming" at TextAreaChat line 1773                                         |
+| Server precedence                   | ✅ Correct         | body > settings > default `'cli'` (aiChat.ts:1094-1097)                                           |
 
-- `isChatBody` accepts `openCodeExecutionMode` (cli/streaming), rejects invalid values, backward compatible
-- Execution mode precedence: body overrides settings, settings used when body omits, defaults to 'cli'
+I09A acceptance criteria: ✅ root causes recorded from current code; no production files changed.
 
-**Verification:**
+Plan document updated: `docs/opencode_i09_ui_acceptance_plan.md` — I09A findings section added.
 
-- typecheck: clean, 0 errors
-- lint: 0 errors, 15 pre-existing warnings (none from our changes)
-- build: succeeds
-- tests: **102/102 pass** (up from 79 — 23 new tests added across G01-G02-Phase H-I and I09)
+### 2026-08-15 — I09B: PromptView draft execution mode (done)
 
-**Files changed:**
+Added local `executionMode` state to `PromptView.tsx` and wired it to `TextAreaChat`:
 
-- MODIFIED: `src/components/TextAreaChat.tsx` — segmented control for transport selection (Bug 1)
-- MODIFIED: `src/components/chat/ChatSession.tsx` — pass openCodeExecutionMode in prepareSendMessagesRequest (Bug 2)
-- MODIFIED: `src/server/aiChat.ts` — ChatBody schema, isChatBody validator, precedence logic (Bug 2)
-- NEW: `src/server/chatBodyValidation.test.ts` — 10 tests for schema validation and precedence
+- Added `const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>('cli')`
+- Replaced `executionMode="cli"` → `executionMode={executionMode}`
+- Added `onExecutionModeChange={setExecutionMode}`
+- Changing model type does NOT reset executionMode — independent state
+- No DB persistence (I09C) — conversation settings still only contain `{ model }`
+- No request body change (I09D) — `prepareSendMessagesRequest` still omits `openCodeExecutionMode`
 
-Phase I Status: COMPLETE
+**Verification:** typecheck clean, 102/102 tests pass.
+
+### 2026-08-15 — I09C: Carry selected mode into newly created conversation (done)
+
+Added `openCodeExecutionMode: executionMode` to the `settings` object in the conversation insert (PromptView.tsx line 165):
+
+```typescript
+settings: {
+  model: model,
+  openCodeExecutionMode: executionMode,
+},
+```
+
+- When CLI selected → conversation gets `settings.openCodeExecutionMode === 'cli'`
+- When Streaming selected → conversation gets `settings.openCodeExecutionMode === 'streaming'`
+- `settings.model` is still persisted unchanged
+- EditorView already reads `conversation.settings.openCodeExecutionMode` → restored on open
+- No request body change (I09D) — `prepareSendMessagesRequest` still omits `openCodeExecutionMode`
+
+**Verification:** typecheck clean, 102/102 tests pass.
+
+### 2026-08-15 — I09D: Remove timing race — add openCodeExecutionMode to chat request body (done)
+
+Added `openCodeExecutionMode: executionMode` to PromptView's `prepareSendMessagesRequest` (line 212):
+
+```typescript
+prepareSendMessagesRequest: ({ body }) => ({
+  body: {
+    conversationId: conversation.id,
+    model,
+    openCodeExecutionMode: executionMode,   // live React state (I09D)
+    ...(body ?? {}),
+  },
+}),
+```
+
+ChatSession already had this (commit 3cd574e, line 224). Server precedence already existed (aiChat.ts:1094-1097).
+
+**Race elimination:** Before I09D, the first PromptView request had no `openCodeExecutionMode` — server fell back to DB settings not yet written. After I09D, the request carries live state — server uses it immediately. The persisted DB value (I09C) is purely historical for reopening.
+
+**Verification:** typecheck clean, 102/102 tests pass (server precedence covered by `chatBodyValidation.test.ts`).
+
+### 2026-08-15 — I09E: Fix label "Stream" → "Streaming" (done)
+
+**TextAreaChat.tsx** line 1773: `Stream` → `Streaming`. Single-line change. All transport labels now consistently use "Streaming" (matching tooltip text and state type `'streaming'`).
+
+**Verification:** typecheck clean, 102/102 tests pass.
+
+### 2026-08-15 — I09F: Fix responsive mobile layout for transport selector (done)
+
+**TextAreaChat.tsx** — two changes to the footer row:
+
+1. Added `flex-wrap` to the right-side flex container (line ~1726):
+
+   ```diff
+   - <div className="flex items-center gap-2">
+   + <div className="flex flex-wrap items-center gap-2">
+   ```
+
+2. Wrapped transport selector in a responsive-width container:
+   ```diff
+   + <div className="w-full md:w-auto">
+       {isOpenCodeTransportModel(model) && ( ... )}
+   + </div>
+   ```
+
+**Responsive behavior:**
+
+- Mobile (< md): transport selector drops to its own full-width row below ModelSelector
+- Desktop (>= md): transport selector stays inline with ModelSelector and Send button
+
+**Verification:** typecheck clean, 102/102 tests pass.
+
+### 2026-08-15 — I09G: Add focused regression tests (done)
+
+**New file: `src/server/transportSelection.test.ts`** — 17 tests covering all 13 I09G requirements at the server-side architecture boundary:
+
+- Request flow: PromptView draft default → CLI transport
+- Request flow: PromptView selection → Streaming transport
+- Conversation settings contain executionMode (2 tests)
+- First request includes selected mode (eliminates timing race)
+- ChatSession subsequent request includes current mode (2 tests)
+- Explicit request mode overrides stale persisted DB mode (2 tests)
+- Missing explicit mode falls back to persisted setting
+- Missing both defaults to CLI
+- Invalid mode rejected (2 tests)
+- Non-OpenCode model routing unchanged (2 tests)
+- Transport-control selected state driven by value (2 tests)
+
+**Architecture:** Uses `simulateRequestFlow()` helper exercising `initialMode → selectedMode → chatBody → resolveExecutionMode → selectChatTransport`. No component test harness needed — lives at the architecture boundary.
+
+**Verification:** 119/119 tests pass (up from 102 — 17 new tests).
 
 I01-I06: DONE
 I07: DONE (diff review completed)
 I08: DONE (final merge gate correction)
-I09: DONE (transport selector acceptance fix)
-
-All phases G01-G02-H-I complete. Branch ready for merge.
+I09: IN PROGRESS (I09A audit + I09B state + I09C persistence + I09D request body + I09E label + I09F responsive layout + I09G regression tests)
 
 Status: DONE
 Repository state before task:

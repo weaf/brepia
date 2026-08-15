@@ -53,6 +53,13 @@ export function PromptView() {
 
   const [model, setModel] = useState<Model>('openai/gpt-5.6-sol');
 
+  // I09B — draft execution mode: owned locally so the transport selector
+  // is interactive.  Persisted into new conversation settings (I09C done).
+  // Does NOT alter the chat request body (I09D).
+  const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
+    'cli',
+  );
+
   const handleTypeChange = (newType: 'parametric' | 'creative') => {
     setType(newType);
     // Reset model to the default for the new type
@@ -155,6 +162,7 @@ export function PromptView() {
             type: type,
             settings: {
               model: model,
+              openCodeExecutionMode: executionMode,
             },
           },
         ])
@@ -201,6 +209,7 @@ export function PromptView() {
             body: {
               conversationId: conversation.id,
               model,
+              openCodeExecutionMode: executionMode,
               ...(body ?? {}),
             },
           }),
@@ -327,7 +336,8 @@ export function PromptView() {
                   showPromptGenerator={true}
                   showFullLabels={true}
                   onTypeChange={handleTypeChange}
-                  executionMode="cli"
+                  executionMode={executionMode}
+                  onExecutionModeChange={setExecutionMode}
                 />
               </SelectedItemsContext.Provider>
               <div className="relative">
