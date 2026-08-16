@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `5290e7b` (feat(P01B): create user_ai_preferences table)
+**HEAD**: `93bf8ea` (feat(P01C): create prompt_profiles table)
 **Last Updated**: 2026-08-16
 
 ---
@@ -123,15 +123,37 @@
 - Grants: anon, authenticated, service_role, postgres
 - No copied model catalog. No provider secrets.
 
+### P01C — Create `prompt_profiles`
+
+**Status**: DONE
+**Reviewer**: PASS
+**Files Created**:
+
+- `supabase/migrations/20260816135311_prompt_profiles.sql`
+- `supabase/schemas/prompt_profiles.sql`
+  **Implemented**:
+- `id uuid` PK → `gen_random_uuid()`
+- `user_id uuid` FK → `auth.users(id) ON DELETE CASCADE`
+- `name text NOT NULL`
+- `description text NULL`
+- `prompt_template text NOT NULL`
+- `base_revision text NULL` (SHA-256 fingerprint)
+- `archived boolean NOT NULL DEFAULT false`
+- `created_at`/`updated_at` timestamptz with `default now()`
+- Unique constraint: `(user_id, lower(name)) WHERE archived = false`
+- Index: `(user_id, archived)`
+- RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
+- Grants: anon, authenticated, service_role, postgres
+
 ---
 
 ## Current Task
 
-P00 + P01A + P01B complete. Ready for P01C.
+P00 + P01A + P01B + P01C complete. Ready for P01D.
 
 ## Next Task
 
-P01C — Create `prompt_profiles` table with migration, RLS, grants, and uniqueness constraint on `(user_id, lower(name))` for non-archived profiles.
+P01D — Create `ai_providers` and `ai_provider_models` tables with migration, RLS, grants.
 
 ## Validation Evidence
 
@@ -142,4 +164,4 @@ P01C — Create `prompt_profiles` table with migration, RLS, grants, and uniquen
 
 ## Blockers
 
-None — ready for P01C.
+None — ready for P01D.
