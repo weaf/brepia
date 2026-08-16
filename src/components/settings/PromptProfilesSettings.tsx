@@ -46,6 +46,7 @@ interface PromptProfileSummary {
   fingerprint: string | null;
   editable: boolean;
   deletable: boolean;
+  baseRevision: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -374,6 +375,7 @@ function ProfileListItem({
   onSelect,
   onArchive,
   isArchiving,
+  builtInFingerprint,
 }: {
   profile: PromptProfileSummary;
   isActive: boolean;
@@ -381,6 +383,7 @@ function ProfileListItem({
   onSelect: () => void;
   onArchive: () => void;
   isArchiving: boolean;
+  builtInFingerprint: string | null;
 }) {
   return (
     <div
@@ -422,6 +425,12 @@ function ProfileListItem({
             <div className="truncate text-xs text-adam-neutral-400">
               {profile.description}
             </div>
+          )}
+          {profile.mode === 'fork' && (
+            <FingerprintWarning
+              baseRevision={profile.baseRevision ?? ''}
+              builtInFingerprint={builtInFingerprint}
+            />
           )}
         </div>
       </button>
@@ -733,6 +742,7 @@ export function PromptProfilesSettings() {
             onSelect={() => handleSelectProfile(builtinProfile.id)}
             onArchive={() => {}}
             isArchiving={false}
+            builtInFingerprint={builtInFingerprint}
           />
         )}
         {customProfiles.map((profile) => (
@@ -746,6 +756,7 @@ export function PromptProfilesSettings() {
             isArchiving={
               archiveMutation.isPending && selectedProfileId === profile.id
             }
+            builtInFingerprint={builtInFingerprint}
           />
         ))}
       </div>

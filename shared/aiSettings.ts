@@ -113,6 +113,7 @@ export const PromptProfileSummarySchema = z.object({
   fingerprint: z.string().nullable(),
   editable: z.boolean(),
   deletable: z.boolean(),
+  baseRevision: z.string().nullable(),
   archived: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

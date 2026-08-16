@@ -87,7 +87,7 @@ export async function getUserPromptProfiles(
   let query = supabase
     .from('prompt_profiles')
     .select(
-      'id, user_id, name, description, mode, archived, created_at, updated_at',
+      'id, user_id, name, description, mode, base_revision, archived, created_at, updated_at',
     )
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
@@ -111,6 +111,7 @@ export async function getUserPromptProfiles(
     fingerprint: null,
     editable: true,
     deletable: true,
+    baseRevision: row.base_revision,
     archived: row.archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
