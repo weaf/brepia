@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `41723b0` (feat(P01D): create ai_providers and ai_provider_models tables)
+**HEAD**: `8f93ebb` (feat(P01E): add updated_at trigger to new tables)
 **Last Updated**: 2026-08-16
 
 ---
@@ -13,169 +13,88 @@
 **Status**: DONE
 **Implementation commit**: `2eab50c`
 **Reviewer**: PASS
-**Implemented**:
-
-- Autonomous repository maintainer agent with read/edit/bash permissions
-- Upstream-safety principles (PARAMETRIC_MODELS, PARAMETRIC_AGENT_PROMPT immutable)
-- Gate requirements (typecheck, lint, build)
-- Commit policy (atomic commits, no auto-merge)
-- Status file update format
 
 ### P00B — Add skill: upstream-safe customization
 
 **Status**: DONE
 **Implementation commit**: `2eab50c`
 **Reviewer**: PASS
-**Implemented**:
-
-- Upstream-owned file identification requirement
-- Additive module preference
-- Built-in definitions preservation
-- Sync seam convention for unavoidable upstream edits
-- Diff check requirements (`git diff --check`, `git diff --stat`)
-- Anti-refactoring rules
 
 ### P00C — Add skill: Supabase settings migration
 
 **Status**: DONE
 **Implementation commit**: `2eab50c`
 **Reviewer**: PASS
-**Implemented**:
-
-- Project conventions documented (UUID, timestamps, RLS)
-- Migration template with RLS policies
-- Credential handling guidelines
-- Additive-only migration policy
-- Type regeneration guidance
 
 ### P00D — Add skill: AI provider registry
 
 **Status**: DONE
 **Implementation commit**: `2eab50c`
 **Reviewer**: PASS
-**Implemented**:
-
-- Built-in providers remain source/env managed
-- Custom providers additive only
-- Secret security (server-only, encrypted, never logged/returned)
-- URL validation rules
-- Reserved prefix protection
-- Provider driver mapping table
-- Error handling (no silent fallback)
 
 ### P00E — Add skill: settings UI
 
 **Status**: DONE
 **Implementation commit**: `2eab50c`
 **Reviewer**: PASS
-**Implemented**:
-
-- Visual primitives (shadcn/ui, Tailwind)
-- Mobile-safe layout requirements
-- Keyboard accessibility
-- React Query state management
-- Security (never render secrets)
-- Save/cancel pattern
-- Component structure guidelines
 
 ### P00F — Status tracker
 
 **Status**: DONE
 **Implementation commit**: `2eab50c`
 **Reviewer**: PASS
-**Implemented**:
-
-- Branch + HEAD tracking
-- Completed tasks with commit SHAs
-- Current task, next task, blockers sections
-- Reviewer gate results
 
 ### P01A — Audit database conventions
 
 **Status**: DONE
 **Reviewer**: PASS
 **Findings recorded**: `docs/p01a_audit_findings.md`
-**Audited**:
-
-- UUID: `gen_random_uuid()` — confirmed across all migrations
-- Timestamps: `created_at`/`updated_at` with `default now()` — no generic trigger; explicit updates only (except `previews` table)
-- RLS: Every user-owned table has RLS enabled with `auth.uid() = user_id` policies
-- Grants: `anon`, `authenticated`, `service_role`, `postgres` on every table
-- FK pattern: `ON DELETE CASCADE`, created with `NOT VALID`, validated separately
-- Type generation: `supabase gen types typescript --local > shared/database.ts`
-- Schema paths: `supabase/schemas/*.sql` — new tables need schema definitions
-- No `uuid-ossp` or `pgcrypto` extensions needed (built-in)
 
 ### P01B — Create `user_ai_preferences`
 
 **Status**: DONE
 **Reviewer**: PASS
-**Files Created**:
-
-- `supabase/migrations/20260816135107_user_ai_preferences.sql`
-- `supabase/schemas/user_ai_preferences.sql`
-  **Implemented**:
-- `user_id uuid` primary key → `auth.users(id) ON DELETE CASCADE`
-- `hidden_model_ids text[] NOT NULL DEFAULT '{}'`
-- `default_prompt_profile_id uuid NULL`
-- `created_at`/`updated_at` timestamptz with `default now()`
-- RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
-- Grants: anon, authenticated, service_role, postgres
-- No copied model catalog. No provider secrets.
+**Files**: migrations/20260816135107, schemas/user_ai_preferences.sql
 
 ### P01C — Create `prompt_profiles`
 
 **Status**: DONE
 **Reviewer**: PASS
-**Files Created**:
-
-- `supabase/migrations/20260816135311_prompt_profiles.sql`
-- `supabase/schemas/prompt_profiles.sql`
-  **Implemented**:
-- `id uuid` PK → `gen_random_uuid()`
-- `user_id uuid` FK → `auth.users(id) ON DELETE CASCADE`
-- `name text NOT NULL`
-- `description text NULL`
-- `prompt_template text NOT NULL`
-- `base_revision text NULL` (SHA-256 fingerprint)
-- `archived boolean NOT NULL DEFAULT false`
-- `created_at`/`updated_at` timestamptz with `default now()`
-- Unique constraint: `(user_id, lower(name)) WHERE archived = false`
-- Index: `(user_id, archived)`
-- RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
-- Grants: anon, authenticated, service_role, postgres
+**Files**: migrations/20260816135311, schemas/prompt_profiles.sql
 
 ### P01D — Create `ai_providers` and `ai_provider_models`
 
 **Status**: DONE
 **Reviewer**: PASS
-**Files Created**:
+**Files**: migrations/20260816135454, 20260816135455, schemas/ai_providers.sql, schemas/ai_provider_models.sql
 
-- `supabase/migrations/20260816135454_ai_providers.sql`
-- `supabase/migrations/20260816135455_ai_provider_models.sql`
-- `supabase/schemas/ai_providers.sql`
-- `supabase/schemas/ai_provider_models.sql`
-  **Implemented**:
-- **ai_providers**: id, user_id, slug, name, driver, base_url, credential_ciphertext, credential_iv, credential_tag, enabled, timestamps
-  - Unique: (user_id, slug)
-  - Index: (user_id, enabled)
-- **ai_provider_models**: id, provider_id (FK ai_providers), user_id, model_id, display_name, is_visible, timestamps
-  - Unique: (provider_id, model_id)
-  - Index: (provider_id)
-- RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
-- Grants: anon, authenticated, service_role, postgres
-- Credentials stored encrypted, never returned to client
-- No silent fallback: custom provider failures surfaced to user
+### P01E — Add `updated_at` trigger to new tables
+
+**Status**: DONE
+**Reviewer**: PASS
+**Files**: migrations/20260816135647_updated_at_triggers.sql
+**Triggers added**:
+
+- user_ai_preferences (BEFORE UPDATE)
+- prompt_profiles (BEFORE UPDATE)
+- ai_providers (BEFORE UPDATE)
+- ai_provider_models (BEFORE UPDATE)
+- Existing previews trigger preserved (no changes)
 
 ---
 
 ## Current Task
 
-P00 + P01A + P01B + P01C + P01D complete. Ready for P01E.
+P00 + P01A-P01E complete. Ready for P02.
 
 ## Next Task
 
-P01E — Add `updated_at` trigger function and verify existing table triggers (previews, conversations/message cascade).
+P02 — Implement Settings UI components:
+
+- P02A: Create Settings page shell (sidebar + main content)
+- P02B: Create SettingsInput component (generic text input with save/cancel)
+- P02C: Create ProviderCard component (AI provider display/edit)
+- P02D: Create ModelFilter component (hidden model IDs)
 
 ## Validation Evidence
 
@@ -186,4 +105,4 @@ P01E — Add `updated_at` trigger function and verify existing table triggers (p
 
 ## Blockers
 
-None — ready for P01E.
+None — ready for P02.
