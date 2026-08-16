@@ -21,6 +21,7 @@ import posthog from 'posthog-js';
 import * as Sentry from '@sentry/react';
 import { useProfile } from '@/services/profileService';
 import { useLayoutContext } from '@/contexts/LayoutContext';
+import { getPreferences } from '@/server/aiSettings';
 import { apiUrl } from '@/services/api';
 import {
   DefaultChatTransport,
@@ -152,6 +153,9 @@ export function PromptView() {
       });
 
       // Create conversation immediately with 'New Conversation'
+      // P04F: pin the user's default prompt profile (null = built-in) so
+      // changing Settings later does not silently alter existing chats.
+      const prefs = await getPreferences(user);
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
         .insert([
@@ -163,6 +167,7 @@ export function PromptView() {
             settings: {
               model: model,
               openCodeExecutionMode: executionMode,
+              promptProfileId: prefs.defaultPromptProfileId,
             },
           },
         ])
