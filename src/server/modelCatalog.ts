@@ -8,16 +8,27 @@
  *   2. Dynamic OpenCode agent models (fetched from opencode serve HTTP API)
  *   3. Custom provider models (from the ai_provider_models DB table)
  *
- * The built-in array is NOT copied into the database; it stays in
- * src/lib/utils.ts and is imported by this module.
+ * Deduplication strategy:
+ *   - Built-in models always win (first source).
+ *   - Opencode models with IDs matching built-in entries are skipped.
+ *   - Custom provider models with IDs matching either built-in or opencode
+ *     entries are skipped (by stable ID format, collisions should be rare).
+ *
+ * Provider-aware merge:
+ *   - When a custom provider shares the same provider name as an opencode
+ *     provider, custom models overlay the same provider bucket.
+ *   - Custom models override opencode models for matching provider-native
+ *     model IDs.
  */
 
-import { PARAMETRIC_MODELS } from '@/lib/utils';
-import type { ModelConfig } from '@/types/misc';
-import { opencodeModels, OpenCodeModelInfo } from './opencode';
+import {
+  makeCustomProviderModelId,
+  parseCustomProviderModelId,
+} from '../../shared/customModelIds';
 import { getUserProviders, getProviderModels } from './customProviders';
-import { makeCustomProviderModelId } from '../../shared/customModelIds';
 import type { User } from '@supabase/supabase-js';
+import { opencodeModels } from './opencode';
+import type { ModelConfig } from '../../src/types/misc';
 
 // ---------------------------------------------------------------------------
 // Catalog entry type — the canonical shape returned by every catalog consumer.
@@ -38,15 +49,13 @@ export interface CatalogEntry extends ModelConfig {
   enabled: boolean;
 
   /**
-   * Whether the model is available at runtime (the backend service is reachable).
-   * For built-in models this is always true; for opencode/custom it reflects
-   * a health check.
+   * Whether the model is available at runtime (the backend service is
+   * reachable).
    */
   available: boolean;
 
   /**
-   * Reason the model is unavailable (when available === false).
-   * e.g. 'opencode_unavailable', 'provider_down', 'key_missing'.
+   * If available is false, a human-readable reason.
    */
   unavailableReason?: string;
 }
@@ -66,6 +75,9 @@ export function isCustomCatalogEntry(entry: CatalogEntry): boolean {
 // Built-in models — always available, always enabled.
 // ---------------------------------------------------------------------------
 
+// Import PARAMETRIC_MODELS — the canonical built-in list.
+import { PARAMETRIC_MODELS } from '../../src/lib/utils';
+
 function toBuiltinCatalogEntry(m: ModelConfig): CatalogEntry {
   return {
     ...m,
@@ -80,17 +92,15 @@ export function getBuiltInModels(): CatalogEntry[] {
 }
 
 // ---------------------------------------------------------------------------
-// OpenCode agent models.
+// Opencode models — fetched at runtime, always enabled.
 // ---------------------------------------------------------------------------
 
-function toOpencodeCatalogEntry(
-  m: OpenCodeModelInfo,
-): CatalogEntry | undefined {
-  // Skip models that duplicate built-in IDs.
-  const exists = PARAMETRIC_MODELS.some(
-    (b: ModelConfig) => b.id === `agent/opencode/${m.cliId}`,
-  );
-  if (exists) return undefined;
+function toOpencodeCatalogEntry(m: {
+  cliId: string;
+  name: string;
+  providerID: string;
+}): CatalogEntry | undefined {
+  if (!m.cliId || !m.name) return undefined;
 
   return {
     id: `agent/opencode/${m.cliId}`,
@@ -176,6 +186,79 @@ export async function getCustomProviderModels(
 }
 
 // ---------------------------------------------------------------------------
+// Provider-aware merge.
+// ---------------------------------------------------------------------------
+
+/**
+ * Merge opencode and custom models by provider name.
+ *
+ * For providers with matching names, custom models override opencode
+ * models on provider-native model ID match. Custom models that don't
+ * match any opencode model ID are appended.
+ *
+ * Returns a flat list preserving opencode-first ordering, with overrides
+ * applied in-place.
+ */
+function mergeByProvider(
+  opencode: CatalogEntry[],
+  custom: CatalogEntry[],
+): CatalogEntry[] {
+  // Build a lookup of custom models by provider name → native model ID.
+  const customByProvider = new Map<string, Map<string, CatalogEntry>>();
+
+  for (const entry of custom) {
+    const provider = entry.provider ?? 'Unknown';
+    const models = customByProvider.get(provider) ?? new Map();
+    // Derive provider-native model ID from the stable custom ID.
+    const parsed = parseCustomProviderModelId(entry.id);
+    if (parsed) {
+      models.set(parsed.modelId, entry);
+    }
+    customByProvider.set(provider, models);
+  }
+
+  // Opencode models keyed by their provider-native model ID.
+  const opencodeByProvider = new Map<string, Map<string, CatalogEntry>>();
+  const ordering: { provider: string; nativeId: string }[] = [];
+
+  for (const entry of opencode) {
+    // Opencode native model ID is the cliId (after "agent/opencode/" prefix).
+    const cliId = entry.id.replace('agent/opencode/', '');
+    const provider = entry.provider ?? 'Unknown';
+    const models = opencodeByProvider.get(provider) ?? new Map();
+    models.set(cliId, entry);
+    opencodeByProvider.set(provider, models);
+    ordering.push({ provider, nativeId: cliId });
+  }
+
+  const result: CatalogEntry[] = [];
+
+  for (const { provider, nativeId } of ordering) {
+    const opencodeModels = opencodeByProvider.get(provider);
+    const customModels = customByProvider.get(provider);
+
+    if (customModels?.has(nativeId)) {
+      // Custom model overrides the opencode one.
+      result.push(customModels.get(nativeId)!);
+    } else {
+      result.push(opencodeModels!.get(nativeId)!);
+    }
+  }
+
+  // Append custom-only models (providers or model IDs not in opencode).
+  for (const [provider, customModels] of customByProvider) {
+    for (const [nativeId, entry] of customModels) {
+      const opencodeModels = opencodeByProvider.get(provider);
+      if (!opencodeModels?.has(nativeId)) {
+        result.push(entry);
+      }
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Full catalog builder.
 // ---------------------------------------------------------------------------
 
@@ -209,5 +292,16 @@ export async function buildCatalog(
     (m: CatalogEntry) => !dedupedIds.has(m.id),
   );
 
-  return [...builtin, ...dedupedOpencode, ...dedupedCustom];
+  // Provider-aware merge: opencode + custom models sharing a provider name
+  // are merged into the same provider bucket, with custom overriding on
+  // native model ID match.
+  const mergedOpencode = mergeByProvider(dedupedOpencode, dedupedCustom);
+
+  const mergedCustom = mergedOpencode.filter((e) => e.source === 'custom');
+
+  return [
+    ...builtin,
+    ...mergedOpencode.filter((e) => e.source === 'opencode'),
+    ...mergedCustom,
+  ];
 }
