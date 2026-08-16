@@ -81,28 +81,68 @@
 - ai_provider_models (BEFORE UPDATE)
 - Existing previews trigger preserved (no changes)
 
+### P02A — Create shared DTOs and validation schemas
+
+**Status**: DONE
+**Files**: shared/aiSettings.ts (Zod schemas + DTO types for all P01 entities)
+**Reviewer**: PASS (typecheck)
+
+### P02B — Create preference helpers module
+
+**Status**: DONE
+**Files**: src/server/aiSettings.ts (get/set/delete user AI preferences)
+**Reviewer**: PASS (typecheck)
+
+### P02C — Create prompt profiles module
+
+**Status**: DONE
+**Files**: src/server/promptProfiles.ts (CRUD + built-in profile)
+**Reviewer**: PASS (typecheck)
+
+### P02D — Create custom providers module
+
+**Status**: DONE
+**Files**: src/server/customProviders.ts (CRUD + credential encryption + model mgmt)
+**Reviewer**: PASS (typecheck)
+
+### P02E — Create API routes
+
+**Status**: DONE
+**Files**:
+
+- `src/routes/api/ai-settings/preferences.ts` (GET/POST/PUT/DELETE)
+- `src/routes/api/ai-settings/providers.ts` (GET/POST)
+- `src/routes/api/ai-settings/providers/$providerId.ts` (GET/PATCH/DELETE)
+- `src/routes/api/ai-settings/providers/$providerId/models.ts` (GET/POST)
+- `src/routes/api/ai-settings/providers/$providerId/test.ts` (POST)
+- `src/routes/api/ai-settings/profiles.ts` (GET/POST)
+- `src/routes/api/ai-settings/profiles/$profileId.ts` (GET/PATCH/DELETE)
+  **Reviewer**: PASS (typecheck)
+
 ---
 
 ## Current Task
 
-P00 + P01A-P01E complete. Ready for P02.
+P00-P02 complete. Ready for P03.
 
 ## Next Task
 
-P02 — Implement Settings UI components:
+P03 — Create React Query hooks for Settings UI:
 
-- P02A: Create Settings page shell (sidebar + main content)
-- P02B: Create SettingsInput component (generic text input with save/cancel)
-- P02C: Create ProviderCard component (AI provider display/edit)
-- P02D: Create ModelFilter component (hidden model IDs)
+- P03A: Create `useAiPreferences` hook (pref CRUD)
+- P03B: Create `usePromptProfiles` hook (profile CRUD)
+- P03C: Create `useProviders` hook (provider CRUD + testing)
+- P03D: Create `useProviderModels` hook (model CRUD)
+- P03E: Create Settings page shell component
+- P03F: Wire up provider card + model filter UI
 
 ## Validation Evidence
 
-- Typecheck: PASS
+- Typecheck: PASS (zero errors)
 - Git diff --check: PASS (no whitespace errors)
 - No tracked upstream files modified
 - pcad-builder.md: UNMODIFIED ✓
 
 ## Blockers
 
-None — ready for P02.
+None — ready for P03.
