@@ -32,8 +32,10 @@ fi
 curl -sf -m 2 "${LLAMA_HEALTH}" > /dev/null 2>&1 && echo "llama-swap: up" || echo "llama-swap: WARNING - not healthy"
 
 echo "=== Starting Ollama ==="
-timeout 10 systemctl start ollama 2>/dev/null || echo "ollama: skipped (cannot start system service as $(id -un))"
 OLLAMA_HEALTH="http://127.0.0.1:11434"
+if ! curl -sf -m 2 "${OLLAMA_HEALTH}" > /dev/null 2>&1 && command -v ollama > /dev/null 2>&1; then
+  nohup ollama serve > /tmp/ollama.log 2>&1 &
+fi
 if ! curl -sf -m 2 "${OLLAMA_HEALTH}" > /dev/null 2>&1; then
   echo "Waiting for Ollama..."
   for _ in $(seq 1 15); do
