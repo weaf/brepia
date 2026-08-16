@@ -327,6 +327,7 @@ export type Database = {
           name: string;
           description: string | null;
           prompt_template: string;
+          mode: 'overlay' | 'fork';
           base_revision: string | null;
           archived: boolean;
           created_at: string;
@@ -338,6 +339,7 @@ export type Database = {
           name: string;
           description?: string | null;
           prompt_template: string;
+          mode?: 'overlay' | 'fork';
           base_revision?: string | null;
           archived?: boolean;
           created_at?: string;
@@ -349,6 +351,7 @@ export type Database = {
           name?: string;
           description?: string | null;
           prompt_template?: string;
+          mode?: 'overlay' | 'fork';
           base_revision?: string | null;
           archived?: boolean;
           created_at?: string;

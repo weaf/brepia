@@ -1,5 +1,6 @@
 -- P01C: prompt_profiles table schema definition
 -- Generated from migration: 20260816135311_prompt_profiles.sql
+-- Updated: 20260816 P04G added mode column with overlay/fork values
 
 CREATE TABLE IF NOT EXISTS "public"."prompt_profiles" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
@@ -7,6 +8,7 @@ CREATE TABLE IF NOT EXISTS "public"."prompt_profiles" (
     "name" "text" NOT NULL,
     "description" "text" NULL,
     "prompt_template" "text" NOT NULL,
+    "mode" text NOT NULL DEFAULT 'overlay' CHECK ("mode" IN ('overlay', 'fork')),
     "base_revision" "text" NULL,
     "archived" boolean NOT NULL DEFAULT false,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,

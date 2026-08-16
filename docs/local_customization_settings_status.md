@@ -1,8 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `c39e787` (P03H: Add vitest test infrastructure and 16 model catalog tests)
+**HEAD**: `b09527c` (P04F: Pin user's default promptProfileId on conversation creation)
 **Last Updated**: 2026-08-16
+**Current Task**: P04G — Upstream update behavior (test overlay vs fork inheritance)
 
 ---
 

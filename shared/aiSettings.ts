@@ -60,7 +60,7 @@ export const AiPreferencesSchema = z.object({
 export type AiPreferencesDto = z.infer<typeof AiPreferencesSchema>;
 
 // ---------------------------------------------------------------------------
-// prompt_profiles (mode is NOT stored — computed server-side)
+// prompt_profiles (mode = 'overlay' | 'fork', stored in DB)
 // ---------------------------------------------------------------------------
 
 export const CreatePromptProfileSchema = z.object({
@@ -70,6 +70,7 @@ export const CreatePromptProfileSchema = z.object({
     .string()
     .min(1, 'promptTemplate is required')
     .max(MAX_CONTENT_LENGTH),
+  mode: z.enum(['overlay', 'fork']).optional(),
   baseRevision: z.string().max(64).nullable().optional(),
 });
 
@@ -81,6 +82,7 @@ export const UpdatePromptProfileSchema = z.object({
     .min(1, 'promptTemplate is required')
     .max(MAX_CONTENT_LENGTH)
     .optional(),
+  mode: z.enum(['overlay', 'fork']).optional(),
   baseRevision: z.string().max(64).nullable().optional(),
 });
 
@@ -90,6 +92,7 @@ export const PromptProfileSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   promptTemplate: z.string(),
+  mode: z.enum(['overlay', 'fork']),
   fingerprint: z.string().nullable(),
   editable: z.boolean(),
   deletable: z.boolean(),
@@ -106,6 +109,7 @@ export const PromptProfileSummarySchema = z.object({
   userId: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable(),
+  mode: z.enum(['overlay', 'fork']),
   fingerprint: z.string().nullable(),
   editable: z.boolean(),
   deletable: z.boolean(),

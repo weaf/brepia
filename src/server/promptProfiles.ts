@@ -1,11 +1,14 @@
 // P02C: Server-side prompt_profiles management.
 //
-// Supports CRUD for user-created profiles.  The built-in (original) prompt
-// profile is NOT stored in the database — it is surfaced as a synthetic
-// immutable record so that settings code can treat it uniformly.
+// Supports CRUD for user-created profiles with two modes:
+// - **overlay**: profile template is recomputed against current built-in prompt
+//   plus user custom instructions. Inherits future upstream updates.
+// - **fork**: frozen copy at creation time. Tracks original fingerprint in
+//   `base_revision`. Does NOT inherit future upstream updates.
 //
-// NOTE: The `prompt_profiles` table does NOT have a `mode` column.
-// The mode is always "fork" for user-created profiles.
+// The built-in (original) prompt profile is NOT stored in the database — it
+// is surfaced as a synthetic immutable record so that settings code can treat
+// it uniformly.
 
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
@@ -56,6 +59,7 @@ function loadBuiltinProfile(): PromptProfileDetailDto {
     name: 'CADAM Original',
     description: null,
     promptTemplate: PARAMETRIC_AGENT_PROMPT,
+    mode: 'overlay',
     fingerprint: _cachedBuiltinFingerprint,
     editable: false,
     deletable: false,
@@ -82,7 +86,9 @@ export async function getUserPromptProfiles(
 
   let query = supabase
     .from('prompt_profiles')
-    .select('id, user_id, name, description, archived, created_at, updated_at')
+    .select(
+      'id, user_id, name, description, mode, archived, created_at, updated_at',
+    )
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
@@ -101,6 +107,7 @@ export async function getUserPromptProfiles(
     userId: row.user_id,
     name: row.name,
     description: row.description,
+    mode: row.mode,
     fingerprint: null,
     editable: true,
     deletable: true,
@@ -144,6 +151,7 @@ export async function getPromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
+    mode: data.mode,
     fingerprint: null,
     editable: true,
     deletable: true,
@@ -156,12 +164,15 @@ export async function getPromptProfile(
 
 /**
  * Create a new prompt profile.
+ * Default mode is 'overlay' — inherits future upstream updates.
  */
 export async function createPromptProfile(
   user: User,
   input: CreatePromptProfileInput,
 ): Promise<PromptProfileDetailDto> {
   const supabase = getServiceRoleSupabaseClient();
+
+  const mode = input.mode ?? 'overlay';
 
   const { data, error } = await supabase
     .from('prompt_profiles')
@@ -170,6 +181,7 @@ export async function createPromptProfile(
       name: input.name,
       description: input.description ?? null,
       prompt_template: input.promptTemplate,
+      mode,
       base_revision: input.baseRevision ?? null,
       archived: false,
     })
@@ -186,6 +198,7 @@ export async function createPromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
+    mode,
     fingerprint: null,
     editable: true,
     deletable: true,
@@ -198,6 +211,8 @@ export async function createPromptProfile(
 
 /**
  * Update an existing prompt profile.
+ * Overlay mode profiles can change their mode to fork (freezing at current
+ * built-in revision). Fork mode profiles cannot change mode.
  */
 export async function updatePromptProfile(
   userId: string,
@@ -212,7 +227,7 @@ export async function updatePromptProfile(
 
   const { data: existing } = await supabase
     .from('prompt_profiles')
-    .select('id')
+    .select('id, mode')
     .eq('id', profileId)
     .eq('user_id', userId)
     .single();
@@ -221,12 +236,18 @@ export async function updatePromptProfile(
     throw new Error('Prompt profile not found');
   }
 
+  // Fork mode: cannot change mode
+  if (existing.mode === 'fork' && input.mode) {
+    throw new Error('Cannot change mode of a forked profile');
+  }
+
   const { data, error } = await supabase
     .from('prompt_profiles')
     .update({
       name: input.name,
       description: input.description ?? null,
       prompt_template: input.promptTemplate,
+      mode: input.mode ?? existing.mode,
       base_revision: input.baseRevision ?? null,
       updated_at: new Date().toISOString(),
     })
@@ -244,6 +265,7 @@ export async function updatePromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
+    mode: data.mode,
     fingerprint: null,
     editable: true,
     deletable: true,
@@ -300,4 +322,52 @@ export async function deletePromptProfile(
   if (error) {
     throw new Error(`Failed to delete prompt profile: ${error.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Runtime prompt resolver
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the system prompt for a conversation at runtime.
+ *
+ * Resolution logic (P04E):
+ * 1. `promptProfileId` is NULL/undefined → return the built-in exact prompt.
+ * 2. `promptProfileId` points to a custom profile → fetch and return its
+ *    template. Archived profiles still resolve (they may be pinned to
+ *    existing conversations).
+ * 3. Profile belongs to another user → reject (safety).
+ * 4. Profile not found or unresolvable → throw an explicit error (never
+ *    silently fall back to a different prompt).
+ *
+ * The built-in profile ID (`BUILTIN_PROFILE_ID`) is a synthetic constant
+ * that always resolves to the current `PARAMETRIC_AGENT_PROMPT` constant.
+ */
+export async function resolveConversationSystemPrompt({
+  userId,
+  profileId,
+}: {
+  userId: string;
+  profileId: string | null | undefined;
+}): Promise<string> {
+  // NULL / undefined / empty → built-in
+  if (!profileId) {
+    return PARAMETRIC_AGENT_PROMPT;
+  }
+
+  // Synthetic built-in → return the constant
+  if (profileId === BUILTIN_PROFILE_ID) {
+    return PARAMETRIC_AGENT_PROMPT;
+  }
+
+  // Fetch custom profile from DB
+  const profile = await getPromptProfile(userId, profileId);
+
+  if (!profile) {
+    throw new Error(
+      `Prompt profile ${profileId} not found for user ${userId}. This conversation may have been corrupted.`,
+    );
+  }
+
+  return profile.promptTemplate;
 }

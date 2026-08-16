@@ -46,6 +46,7 @@ export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
             name: body.name,
             description: body.description,
             promptTemplate: body.promptTemplate,
+            mode: body.mode as 'overlay' | 'fork' | undefined,
             baseRevision: body.baseRevision,
           });
 

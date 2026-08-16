@@ -41,6 +41,7 @@ interface PromptProfileSummary {
   userId: string;
   name: string;
   description: string | null;
+  mode: 'overlay' | 'fork';
   archived: boolean;
   fingerprint: string | null;
   editable: boolean;
@@ -405,13 +406,15 @@ function ProfileListItem({
             >
               {profile.name}
             </span>
-            {!profile.editable && (
+            {!profile.editable ? (
               <Badge
                 variant="outline"
                 className="border-adam-blue/30 bg-adam-blue/10 text-[10px] text-adam-blue"
               >
                 CADAM Original
               </Badge>
+            ) : (
+              <ModeBadge mode={profile.mode} />
             )}
             <DefaultBadge profileId={profile.id} defaultId={defaultId} />
           </div>
