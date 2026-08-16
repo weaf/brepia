@@ -7,6 +7,7 @@ import {
   requireUser,
 } from '@/server/api';
 import {
+  getModelById,
   updateProviderModel,
   deleteProviderModel,
 } from '@/server/customProviders';
@@ -17,7 +18,25 @@ export const Route = createFileRoute(
   server: {
     handlers: {
       OPTIONS: preflight,
-      GET: methodNotAllowed,
+      GET: async ({ request, params }) => {
+        try {
+          const user = await requireUser(request);
+          const model = await getModelById(params.modelId, user.id);
+          if (!model) {
+            return json({ error: 'Provider model not found' }, 404);
+          }
+          return json(model);
+        } catch (err) {
+          return json(
+            {
+              error: isUnauthorizedError(err)
+                ? 'Unauthorized'
+                : 'failed_to_load_provider_model',
+            },
+            isUnauthorizedError(err) ? 401 : 500,
+          );
+        }
+      },
       POST: methodNotAllowed,
       PATCH: async ({ request, params }) => {
         try {

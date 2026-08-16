@@ -8,6 +8,8 @@ import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
 import { normalizeConversationSuggestions } from '@shared/suggestions';
 import { normalizeModelId } from '@shared/models';
 import { streamingOpencodeChatModel } from '@/server/opencode';
+import { buildCustomChatModel } from '@/server/customProviders';
+import { isCustomProviderModel } from '@shared/customModelIds';
 import type { Conversation, Message, MeshFileType, Model } from '@shared/types';
 import {
   convertToModelMessages,
@@ -1329,6 +1331,15 @@ export async function handleAiChatRequest(req: Request) {
       );
       // Streaming opencode handles reasoning internally; no provider options.
       chatProviderOptions = undefined;
+    } else if (isCustomProviderModel(actualModelId)) {
+      // P06: Custom provider models — resolve via buildCustomChatModel
+      const built = await buildCustomChatModel(
+        actualModelId,
+        user.id,
+        thinkingEnabled,
+      );
+      chatLanguageModel = built.model;
+      chatProviderOptions = built.providerOptions;
     } else {
       const built = buildChatModel(actualModelId, providers, thinkingEnabled);
       chatLanguageModel = built.model;

@@ -12,8 +12,15 @@
 
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import type { LanguageModel } from 'ai';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import { env } from './env';
+import { parseCustomProviderModelId } from '@shared/customModelIds';
 import type {
   CreateProviderInput,
   UpdateProviderInput,
@@ -437,6 +444,46 @@ export async function testProvider(
 // ---------------------------------------------------------------------------
 
 /**
+ * Get a single model by its ID (scoped to user via FK).
+ */
+export async function getModelById(
+  modelId: string,
+  userId: string,
+): Promise<ProviderModelDto | null> {
+  const supabase = getServiceRoleSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('ai_provider_models')
+    .select('*')
+    .eq('id', modelId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load provider model: ${error.message}`);
+  }
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    providerId: data.provider_id,
+    userId: data.user_id,
+    modelId: data.model_id,
+    displayName: data.display_name,
+    description: data.description,
+    supportsTools: data.supports_tools,
+    supportsThinking: data.supports_thinking,
+    supportsVision: data.supports_vision,
+    contextLimit: data.context_limit,
+    outputLimit: data.output_limit,
+    isVisible: data.is_visible,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+/**
  * Get all models for a provider (scoped to user via FK).
  */
 export async function getProviderModels(
@@ -613,4 +660,174 @@ export async function deleteProviderModel(
   if (error) {
     throw new Error(`Failed to delete provider model: ${error.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// P06: Runtime custom-provider routing (buildCustomChatModel)
+// ---------------------------------------------------------------------------
+
+/**
+ * P06B: Build a custom chat model from a custom provider model ID.
+ *
+ * Parses the custom model ID (`custom/<provider-uuid>/<model-id>`), loads
+ * the provider and model rows from the database, validates them, decrypts
+ * the credential, and instantiates the appropriate AI SDK provider.
+ *
+ * Returns a tuple of [LanguageModel, ProviderOptions | undefined] so the
+ * call site can pass it directly to `streamText({ model, providerOptions })`.
+ *
+ * Throws explicit errors for every failure mode (P06E):
+ * - Custom provider disabled
+ * - Custom model disabled
+ * - Provider credential missing
+ * - Provider authentication failed
+ * - Provider endpoint unreachable
+ * - Provider model not found
+ */
+export async function buildCustomChatModel(
+  modelId: string,
+  userId: string,
+  thinkingEnabled: boolean,
+  thinkingBudget?: number,
+): Promise<{ model: LanguageModel; providerOptions?: ProviderOptions }> {
+  // --- 1. Parse custom model ID ---
+  const parsed = parseCustomProviderModelId(modelId);
+  if (!parsed) {
+    throw new Error(`Invalid custom model ID: ${modelId}`);
+  }
+
+  const { providerId, modelId: nativeModelId } = parsed;
+
+  // --- 2. Load provider row (scoped to user) ---
+  const supabase = getServiceRoleSupabaseClient();
+
+  const { data: providerRow, error: providerError } = await supabase
+    .from('ai_providers')
+    .select('*')
+    .eq('id', providerId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (providerError) {
+    throw new Error(
+      `Provider not found: custom provider ${providerId} does not belong to this user.`,
+    );
+  }
+
+  if (!providerRow) {
+    throw new Error(
+      `Custom provider disabled: provider ${providerId} not found.`,
+    );
+  }
+
+  if (!providerRow.enabled) {
+    throw new Error(
+      `Custom provider disabled: ${providerRow.name} is disabled.`,
+    );
+  }
+
+  // --- 3. Load model row (scoped to user) ---
+  const { data: modelRow, error: modelError } = await supabase
+    .from('ai_provider_models')
+    .select('*')
+    .eq('id', nativeModelId)
+    .eq('provider_id', providerId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (modelError) {
+    throw new Error(
+      `Custom model not found: model ${nativeModelId} not found.`,
+    );
+  }
+
+  if (!modelRow) {
+    throw new Error(`Custom model disabled: model ${nativeModelId} not found.`);
+  }
+
+  if (!modelRow.is_visible) {
+    throw new Error(
+      `Custom model disabled: model ${modelRow.display_name || nativeModelId} is not visible.`,
+    );
+  }
+
+  // --- 4. Decrypt credential ---
+  const credential = decryptStoredCredential(providerRow);
+
+  if (!credential) {
+    throw new Error('Provider credential missing: no API key configured.');
+  }
+
+  // --- 5. Instantiate AI SDK provider based on driver ---
+  const driver = providerRow.driver as string;
+
+  switch (driver) {
+    case 'openai-compatible': {
+      const provider = createOpenAICompatible({
+        name: providerRow.slug || 'custom-openai',
+        apiKey: credential,
+        baseURL: providerRow.base_url ?? undefined,
+      });
+      const model = provider(nativeModelId);
+      return { model };
+    }
+
+    case 'anthropic': {
+      const provider = createAnthropic({
+        apiKey: credential,
+        baseURL: providerRow.base_url ?? undefined,
+      });
+      const model = provider(nativeModelId);
+      const providerOptions: ProviderOptions | undefined = thinkingEnabled
+        ? {
+            anthropic: {
+              thinking: {
+                type: 'enabled' as const,
+                budgetTokens: thinkingBudget || 4096,
+              },
+            },
+          }
+        : undefined;
+      return { model, providerOptions };
+    }
+
+    case 'google': {
+      const provider = createGoogleGenerativeAI({
+        apiKey: credential,
+      });
+      const model = provider(nativeModelId);
+      return { model };
+    }
+
+    case 'openrouter': {
+      const provider = createOpenRouter({
+        apiKey: credential,
+      });
+      const model = provider.chat(nativeModelId, {
+        ...(thinkingEnabled
+          ? { reasoning: { max_tokens: thinkingBudget || 4096 } }
+          : {}),
+        usage: { include: true },
+      });
+      return { model };
+    }
+
+    default:
+      throw new Error(
+        `Provider does not support required CAD tools: unsupported driver "${driver}".`,
+      );
+  }
+}
+
+function decryptStoredCredential(row: {
+  credential_ciphertext: string | null;
+  credential_iv: string | null;
+  credential_tag: string | null;
+}): string | null {
+  if (!hasStoredCred(row)) return null;
+  return decryptCredential(
+    row.credential_ciphertext!,
+    row.credential_iv!,
+    row.credential_tag!,
+  );
 }
