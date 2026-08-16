@@ -230,9 +230,17 @@
 **Files**: `tests/promptProfiles.test.ts`, `src/server/promptProfiles.ts` (exported fingerprint/loadBuiltinProfile)
 **Tests**: built-in shape, immutability, fingerprint stability, Zod validation (create/update/mode/empty), resolver NULL/BUILTIN/missing, fork immutability, overlay→fork transition, empty template rejection
 
+### P04I — Overlay prompt resolution
+
+**Status**: DONE
+**Commit**: `695617c`
+**Reviewer**: PASS (typecheck clean)
+**Files**: `src/server/promptProfiles.ts`
+**Changes**: `resolveConversationSystemPrompt` now checks `profile.mode` — overlay mode prepends current built-in prompt with `--- User Custom Instructions ---` delimiter before user template; fork mode returns template as-is.
+
 ## Current Task
 
-P00-P04H complete. Ready for P04I — Overlay prompt resolution (recompute profile against current built-in when mode is overlay).
+P00-P04I complete. Ready for P04J — Built-in prompt fingerprint mismatch detection and UI warning in PromptProfilesSettings.
 
 ## Validation Evidence
 
