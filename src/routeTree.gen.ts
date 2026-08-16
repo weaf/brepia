@@ -43,6 +43,7 @@ import { Route as LayoutAuthSettingsRouteImport } from './routes/_layout/_auth/s
 import { Route as LayoutAuthHistoryRouteImport } from './routes/_layout/_auth/history';
 import { Route as ApiInternalAccountDeleteRouteImport } from './routes/api/internal/account/delete';
 import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId';
+import { Route as ApiModelsCatalogRouteImport } from './routes/api/models/catalog';
 import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api/ai-settings/profiles/$profileId';
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id';
 import { Route as ApiAiSettingsProvidersProviderIdTestRouteImport } from './routes/api/ai-settings/providers/$providerId/test';
@@ -171,6 +172,11 @@ const ApiOpencodeModelsRoute = ApiOpencodeModelsRouteImport.update({
   path: '/api/opencode/models',
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiModelsCatalogRoute = ApiModelsCatalogRouteImport.update({
+  id: '/api/models/catalog',
+  path: '/api/models/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiJacksonPollockSplatRoute = ApiJacksonPollockSplatRouteImport.update({
   id: '/api/jackson-pollock/$',
   path: '/api/jackson-pollock/$',
@@ -274,6 +280,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
   '/api/jackson-pollock/$': typeof ApiJacksonPollockSplatRoute;
   '/api/opencode/models': typeof ApiOpencodeModelsRoute;
+  '/api/models/catalog': typeof ApiModelsCatalogRoute;
   '/editor/$id': typeof LayoutAuthEditorIdRoute;
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute;
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
@@ -312,6 +319,7 @@ export interface FileRoutesByTo {
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
   '/api/jackson-pollock/$': typeof ApiJacksonPollockSplatRoute;
   '/api/opencode/models': typeof ApiOpencodeModelsRoute;
+  '/api/models/catalog': typeof ApiModelsCatalogRoute;
   '/editor/$id': typeof LayoutAuthEditorIdRoute;
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute;
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
@@ -353,6 +361,7 @@ export interface FileRoutesById {
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
   '/api/jackson-pollock/$': typeof ApiJacksonPollockSplatRoute;
   '/api/opencode/models': typeof ApiOpencodeModelsRoute;
+  '/api/models/catalog': typeof ApiModelsCatalogRoute;
   '/_layout/_auth/editor/$id': typeof LayoutAuthEditorIdRoute;
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute;
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
@@ -685,6 +694,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpencodeModelsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    '/api/models/catalog': {
+      id: '/api/models/catalog';
+      path: '/api/models/catalog';
+      fullPath: '/api/models/catalog';
+      preLoaderRoute: typeof ApiModelsCatalogRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     '/api/jackson-pollock/$': {
       id: '/api/jackson-pollock/$';
       path: '/api/jackson-pollock/$';
@@ -886,6 +902,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAiSettingsProvidersRoute: ApiAiSettingsProvidersRouteWithChildren,
   ApiJacksonPollockSplatRoute: ApiJacksonPollockSplatRoute,
   ApiOpencodeModelsRoute: ApiOpencodeModelsRoute,
+  ApiModelsCatalogRoute: ApiModelsCatalogRoute,
   ApiInternalAccountDeleteRoute: ApiInternalAccountDeleteRoute,
 };
 export const routeTree = rootRouteImport
