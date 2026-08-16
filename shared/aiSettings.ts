@@ -188,6 +188,12 @@ export const ProviderModelSchema = z.object({
   userId: z.string().uuid(),
   modelId: modelIdSchema,
   displayName: z.string(),
+  description: z.string().nullable().optional(),
+  supportsTools: z.boolean(),
+  supportsThinking: z.boolean(),
+  supportsVision: z.boolean(),
+  contextLimit: z.number().nullable().optional(),
+  outputLimit: z.number().nullable().optional(),
   isVisible: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -196,11 +202,23 @@ export const ProviderModelSchema = z.object({
 export const CreateProviderModelSchema = z.object({
   modelId: modelIdSchema,
   displayName: z.string().min(1, 'displayName is required').max(256),
+  description: z.string().nullable().optional(),
+  supportsTools: z.boolean().default(false),
+  supportsThinking: z.boolean().default(false),
+  supportsVision: z.boolean().default(false),
+  contextLimit: z.number().nullable().optional(),
+  outputLimit: z.number().nullable().optional(),
   isVisible: z.boolean().default(true),
 });
 
 export const UpdateProviderModelSchema = z.object({
   displayName: z.string().min(1, 'displayName is required').max(256).optional(),
+  description: z.string().nullable().optional(),
+  supportsTools: z.boolean().optional(),
+  supportsThinking: z.boolean().optional(),
+  supportsVision: z.boolean().optional(),
+  contextLimit: z.number().nullable().optional(),
+  outputLimit: z.number().nullable().optional(),
   isVisible: z.boolean().optional(),
 });
 

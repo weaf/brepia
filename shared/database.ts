@@ -425,6 +425,12 @@ export type Database = {
           user_id: string;
           model_id: string;
           display_name: string;
+          description: string | null;
+          supports_tools: boolean;
+          supports_thinking: boolean;
+          supports_vision: boolean;
+          context_limit: number | null;
+          output_limit: number | null;
           is_visible: boolean;
           created_at: string;
           updated_at: string;
@@ -435,6 +441,12 @@ export type Database = {
           user_id: string;
           model_id: string;
           display_name: string;
+          description?: string | null;
+          supports_tools?: boolean;
+          supports_thinking?: boolean;
+          supports_vision?: boolean;
+          context_limit?: number | null;
+          output_limit?: number | null;
           is_visible?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -445,6 +457,12 @@ export type Database = {
           user_id?: string;
           model_id?: string;
           display_name?: string;
+          description?: string | null;
+          supports_tools?: boolean;
+          supports_thinking?: boolean;
+          supports_vision?: boolean;
+          context_limit?: number | null;
+          output_limit?: number | null;
           is_visible?: boolean;
           created_at?: string;
           updated_at?: string;

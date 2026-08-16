@@ -52,6 +52,12 @@ export const Route = createFileRoute(
           const model = await createProviderModel(params.providerId, user.id, {
             modelId,
             displayName,
+            description: body.description ?? null,
+            supportsTools: body.supportsTools ?? false,
+            supportsThinking: body.supportsThinking ?? false,
+            supportsVision: body.supportsVision ?? false,
+            contextLimit: body.contextLimit ?? null,
+            outputLimit: body.outputLimit ?? null,
             isVisible: body.isVisible !== false,
           });
 

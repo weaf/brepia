@@ -48,6 +48,7 @@ import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id';
 import { Route as ApiAiSettingsProvidersProviderIdTestRouteImport } from './routes/api/ai-settings/providers/$providerId/test';
 import { Route as ApiAiSettingsProvidersProviderIdModelsRouteImport } from './routes/api/ai-settings/providers/$providerId/models';
+import { Route as ApiAiSettingsProvidersProviderIdModelsModelIdRouteImport } from './routes/api/ai-settings/providers/$providerId/models/$modelId';
 
 const UpdatePasswordRoute = UpdatePasswordRouteImport.update({
   id: '/update-password',
@@ -248,6 +249,12 @@ const ApiAiSettingsProvidersProviderIdModelsRoute =
     path: '/models',
     getParentRoute: () => ApiAiSettingsProvidersProviderIdRoute,
   } as any);
+const ApiAiSettingsProvidersProviderIdModelsModelIdRoute =
+  ApiAiSettingsProvidersProviderIdModelsModelIdRouteImport.update({
+    id: '/$modelId',
+    path: '/$modelId',
+    getParentRoute: () => ApiAiSettingsProvidersProviderIdModelsRoute,
+  } as any);
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute;
@@ -286,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRoute;
+  '/api/ai-settings/providers/$providerId/models/$modelId': typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
   '/api/ai-settings/providers/$providerId/test': typeof ApiAiSettingsProvidersProviderIdTestRoute;
 }
 export interface FileRoutesByTo {
@@ -325,6 +333,7 @@ export interface FileRoutesByTo {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRoute;
+  '/api/ai-settings/providers/$providerId/models/$modelId': typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
   '/api/ai-settings/providers/$providerId/test': typeof ApiAiSettingsProvidersProviderIdTestRoute;
 }
 export interface FileRoutesById {
@@ -367,6 +376,7 @@ export interface FileRoutesById {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRoute;
+  '/api/ai-settings/providers/$providerId/models/$modelId': typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
   '/api/ai-settings/providers/$providerId/test': typeof ApiAiSettingsProvidersProviderIdTestRoute;
 }
 export interface FileRouteTypes {
@@ -407,6 +417,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/internal/account/delete'
     | '/api/ai-settings/providers/$providerId/models'
+    | '/api/ai-settings/providers/$providerId/models/$modelId'
     | '/api/ai-settings/providers/$providerId/test';
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -445,6 +456,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/internal/account/delete'
     | '/api/ai-settings/providers/$providerId/models'
+    | '/api/ai-settings/providers/$providerId/models/$modelId'
     | '/api/ai-settings/providers/$providerId/test';
   id:
     | '__root__'
@@ -485,6 +497,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/internal/account/delete'
     | '/api/ai-settings/providers/$providerId/models'
+    | '/api/ai-settings/providers/$providerId/models/$modelId'
     | '/api/ai-settings/providers/$providerId/test';
   fileRoutesById: FileRoutesById;
 }
@@ -792,6 +805,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiSettingsProvidersProviderIdModelsRouteImport;
       parentRoute: typeof ApiAiSettingsProvidersProviderIdRoute;
     };
+    '/api/ai-settings/providers/$providerId/models/$modelId': {
+      id: '/api/ai-settings/providers/$providerId/models/$modelId';
+      path: '/$modelId';
+      fullPath: '/api/ai-settings/providers/$providerId/models/$modelId';
+      preLoaderRoute: typeof ApiAiSettingsProvidersProviderIdModelsModelIdRouteImport;
+      parentRoute: typeof ApiAiSettingsProvidersProviderIdModelsRoute;
+    };
   }
 }
 
@@ -844,14 +864,14 @@ const ApiAiSettingsProfilesRouteWithChildren =
   );
 
 interface ApiAiSettingsProvidersProviderIdRouteChildren {
-  ApiAiSettingsProvidersProviderIdModelsRoute: typeof ApiAiSettingsProvidersProviderIdModelsRoute;
+  ApiAiSettingsProvidersProviderIdModelsRoute: typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
   ApiAiSettingsProvidersProviderIdTestRoute: typeof ApiAiSettingsProvidersProviderIdTestRoute;
 }
 
 const ApiAiSettingsProvidersProviderIdRouteChildren: ApiAiSettingsProvidersProviderIdRouteChildren =
   {
     ApiAiSettingsProvidersProviderIdModelsRoute:
-      ApiAiSettingsProvidersProviderIdModelsRoute,
+      ApiAiSettingsProvidersProviderIdModelsRouteWithChildren,
     ApiAiSettingsProvidersProviderIdTestRoute:
       ApiAiSettingsProvidersProviderIdTestRoute,
   };
@@ -859,6 +879,21 @@ const ApiAiSettingsProvidersProviderIdRouteChildren: ApiAiSettingsProvidersProvi
 const ApiAiSettingsProvidersProviderIdRouteWithChildren =
   ApiAiSettingsProvidersProviderIdRoute._addFileChildren(
     ApiAiSettingsProvidersProviderIdRouteChildren,
+  );
+
+interface ApiAiSettingsProvidersProviderIdModelsRouteChildren {
+  ApiAiSettingsProvidersProviderIdModelsModelIdRoute: typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
+}
+
+const ApiAiSettingsProvidersProviderIdModelsRouteChildren: ApiAiSettingsProvidersProviderIdModelsRouteChildren =
+  {
+    ApiAiSettingsProvidersProviderIdModelsModelIdRoute:
+      ApiAiSettingsProvidersProviderIdModelsModelIdRoute,
+  };
+
+const ApiAiSettingsProvidersProviderIdModelsRouteWithChildren =
+  ApiAiSettingsProvidersProviderIdModelsRoute._addFileChildren(
+    ApiAiSettingsProvidersProviderIdModelsRouteChildren,
   );
 
 interface ApiAiSettingsProvidersRouteChildren {

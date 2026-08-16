@@ -461,6 +461,12 @@ export async function getProviderModels(
     userId: row.user_id,
     modelId: row.model_id,
     displayName: row.display_name,
+    description: row.description,
+    supportsTools: row.supports_tools,
+    supportsThinking: row.supports_thinking,
+    supportsVision: row.supports_vision,
+    contextLimit: row.context_limit,
+    outputLimit: row.output_limit,
     isVisible: row.is_visible,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -496,6 +502,12 @@ export async function createProviderModel(
       user_id: userId,
       model_id: input.modelId,
       display_name: input.displayName,
+      description: input.description ?? null,
+      supports_tools: input.supportsTools ?? false,
+      supports_thinking: input.supportsThinking ?? false,
+      supports_vision: input.supportsVision ?? false,
+      context_limit: input.contextLimit ?? null,
+      output_limit: input.outputLimit ?? null,
       is_visible: input.isVisible,
     })
     .select()
@@ -511,6 +523,12 @@ export async function createProviderModel(
     userId: data.user_id,
     modelId: data.model_id,
     displayName: data.display_name,
+    description: data.description,
+    supportsTools: data.supports_tools,
+    supportsThinking: data.supports_thinking,
+    supportsVision: data.supports_vision,
+    contextLimit: data.context_limit,
+    outputLimit: data.output_limit,
     isVisible: data.is_visible,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
@@ -527,13 +545,29 @@ export async function updateProviderModel(
 ): Promise<ProviderModelDto> {
   const supabase = getServiceRoleSupabaseClient();
 
+  const updateRow: Record<string, unknown> = {};
+
+  if (input.displayName !== undefined)
+    updateRow.display_name = input.displayName;
+  if (input.description !== undefined)
+    updateRow.description = input.description;
+  if (input.supportsTools !== undefined)
+    updateRow.supports_tools = input.supportsTools;
+  if (input.supportsThinking !== undefined)
+    updateRow.supports_thinking = input.supportsThinking;
+  if (input.supportsVision !== undefined)
+    updateRow.supports_vision = input.supportsVision;
+  if (input.contextLimit !== undefined)
+    updateRow.context_limit = input.contextLimit;
+  if (input.outputLimit !== undefined)
+    updateRow.output_limit = input.outputLimit;
+  if (input.isVisible !== undefined) updateRow.is_visible = input.isVisible;
+  updateRow.updated_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from('ai_provider_models')
-    .update({
-      display_name: input.displayName,
-      is_visible: input.isVisible,
-      updated_at: new Date().toISOString(),
-    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updateRow as any)
     .eq('id', modelId)
     .eq('user_id', userId)
     .select()
@@ -549,6 +583,12 @@ export async function updateProviderModel(
     userId: data.user_id,
     modelId: data.model_id,
     displayName: data.display_name,
+    description: data.description,
+    supportsTools: data.supports_tools,
+    supportsThinking: data.supports_thinking,
+    supportsVision: data.supports_vision,
+    contextLimit: data.context_limit,
+    outputLimit: data.output_limit,
     isVisible: data.is_visible,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
