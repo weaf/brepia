@@ -305,3 +305,18 @@ export async function buildCatalog(
     ...mergedCustom,
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Default model resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the default model ID.
+ *
+ * Returns the first model in PARAMETRIC_MODELS (the canonical built-in
+ * catalog). The full default model logic with user preferences should
+ * be implemented in the API route layer.
+ */
+export function getDefaultModel(): string {
+  return PARAMETRIC_MODELS[0].id;
+}
