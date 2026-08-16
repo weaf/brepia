@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Podman shim: podman <5 cannot evaluate {{.Label "key"}} in ps --format
+# templates (used by the Supabase CLI). Rewrite it to {{index .Labels "key"}},
+# which podman 4.x supports, then delegate to the real podman.
+REAL_PODMAN="/usr/bin/podman"
+[ -x "${REAL_PODMAN}" ] || REAL_PODMAN="$(command -v podman)"
+
+newargs=()
+rewrite=0
+for arg in "$@"; do
+  if [ "${rewrite}" -eq 1 ]; then
+    arg="${arg//\{\{.Label \"/\{\{index .Labels \"}"
+    rewrite=0
+  elif [[ "${arg}" = --format=* ]]; then
+    arg="--format=${arg#--format=}"
+    arg="${arg//\{\{.Label \"/\{\{index .Labels \"}"
+  elif [ "${arg}" = "--format" ]; then
+    rewrite=1
+  fi
+  newargs+=("${arg}")
+done
+
+exec "${REAL_PODMAN}" "${newargs[@]}"
