@@ -127,14 +127,16 @@ P00-P02 complete. Ready for P03.
 
 ## Next Task
 
-P03 — Create React Query hooks for Settings UI:
+P03 — Model catalog system:
 
-- P03A: Create `useAiPreferences` hook (pref CRUD)
-- P03B: Create `usePromptProfiles` hook (profile CRUD)
-- P03C: Create `useProviders` hook (provider CRUD + testing)
-- P03D: Create `useProviderModels` hook (model CRUD)
-- P03E: Create Settings page shell component
-- P03F: Wire up provider card + model filter UI
+- P03A: Introduce catalog module (src/server/modelCatalog.ts)
+- P03B: Stable custom model IDs (shared/customModelIds.ts)
+- P03C: Catalog API endpoint (GET /api/models/catalog)
+- P03D: Effective picker filtering (useParametricModelCatalog hook)
+- P03E: Replace direct picker dependency on PARAMETRIC_MODELS
+- P03F: Default model behavior
+- P03G: Model settings UI
+- P03H: Tests
 
 ## Validation Evidence
 
