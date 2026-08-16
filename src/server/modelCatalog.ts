@@ -16,6 +16,7 @@ import { PARAMETRIC_MODELS } from '@/lib/utils';
 import type { ModelConfig } from '@/types/misc';
 import { opencodeModels, OpenCodeModelInfo } from './opencode';
 import { getUserProviders, getProviderModels } from './customProviders';
+import { makeCustomProviderModelId } from '../../shared/customModelIds';
 import type { User } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,17 @@ export interface CatalogEntry extends ModelConfig {
    * e.g. 'opencode_unavailable', 'provider_down', 'key_missing'.
    */
   unavailableReason?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Type guards
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the given entry is a custom provider model.
+ */
+export function isCustomCatalogEntry(entry: CatalogEntry): boolean {
+  return entry.source === 'custom';
 }
 
 // ---------------------------------------------------------------------------
@@ -125,8 +137,7 @@ function toCustomCatalogEntry(
   enabled: boolean,
 ): CatalogEntry {
   return {
-    // Stable custom ID format: custom/<provider-uuid>/<model-id>
-    id: `custom/${model.providerId}/${model.modelId}`,
+    id: makeCustomProviderModelId(model.providerId, model.modelId),
     name: model.displayName,
     description: '',
     provider: providerName,
