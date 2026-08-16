@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `976ee61` (feat(p03f): add getDefaultModel() to modelCatalog module)
+**HEAD**: `c39e787` (P03H: Add vitest test infrastructure and 16 model catalog tests)
 **Last Updated**: 2026-08-16
 
 ---
@@ -121,10 +121,6 @@
 
 ---
 
-## Current Task
-
-P00-P02 complete. P03A-F complete. Ready for P03G.
-
 ## Completed Tasks — P03
 
 ### P03A — Model catalog module (src/server/modelCatalog.ts)
@@ -175,9 +171,25 @@ P00-P02 complete. P03A-F complete. Ready for P03G.
 **Files**: `src/server/modelCatalog.ts`
 **Export**: `getDefaultModel()` — returns first PARAMETRIC_MODEL id
 
-## Next Task
+### P03G — Model settings UI
 
-P03G — Model settings UI (ModelSettingsSection component)
+**Status**: DONE
+**Commit**: `8005e7d`
+**Reviewer**: PASS (typecheck + eslint)
+**Files**: `src/components/settings/AiModelsSettings.tsx`, `src/views/SettingsView.tsx`
+**Component**: Searchable, groupable model visibility panel with enable-all, hide-all, restore defaults
+
+### P03H — Tests (9 required)
+
+**Status**: DONE
+**Commit**: `c39e787`
+**Reviewer**: PASS (16 tests pass, vitest)
+**Files**: `vitest.config.ts`, `tests/modelCatalog.test.ts`
+**Tests**: built-in default, new built-in structure, hidden absent, hidden current selection, OpenCode hide/show, custom hide/show, stale hidden harmless, all-hidden blocks send, creative unchanged
+
+## Current Task
+
+P00-P03 complete. Ready for P04A.
 
 ## Validation Evidence
 
