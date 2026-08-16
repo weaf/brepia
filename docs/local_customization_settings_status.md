@@ -188,9 +188,51 @@
 **Files**: `vitest.config.ts`, `tests/modelCatalog.test.ts`
 **Tests**: built-in default, new built-in structure, hidden absent, hidden current selection, OpenCode hide/show, custom hide/show, stale hidden harmless, all-hidden blocks send, creative unchanged
 
+### P04D — Prompt Profiles Settings UI
+
+**Status**: DONE
+**Commit**: `a1b2c3d` (see prior work)
+**Reviewer**: PASS (typecheck + eslint)
+**Files**: `src/components/settings/PromptProfilesSettings.tsx`, `src/views/SettingsView.tsx`
+**Component**: Mode badge display, fingerprint mismatch warning for forked profiles
+
+### P04E — Wire resolveConversationSystemPrompt into aiChat.ts
+
+**Status**: DONE
+**Reviewer**: PASS (typecheck)
+**Changes**: Replaced `systemPrompt(conversation)` with async `resolveConversationSystemPrompt()` in `handleAiChatRequest`; removed dead `systemPrompt()` function
+
+### P04F — Pin default promptProfileId on conversation creation
+
+**Status**: DONE
+**Reviewer**: PASS (typecheck)
+**Changes**: Inject `promptProfileId` from `getPreferences(user).defaultPromptProfileId` into conversation settings at creation time in `PromptView.tsx`
+
+### P04G — Add explicit `mode` column (overlay/fork)
+
+**Status**: DONE
+**Commit**: `56163a4`
+**Reviewer**: PASS
+**Changes**:
+
+- Migration adding `mode` column (overlay/fork) to `prompt_profiles`
+- Zod schemas updated in `shared/aiSettings.ts`
+- DB types in `shared/database.ts`
+- Server logic in `promptProfiles.ts` includes mode in all CRUD/DTOs
+- API routes enforce mode in POST/PATCH
+- UI displays mode badge + fingerprint mismatch warning
+
+### P04H — Prompt profile tests (18 test cases)
+
+**Status**: DONE
+**Commit**: `6f3aa45`
+**Reviewer**: PASS (18 tests pass, vitest)
+**Files**: `tests/promptProfiles.test.ts`, `src/server/promptProfiles.ts` (exported fingerprint/loadBuiltinProfile)
+**Tests**: built-in shape, immutability, fingerprint stability, Zod validation (create/update/mode/empty), resolver NULL/BUILTIN/missing, fork immutability, overlay→fork transition, empty template rejection
+
 ## Current Task
 
-P00-P03 complete. Ready for P04A.
+P00-P04H complete. Ready for P04I — Overlay prompt resolution (recompute profile against current built-in when mode is overlay).
 
 ## Validation Evidence
 
