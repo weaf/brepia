@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `6a6cade` (P05A-D: Provider settings component with form, validation, and test connection)
+**HEAD**: `da00191` (P05E: Provider model management — migration, schema, Zod, server module, API routes)
 **Last Updated**: 2026-08-16
-**Current Task**: P05E — Provider model management
+**Current Task**: P05E — Provider model management (migration + server/API done, UI component pending)
 
 ---
 
