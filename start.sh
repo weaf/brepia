@@ -31,20 +31,6 @@ if ! curl -sf -m 2 "${LLAMA_HEALTH}" > /dev/null 2>&1; then
 fi
 curl -sf -m 2 "${LLAMA_HEALTH}" > /dev/null 2>&1 && echo "llama-swap: up" || echo "llama-swap: WARNING - not healthy"
 
-echo "=== Starting Ollama ==="
-OLLAMA_HEALTH="http://127.0.0.1:11434"
-if ! curl -sf -m 2 "${OLLAMA_HEALTH}" > /dev/null 2>&1 && command -v ollama > /dev/null 2>&1; then
-  nohup ollama serve > /tmp/ollama.log 2>&1 &
-fi
-if ! curl -sf -m 2 "${OLLAMA_HEALTH}" > /dev/null 2>&1; then
-  echo "Waiting for Ollama..."
-  for _ in $(seq 1 15); do
-    curl -sf -m 2 "${OLLAMA_HEALTH}" > /dev/null 2>&1 && break
-    sleep 1
-  done
-fi
-curl -sf -m 2 "${OLLAMA_HEALTH}" > /dev/null 2>&1 && echo "ollama: up" || echo "ollama: WARNING - not healthy"
-
 # podman <5 cannot parse {{.Label "key"}} in ps --format templates, which the
 # Supabase CLI relies on to find project containers. Prepend a shim that
 # rewrites it to {{index .Labels "key"}} for the supabase step only.
