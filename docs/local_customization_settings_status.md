@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `4707e6f` (P04J: Fingerprint mismatch warning in profile list items)
+**HEAD**: `6a6cade` (P05A-D: Provider settings component with form, validation, and test connection)
 **Last Updated**: 2026-08-16
-**Current Task**: P05A — Provider settings component
+**Current Task**: P05E — Provider model management
 
 ---
 
@@ -238,17 +238,51 @@
 **Files**: `src/server/promptProfiles.ts`
 **Changes**: `resolveConversationSystemPrompt` now checks `profile.mode` — overlay mode prepends current built-in prompt with `--- User Custom Instructions ---` delimiter before user template; fork mode returns template as-is.
 
+## Completed Tasks — P05
+
+### P05A — Provider settings component
+
+**Status**: DONE
+**Commit**: `6a6cade`
+**Reviewer**: PASS (typecheck + eslint)
+**Files**: `src/components/settings/ProvidersSettings.tsx`, `src/views/SettingsView.tsx`
+**Component**: Provider settings panel with built-in/custom groups, CRUD, enable/disable, connection testing
+
+### P05B — Provider add/edit form
+
+**Status**: DONE
+**Commit**: `6a6cade` (bundled with P05A)
+**Files**: `src/components/settings/ProvidersSettings.tsx` (`ProviderForm` component, 900+ lines)
+**Features**: Create provider with name, slug, driver, base URL, credential; edit existing provider; built-in provider details view
+
+### P05C — URL validation
+
+**Status**: DONE
+**Commit**: `6a6cade` (bundled with P05A)
+**Files**: `src/components/settings/ProvidersSettings.tsx`
+**Validation**: `isValidUrl()` helper for base URL field; input validation on form submission
+
+### P05D — Test connection
+
+**Status**: DONE
+**Commit**: `6a6cade` (bundled with P05A)
+**Files**: `src/routes/api/ai-settings/providers/$providerId/test.ts` (new), `src/components/settings/ProvidersSettings.tsx` (`testProviderConnection` helper)
+**Features**: POST `/api/ai-settings/providers/:id/test` endpoint; live connection test UI with success/failure feedback
+
+---
+
 ## Current Task
 
-P00-P04I complete. Ready for P04J — Built-in prompt fingerprint mismatch detection and UI warning in PromptProfilesSettings.
+P00-P05D complete. Ready for P05E — Provider model management (CRUD for provider-specific models).
 
 ## Validation Evidence
 
 - Typecheck: PASS (zero errors)
+- ESLint: PASS (zero errors)
 - Git diff --check: PASS (no whitespace errors)
 - No tracked upstream files modified
 - pcad-builder.md: UNMODIFIED ✓
 
 ## Blockers
 
-None — ready for P03.
+None — ready for P05E.
