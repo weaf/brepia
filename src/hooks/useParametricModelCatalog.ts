@@ -3,22 +3,16 @@
  * parametric model catalog.
  *
  * Under the hood this calls the `/api/models/catalog` endpoint which
- * merges built-in, opencode, and custom provider models per the
+ * merges built-in, opencode, Codex and custom provider models per the
  * `modelCatalog` server module.
- *
- * Usage:
- *   const { models, isLoading, error } = useParametricModelCatalog();
- *   // models: CatalogEntry[] — enabled + available entries only
  */
 
 import { useState, useEffect } from 'react';
 import type { CatalogEntry } from '../../src/server/modelCatalog';
+import { apiJson } from '@/services/api';
 
 interface UseCatalogResult {
-  /**
-   * Enabled and available catalog entries, grouped by provider.
-   * Each entry carries a `source` field ('builtin' | 'opencode' | 'custom').
-   */
+  /** Enabled and available catalog entries. */
   models: CatalogEntry[];
   /** Whether data is currently being fetched. */
   isLoading: boolean;
@@ -29,7 +23,10 @@ interface UseCatalogResult {
 /**
  * Fetch the effective parametric model catalog.
  *
- * Returns only entries where `enabled && available` is true.
+ * The catalog endpoint requires the current Supabase access token.  Always use
+ * the project's authenticated API helper rather than a raw `fetch()` here;
+ * otherwise a signed-in Settings/PromptView request is seen as anonymous by
+ * `requireUser()` and returns HTTP 401.
  */
 export function useParametricModelCatalog(): UseCatalogResult {
   const [models, setModels] = useState<CatalogEntry[]>([]);
@@ -41,15 +38,11 @@ export function useParametricModelCatalog(): UseCatalogResult {
 
     const fetchCatalog = async () => {
       try {
-        const res = await fetch('/api/models/catalog');
-        if (!res.ok) {
-          setError(`Failed to load model catalog: ${res.status}`);
-          setModels([]);
-          return;
-        }
-        const entries: CatalogEntry[] = await res.json();
+        const entries = (await apiJson('models/catalog')) as CatalogEntry[];
         if (!cancelled) {
-          // Only enabled and available entries.
+          // Picker consumers only receive selectable entries. Settings keeps
+          // visibility preferences separately and will get a dedicated full
+          // catalog view in the follow-up hardening pass.
           const filtered = entries.filter((e) => e.enabled && e.available);
           setModels(filtered);
           setError(null);
@@ -66,7 +59,7 @@ export function useParametricModelCatalog(): UseCatalogResult {
       }
     };
 
-    fetchCatalog();
+    void fetchCatalog();
     return () => {
       cancelled = true;
     };
