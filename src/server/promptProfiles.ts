@@ -37,7 +37,7 @@ let _cachedBuiltinFingerprint: string | null = null;
  * between the stored fingerprint and the current one indicates a new
  * upstream revision.
  */
-function fingerprint(text: string): string {
+export function fingerprint(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
 }
 
@@ -48,7 +48,7 @@ function fingerprint(text: string): string {
  * there is zero duplication between the chat transport and the settings API.
  * A cached fingerprint is kept to avoid recomputing on every API call.
  */
-function loadBuiltinProfile(): PromptProfileDetailDto {
+export function loadBuiltinProfile(): PromptProfileDetailDto {
   if (_cachedBuiltinFingerprint === null) {
     _cachedBuiltinFingerprint = fingerprint(PARAMETRIC_AGENT_PROMPT);
   }
