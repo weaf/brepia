@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `93bf8ea` (feat(P01C): create prompt_profiles table)
+**HEAD**: `41723b0` (feat(P01D): create ai_providers and ai_provider_models tables)
 **Last Updated**: 2026-08-16
 
 ---
@@ -145,15 +145,37 @@
 - RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
 - Grants: anon, authenticated, service_role, postgres
 
+### P01D — Create `ai_providers` and `ai_provider_models`
+
+**Status**: DONE
+**Reviewer**: PASS
+**Files Created**:
+
+- `supabase/migrations/20260816135454_ai_providers.sql`
+- `supabase/migrations/20260816135455_ai_provider_models.sql`
+- `supabase/schemas/ai_providers.sql`
+- `supabase/schemas/ai_provider_models.sql`
+  **Implemented**:
+- **ai_providers**: id, user_id, slug, name, driver, base_url, credential_ciphertext, credential_iv, credential_tag, enabled, timestamps
+  - Unique: (user_id, slug)
+  - Index: (user_id, enabled)
+- **ai_provider_models**: id, provider_id (FK ai_providers), user_id, model_id, display_name, is_visible, timestamps
+  - Unique: (provider_id, model_id)
+  - Index: (provider_id)
+- RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
+- Grants: anon, authenticated, service_role, postgres
+- Credentials stored encrypted, never returned to client
+- No silent fallback: custom provider failures surfaced to user
+
 ---
 
 ## Current Task
 
-P00 + P01A + P01B + P01C complete. Ready for P01D.
+P00 + P01A + P01B + P01C + P01D complete. Ready for P01E.
 
 ## Next Task
 
-P01D — Create `ai_providers` and `ai_provider_models` tables with migration, RLS, grants.
+P01E — Add `updated_at` trigger function and verify existing table triggers (previews, conversations/message cascade).
 
 ## Validation Evidence
 
@@ -164,4 +186,4 @@ P01D — Create `ai_providers` and `ai_provider_models` tables with migration, R
 
 ## Blockers
 
-None — ready for P01D.
+None — ready for P01E.
