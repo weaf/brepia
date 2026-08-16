@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `56163a4` (P04G: Add explicit mode column — overlay/fork)
+**HEAD**: `d14e77e` (P04I: Overlay prompt resolution in resolveConversationSystemPrompt)
 **Last Updated**: 2026-08-16
-**Current Task**: P04H — Overlay prompt resolution (recompute profile against current built-in)
+**Current Task**: P04J — Built-in prompt fingerprint mismatch detection and UI warning in PromptProfilesSettings
 
 ---
 
