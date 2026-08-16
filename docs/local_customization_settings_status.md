@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `d14e77e` (P04I: Overlay prompt resolution in resolveConversationSystemPrompt)
+**HEAD**: `4707e6f` (P04J: Fingerprint mismatch warning in profile list items)
 **Last Updated**: 2026-08-16
-**Current Task**: P04J — Built-in prompt fingerprint mismatch detection and UI warning in PromptProfilesSettings
+**Current Task**: P05A — Provider settings component
 
 ---
 
