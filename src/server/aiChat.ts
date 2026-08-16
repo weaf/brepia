@@ -626,7 +626,9 @@ function billingMultiplier(): number {
 function billingTokensFromUsage(
   modelId: string,
   usage: LanguageModelUsage,
+  billingSource?: 'custom',
 ): number {
+  if (billingSource === 'custom') return 0; // P06D: custom/BYOK — user pays, not platform
   const usdCost = usdCostFromUsage(modelId, usage) * billingMultiplier();
   return Math.max(1, Math.ceil(usdCost / USD_PER_BILLING_TOKEN));
 }
@@ -1324,6 +1326,7 @@ export async function handleAiChatRequest(req: Request) {
 
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
+  let customBillingSource: 'custom' | undefined;
   try {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
@@ -1333,13 +1336,42 @@ export async function handleAiChatRequest(req: Request) {
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
       // P06: Custom provider models — resolve via buildCustomChatModel
-      const built = await buildCustomChatModel(
-        actualModelId,
-        user.id,
-        thinkingEnabled,
-      );
-      chatLanguageModel = built.model;
-      chatProviderOptions = built.providerOptions;
+      try {
+        const built = await buildCustomChatModel(
+          actualModelId,
+          user.id,
+          thinkingEnabled,
+        );
+
+        // P06C: Capability gates — reject if model lacks required capabilities
+        const supportsTools = built.capabilities.supportsTools;
+        if (!supportsTools) {
+          return jsonResponse(
+            { error: 'Provider does not support required CAD tools' },
+            400,
+          );
+        }
+
+        chatLanguageModel = built.model;
+        chatProviderOptions = built.providerOptions;
+        // P06D: Mark billing source as custom — caller must not use FALLBACK_MODEL_PRICE
+        customBillingSource = 'custom';
+      } catch (error) {
+        // P06E: Custom provider failures — NO fallback to OpenRouter/OpenCode/default
+        logError(error, {
+          functionName: 'ai-chat',
+          statusCode: 400,
+          userId: user.id,
+          conversationId: conversation.id,
+          additionalContext: {
+            ...baseLogContext,
+            operation: 'build_custom_chat_model',
+          },
+        });
+        const message =
+          error instanceof Error ? error.message : 'Custom provider error';
+        return jsonResponse({ error: message }, 400);
+      }
     } else {
       const built = buildChatModel(actualModelId, providers, thinkingEnabled);
       chatLanguageModel = built.model;
@@ -1555,7 +1587,11 @@ export async function handleAiChatRequest(req: Request) {
           generateMessageId: () => crypto.randomUUID(),
           onFinish: async ({ responseMessage, isContinuation }) => {
             const usage = await result.totalUsage;
-            const billingTokens = billingTokensFromUsage(actualModelId, usage);
+            const billingTokens = billingTokensFromUsage(
+              actualModelId,
+              usage,
+              customBillingSource,
+            );
             const metadata = {
               ...(responseMessage.metadata ?? {}),
               model: rawBody.model,
@@ -1662,12 +1698,15 @@ export async function handleAiChatRequest(req: Request) {
               // will block the next request. Not an error path —
               // intentional terminal state. Runs after the persist above so
               // its latency never delays the row the client is waiting on.
-              await billing.consume(user.email!, {
-                tokens: billingTokens,
-                operation:
-                  conversation.type === 'creative' ? 'chat' : 'parametric',
-                referenceId: responseMessage.id,
-              });
+              // P06D: Skip billing for custom/BYOK providers — user pays directly.
+              if (customBillingSource !== 'custom') {
+                await billing.consume(user.email!, {
+                  tokens: billingTokens,
+                  operation:
+                    conversation.type === 'creative' ? 'chat' : 'parametric',
+                  referenceId: responseMessage.id,
+                });
+              }
             } catch (error) {
               logError(error, {
                 functionName: 'ai-chat',

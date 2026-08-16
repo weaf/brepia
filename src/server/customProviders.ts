@@ -676,20 +676,29 @@ export async function deleteProviderModel(
  * Returns a tuple of [LanguageModel, ProviderOptions | undefined] so the
  * call site can pass it directly to `streamText({ model, providerOptions })`.
  *
+ * Also returns model capability metadata (P06C) so the caller can gate
+ * features like tool calls and vision based on model support.
+ *
  * Throws explicit errors for every failure mode (P06E):
  * - Custom provider disabled
  * - Custom model disabled
  * - Provider credential missing
- * - Provider authentication failed
- * - Provider endpoint unreachable
+ * - Provider authentication failed (401)
+ * - Provider endpoint unreachable (network error)
  * - Provider model not found
+ * - Unsupported driver
  */
 export async function buildCustomChatModel(
   modelId: string,
   userId: string,
   thinkingEnabled: boolean,
   thinkingBudget?: number,
-): Promise<{ model: LanguageModel; providerOptions?: ProviderOptions }> {
+): Promise<{
+  model: LanguageModel;
+  providerOptions?: ProviderOptions;
+  capabilities: { supportsTools: boolean; supportsVision: boolean };
+  billingSource: 'custom'; // P06D: mark as custom/BYOK — never use FALLBACK_MODEL_PRICE
+}> {
   // --- 1. Parse custom model ID ---
   const parsed = parseCustomProviderModelId(modelId);
   if (!parsed) {
@@ -769,7 +778,14 @@ export async function buildCustomChatModel(
         baseURL: providerRow.base_url ?? undefined,
       });
       const model = provider(nativeModelId);
-      return { model };
+      return {
+        model,
+        capabilities: {
+          supportsTools: modelRow.supports_tools ?? true,
+          supportsVision: modelRow.supports_vision ?? true,
+        },
+        billingSource: 'custom' as const,
+      };
     }
 
     case 'anthropic': {
@@ -788,7 +804,15 @@ export async function buildCustomChatModel(
             },
           }
         : undefined;
-      return { model, providerOptions };
+      return {
+        model,
+        providerOptions,
+        capabilities: {
+          supportsTools: modelRow.supports_tools ?? true,
+          supportsVision: modelRow.supports_vision ?? false,
+        },
+        billingSource: 'custom' as const,
+      };
     }
 
     case 'google': {
@@ -796,7 +820,14 @@ export async function buildCustomChatModel(
         apiKey: credential,
       });
       const model = provider(nativeModelId);
-      return { model };
+      return {
+        model,
+        capabilities: {
+          supportsTools: modelRow.supports_tools ?? true,
+          supportsVision: modelRow.supports_vision ?? true,
+        },
+        billingSource: 'custom' as const,
+      };
     }
 
     case 'openrouter': {
@@ -809,7 +840,14 @@ export async function buildCustomChatModel(
           : {}),
         usage: { include: true },
       });
-      return { model };
+      return {
+        model,
+        capabilities: {
+          supportsTools: modelRow.supports_tools ?? true,
+          supportsVision: modelRow.supports_vision ?? true,
+        },
+        billingSource: 'custom' as const,
+      };
     }
 
     default:

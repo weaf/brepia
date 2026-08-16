@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `c357348` (P06: Runtime custom-provider chat routing)
+**HEAD**: `c357348` (P06A-B: Runtime custom-provider chat routing)
 **Last Updated**: 2026-08-16
-**Current Task**: P07 — Prompt profile tests
+**Current Task**: P06C-E — Capability gates, billing policy, failure behavior
 
 ---
 
