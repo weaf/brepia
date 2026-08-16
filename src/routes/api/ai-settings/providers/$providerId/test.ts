@@ -17,28 +17,19 @@ export const Route = createFileRoute(
       POST: async ({ request, params }) => {
         try {
           const user = await requireUser(request);
-          const body = await request.json().catch(() => ({}));
 
-          // Test with existing provider config (uses stored credentials)
-          if (body.useStored) {
-            const result = await testProvider(user.id, params.providerId);
-            return json(result);
-          }
-
-          // Test with draft config (for new providers without stored credentials)
-          const result = await testProvider(user.id, undefined, {
-            slug: body.slug,
-            name: body.name,
-            driver: body.driver,
-            baseUrl: body.baseUrl,
-            credential: body.credential,
-          });
+          const result = await testProvider(
+            user.id,
+            params.providerId,
+            undefined,
+          );
 
           return json(result);
         } catch (err) {
           return json(
             {
-              error: isUnauthorizedError(err)
+              ok: false,
+              message: isUnauthorizedError(err)
                 ? 'Unauthorized'
                 : 'failed_to_test_provider',
             },
@@ -50,7 +41,6 @@ export const Route = createFileRoute(
       PUT: methodNotAllowed,
       PATCH: methodNotAllowed,
       DELETE: methodNotAllowed,
-      HEAD: methodNotAllowed,
     },
   },
 });
