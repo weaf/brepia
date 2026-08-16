@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `b09527c` (P04F: Pin user's default promptProfileId on conversation creation)
+**HEAD**: `56163a4` (P04G: Add explicit mode column — overlay/fork)
 **Last Updated**: 2026-08-16
-**Current Task**: P04G — Upstream update behavior (test overlay vs fork inheritance)
+**Current Task**: P04H — Overlay prompt resolution (recompute profile against current built-in)
 
 ---
 
