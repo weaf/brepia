@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `c1e83b9` (P06C-E: Capability gates, billing policy, explicit errors)
+**HEAD**: `0f9ab91` (P07 complete — P08A verified complete)
 **Last Updated**: 2026-08-16
-**Current Task**: P06 complete — P07 complete — P08 next (Conversation integration)
+**Current Task**: P08B in progress (RetryModelDropdown hidden model fix)
 
 ---
 
