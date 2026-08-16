@@ -20,6 +20,47 @@
 import crypto from 'node:crypto';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 
+/**
+ * The canonical agent-output contract — the single source of truth for how
+ * OpenCode / Codex / CLI agents must format their FINAL result.
+ *
+ * Both transports (CLI and Streaming) append this contract to the prompt
+ * before sending to the model.  It tells the model exactly what JSON shape
+ * to produce and why, without the contradictions that existed before R3:
+ *
+ *   - No "answer in plain text" directive
+ *   - No "ignore all tool instructions" blanket
+ *   - Clear {code, message} schema with CAD vs non-CAD distinction
+ *
+ * This helper is the ONLY place the contract text is defined.
+ * Changing it here updates both transports in R3C/R3D.
+ *
+ * The helper is imported by the transport adapters in R3C/R3D and appended
+ * as a final instruction line after the prompt body.
+ */
+export function buildAgentOutputContract(): string {
+  return [
+    'Final result format — return ONLY a JSON object with these keys:',
+    '',
+    '  {"code":"complete runnable OpenSCAD source or empty string",',
+    '   "message":"short user-facing status"}',
+    '',
+    'For a CAD build/edit/fix request:',
+    '  - code = complete, runnable OpenSCAD program',
+    '  - message = short status (e.g. "Box with bottom created")',
+    '',
+    'For non-CAD / conversational requests:',
+    '  - code = "" (empty string)',
+    '  - message = normal answer',
+    '',
+    'Constraints:',
+    '  - Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
+    '  - Work only from the supplied conversation context.',
+    "  - Do NOT call pCAD's build_parametric_model tool directly — pCAD will",
+    '    convert a non-empty `code` into build_parametric_model itself.',
+  ].join('\n');
+}
+
 export type AgentResult = { code?: string; message: string };
 
 export function parseAgentResult(text: string): AgentResult {

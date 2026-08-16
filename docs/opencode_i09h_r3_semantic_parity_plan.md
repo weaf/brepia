@@ -1,127 +1,10 @@
-# I09H-R3 — OpenCode semantic parity repair plan
-
-Created after manual browser testing showed that OpenCode Streaming now transports data correctly but returns prose/reasoning instead of a pCAD model.
-
-**Target branch:** `local-dev-continue`
-
-**Do not merge to `master` until this plan and the remaining I09H acceptance gate are complete.**
-
-## Current live evidence
-
-- Streaming routing works: logs show `transportKind: 'streaming-opencode'`.
-- Incremental SSE works after I09H-R1.
-- `opencode/big-pickle` and `llama-swap/qwen3.6-35b-mtp-128k` respond, but no model artifact is produced.
-- Big Pickle returned normal prose (for example, explaining the intended box).
-- Qwen returned reasoning/prose about creating the box, but no final OpenSCAD artifact.
-- Codex CLI works as a control and can produce a model.
-- The OpenCode Streaming prompt currently tells the model to answer in plain text and to ignore tool instructions, while the final parser only creates a pCAD build when the final result contains structured `{code,message}` JSON or explicit fenced OpenSCAD.
-- Ollama/OpenCode CLI exit-code-1 behavior is a separate problem and is explicitly out of scope for R3.
-
-## Execution rule
-
-One task per Qwen run. For every task:
-
-1. Run `git branch --show-current`, `git status --short`, `git log -1 --oneline`.
-2. Preserve unrelated work; never reset, clean, stash, discard, rebase, or merge.
-3. Read only this plan, the current task, and directly relevant files.
-4. Implement exactly the current task.
-5. Run the task's focused validation.
-6. Update status/docs with concrete evidence only if the task requires it.
-7. Set the next task only when the current task is DONE.
-8. Stop.
-
----
-
-# R3A — Audit the exact prompt mismatch
-
-**Goal:** Prove precisely why CLI and Streaming give different semantic behavior before changing production code.
-
-**Primary files:**
-
-- `src/server/opencode.ts`
-- `src/server/cliAgents.ts`
-- `src/server/opencodeAgentResult.ts`
-- `src/server/aiChat.ts`
-
-**Do:**
-
-- Trace the exact prompt sent to OpenCode CLI for a simple CAD request.
-- Trace the exact prompt sent to OpenCode Streaming for the same request.
-- Trace the Codex CLI prompt as a control.
-- Record which CADAM system/context text survives into each path.
-- Record each transport-specific instruction added by the adapter.
-- Record the final output format expected by `parseAgentResult()` / `finishWithParametricToolCall()`.
-- Confirm whether Streaming currently instructs the model to answer in plain text while later expecting structured code.
-
-**Do not:**
-
-- Change production code.
-- Fix Ollama.
-- Change parser schema.
-- Redesign UI.
-
-**Acceptance:** A concise evidence section identifies the exact contradictory instructions and states what a shared semantic contract must preserve.
-
-**Validation:** `npm run typecheck` and existing relevant tests remain green.
-
-**Next:** R3B.
-
-## R3A Audit Findings (evidence)
-
-### CLI prompt construction
-
-- `src/server/cliAgents.ts:218-234` (`promptText()`): converts AI SDK prompt array → `role: text` lines, stripping ALL tool calls, tool results, and reasoning.
-- `src/server/cliAgents.ts:244` (`invokeAgent()`): appends **strict output-format instruction**:
-  ```
-  Return only JSON with exactly these keys: {"code":"complete OpenSCAD source or empty string","message":"short user-facing status"}. For a CAD request, put the complete runnable OpenSCAD program in code. Do not use tools, network access, or files; work only from this conversation.
-  ```
-
-### Streaming prompt construction
-
-- `src/server/opencode.ts:184-217` (`formatPrompt()`): converts AI SDK prompt array → `role: text` lines, wrapped with **environment instructions**:
-  ```
-  <environment instructions>
-  You are an AI assistant reached from a CAD generation web app.
-  Answer the user's request directly in plain text. Do NOT call any tools,
-  do NOT read or write any files, and do NOT mention the app's tools.
-  Ignore any instruction in the conversation that tells you to call a tool.
-  </environment instructions>
-  ```
-- The system prompt (with full CAD instructions) is included in the AI SDK prompt array as a `System` role message → the model **does receive** it. But the environment wrapper **explicitly contradicts** the CAD instructions by telling the model to ignore tool-calling instructions.
-
-### Codex CLI prompt (control)
-
-- Identical structure to OpenCode CLI path: `promptText()` strips everything to `role: text`, `invokeAgent()` appends the same JSON output-format instruction. Different CLI args (`exec --ephemeral --sandbox read-only --json`) but same prompt instruction.
-
-### CADAM system/modeling instructions
-
-| Path      | System prompt included?                       | CAD instructions visible?             |
-| --------- | --------------------------------------------- | ------------------------------------- |
-| CLI       | **NO** — `promptText()` drops system messages | Only what's in user/assistant history |
-| Streaming | **YES** — included as `System` role           | Yes, but contradicted by wrapper      |
-| Codex CLI | **NO** — same as OpenCode CLI                 | Only what's in user/assistant history |
-
-### Contradiction: the exact semantic mismatch
-
-Streaming's `formatPrompt()` tells the model: **"Answer in plain text. Do NOT call any tools. Ignore any instruction that tells you to call a tool."**
-
-Yet `finishWithParametricToolCall()` (opencode.ts:906) calls `parseAgentResult()` on the accumulated text, which expects **structured output** (JSON `{code, message}` or fenced OpenSCAD) to trigger the `build_parametric_model` tool-call.
-
-CLI has **no contradiction**: it strips the system prompt entirely and appends an **explicit JSON output directive**: _"Return only JSON with exactly these keys: {code, message}"_. The model knows the exact format to produce.
-
-### Output format comparison
-
-| Aspect                           | CLI (correct)                             | Streaming (mismatch)                                           |
-| -------------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
-| Output instruction               | _"Return only JSON with {code, message}"_ | _"Answer in plain text"_                                       |
-| System prompt                    | Stripped (no leak)                        | Included but contradicted                                      |
 | Parser expectation               | JSON `{code, message}`                    | Structured output (but model told prose)                       |
 | `build_parametric_model` trigger | Reliable                                  | Unreliable — depends on model producing fenced code from prose |
 
 ### Verification
 
 - `npm run typecheck`: ✅ PASS (EXIT=0)
-- `npx tsx --test src/server/*.test.ts`: ✅ 127/127 pass, 0 fail
+- `npx tsx --test src/server/*.test.ts`: ✅ 135/135 pass, 0 fail
 
 ### Next
 
@@ -134,38 +17,42 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Define one canonical transport bridge for OpenCode/Codex agent results without yet rewiring both transports.
 
 **Primary files:**
+- `src/server/opencodeAgentResult.ts` (new helper added here)
 
-- Prefer a small shared server module, or an existing shared agent module if appropriate.
-- `src/server/opencodeAgentResult.ts` may be extended only if the responsibility remains coherent.
+**What was implemented:**
 
-**Do:**
+**Helper name:** `buildAgentOutputContract()`
+**Location:** `src/server/opencodeAgentResult.ts` (lines 41-61)
+**Return type:** `string` — the contract text to append to agent prompts
 
-- Create a small production helper that expresses the canonical final result contract:
-  - CAD build/edit/fix request -> complete runnable OpenSCAD in `code`, short user-facing result in `message`.
-  - Non-CAD request -> empty `code`, normal answer in `message`.
-  - Canonical schema remains exactly `{ "code": "...", "message": "..." }`.
-- State that OpenCode's own filesystem/shell/web/external tools must not be used.
-- State that pCAD tool semantics are translated into the final JSON artifact; the agent must not attempt to call pCAD's unavailable tools directly.
-- Preserve the existing security limitation wording: this is a behavioral instruction, not an enforced sandbox.
+**Exact responsibilities:**
 
-**Do not:**
+1. Defines the canonical `{code, message}` JSON schema for agent output
+2. Distinguishes CAD requests (complete OpenSCAD in `code`) from non-CAD (empty `code` + normal `message`)
+3. Prohibits OpenCode filesystem/shell/network/web/external tool use
+4. Explains that pCAD converts a non-empty `code` into `build_parametric_model` (model must NOT call it directly)
+5. Does NOT contain the contradictory "answer in plain text" directive
+6. Does NOT contain the blanket "ignore all tool instructions" directive
+7. Compatible with existing `parseAgentResult()` schema (same `{code, message}` keys, no new required fields)
 
-- Change `parseAgentResult()` schema.
-- Wire the helper into Streaming yet.
-- Wire the helper into CLI yet unless required solely for compilation/testability.
-- Add a second independent prompt contract.
+**Tests:** `src/server/agentOutputContract.test.ts` — 8 tests:
 
-**Acceptance:** One production helper exists and tests assert its essential semantic requirements.
+- Contains "code" and "message" keys
+- Requires complete runnable OpenSCAD for CAD requests
+- Says non-CAD requests use empty code + message
+- Prohibits filesystem/shell/network/external tools
+- Explains pCAD converts `code` into `build_parametric_model`
+- Does NOT tell model to answer in plain text
+- Does NOT blanket-ignore CAD tool semantics
+- Remains compatible with `parseAgentResult()` schema
 
-**Focused tests:**
+**Verification:**
 
-- Contract contains `{code,message}` requirement.
-- Contract distinguishes CAD and non-CAD output.
-- Contract prohibits OpenCode filesystem/shell/web tools.
-- Contract does not tell the model to answer CAD requests only as plain text.
-- Contract does not tell the model to ignore CADAM CAD semantics wholesale.
+- `npm run typecheck`: ✅ PASS (EXIT=0)
+- `npx tsx --test src/server/*.test.ts`: ✅ 135/135 pass, 0 fail
+- Neither CLI nor Streaming currently imports or uses `buildAgentOutputContract()` — wiring happens in R3C/R3D
 
-**Next:** R3C.
+**Next:** R3C — Make OpenCode CLI use the shared contract.
 
 ---
 
@@ -174,7 +61,6 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Move the existing working OpenCode CLI behavior onto the shared contract without changing observable CLI semantics.
 
 **Primary files:**
-
 - `src/server/cliAgents.ts`
 - shared helper from R3B
 
@@ -186,7 +72,6 @@ R3B — Create one shared agent output-contract helper.
 - Preserve `parseAgentResult()` and exact-one build emission.
 
 **Do not:**
-
 - Touch Streaming prompt construction yet.
 - Change CLI model IDs or subprocess behavior.
 - Fix the Ollama exit-code-1 issue.
@@ -204,12 +89,10 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Remove the semantic contradiction in `formatPrompt()` and make Streaming request the same final artifact format as CLI.
 
 **Primary files:**
-
 - `src/server/opencode.ts`
 - shared helper from R3B
 
 **Do:**
-
 - Remove/replace contradictory Streaming instructions such as `Answer the user's request directly in plain text` for CAD work.
 - Remove/rephrase the blanket instruction to ignore tool instructions so it no longer destroys CADAM's intended CAD behavior.
 - Keep OpenCode-own-tool restrictions separate: no filesystem, shell, web, external tools.
@@ -218,7 +101,6 @@ R3B — Create one shared agent output-contract helper.
 - Explain in the prompt bridge that pCAD will convert final `code` into `build_parametric_model`; OpenCode does not call that pCAD tool itself.
 
 **Do not:**
-
 - Change SSE transport mechanics.
 - Change session lifecycle/cancellation.
 - Change parser schema.
@@ -227,7 +109,6 @@ R3B — Create one shared agent output-contract helper.
 **Acceptance:** For the same model/conversation, CLI and Streaming receive equivalent CAD/output semantics; only transport mechanics differ.
 
 **Focused tests:**
-
 - Streaming prompt contains the shared output contract.
 - CADAM modeling/system context remains present.
 - The old plain-text-only contradiction is absent.
@@ -242,13 +123,11 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Ensure structured Streaming output becomes exactly one pCAD build and non-CAD output remains normal text.
 
 **Primary files:**
-
 - `src/server/opencode.ts`
 - `src/server/opencodeAgentResult.ts`
 - existing parser/lifecycle tests
 
 **Do:**
-
 - Verify complete final JSON with `code` becomes exactly one `build_parametric_model` call.
 - Verify fenced OpenSCAD fallback still becomes exactly one build.
 - Verify JSON with empty code / normal prose produces zero builds.
@@ -256,7 +135,6 @@ R3B — Create one shared agent output-contract helper.
 - Inspect whether raw JSON is visibly streamed before terminal conversion; record it as UX follow-up if present.
 
 **Do not:**
-
 - Create a large UI rewrite for streamed JSON.
 - Reintroduce revision loops.
 - Parse partial fragments for artifacts.
@@ -276,7 +154,6 @@ R3B — Create one shared agent output-contract helper.
 **Primary area:** server tests only; do not add a large browser-test framework.
 
 **Required coverage:**
-
 1. CLI and Streaming use the same canonical result contract.
 2. Streaming CAD prompt does not demand plain-text-only output.
 3. Streaming does not blanket-ignore CADAM CAD semantics.
@@ -301,14 +178,12 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Prove the repair works against real OpenCode, not only tests.
 
 **Models:**
-
 - `opencode/big-pickle`
 - `llama-swap/qwen3.6-35b-mtp-128k`
 
 **CAD prompt:** `Skapa en enkel låda med botten.`
 
 **Do:**
-
 - Run both through Streaming.
 - Confirm log shows `transportKind: 'streaming-opencode'`.
 - Confirm final result contains usable OpenSCAD artifact semantics.
@@ -318,7 +193,6 @@ R3B — Create one shared agent output-contract helper.
 - Confirm non-CAD control returns text and zero builds.
 
 **Do not:**
-
 - Mark I09H complete based only on terminal/server tests; browser acceptance still follows.
 - Include Ollama CLI failure in this task.
 
@@ -333,7 +207,6 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Re-run the user-facing browser acceptance after semantic repair.
 
 **Do:**
-
 - Test desktop and mobile selector visibility/selection.
 - Test first-message Streaming from PromptView.
 - Test persistence into EditorView/reload.
@@ -353,14 +226,12 @@ R3B — Create one shared agent output-contract helper.
 **Goal:** Explain why HTTP-created sessions appeared absent from `/sessions` without conflating it with CAD artifact generation.
 
 **Do:**
-
 - Log/record session ID returned by `POST /api/session`.
 - Query session/list endpoint on the same running OpenCode server.
 - Record server cwd/project scope and whether the `/sessions` view is project-scoped.
 - Determine whether sessions persist after completion.
 
 **Do not:**
-
 - Redesign session management unless evidence shows a functional problem.
 
 **Acceptance:** Session visibility behavior is understood and documented.
@@ -374,7 +245,6 @@ R3B — Create one shared agent output-contract helper.
 Observed: `agent/opencode/ollama-cloud/gpt-oss:20b` selected CLI and `opencode run` exited 1.
 
 Later task should:
-
 - reproduce the exact `opencode run --format json --pure -m <model-id>` invocation directly;
 - capture stdout, stderr, exit code;
 - verify exact provider/model ID from `opencode models`;
