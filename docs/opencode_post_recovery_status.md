@@ -750,6 +750,7 @@ I07: DONE (diff review completed)
 I08: DONE (final merge gate correction)
 I09: IN PROGRESS (I09A audit + I09B state + I09C persistence + I09D request body + I09E label + I09F responsive layout + I09G regression tests)
 I09H: **BLOCKED** — manual acceptance FAILED (Streaming stalls on first event); R1 repair implemented + Task H live validation PASSED (127/127 tests green, big-pickle full lifecycle ~1.6s), manual browser re-test still required
+I09I: IN PROGRESS (R3 semantic parity — R3A audit DONE, R3B shared contract helper pending)
 
 Status: DONE
 Repository state before task:
