@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `8f93ebb` (feat(P01E): add updated_at trigger to new tables)
+**HEAD**: `976ee61` (feat(p03f): add getDefaultModel() to modelCatalog module)
 **Last Updated**: 2026-08-16
 
 ---
@@ -123,20 +123,61 @@
 
 ## Current Task
 
-P00-P02 complete. Ready for P03.
+P00-P02 complete. P03A-F complete. Ready for P03G.
+
+## Completed Tasks — P03
+
+### P03A — Model catalog module (src/server/modelCatalog.ts)
+
+**Status**: DONE
+**Commit**: `56d3ade`
+**Reviewer**: PASS (typecheck)
+**Files**: `src/server/modelCatalog.ts`
+**Exports**: `CatalogEntry` type, `buildCatalog(user)`, `isCustomCatalogEntry(entry)`
+
+### P03B — Stable custom model IDs
+
+**Status**: DONE
+**Commit**: `8288dbf`
+**Reviewer**: PASS (typecheck)
+**Files**: `shared/customModelIds.ts`
+**Exports**: `makeCustomProviderModelId()`, `parseCustomProviderModelId()`, `isCustomProviderModelId()`
+
+### P03C — Catalog API endpoint
+
+**Status**: DONE
+**Commit**: `e5e3773`
+**Reviewer**: PASS (typecheck)
+**Files**: `src/routes/api/models/catalog.ts`
+**Route**: GET `/api/models/catalog` — returns merged catalog
+
+### P03D — Provider-aware catalog merge + hook
+
+**Status**: DONE
+**Commit**: `e6861fe` + `2fb6830`
+**Reviewer**: PASS (typecheck)
+**Files**: `src/server/modelCatalog.ts`, `src/hooks/useParametricModelCatalog.ts`
+**Changes**: `mergeByProvider()` groups models by provider name; hook calls `/api/models/catalog`
+
+### P03E — Replace direct picker dependency
+
+**Status**: DONE
+**Commit**: `2fb6830`
+**Reviewer**: PASS (typecheck)
+**Files**: `src/components/TextAreaChat.tsx`
+**Changes**: Removed `PARAMETRIC_MODELS` import, removed `dynamicOpenCodeModels` state, uses `useParametricModelCatalog`
+
+### P03F — Default model behavior
+
+**Status**: DONE
+**Commit**: `976ee61`
+**Reviewer**: PASS (typecheck)
+**Files**: `src/server/modelCatalog.ts`
+**Export**: `getDefaultModel()` — returns first PARAMETRIC_MODEL id
 
 ## Next Task
 
-P03 — Model catalog system:
-
-- P03A: Introduce catalog module (src/server/modelCatalog.ts)
-- P03B: Stable custom model IDs (shared/customModelIds.ts)
-- P03C: Catalog API endpoint (GET /api/models/catalog)
-- P03D: Effective picker filtering (useParametricModelCatalog hook)
-- P03E: Replace direct picker dependency on PARAMETRIC_MODELS
-- P03F: Default model behavior
-- P03G: Model settings UI
-- P03H: Tests
+P03G — Model settings UI (ModelSettingsSection component)
 
 ## Validation Evidence
 
