@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `da00191` (P05E: Provider model management — migration, schema, Zod, server module, API routes)
+**HEAD**: `58ffb32` (P05E: Provider model management UI — ProviderModelForm + ProviderModelCard)
 **Last Updated**: 2026-08-16
-**Current Task**: P05E — Provider model management (migration + server/API done, UI component pending)
+**Current Task**: P05F — Provider model management tests
 
 ---
 
@@ -269,11 +269,19 @@
 **Files**: `src/routes/api/ai-settings/providers/$providerId/test.ts` (new), `src/components/settings/ProvidersSettings.tsx` (`testProviderConnection` helper)
 **Features**: POST `/api/ai-settings/providers/:id/test` endpoint; live connection test UI with success/failure feedback
 
+### P05E — Provider model management UI
+
+**Status**: DONE
+**Commit**: `9b210da` + `58ffb32`
+**Reviewer**: PASS (typecheck + eslint)
+**Files**: `src/components/settings/ProvidersSettings.tsx`
+**Features**: ProviderModelForm (create/edit), ProviderModelCard (list), Manage Models button per provider card; full CRUD for `ai_provider_models` with supports_tools/thinking/vision toggles, context/output limits, visibility toggle; GET `/api/ai-settings/providers/:providerId/models/:modelId` route for model detail fetch.
+
 ---
 
 ## Current Task
 
-P00-P05D complete. Ready for P05E — Provider model management (CRUD for provider-specific models).
+P00-P05E complete. Ready for P05F — Provider model management tests.
 
 ## Validation Evidence
 
@@ -285,4 +293,4 @@ P00-P05D complete. Ready for P05E — Provider model management (CRUD for provid
 
 ## Blockers
 
-None — ready for P05E.
+None — ready for P05F (provider model tests).
