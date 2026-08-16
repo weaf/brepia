@@ -578,6 +578,107 @@ Record screenshots for desktop and mobile after the fix.
 
 ---
 
+## I09H status — BLOCKED pending R1 repair (2026-08-15)
+
+Manual acceptance FAILED during Test 5 (Streaming generation).
+
+Observed: OpenCode · Big Pickle, Streaming selected, request started, browser
+in foreground ~2 minutes, no visible streaming text/progress/result, then
+"network error" appeared only after switching away from Chrome. Server logs
+showed AbortError via req.signal / ServerResponse close.
+
+Conclusion: client backgrounding/disconnect is NOT the cause — the Streaming
+request was already stuck before disconnect.
+
+## I09H-R1 — First-event Streaming stall: diagnosed and repaired
+
+### Root cause (Task A + B, live-verified)
+
+`GET /api/session/{id}/event` is a **long-lived SSE subscription** ("Replay
+durable events after an aggregate sequence, then continue with new durable
+events" — verified in live `/doc` and with `curl -N`; the connection stays
+open indefinitely, there is no natural EOF).
+
+`streamParts()` consumed the response with `await eventRes.text()`, which
+waits for EOF on a stream that never ends → the request hung at the first
+event until the client disconnected.
+
+### Repair (Task C)
+
+- Added `createIncrementalSseReader()` in `src/server/opencode.ts`:
+  consumes `eventRes.body` with `ReadableStreamDefaultReader` +
+  `TextDecoder`, buffers incomplete SSE frames across chunks, and yields
+  `SSEEvent[]` batches as soon as complete events arrive — no EOF wait.
+- `streamParts()` now polls the reader and feeds batches into the existing
+  `processBatch` state machine; yields LanguageModelV2StreamPart values
+  immediately as events arrive.
+- SSE connection teardown happens via `reader.cancel()` (idempotent) in
+  the `finally` block; the AbortController is reserved for real
+  cancellations (user Stop, 8-minute timeout, client disconnect) and is no
+  longer aborted by normal batch completion.
+
+### Cancellation semantics preserved (Task D)
+
+- User Stop → local `ac.abort()` + `POST /api/session/{id}/interrupt`.
+- Timeout → `ac.abort()` + `/interrupt`.
+- Client disconnect → `options.abortSignal` → `ac.abort()` + `/interrupt`.
+- `/interrupt` is sent at most once per cancellation (`AbortSignal.timeout`
+  guard + only when `sessionId` exists).
+- Expected AbortErrors from intentional cancellation are no longer logged
+  as 500 provider errors (documented with WHY comment per project rule).
+
+### Transport observability (Task E)
+
+`aiChat.ts` now logs the transport decision after `selectChatTransport()`:
+
+```text
+transport { modelId: ..., executionMode: cli|streaming, transportKind: cli-agent|streaming-opencode }
+```
+
+This makes `executionMode=cli transport=cli-agent` vs
+`executionMode=streaming transport=streaming-opencode` distinguishable in
+server logs.
+
+### Progress feedback (Task F) — deferred to I09H-R2
+
+While Streaming is connected but no model text has arrived, the UI gives
+almost no useful feedback beyond the Stop button. Recorded as **I09H-R2**:
+"Connecting to OpenCode… / Waiting for model… / Thinking/Generating…".
+Not part of R1 (no large UX feature in this repair).
+
+### Verification (Task G + suite)
+
+- New `src/server/incrementalSseReader.test.ts` (8 tests): event split
+  across chunks, multiple events per chunk, incomplete-frame retention,
+  events before EOF, terminal detection, cancellation while waiting for
+  SSE bytes, empty response, idempotent close.
+- Lifecycle tests updated for the incremental reader; S01 lifecycle
+  invariant tests pass again (text-end only after terminal batch).
+- Full suite: **127/127 pass**. `npm run typecheck`, `npm run lint`
+  (0 errors), `npm run build` all green.
+
+### Remaining — I09H-R1 Task H (live validation)
+
+**Server-level live validation has PASSED (2026-08-15):** the production
+`streamingOpencodeChatModel` was run against the real OpenCode server with
+both `opencode/nemotron-3.5-lightning-free` and `opencode/big-pickle`. Full
+lifecycle observed in ~1.6–3s with no stall: `stream-start → text-start →
+text-delta → text-end → finish` (plus `reasoning-start/reasoning-delta/
+reasoning-end` for big-pickle). First text-delta arrives well before SSE EOF,
+so the repaired incremental reader is confirmed against the live endpoint.
+
+Still pending: the **manual browser re-test** — select Streaming, send a
+simple prompt, keep browser in foreground, confirm first visible activity
+occurs without waiting for SSE EOF, generation completes normally, no network
+error, Stop works, subsequent Streaming request works, and the server log
+shows `transport=streaming-opencode`. Also verify CLI still works
+independently.
+
+**I09H remains BLOCKED until R1 is manually re-tested in the browser and
+passes.**
+
+---
+
 # I09I — Final pre-merge gate
 
 Only after I09A–I09H are complete:

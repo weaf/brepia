@@ -591,6 +591,7 @@ I01-I06: DONE
 I07: DONE (diff review completed)
 I08: DONE (final merge gate correction)
 I09: IN PROGRESS (I09A audit + I09B state + I09C persistence + I09D request body + I09E label + I09F responsive layout + I09G regression tests)
+I09H: **BLOCKED** — manual acceptance FAILED (Streaming stalls on first event); R1 repair implemented + Task H live validation PASSED (127/127 tests green, big-pickle full lifecycle ~1.6s), manual browser re-test still required
 
 Fixed in commit 3cd574e:
 
@@ -724,10 +725,31 @@ ChatSession already had this (commit 3cd574e, line 224). Server precedence alrea
 
 **Verification:** 119/119 tests pass (up from 102 — 17 new tests).
 
+### 2026-08-15 — I09H-R1: Repair Streaming SSE stall (done, awaiting manual re-test)
+
+**Manual acceptance FAILED** — Streaming transport stalled for ~2 minutes on the first event (no visible text while the browser was foregrounded; "network error" only after backgrounding). Server logs showed the stall happened **before** any client disconnect, so backgrounding was NOT the cause.
+
+**Root cause (confirmed against live endpoint):** `streamParts()` used `await eventRes.text()` on the OpenCode `/api/session/{id}/event` endpoint. The live endpoint (verified via `/doc` + `curl -N`) is a **long-lived SSE subscription** — "Subscribe to session events … then continue with new durable events" — it stays open indefinitely and has no natural EOF. `Response.text()` waits for EOF → infinite stall.
+
+**Fix (I09H-R1):**
+
+- `src/server/opencode.ts`: added `createIncrementalSseReader()` — consumes `eventRes.body` incrementally via `ReadableStreamDefaultReader` + `TextDecoder`, buffers incomplete SSE frames between chunks, splits on `\n\n`, and yields complete `SSEEvent[]` batches as they arrive (no EOF wait).
+- `streamParts()` rewritten to iterate `eventReader` batches and feed each into the existing `processBatch()` state machine; `state.isTerminal` short-circuits the inner loop.
+- `gen.close()` only cancels the reader idempotently (does NOT abort `ac`) — real cancellations (8-min timeout, user Stop, disconnect) call `ac.abort()` directly. Previously `close()` was aborting `ac` after every batch, which killed the outer poll loop after batch 1 (S01 regression — fixed; lifecycle now emits `text-end` only at terminal).
+- AbortError from intentional cancellation is NOT logged as a 500 provider error (documented security-relevant policy).
+- `src/server/aiChat.ts`: minimal transport logging after `selectChatTransport()` — log line distinguishes `executionMode=cli transport=cli-agent` vs `executionMode=streaming transport=streaming-opencode`.
+
+**Tests (`src/server/incrementalSseReader.test.ts`):** 8 focused tests — events split across chunks, multiple events per chunk, incomplete final chunk retention, events yielded before EOF, terminal detection, cancellation while reading, empty response, idempotent close.
+
+**Verification:** 127/127 tests pass, typecheck clean, lint 0 errors, build succeeds.
+
+**Status:** I09H remains **BLOCKED** until a manual browser re-test passes (Test 1–6 in the acceptance plan). **Task H (live validation) has PASSED:** the production `streamingOpencodeChatModel` was run against the real OpenCode server with both `opencode/nemotron-3.5-lightning-free` and `opencode/big-pickle`. Full lifecycle observed in ~1.6–3s with no stall: `stream-start → text-start → text-delta → text-end → finish` (plus `reasoning-start/reasoning-delta/reasoning-end` for big-pickle). First text-delta arrives well before SSE EOF — the repaired incremental reader is confirmed against the live server. Manual browser acceptance (desktop + mobile, foreground, Stop, second request) is still required before unblocking. I09H-R2 (UX progress feedback while connecting — "Connecting to OpenCode… / Waiting for model… / Thinking…") recorded for later.
+
 I01-I06: DONE
 I07: DONE (diff review completed)
 I08: DONE (final merge gate correction)
 I09: IN PROGRESS (I09A audit + I09B state + I09C persistence + I09D request body + I09E label + I09F responsive layout + I09G regression tests)
+I09H: **BLOCKED** — manual acceptance FAILED (Streaming stalls on first event); R1 repair implemented + Task H live validation PASSED (127/127 tests green, big-pickle full lifecycle ~1.6s), manual browser re-test still required
 
 Status: DONE
 Repository state before task:

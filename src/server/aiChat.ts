@@ -1285,6 +1285,17 @@ export async function handleAiChatRequest(req: Request) {
   // executionMode; the transport is never a different model ID.
   const transport = selectChatTransport(actualModelId, executionMode);
 
+  // I09E: minimal transport observability — distinguish cli vs streaming in
+  // server logs so the selected transport can be verified without tracing.
+  console.info(`transport`, {
+    modelId: actualModelId,
+    executionMode,
+    transportKind: transport.kind,
+    ...(transport.kind === 'streaming-opencode' && {
+      underlyingModelId: transport.underlyingModelId,
+    }),
+  });
+
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
   try {

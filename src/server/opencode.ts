@@ -258,6 +258,89 @@ export function parseSSE(text: string): SSEEvent[] {
 }
 
 /**
+ * Incremental SSE reader for long-lived OpenCode `/api/session/{id}/event`
+ * subscriptions.
+ *
+ * The endpoint is a persistent SSE stream (see `GET /doc` → "Subscribe to
+ * session events … then continue with new durable events").  Reading the
+ * entire response body with `Response.text()` blocks until EOF which never
+ * arrives while the session is active — this caused a 2+ minute stall
+ * (I09H-R1).  This function reads `eventRes.body` incrementally, decodes
+ * chunks with `TextDecoder`, buffers incomplete SSE frames between chunks,
+ * and yields a batch of complete `SSEEvent[]` as soon as they are available.
+ *
+ * The returned object also exposes a `close()` method that the caller should
+ * invoke in the `finally` block to ensure the HTTP connection is cleaned up.
+ */
+function createIncrementalSseReader(
+  eventRes: Response,
+  ac: AbortController,
+): AsyncIterableIterator<SSEEvent[]> & { close: () => void } {
+  const body = eventRes.body;
+  if (!body) {
+    const empty = (async function* () {})() as AsyncIterableIterator<
+      SSEEvent[]
+    > & { close: () => void };
+    empty.close = () => {};
+    return empty;
+  }
+
+  const reader = body.getReader();
+  let textBuffer = '';
+
+  const gen = (async function* () {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const buf = Buffer.isBuffer(value)
+          ? value
+          : value instanceof Uint8Array
+            ? value
+            : new TextEncoder().encode(String(value));
+        textBuffer += new TextDecoder().decode(buf, { stream: true });
+
+        // Split on double-newline (SSE event boundary).
+        const parts = textBuffer.split('\n\n');
+        textBuffer = parts.pop() ?? ''; // retain incomplete frame
+
+        // Parse all complete events in this batch.
+        const events: SSEEvent[] = [];
+        for (const part of parts) {
+          events.push(...parseSSE(part));
+        }
+        if (events.length) yield events;
+      }
+    } catch (err: unknown) {
+      // If the signal was already aborted (intentional cancellation),
+      // ignore the error. Otherwise re-throw.
+      if (!ac.signal.aborted) throw err;
+    } finally {
+      // Flush any remaining buffered text (last incomplete frame).
+      if (textBuffer) {
+        const events = parseSSE(textBuffer);
+        if (events.length) yield events;
+      }
+      reader.cancel();
+      reader.releaseLock();
+    }
+  })() as AsyncIterableIterator<SSEEvent[]> & { close: () => void };
+
+  gen.close = async () => {
+    // Reader may already be cancelled (e.g., generator's finally ran).
+    // This is safe to ignore — the stream is being torn down.
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return gen;
+}
+
+/**
  * Extract incremental text and reasoning from the accumulated event stream.
  *
  * Opencode event shapes:
@@ -577,7 +660,11 @@ async function* streamParts(
       );
     }
 
-    // Step 3: Poll SSE events for the response using the shared processBatch helper.
+    // Step 3: Read SSE events incrementally using the shared processBatch
+    // helper.  The OpenCode /event endpoint is a long-lived SSE subscription
+    // (not a finite batch).  `createIncrementalSseReader` consumes
+    // eventRes.body directly so events yield as soon as they arrive — no
+    // waiting for EOF.  See `createIncrementalSseReader` for details.
     const state = {
       cursor: 0,
       finishReason: 'stop' as LanguageModelV2FinishReason,
@@ -598,28 +685,43 @@ async function* streamParts(
     };
 
     while (!state.isTerminal && !state.isErrored) {
+      // Check for prior cancellation before fetching.
+      if (ac.signal.aborted) break;
+
       const eventsUrl = new URL(`${apiUrl}/api/session/${sessionId}/event`);
       if (state.cursor > 0) {
         eventsUrl.searchParams.set('after', String(state.cursor));
       }
 
-      const eventRes = await fetch(eventsUrl.toString(), {
-        signal: ac.signal,
-      });
+      let eventReader:
+        | ReturnType<typeof createIncrementalSseReader>
+        | undefined;
+      try {
+        const eventRes = await fetch(eventsUrl.toString(), {
+          signal: ac.signal,
+        });
 
-      if (!eventRes.ok) {
-        const body = await eventRes.text();
-        throw new Error(
-          `event fetch failed HTTP ${eventRes.status}: ${body.slice(0, 300)}`,
-        );
-      }
+        if (!eventRes.ok) {
+          const body = await eventRes.text();
+          throw new Error(
+            `event fetch failed HTTP ${eventRes.status}: ${body.slice(0, 300)}`,
+          );
+        }
 
-      const sseText = await eventRes.text();
-      const events = parseSSE(sseText);
-      const { newParts } = processBatch(state, events);
+        eventReader = createIncrementalSseReader(eventRes, ac);
 
-      for (const part of newParts) {
-        yield part;
+        for await (const events of eventReader) {
+          const { newParts } = processBatch(state, events);
+          for (const part of newParts) {
+            yield part;
+          }
+          if (state.isTerminal) break;
+        }
+      } catch (err) {
+        // Re-throw if this wasn't caused by intentional cancellation.
+        if (!ac.signal.aborted) throw err;
+      } finally {
+        eventReader?.close();
       }
 
       if (state.isTerminal) break;
@@ -633,10 +735,18 @@ async function* streamParts(
       usage: state.usage ?? USAGE(),
     };
   } catch (err) {
-    logError(err, {
-      functionName: 'opencode-api',
-      statusCode: 500,
-    });
+    const msg = err instanceof Error ? err.message : String(err);
+    // AbortError from intentional cancellation (user Stop, timeout) is NOT a
+    // provider/model failure.  Log it at debug level so it doesn't pollute
+    // error logs while still leaving a trace.
+    const isCancellation =
+      ac.signal.aborted && /abort|canceled|cancelling/i.test(msg);
+    if (!isCancellation) {
+      logError(err, {
+        functionName: 'opencode-api',
+        statusCode: 500,
+      });
+    }
     yield {
       type: 'error',
       error: err instanceof Error ? err : new Error('opencode API call failed'),
