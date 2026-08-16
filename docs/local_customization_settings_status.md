@@ -3,7 +3,7 @@
 **Branch**: `local-dev-continue`
 **HEAD**: `c1e83b9` (P06C-E: Capability gates, billing policy, explicit errors)
 **Last Updated**: 2026-08-16
-**Current Task**: P06 complete — P07 next (Settings page composition)
+**Current Task**: P06 complete — P07 complete — P08 next (Conversation integration)
 
 ---
 
@@ -287,7 +287,7 @@
 
 ## Current Task
 
-P00-P06 complete. Ready for P07 — Settings page composition.
+P00-P06 complete. Ready for P08 — Conversation integration and reproducibility.
 
 ## Validation Evidence
 
@@ -299,4 +299,4 @@ P00-P06 complete. Ready for P07 — Settings page composition.
 
 ## Blockers
 
-None — ready for P07 (Settings page composition).
+None — ready for P08 (Conversation integration).
