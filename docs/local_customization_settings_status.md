@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `5f52cd4` (P05E/P05F: Provider model management UI + Secret UX, HEAD 58ffb32)
+**HEAD**: `c357348` (P06: Runtime custom-provider chat routing)
 **Last Updated**: 2026-08-16
-**Current Task**: P06 — Runtime custom-provider routing
+**Current Task**: P07 — Prompt profile tests
 
 ---
 
@@ -287,7 +287,7 @@
 
 ## Current Task
 
-P00-P05F complete. Ready for P06 — Runtime custom-provider routing.
+P00-P06 complete. Ready for P07 — Prompt profile tests.
 
 ## Validation Evidence
 
@@ -299,4 +299,4 @@ P00-P05F complete. Ready for P06 — Runtime custom-provider routing.
 
 ## Blockers
 
-None — ready for P06 (Runtime custom-provider routing).
+None — ready for P07 (Prompt profile tests).
