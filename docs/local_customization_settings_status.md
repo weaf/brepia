@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `ee74627` (docs(P00): update status file with P00 review PASS and commit SHA)
+**HEAD**: `5290e7b` (feat(P01B): create user_ai_preferences table)
 **Last Updated**: 2026-08-16
 
 ---
@@ -106,21 +106,40 @@
 - Schema paths: `supabase/schemas/*.sql` — new tables need schema definitions
 - No `uuid-ossp` or `pgcrypto` extensions needed (built-in)
 
+### P01B — Create `user_ai_preferences`
+
+**Status**: DONE
+**Reviewer**: PASS
+**Files Created**:
+
+- `supabase/migrations/20260816135107_user_ai_preferences.sql`
+- `supabase/schemas/user_ai_preferences.sql`
+  **Implemented**:
+- `user_id uuid` primary key → `auth.users(id) ON DELETE CASCADE`
+- `hidden_model_ids text[] NOT NULL DEFAULT '{}'`
+- `default_prompt_profile_id uuid NULL`
+- `created_at`/`updated_at` timestamptz with `default now()`
+- RLS: SELECT/INSERT/UPDATE/DELETE on `auth.uid() = user_id`
+- Grants: anon, authenticated, service_role, postgres
+- No copied model catalog. No provider secrets.
+
 ---
 
 ## Current Task
 
-P00 + P01A complete. Ready for P01B.
+P00 + P01A + P01B complete. Ready for P01C.
 
 ## Next Task
 
-P01B — Create `user_ai_preferences` table with migration, RLS, grants.
+P01C — Create `prompt_profiles` table with migration, RLS, grants, and uniqueness constraint on `(user_id, lower(name))` for non-archived profiles.
 
 ## Validation Evidence
 
-- Audit findings documented in `docs/p01a_audit_findings.md`
-- No production schema changes in P01A (audit-only task)
+- Typecheck: PASS
+- Git diff --check: PASS (no whitespace errors)
+- No tracked upstream files modified
+- pcad-builder.md: UNMODIFIED ✓
 
 ## Blockers
 
-None — ready for P01B.
+None — ready for P01C.
