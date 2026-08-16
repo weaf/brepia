@@ -20,7 +20,6 @@ import {
 import {
   cn,
   CREATIVE_MODELS,
-  PARAMETRIC_MODELS,
   parametricModelSupportsVision,
 } from '@/lib/utils';
 import {
@@ -29,7 +28,6 @@ import {
   MeshFileType,
   Model,
 } from '@shared/types';
-import type { ModelConfig } from '@/types/misc';
 import type { AppUIMessage } from '@shared/chatAi';
 import { imageFilePartUrl } from '@shared/imageRefs';
 import { isOpenCodeTransportModel } from '@shared/models';
@@ -41,6 +39,7 @@ import {
 } from '@/constants/meshConstants';
 import { MessageItem } from '../types/misc.ts';
 import { useToast } from '@/hooks/use-toast';
+import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import {
   Tooltip,
   TooltipContent,
@@ -666,37 +665,19 @@ function TextAreaChat({
     },
   };
 
-  const [dynamicOpenCodeModels, setDynamicOpenCodeModels] = useState<
-    ModelConfig[] | null
-  >(null);
-
-  // Dynamic model list from the local OpenCode installation. Only meaningful
-  // in parametric mode — creative mode uses quality presets.
-  useEffect(() => {
-    if (type === 'creative') return;
-    let cancelled = false;
-    apiJson('/opencode/models')
-      .then((data) => {
-        if (!cancelled && Array.isArray(data)) {
-          setDynamicOpenCodeModels(data as ModelConfig[]);
-        }
-      })
-      .catch(() => {
-        // OpenCode server unreachable — the picker falls back to the
-        // built-in static model list.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [type]);
+  // ------------------------------------------------------------------
+  // Model picker: fetch the effective catalog from the server.
+  // ------------------------------------------------------------------
+  const { models: catalogModels, isLoading: _catalogLoading } =
+    useParametricModelCatalog();
 
   const memoizedModels = useMemo(() => {
     if (type === 'creative') {
       return CREATIVE_MODELS;
     }
-    const opencodeModels = dynamicOpenCodeModels ?? [];
-    return [...PARAMETRIC_MODELS, ...opencodeModels];
-  }, [type, dynamicOpenCodeModels]);
+    // Use the unified catalog (builtin + opencode + custom providers).
+    return catalogModels;
+  }, [type, catalogModels]);
 
   // ------------------------------------------------------------
   // Placeholder – Typed-out Animation
