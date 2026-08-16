@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `c357348` (P06A-B: Runtime custom-provider chat routing)
+**HEAD**: `c1e83b9` (P06C-E: Capability gates, billing policy, explicit errors)
 **Last Updated**: 2026-08-16
-**Current Task**: P06C-E — Capability gates, billing policy, failure behavior
+**Current Task**: P06 complete — P07 next (Settings page composition)
 
 ---
 
@@ -287,7 +287,7 @@
 
 ## Current Task
 
-P00-P06 complete. Ready for P07 — Prompt profile tests.
+P00-P06 complete. Ready for P07 — Settings page composition.
 
 ## Validation Evidence
 
@@ -299,4 +299,4 @@ P00-P06 complete. Ready for P07 — Prompt profile tests.
 
 ## Blockers
 
-None — ready for P07 (Prompt profile tests).
+None — ready for P07 (Settings page composition).
