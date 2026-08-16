@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `58ffb32` (P05E: Provider model management UI — ProviderModelForm + ProviderModelCard)
+**HEAD**: `5f52cd4` (P05E/P05F: Provider model management UI + Secret UX, HEAD 58ffb32)
 **Last Updated**: 2026-08-16
-**Current Task**: P05F — Provider model management tests
+**Current Task**: P06 — Runtime custom-provider routing
 
 ---
 
@@ -277,11 +277,17 @@
 **Files**: `src/components/settings/ProvidersSettings.tsx`
 **Features**: ProviderModelForm (create/edit), ProviderModelCard (list), Manage Models button per provider card; full CRUD for `ai_provider_models` with supports_tools/thinking/vision toggles, context/output limits, visibility toggle; GET `/api/ai-settings/providers/:providerId/models/:modelId` route for model detail fetch.
 
+### P05F — Secret UX
+
+**Status**: DONE
+**Reviewer**: PASS (typecheck + eslint)
+**Features**: Credentials never returned in API responses (only `hasCredential: boolean`); "Credential saved" / "No credential" badge; blank input preserves existing credential; `__REMOVE__` sentinel clears credential; "Remove existing" button in edit form.
+
 ---
 
 ## Current Task
 
-P00-P05E complete. Ready for P05F — Provider model management tests.
+P00-P05F complete. Ready for P06 — Runtime custom-provider routing.
 
 ## Validation Evidence
 
@@ -293,4 +299,4 @@ P00-P05E complete. Ready for P05F — Provider model management tests.
 
 ## Blockers
 
-None — ready for P05F (provider model tests).
+None — ready for P06 (Runtime custom-provider routing).
