@@ -38,6 +38,13 @@ describe('buildAgentOutputContract', () => {
     );
   });
 
+  it('forbids an empty terminal result after reasoning', () => {
+    assert.ok(
+      has('Never finish after reasoning without'),
+      'contract must require a final JSON result rather than reasoning only',
+    );
+  });
+
   it('prohibits OpenCode filesystem/shell/network/external tool use', () => {
     assert.ok(
       has('Do NOT use OpenCode filesystem'),
@@ -57,6 +64,11 @@ describe('buildAgentOutputContract', () => {
       has("Do NOT call pCAD's build_parametric_model tool directly"),
       'contract must tell the model NOT to call the tool directly',
     );
+  });
+
+  it('bridges CADAM tool-workflow instructions to the JSON result', () => {
+    assert.ok(has('that as pCAD-only workflow'));
+    assert.ok(has('Do not wait'));
   });
 
   it('does NOT tell the model to answer in plain text', () => {

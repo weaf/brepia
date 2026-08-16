@@ -750,7 +750,56 @@ I07: DONE (diff review completed)
 I08: DONE (final merge gate correction)
 I09: IN PROGRESS (I09A audit + I09B state + I09C persistence + I09D request body + I09E label + I09F responsive layout + I09G regression tests)
 I09H: **BLOCKED** — manual acceptance FAILED (Streaming stalls on first event); R1 repair implemented + Task H live validation PASSED (127/127 tests green, big-pickle full lifecycle ~1.6s), manual browser re-test still required
-I09I: IN PROGRESS (R3 semantic parity — R3A audit DONE, R3B shared contract DONE, R3C CLI wiring pending)
+I09I: IN PROGRESS (R3C–R3G complete; R3H remains blocked on authenticated browser acceptance)
+
+### 2026-08-16 — I09I R3 semantic-parity repair (R3C–R3G complete)
+
+- OpenCode CLI now appends `buildAgentOutputContract()` through
+  `buildCliAgentInstruction()`; Codex keeps its existing instruction.
+- Streaming now preserves the CADAM system/history context, prohibits only
+  OpenCode-owned filesystem/shell/network/web/external tools, and appends the
+  identical final `{code,message}` contract. The prose-only and blanket
+  ignore-tool contradictions are removed.
+- Added `opencodeSemanticParity.test.ts` (5 tests) for the shared contract,
+  preserved context, prohibition, and non-OpenCode/Codex boundary.
+- Focused parser/artifact/routing/parity suite: 39/39 pass. `npm run
+typecheck` and `npm run build` pass. `npm run lint` reports 0 errors and 15
+  pre-existing warnings outside this change.
+- Live Streaming validation passed against `opencode/big-pickle` and
+  `llama-swap/qwen3.6-35b-mtp-128k`: each CAD request produced terminal
+  structured OpenSCAD and exactly one `build_parametric_model` tool call.
+  Big Pickle non-CAD control produced text with empty code and zero builds.
+- R3S sessions audit: the live `GET /api/session` list includes the sessions
+  created by the live validations, with `location.directory` equal to
+  `/home/thn/ai/pCAD`; they persist after completion. No session-management
+  defect found.
+- R3H is still blocked: Playwright reached `/cadam` on the local app, but the
+  prompt control is disabled until authentication. No test account/session was
+  available, so selector, persistence, Stop, and actual browser-build checks
+  were not falsely claimed.
+
+### 2026-08-16 — R4 CLI reproduction (no code change)
+
+- `opencode models` lists `ollama-cloud/gpt-oss:20b`.
+- The documented direct invocation, both with and without `--attach`, now
+  exits 0 but returns no JSON/stdout; the live server records a corresponding
+  `ollama-cloud/gpt-oss:20b` session. The historical exit-1 failure is not
+  reproducible on this checkout. The empty successful CLI response remains a
+  separate provider/CLI behavior to investigate if CLI support for this model
+  is required.
+
+### 2026-08-16 — Qwen Streaming browser acceptance passed
+
+- Authenticated browser validation selected OpenCode Qwen3.6-35B-A3B-MTP
+  (128k), selected Streaming, and submitted a simple box-with-bottom request.
+- The completed UI showed exactly one `Generated model`, editable dimension
+  and colour parameters, and an enabled STL download. The chat returned to an
+  idle state after the request.
+- Streaming OpenCode now uses the shared JSON artifact contract, parses the
+  terminal corrected artifact, avoids a forced native tool choice, and stops
+  after its first agent step while retaining pCAD's synthetic build execution.
+- Validation: `npm run typecheck` and the 63-test focused contract, parser,
+  lifecycle, and transport suite passed; `git diff --check` passed.
 
 Status: DONE
 Repository state before task:
@@ -783,3 +832,44 @@ Repository state before task:
 ## Prompt for coding agent
 
 > Read `docs/opencode_post_recovery_status.md` first. Work only on `Current next task`. Read only that task's section from `docs/opencode_post_recovery_plan.md` plus the directly relevant source files. First run `git branch --show-current`, `git status --short`, and `git log -1 --oneline`. Never reset/clean/discard unrelated user work. Implement exactly one task, run the focused validation, update this status file with evidence/results, set the next task only if DONE, then stop. For OpenCode API/permissions trust the installed version and `/doc`; for AI SDK lifecycle trust installed provider types. Do not resume the main G03 task until S01-S04 and G02A-G02G are complete.
+
+---
+
+## 2026-08-16 — User-directed checkpoint: pause OpenCode plan work
+
+**State:** PAUSED BY USER. Do not begin any remaining OpenCode/I09/R3/R4 work
+until the user explicitly returns with a new request. The next work is expected
+to be new functionality, not automatic completion of this backlog.
+
+### Verified at this checkpoint
+
+- The project-local `pcad-builder` OpenCode agent and `pcad_validate` OpenSCAD
+  validation plugin load on the running OpenCode server.
+- pCAD validates a generated OpenSCAD candidate itself and can return compiler
+  diagnostics to the same agent for up to three repair attempts. This is a
+  model-independent guard; a model is not trusted merely because it claims
+  validation succeeded.
+- Authenticated browser acceptance passed for OpenCode Qwen3.6-35B-A3B-MTP
+  (128k) in Streaming mode: the generated 20 mm cube with a centered 6 mm
+  through-hole exposed the expected parameters and enabled STL download.
+- The post-build Streaming stop condition now stops on the synthetic
+  `build_parametric_model` call, preventing the repeated pCAD agent loop
+  observed during the first live attempt.
+- Latest focused validation: `npm run typecheck` and 37 OpenCode parser,
+  semantic-parity, and lifecycle tests passed; `git diff --check` passed.
+
+### Deferred backlog — do not start automatically
+
+1. **I09H/R3H manual acceptance completion:** mobile selector and generation,
+   Big Pickle browser run, reload/persistence, Stop then a subsequent request,
+   and independent CLI check.
+2. **I09H-R2 UX:** connecting/thinking/generating progress feedback.
+3. **I09I final merge gate:** full typecheck, lint, build, complete test run,
+   clean diff/status review, and user acceptance before any merge.
+4. **R4:** investigate the empty OpenCode CLI response for
+   `ollama-cloud/gpt-oss:20b` only if that provider's CLI support is needed.
+5. **Negative validation-agent proof:** submit intentionally invalid OpenSCAD
+   and confirm bounded repair or safe refusal without a model build.
+
+**Handoff:** Preserve the current worktree, including unrelated user changes
+and untracked files. Resume only from a newly specified feature request.

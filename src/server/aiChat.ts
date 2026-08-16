@@ -15,6 +15,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
+  hasToolCall,
   Output,
   smoothStream,
   stepCountIs,
@@ -1342,7 +1343,15 @@ export async function handleAiChatRequest(req: Request) {
   // rely on the system prompt to steer the build call — a fragile path where
   // the model *might* answer with text instead of building. Track that fallback
   // so we can detect — and log — a turn that finished without building.
-  const forceBuildToolChoice = supportsForcedToolChoice(actualModelId);
+  // The streaming OpenCode adapter emits the shared { code, message } artifact
+  // and then synthesizes pCAD's build tool call. Do not force that tool choice
+  // for the underlying agent: it has a text protocol, and a forced native tool
+  // choice can make it stop after reasoning without producing an artifact.
+  // The tool registry stays available so AI SDK can execute the adapter's
+  // synthetic build_parametric_model call after the artifact is returned.
+  const streamingOpenCode = transport.kind === 'streaming-opencode';
+  const forceBuildToolChoice =
+    !streamingOpenCode && supportsForcedToolChoice(actualModelId);
   const disableThinkingForBuildStep =
     forceBuildToolChoice && thinkingEnabled && resolvedProvider === 'anthropic';
   const usingAutoToolChoiceFallback =
@@ -1357,6 +1366,7 @@ export async function handleAiChatRequest(req: Request) {
     messages: modelMessages,
     tools,
     prepareStep: ({ stepNumber }) => {
+      if (streamingOpenCode) return {};
       if (
         conversation.type === 'parametric' &&
         leafRole === 'user' &&
@@ -1391,7 +1401,13 @@ export async function handleAiChatRequest(req: Request) {
       }
       return {};
     },
-    stopWhen: stepCountIs(conversation.type === 'parametric' ? 60 : 5),
+    // OpenCode Streaming returns one complete artifact and the adapter turns
+    // it into the build tool call. Stop after that first model step so the
+    // normal CADAM screenshot/revision loop cannot ask the text-only agent to
+    // produce duplicate artifacts after a successful build.
+    stopWhen: streamingOpenCode
+      ? hasToolCall('build_parametric_model')
+      : stepCountIs(conversation.type === 'parametric' ? 60 : 5),
     // Thinking and visible response tokens share this pool. With adaptive
     // thinking now always-on for Claude 5 / 4.6+, a heavy reasoning turn can
     // spend 10k+ tokens before the answer starts — 32k keeps the visible

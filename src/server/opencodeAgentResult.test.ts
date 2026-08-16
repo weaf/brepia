@@ -41,6 +41,15 @@ describe('R04B shared final-result parser (opencodeAgentResult)', () => {
       assert.equal(result.message, 'Done');
     });
 
+    it('uses the final valid JSON artifact when an agent corrects a draft', () => {
+      const result = parseAgentResult(
+        '```json\n{"code":"cube(broken);","message":""}\n```\n' +
+          'Correction:\n```json\n{"code":"cube([10,10,10]);","message":"Fixed"}\n```',
+      );
+      assert.equal(result.code, 'cube([10,10,10]);');
+      assert.equal(result.message, 'Fixed');
+    });
+
     it('treats empty code as no code', () => {
       const result = parseAgentResult(
         '```json\n{"code":"","message":"nothing to build"}\n```',

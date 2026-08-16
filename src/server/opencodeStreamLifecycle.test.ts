@@ -610,6 +610,19 @@ describe('H05 — Error recovery scenarios', () => {
         ]),
       );
     });
+
+    it('keeps reading after an internal tool-calls step', () => {
+      const state = makeState();
+      const { newParts } = processBatch(state, [
+        {
+          type: 'session.next.step.ended',
+          data: { finish: 'tool-calls' },
+        },
+      ]);
+
+      assert.equal(state.isTerminal, false);
+      assert.deepEqual(newParts, []);
+    });
     assert.ok(state.isTerminal);
   });
 });

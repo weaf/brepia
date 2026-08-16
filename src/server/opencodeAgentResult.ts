@@ -53,37 +53,53 @@ export function buildAgentOutputContract(): string {
     '  - code = "" (empty string)',
     '  - message = normal answer',
     '',
+    'You MUST emit this JSON final result. Never finish after reasoning without',
+    'a non-empty message; for a CAD request, code must also be non-empty.',
+    '',
     'Constraints:',
     '  - Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
     '  - Work only from the supplied conversation context.',
     "  - Do NOT call pCAD's build_parametric_model tool directly — pCAD will",
     '    convert a non-empty `code` into build_parametric_model itself.',
+    '  - If the supplied CADAM context says to call build_parametric_model,',
+    '    answer_user, inspect screenshots, or wait for a tool result, treat',
+    '    that as pCAD-only workflow: emit this JSON now instead. Do not wait',
+    '    for a tool call, a preview, or another turn before giving the code.',
   ].join('\n');
 }
 
 export type AgentResult = { code?: string; message: string };
 
 export function parseAgentResult(text: string): AgentResult {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1] ?? text;
-  try {
-    const parsed = JSON.parse(fenced.trim()) as {
-      code?: unknown;
-      message?: unknown;
-    };
-    const code =
-      typeof parsed.code === 'string' && parsed.code.trim()
-        ? parsed.code.trim()
-        : undefined;
-    return {
-      code,
-      message: typeof parsed.message === 'string' ? parsed.message : '',
-    };
-  } catch {
-    const code = /```(?:scad|openscad)?\s*([\s\S]*?)```/i
-      .exec(text)?.[1]
-      ?.trim();
-    return { code, message: code ? 'Model generated.' : text.trim() };
+  // Agents occasionally emit a first draft, notice a syntax error, and then
+  // provide a corrected JSON result.  The terminal artifact is the final
+  // valid structured result, not the first draft seen in the stream.
+  const jsonCandidates = [
+    ...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
+  ].map((match) => match[1]);
+  if (!jsonCandidates.length) jsonCandidates.push(text);
+
+  for (const candidate of jsonCandidates.reverse()) {
+    try {
+      const parsed = JSON.parse(candidate.trim()) as {
+        code?: unknown;
+        message?: unknown;
+      };
+      const code =
+        typeof parsed.code === 'string' && parsed.code.trim()
+          ? parsed.code.trim()
+          : undefined;
+      return {
+        code,
+        message: typeof parsed.message === 'string' ? parsed.message : '',
+      };
+    } catch {
+      // Try the preceding structured result, then the fenced SCAD fallback.
+    }
   }
+
+  const code = /```(?:scad|openscad)?\s*([\s\S]*?)```/i.exec(text)?.[1]?.trim();
+  return { code, message: code ? 'Model generated.' : text.trim() };
 }
 
 /**

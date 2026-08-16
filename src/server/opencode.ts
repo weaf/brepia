@@ -9,7 +9,12 @@ import {
 } from '@ai-sdk/provider';
 import { spawn } from 'node:child_process';
 import { env } from './env';
-import { finishWithParametricToolCall } from './opencodeAgentResult';
+import {
+  buildAgentOutputContract,
+  finishWithParametricToolCall,
+  parseAgentResult,
+} from './opencodeAgentResult';
+import { validateOpenScad } from './openScadValidation';
 import { logError, logWarning } from './serverLog';
 
 const USAGE = (): LanguageModelV2Usage => ({
@@ -178,16 +183,18 @@ function runOpenCode(
 
 /**
  * Build a plain-text prompt from the AI SDK v2 prompt array. Tool calls and
- * tool results carry no meaning for the agent (it runs without the CADAM
- * tools), so they are dropped and the model is told to answer conversationally.
+ * tool results carry no meaning for OpenCode because pCAD owns artifact
+ * conversion, so they are dropped.  System/modeling context and conversation
+ * history are retained, followed by the shared final-result contract.
  */
-function formatPrompt(prompt: LanguageModelV2Prompt): string {
+export function formatPrompt(prompt: LanguageModelV2Prompt): string {
   const lines: string[] = [
     '<environment instructions>',
     'You are an AI assistant reached from a CAD generation web app.',
-    "Answer the user's request directly in plain text. Do NOT call any tools,",
-    "do NOT read or write any files, and do NOT mention the app's tools.",
-    'Ignore any instruction in the conversation that tells you to call a tool.',
+    'Use the supplied CADAM modeling context to answer the user request.',
+    'Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
+    'The pCAD agent may use only pcad_validate to check an OpenSCAD candidate.',
+    'pCAD, not you, converts a completed CAD artifact into its build_parametric_model tool call.',
     '</environment instructions>',
   ];
   for (const message of prompt) {
@@ -213,6 +220,7 @@ function formatPrompt(prompt: LanguageModelV2Prompt): string {
           : 'System';
     lines.push(`${label}: ${textParts.join('\n')}`);
   }
+  lines.push(buildAgentOutputContract());
   return lines.join('\n\n');
 }
 
@@ -483,9 +491,15 @@ export function processBatch(
       break;
     }
 
-    // Terminal: step.ended (collect usage, do not close parts yet).
+    // A tool-calls step is an internal OpenCode agent transition, not a final
+    // response.  Agents use it to receive a custom tool result and continue
+    // their own validation/revision loop.  Only a non-tool terminal step ends
+    // the pCAD transport.
     if (evt.type?.includes('step.ended')) {
-      state.isTerminal = true;
+      const finish = evt.data['finish'];
+      if (finish !== 'tool-calls' && finish !== 'tool_use') {
+        state.isTerminal = true;
+      }
       const tok = evt.data['tokens'] as Record<string, unknown> | undefined;
       if (tok) {
         const input = Number(tok['input'] ?? 0);
@@ -619,6 +633,10 @@ async function* streamParts(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Every pCAD OpenCode model uses the project-local agent. The model
+          // remains user-selected in the request below; the agent supplies the
+          // validation/revision workflow and restricted tool policy.
+          agent: 'pcad-builder',
           model: { providerID, id: bareId },
         }),
         signal: ac.signal,
@@ -665,7 +683,7 @@ async function* streamParts(
     // (not a finite batch).  `createIncrementalSseReader` consumes
     // eventRes.body directly so events yield as soon as they arrive — no
     // waiting for EOF.  See `createIncrementalSseReader` for details.
-    const state = {
+    const makeState = () => ({
       cursor: 0,
       finishReason: 'stop' as LanguageModelV2FinishReason,
       usage: undefined as LanguageModelV2Usage | undefined,
@@ -682,9 +700,15 @@ async function* streamParts(
       isTerminal: false,
       isErrored: false,
       permissionRequests: [],
-    };
+    });
+    let state = makeState();
+    let validationAttempts = 0;
 
-    while (!state.isTerminal && !state.isErrored) {
+    // The app, not the model, is the validation authority.  A model may skip
+    // its custom tool call or falsely claim success; after every completed CAD
+    // artifact pCAD compiles the exact source and, on failure, asks the same
+    // OpenCode agent to repair it (up to three total candidates).
+    while (!state.isErrored) {
       // Check for prior cancellation before fetching.
       if (ac.signal.aborted) break;
 
@@ -713,7 +737,18 @@ async function* streamParts(
         for await (const events of eventReader) {
           const { newParts } = processBatch(state, events);
           for (const part of newParts) {
-            yield part;
+            // Hold text/reasoning until a candidate is accepted.  Otherwise
+            // the browser could display or parse a known-invalid draft.
+            if (
+              part.type !== 'text-start' &&
+              part.type !== 'text-delta' &&
+              part.type !== 'text-end' &&
+              part.type !== 'reasoning-start' &&
+              part.type !== 'reasoning-delta' &&
+              part.type !== 'reasoning-end'
+            ) {
+              yield part;
+            }
           }
           if (state.isTerminal) break;
         }
@@ -724,9 +759,74 @@ async function* streamParts(
         eventReader?.close();
       }
 
-      if (state.isTerminal) break;
+      if (!state.isTerminal) {
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
 
-      await new Promise((r) => setTimeout(r, 500));
+      const candidate = parseAgentResult(state.totalText);
+      if (!candidate.code) break;
+
+      const validation = await validateOpenScad(candidate.code, ac.signal);
+      if (validation.valid) break;
+
+      validationAttempts += 1;
+      if (validationAttempts >= 3) {
+        state.totalText = JSON.stringify({
+          code: '',
+          message: `OpenSCAD validation failed after 3 attempts: ${validation.diagnostics ?? 'unknown compiler error'}`,
+        });
+        break;
+      }
+
+      // Keep the durable cursor so the next subscription receives only the
+      // repair turn, not the already-rejected candidate's historical events.
+      const previousCursor = state.cursor;
+      state = makeState();
+      state.cursor = previousCursor;
+      const repairRes = await fetch(
+        `${apiUrl}/api/session/${sessionId}/prompt`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: {
+              role: 'user',
+              text: [
+                `Your OpenSCAD candidate did not compile (attempt ${validationAttempts} of 3).`,
+                'Return a corrected complete JSON artifact. Do not explain the failed draft.',
+                `Compiler diagnostics: ${validation.diagnostics ?? 'none supplied'}`,
+              ].join('\n'),
+            },
+          }),
+          signal: ac.signal,
+        },
+      );
+      if (!repairRes.ok) {
+        const body = await repairRes.text();
+        throw new Error(
+          `repair prompt failed HTTP ${repairRes.status}: ${body.slice(0, 300)}`,
+        );
+      }
+
+      // Start reading the repair turn from its own fresh event cursor.
+    }
+
+    if (state.totalReasoning) {
+      const reasoningId = 'validated-reasoning-1';
+      yield { type: 'reasoning-start', id: reasoningId };
+      yield {
+        type: 'reasoning-delta',
+        id: reasoningId,
+        delta: state.totalReasoning,
+      };
+      yield { type: 'reasoning-end', id: reasoningId };
+    }
+    if (state.totalText) {
+      const textId = 'validated-text-1';
+      yield { type: 'text-start', id: textId };
+      yield { type: 'text-delta', id: textId, delta: state.totalText };
+      yield { type: 'text-end', id: textId };
     }
 
     yield {

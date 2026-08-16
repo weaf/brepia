@@ -21,7 +21,11 @@ import type {
   LanguageModelV2Usage,
 } from '@ai-sdk/provider';
 import { env } from './env';
-import { parseAgentResult, type AgentResult } from './opencodeAgentResult';
+import {
+  buildAgentOutputContract,
+  parseAgentResult,
+  type AgentResult,
+} from './opencodeAgentResult';
 
 const TIMEOUT_MS = 8 * 60_000;
 
@@ -233,6 +237,21 @@ function promptText(prompt: LanguageModelV2Prompt): string {
   return messages.join('\n\n');
 }
 
+/**
+ * Build the final instruction sent to a CLI agent.  OpenCode uses the same
+ * result contract as the streaming transport; Codex deliberately keeps its
+ * established instruction unchanged.
+ */
+export function buildCliAgentInstruction(
+  agent: AgentKind,
+  prompt: string,
+): string {
+  if (agent === 'opencode') {
+    return `${prompt}\n\n${buildAgentOutputContract()}`;
+  }
+  return `${prompt}\n\nReturn only JSON with exactly these keys: {"code":"complete OpenSCAD source or empty string","message":"short user-facing status"}. For a CAD request, put the complete runnable OpenSCAD program in code. Do not use tools, network access, or files; work only from this conversation.`;
+}
+
 async function invokeAgent(
   agent: AgentKind,
   model: string,
@@ -241,7 +260,7 @@ async function invokeAgent(
 ): Promise<AgentResult> {
   const dir = await mkdtemp(join(tmpdir(), 'pcad-cli-agent-'));
   try {
-    const instruction = `${prompt}\n\nReturn only JSON with exactly these keys: {"code":"complete OpenSCAD source or empty string","message":"short user-facing status"}. For a CAD request, put the complete runnable OpenSCAD program in code. Do not use tools, network access, or files; work only from this conversation.`;
+    const instruction = buildCliAgentInstruction(agent, prompt);
     const args =
       agent === 'opencode'
         ? ['run', '--format', 'json', '--pure', '-m', model]
