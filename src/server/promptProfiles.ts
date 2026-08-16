@@ -331,11 +331,11 @@ export async function deletePromptProfile(
 /**
  * Resolve the system prompt for a conversation at runtime.
  *
- * Resolution logic (P04E):
+ * Resolution logic (P04E/I):
  * 1. `promptProfileId` is NULL/undefined → return the built-in exact prompt.
- * 2. `promptProfileId` points to a custom profile → fetch and return its
- *    template. Archived profiles still resolve (they may be pinned to
- *    existing conversations).
+ * 2. `promptProfileId` points to a custom profile → fetch and resolve:
+ *    - overlay mode: combine current built-in + user custom instructions
+ *    - fork mode: return the stored template as-is
  * 3. Profile belongs to another user → reject (safety).
  * 4. Profile not found or unresolvable → throw an explicit error (never
  *    silently fall back to a different prompt).
@@ -367,6 +367,10 @@ export async function resolveConversationSystemPrompt({
     throw new Error(
       `Prompt profile ${profileId} not found for user ${userId}. This conversation may have been corrupted.`,
     );
+  }
+
+  if (profile.mode === 'overlay') {
+    return `${PARAMETRIC_AGENT_PROMPT}\n\n--- User Custom Instructions ---\n\n${profile.promptTemplate}`;
   }
 
   return profile.promptTemplate;
