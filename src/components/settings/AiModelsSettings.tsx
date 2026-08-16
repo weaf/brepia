@@ -1,10 +1,8 @@
 // P03G: Model settings UI — AiModelsSettings section.
 //
 // Renders a searchable, groupable model visibility panel in SettingsView.
-// Users can show/hide individual models, enable-all, hide-all (with
-// confirmation), and restore defaults.  Changes persist to
-// `user_ai_preferences.hidden_model_ids` via the `/api/ai-settings/preferences`
-// PUT endpoint.
+// Users can show/hide individual models, enable-all, hide-all, and restore
+// defaults. Changes persist to user_ai_preferences.hidden_model_ids.
 
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -14,13 +12,9 @@ import { Switch } from '@/components/ui/switch';
 import { EyeOff, Loader2, RotateCcw, Search, SquareCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
 import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
+import { apiJson } from '@/services/api';
 import type { CatalogEntry } from '@/server/modelCatalog';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type SourceGroup = {
   source: 'builtin' | 'opencode' | 'custom';
@@ -28,13 +22,11 @@ type SourceGroup = {
   models: CatalogEntry[];
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const SOURCE_LABELS: Record<string, string> = {
   builtin: 'Built-in models',
-  opencode: 'OpenCode agents',
+  // Codex is temporarily carried by the existing agent source during the
+  // repair pass. The later Runtime Integrations task will split the UI groups.
+  opencode: 'Local agents',
   custom: 'Custom providers',
 };
 
@@ -75,23 +67,13 @@ function filterBySearch(models: CatalogEntry[], query: string): CatalogEntry[] {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Data hooks
-// ---------------------------------------------------------------------------
-
 interface AiPreferences {
   hiddenModelIds: string[];
 }
 
-function fetchPreferences(): Promise<AiPreferences> {
-  return fetch('/api/ai-settings/preferences')
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .then((data: AiPreferences) => ({
-      hiddenModelIds: data.hiddenModelIds ?? [],
-    }));
+async function fetchPreferences(): Promise<AiPreferences> {
+  const data = (await apiJson('ai-settings/preferences')) as AiPreferences;
+  return { hiddenModelIds: data.hiddenModelIds ?? [] };
 }
 
 function useAiPreferences() {
@@ -103,23 +85,17 @@ function useAiPreferences() {
 }
 
 function useUpdateHiddenModels() {
-  const { user: _user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (hiddenModelIds: string[]) => {
-      const res = await fetch('/api/ai-settings/preferences', {
+    mutationFn: async (hiddenModelIds: string[]) =>
+      apiJson('ai-settings/preferences', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hiddenModelIds }),
-      });
-      if (!res.ok) throw new Error('Failed to save preferences');
-      return res.json();
-    },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-preferences'] });
-      queryClient.invalidateQueries({ queryKey: ['model-catalog'] });
       toast({
         title: 'Model preferences saved',
         description: 'Your model visibility settings have been updated.',
@@ -134,10 +110,6 @@ function useUpdateHiddenModels() {
     },
   });
 }
-
-// ---------------------------------------------------------------------------
-// Model row
-// ---------------------------------------------------------------------------
 
 function ModelRow({
   entry,
@@ -163,7 +135,6 @@ function ModelRow({
           >
             {entry.name}
           </span>
-          {/* Source badge */}
           <Badge
             variant={
               entry.source === 'builtin'
@@ -180,7 +151,7 @@ function ModelRow({
                   : ''
             }
           >
-            {entry.source}
+            {entry.source === 'opencode' ? 'agent' : entry.source}
           </Badge>
         </div>
         <div className="flex items-center gap-1.5">
@@ -189,7 +160,6 @@ function ModelRow({
               {entry.provider}
             </span>
           )}
-          {/* Capability chips */}
           {entry.supportsTools && (
             <Badge variant="outline" className="h-4 px-1 text-[10px]">
               Tools
@@ -223,22 +193,13 @@ function ModelRow({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
 export function AiModelsSettings() {
-  const { user: _user } = useAuth();
-  const { toast: _toast } = useToast();
-
-  // Fetch the full catalog (includes hidden entries)
   const {
     models: allEntries = [],
     isLoading: isCatalogLoading,
     error: catalogError,
   } = useParametricModelCatalog();
 
-  // Fetch hidden IDs
   const {
     data: prefs,
     isLoading: isPrefsLoading,
@@ -250,22 +211,20 @@ export function AiModelsSettings() {
     [prefs?.hiddenModelIds],
   );
   const updateMutation = useUpdateHiddenModels();
-
-  // Search state
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Derived groups
   const groups = useMemo<SourceGroup[]>(() => {
     const filtered = filterBySearch(allEntries, searchQuery);
     return groupBySource(filtered);
   }, [allEntries, searchQuery]);
 
-  // Count visible / total
   const totalModels = allEntries.length;
-  const visibleModels = totalModels - hiddenIds.length;
-  const allHidden = visibleModels === 0;
+  const hiddenKnownModels = hiddenIds.filter((id) =>
+    allEntries.some((entry) => entry.id === id),
+  ).length;
+  const visibleModels = Math.max(0, totalModels - hiddenKnownModels);
+  const allHidden = totalModels > 0 && visibleModels === 0;
 
-  // Handlers
   const handleToggle = useCallback(
     (modelId: string) => {
       const isCurrentlyHidden = hiddenIds.includes(modelId);
@@ -282,8 +241,7 @@ export function AiModelsSettings() {
   }, [updateMutation]);
 
   const handleHideAll = useCallback(() => {
-    // Only allow if not all would be hidden (user needs at least one model)
-    if (allHidden) return;
+    if (allHidden || allEntries.length === 0) return;
     updateMutation.mutate(allEntries.map((e: CatalogEntry) => e.id));
   }, [allEntries, allHidden, updateMutation]);
 
@@ -291,9 +249,8 @@ export function AiModelsSettings() {
     updateMutation.mutate([]);
   }, [updateMutation]);
 
-  // Loading state
   const isLoading = isCatalogLoading || isPrefsLoading;
-  const error = catalogError ?? prefsError;
+  const error = catalogError ?? (prefsError instanceof Error ? prefsError.message : null);
 
   if (error) {
     return (
@@ -302,7 +259,7 @@ export function AiModelsSettings() {
           Models
         </h2>
         <div className="text-adam-red-400 text-sm">
-          Failed to load model settings. Please try again.
+          Failed to load model settings: {error}
         </div>
       </section>
     );
@@ -317,7 +274,6 @@ export function AiModelsSettings() {
         </span>
       </div>
 
-      {/* Search */}
       <div className="mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-adam-neutral-500" />
@@ -330,13 +286,12 @@ export function AiModelsSettings() {
         </div>
       </div>
 
-      {/* Action buttons */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           variant="light"
           onClick={handleEnableAll}
-          disabled={updateMutation.isPending || visibleModels === 0}
+          disabled={updateMutation.isPending || hiddenIds.length === 0}
           className="h-7 rounded-full px-2 text-xs"
         >
           <SquareCheck className="mr-1 h-3 w-3" />
@@ -347,7 +302,7 @@ export function AiModelsSettings() {
           variant="dark"
           onClick={handleHideAll}
           disabled={
-            updateMutation.isPending || allHidden || visibleModels === 0
+            updateMutation.isPending || allHidden || allEntries.length === 0
           }
           className="h-7 rounded-full px-2 text-xs"
         >
@@ -366,7 +321,6 @@ export function AiModelsSettings() {
         </Button>
       </div>
 
-      {/* Model list */}
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-500" />
