@@ -1,17 +1,18 @@
 /**
  * Model Catalog — unified model discovery layer.
  *
- * Merges three model sources into a single effective catalog for the
+ * Merges model sources into a single effective catalog for the
  * parametric picker and settings UI:
  *
  *   1. Built-in parametric models (PARAMETRIC_MODELS from src/lib/utils.ts)
- *   2. Dynamic OpenCode agent models (fetched from opencode serve HTTP API)
- *   3. Custom provider models (from the ai_provider_models DB table)
+ *   2. Dynamic OpenCode agent models (fetched from opencode serve HTTP API/CLI)
+ *   3. Configured Codex CLI agent models
+ *   4. Custom provider models (from the ai_provider_models DB table)
  *
  * Deduplication strategy:
  *   - Built-in models always win (first source).
- *   - Opencode models with IDs matching built-in entries are skipped.
- *   - Custom provider models with IDs matching either built-in or opencode
+ *   - Agent models with IDs matching built-in entries are skipped.
+ *   - Custom provider models with IDs matching either built-in or agent
  *     entries are skipped (by stable ID format, collisions should be rare).
  *
  * Provider-aware merge:
@@ -28,6 +29,7 @@ import {
 import { getUserProviders, getProviderModels } from './customProviders';
 import type { User } from '@supabase/supabase-js';
 import { opencodeModels } from './opencode';
+import { configuredCodexModels } from './cliAgents';
 import type { ModelConfig } from '../../src/types/misc';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +42,7 @@ export interface CatalogEntry extends ModelConfig {
   /**
    * Which source this entry came from.
    * - 'builtin' — from PARAMETRIC_MODELS
-   * - 'opencode' — from opencode serve HTTP API
+   * - 'opencode' — local CLI/agent discovery (OpenCode and Codex for now)
    * - 'custom' — from ai_provider_models table
    */
   source: CatalogEntrySource;
@@ -48,15 +50,10 @@ export interface CatalogEntry extends ModelConfig {
   /** Whether the model is enabled for user selection. */
   enabled: boolean;
 
-  /**
-   * Whether the model is available at runtime (the backend service is
-   * reachable).
-   */
+  /** Whether the model is available at runtime. */
   available: boolean;
 
-  /**
-   * If available is false, a human-readable reason.
-   */
+  /** If available is false, a human-readable reason. */
   unavailableReason?: string;
 }
 
@@ -64,9 +61,7 @@ export interface CatalogEntry extends ModelConfig {
 // Type guards
 // ---------------------------------------------------------------------------
 
-/**
- * Returns true if the given entry is a custom provider model.
- */
+/** Returns true if the given entry is a custom provider model. */
 export function isCustomCatalogEntry(entry: CatalogEntry): boolean {
   return entry.source === 'custom';
 }
@@ -92,7 +87,7 @@ export function getBuiltInModels(): CatalogEntry[] {
 }
 
 // ---------------------------------------------------------------------------
-// Opencode models — fetched at runtime, always enabled.
+// Local agents — OpenCode discovery plus configured Codex CLI models.
 // ---------------------------------------------------------------------------
 
 function toOpencodeCatalogEntry(m: {
@@ -116,16 +111,33 @@ function toOpencodeCatalogEntry(m: {
   };
 }
 
+function toCodexCatalogEntry(
+  model: ReturnType<typeof configuredCodexModels>[number],
+): CatalogEntry {
+  return {
+    ...model,
+    // Keep the existing source union stable for this repair pass. The follow-up
+    // provider/settings work can split OpenCode and Codex into separate runtime
+    // integration groups without changing their canonical model IDs.
+    source: 'opencode' as const,
+    enabled: true,
+    available: true,
+  };
+}
+
 export async function getOpencodeModels(): Promise<CatalogEntry[]> {
+  let openCodeEntries: CatalogEntry[] = [];
   try {
     const models = await opencodeModels();
-    return models
+    openCodeEntries = models
       .map(toOpencodeCatalogEntry)
       .filter((e): e is CatalogEntry => e !== undefined);
   } catch {
-    // Opencode server unreachable — return empty list.
-    return [];
+    // OpenCode server/CLI unreachable — Codex may still be available.
   }
+
+  const codexEntries = configuredCodexModels().map(toCodexCatalogEntry);
+  return [...openCodeEntries, ...codexEntries];
 }
 
 // ---------------------------------------------------------------------------
@@ -195,21 +207,16 @@ export async function getCustomProviderModels(
  * For providers with matching names, custom models override opencode
  * models on provider-native model ID match. Custom models that don't
  * match any opencode model ID are appended.
- *
- * Returns a flat list preserving opencode-first ordering, with overrides
- * applied in-place.
  */
 function mergeByProvider(
   opencode: CatalogEntry[],
   custom: CatalogEntry[],
 ): CatalogEntry[] {
-  // Build a lookup of custom models by provider name → native model ID.
   const customByProvider = new Map<string, Map<string, CatalogEntry>>();
 
   for (const entry of custom) {
     const provider = entry.provider ?? 'Unknown';
     const models = customByProvider.get(provider) ?? new Map();
-    // Derive provider-native model ID from the stable custom ID.
     const parsed = parseCustomProviderModelId(entry.id);
     if (parsed) {
       models.set(parsed.modelId, entry);
@@ -217,12 +224,10 @@ function mergeByProvider(
     customByProvider.set(provider, models);
   }
 
-  // Opencode models keyed by their provider-native model ID.
   const opencodeByProvider = new Map<string, Map<string, CatalogEntry>>();
   const ordering: { provider: string; nativeId: string }[] = [];
 
   for (const entry of opencode) {
-    // Opencode native model ID is the cliId (after "agent/opencode/" prefix).
     const cliId = entry.id.replace('agent/opencode/', '');
     const provider = entry.provider ?? 'Unknown';
     const models = opencodeByProvider.get(provider) ?? new Map();
@@ -238,14 +243,12 @@ function mergeByProvider(
     const customModels = customByProvider.get(provider);
 
     if (customModels?.has(nativeId)) {
-      // Custom model overrides the opencode one.
       result.push(customModels.get(nativeId)!);
     } else {
       result.push(opencodeModels!.get(nativeId)!);
     }
   }
 
-  // Append custom-only models (providers or model IDs not in opencode).
   for (const [provider, customModels] of customByProvider) {
     for (const [nativeId, entry] of customModels) {
       const opencodeModels = opencodeByProvider.get(provider);
@@ -262,15 +265,7 @@ function mergeByProvider(
 // Full catalog builder.
 // ---------------------------------------------------------------------------
 
-/**
- * Build the effective parametric model catalog by merging all sources.
- *
- * Deduplication strategy:
- *   - Built-in models always win (first source).
- *   - Opencode models with IDs matching built-in entries are skipped.
- *   - Custom provider models with IDs matching either built-in or opencode
- *     entries are skipped (by stable ID format, collisions should be rare).
- */
+/** Build the effective parametric model catalog by merging all sources. */
 export async function buildCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
@@ -278,7 +273,6 @@ export async function buildCatalog(
   const opencode = await getOpencodeModels();
   const custom = await getCustomProviderModels(user);
 
-  // Build a set of all builtin IDs for dedup.
   const builtinIds = new Set(builtin.map((m: CatalogEntry) => m.id));
 
   const dedupedOpencode = opencode.filter(
@@ -292,11 +286,7 @@ export async function buildCatalog(
     (m: CatalogEntry) => !dedupedIds.has(m.id),
   );
 
-  // Provider-aware merge: opencode + custom models sharing a provider name
-  // are merged into the same provider bucket, with custom overriding on
-  // native model ID match.
   const mergedOpencode = mergeByProvider(dedupedOpencode, dedupedCustom);
-
   const mergedCustom = mergedOpencode.filter((e) => e.source === 'custom');
 
   return [
@@ -310,13 +300,7 @@ export async function buildCatalog(
 // Default model resolution
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve the default model ID.
- *
- * Returns the first model in PARAMETRIC_MODELS (the canonical built-in
- * catalog). The full default model logic with user preferences should
- * be implemented in the API route layer.
- */
+/** Resolve the default model ID from the canonical built-in catalog. */
 export function getDefaultModel(): string {
   return PARAMETRIC_MODELS[0].id;
 }
