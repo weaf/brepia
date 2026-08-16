@@ -11,11 +11,7 @@
 // - Model count display
 // - Credential saved status
 
-import { useState, useCallback, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
   CheckCircle2,
@@ -23,16 +19,22 @@ import {
   Edit2,
   Key,
   Loader2,
-  Plus,
+  MessageSquare,
   Plug,
+  Plus,
   Settings2,
   TestTubes,
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,51 @@ interface TestProviderResult {
   ok: boolean;
   message: string;
   latencyMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// Types — provider models
+// ---------------------------------------------------------------------------
+
+interface ProviderModelSummary {
+  id: string;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  description: string | null;
+  supportsTools: boolean;
+  supportsThinking: boolean;
+  supportsVision: boolean;
+  contextLimit: number | null;
+  outputLimit: number | null;
+  isVisible: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type ProviderModelDetail = ProviderModelSummary;
+
+interface CreateProviderModelInput {
+  modelId: string;
+  displayName: string;
+  description?: string;
+  supportsTools?: boolean;
+  supportsThinking?: boolean;
+  supportsVision?: boolean;
+  contextLimit?: number;
+  outputLimit?: number;
+  isVisible?: boolean;
+}
+
+interface UpdateProviderModelInput {
+  displayName?: string;
+  description?: string | null;
+  supportsTools?: boolean;
+  supportsThinking?: boolean;
+  supportsVision?: boolean;
+  contextLimit?: number | null;
+  outputLimit?: number | null;
+  isVisible?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +198,77 @@ async function testProviderConnection(
   return res.json();
 }
 
+async function fetchProviderModels(
+  providerId: string,
+): Promise<ProviderModelSummary[]> {
+  const res = await fetch(`/api/ai-settings/providers/${providerId}/models`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function _fetchProviderModelDetail(
+  providerId: string,
+  modelId: string,
+): Promise<ProviderModelDetail> {
+  const res = await fetch(
+    `/api/ai-settings/providers/${providerId}/models/${modelId}`,
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function createProviderModel(
+  providerId: string,
+  input: CreateProviderModelInput,
+): Promise<ProviderModelDetail> {
+  const res = await fetch(`/api/ai-settings/providers/${providerId}/models`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? 'Failed to create provider model');
+  }
+  return res.json();
+}
+
+async function updateProviderModel(
+  providerId: string,
+  modelId: string,
+  input: UpdateProviderModelInput,
+): Promise<ProviderModelDetail> {
+  const res = await fetch(
+    `/api/ai-settings/providers/${providerId}/models/${modelId}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? 'Failed to update provider model');
+  }
+  return res.json();
+}
+
+async function deleteProviderModel(
+  providerId: string,
+  modelId: string,
+): Promise<void> {
+  const res = await fetch(
+    `/api/ai-settings/providers/${providerId}/models/${modelId}`,
+    {
+      method: 'DELETE',
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? 'Failed to delete provider model');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // React Query hooks
 // ---------------------------------------------------------------------------
@@ -170,6 +288,13 @@ function useProviderDetail(id: string | null) {
     enabled: !!id,
     staleTime: 0,
   });
+}
+
+function _useProviderModelDetail(
+  _providerId: string | null,
+  _modelModelId: string | null,
+) {
+  return { data: null };
 }
 
 function useCreateProvider() {
@@ -261,6 +386,102 @@ function useTestProvider() {
       toast({
         title: 'Test failed',
         description: e.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+function useProviderModels(providerId: string | null) {
+  return useQuery({
+    queryKey: ['providerModels', providerId ?? ''],
+    queryFn: () =>
+      providerId ? fetchProviderModels(providerId) : Promise.resolve([]),
+    enabled: !!providerId,
+    staleTime: 0,
+  });
+}
+
+function useCreateProviderModel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      providerId,
+      input,
+    }: {
+      providerId: string;
+      input: CreateProviderModelInput;
+    }) => createProviderModel(providerId, input),
+    onSuccess: (_, { providerId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ['providerModels', providerId],
+      });
+      toast({ title: 'Success', description: 'Provider model created.' });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: 'Error',
+        description: e.message ?? 'Failed to create provider model.',
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+function useUpdateProviderModel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      providerId,
+      modelId,
+      input,
+    }: {
+      providerId: string;
+      modelId: string;
+      input: UpdateProviderModelInput;
+    }) => updateProviderModel(providerId, modelId, input),
+    onSuccess: (_, { providerId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ['providerModels', providerId],
+      });
+      toast({ title: 'Success', description: 'Provider model updated.' });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: 'Error',
+        description: e.message ?? 'Failed to update provider model.',
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+function useDeleteProviderModel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      providerId,
+      modelId,
+    }: {
+      providerId: string;
+      modelId: string;
+    }) => deleteProviderModel(providerId, modelId),
+    onSuccess: (_, { providerId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ['providerModels', providerId],
+      });
+      toast({ title: 'Success', description: 'Provider model deleted.' });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: 'Error',
+        description: e.message ?? 'Failed to delete provider model.',
         variant: 'destructive',
       });
     },
@@ -411,6 +632,7 @@ interface ProviderCardProps {
   onDelete: () => void;
   onToggleEnabled: () => void;
   onTest: () => void;
+  onManageModels?: () => void;
   isDeleting: boolean;
   isTesting: boolean;
   testResult: TestProviderResult | null;
@@ -425,6 +647,7 @@ function ProviderCard({
   isDeleting,
   isTesting,
   testResult,
+  onManageModels,
 }: ProviderCardProps) {
   const Icon = DRIVER_ICONS[provider.driver] ?? Code2;
 
@@ -478,6 +701,17 @@ function ProviderCard({
       </div>
 
       <div className="flex items-center justify-end gap-2">
+        {onManageModels && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onManageModels}
+            className="h-7 rounded-full px-2 text-xs text-adam-neutral-400 hover:text-adam-neutral-200"
+          >
+            <MessageSquare className="mr-1 h-3 w-3" />
+            Manage Models
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -726,6 +960,316 @@ function ProviderForm({
 }
 
 // ---------------------------------------------------------------------------
+// Provider model form (inline editor)
+// ---------------------------------------------------------------------------
+
+interface ProviderModelFormProps {
+  mode: 'create' | 'edit';
+  initialData?: ProviderModelDetail;
+  onSave: (input: CreateProviderModelInput | UpdateProviderModelInput) => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}
+
+function ProviderModelForm({
+  mode,
+  initialData,
+  onSave,
+  onCancel,
+  isSaving,
+}: ProviderModelFormProps) {
+  const [modelId, setModelId] = useState(
+    mode === 'edit' ? (initialData?.modelId ?? '') : '',
+  );
+  const [displayName, setDisplayName] = useState(
+    mode === 'edit' ? (initialData?.displayName ?? '') : '',
+  );
+  const [description, setDescription] = useState(
+    mode === 'edit' ? (initialData?.description ?? '') : '',
+  );
+  const [supportsTools, setSupportsTools] = useState(
+    mode === 'edit' ? (initialData?.supportsTools ?? false) : false,
+  );
+  const [supportsThinking, setSupportsThinking] = useState(
+    mode === 'edit' ? (initialData?.supportsThinking ?? false) : false,
+  );
+  const [supportsVision, setSupportsVision] = useState(
+    mode === 'edit' ? (initialData?.supportsVision ?? false) : false,
+  );
+  const [contextLimit, setContextLimit] = useState(
+    mode === 'edit' ? (initialData?.contextLimit?.toString() ?? '') : '',
+  );
+  const [outputLimit, setOutputLimit] = useState(
+    mode === 'edit' ? (initialData?.outputLimit?.toString() ?? '') : '',
+  );
+  const [isVisible, setIsVisible] = useState(
+    mode === 'edit' ? (initialData?.isVisible ?? true) : true,
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const base = {
+      displayName,
+      description: description || null,
+      supportsTools,
+      supportsThinking,
+      supportsVision,
+      contextLimit: contextLimit ? parseInt(contextLimit, 10) : null,
+      outputLimit: outputLimit ? parseInt(outputLimit, 10) : null,
+      isVisible,
+    };
+    if (mode === 'create') {
+      onSave({ ...base, modelId } as CreateProviderModelInput);
+    } else {
+      onSave(base as UpdateProviderModelInput);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mb-3 rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-3"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-medium text-adam-neutral-300">
+          {mode === 'create' ? 'Add Model' : 'Edit Model'}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          className="h-6 rounded-full px-2 text-xs"
+        >
+          Cancel
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs text-adam-neutral-400">
+            Model ID *
+          </label>
+          <Input
+            value={modelId}
+            onChange={(e) => setModelId(e.target.value)}
+            placeholder="e.g. claude-sonnet-4-20250514"
+            disabled={mode === 'edit'}
+            required
+            className="h-7 rounded-full bg-adam-background-1 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-adam-neutral-400">
+            Display Name *
+          </label>
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="e.g. Claude Sonnet 4"
+            required
+            className="h-7 rounded-full bg-adam-background-1 text-xs"
+          />
+        </div>
+      </div>
+
+      <div className="mb-2">
+        <label className="mb-1 block text-xs text-adam-neutral-400">
+          Description
+        </label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Optional description..."
+          rows={2}
+          className="rounded-md bg-adam-background-1 text-xs"
+        />
+      </div>
+
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={supportsTools}
+            onCheckedChange={setSupportsTools}
+            aria-label="Supports tools"
+          />
+          <span className="text-xs text-adam-neutral-400">Tools</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={supportsThinking}
+            onCheckedChange={setSupportsThinking}
+            aria-label="Supports thinking"
+          />
+          <span className="text-xs text-adam-neutral-400">Thinking</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={supportsVision}
+            onCheckedChange={setSupportsVision}
+            aria-label="Supports vision"
+          />
+          <span className="text-xs text-adam-neutral-400">Vision</span>
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div>
+          <label className="mb-1 block text-xs text-adam-neutral-400">
+            Context Limit
+          </label>
+          <Input
+            value={contextLimit}
+            onChange={(e) => setContextLimit(e.target.value)}
+            placeholder="e.g. 128000"
+            type="number"
+            className="h-7 rounded-full bg-adam-background-1 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-adam-neutral-400">
+            Output Limit
+          </label>
+          <Input
+            value={outputLimit}
+            onChange={(e) => setOutputLimit(e.target.value)}
+            placeholder="e.g. 8192"
+            type="number"
+            className="h-7 rounded-full bg-adam-background-1 text-xs"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={isVisible}
+            onCheckedChange={setIsVisible}
+            aria-label="Enable model"
+          />
+          <span className="text-xs text-adam-neutral-400">Enabled</span>
+        </div>
+        <Button
+          type="submit"
+          size="sm"
+          variant="dark"
+          disabled={isSaving}
+          className="h-7 rounded-full px-2 text-xs"
+        >
+          {isSaving ? (
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          ) : mode === 'create' ? (
+            <Plus className="mr-1 h-3 w-3" />
+          ) : (
+            <Check className="mr-1 h-3 w-3" />
+          )}
+          {mode === 'create' ? 'Add Model' : 'Save'}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Provider model card
+// ---------------------------------------------------------------------------
+
+interface ProviderModelCardProps {
+  model: ProviderModelDetail;
+  onEdit: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+}
+
+function ProviderModelCard({
+  model,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: ProviderModelCardProps) {
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-between rounded-md border px-3 py-2 transition-colors',
+        model.isVisible
+          ? 'border-adam-neutral-700 bg-adam-background-1/50'
+          : 'border-adam-neutral-800 bg-adam-background-1/30 opacity-50',
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-mono text-xs text-adam-neutral-300">
+              {model.modelId}
+            </span>
+            <span className="text-xs text-adam-neutral-500">—</span>
+            <span className="truncate text-xs text-adam-neutral-400">
+              {model.displayName}
+            </span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1">
+            {model.supportsTools && (
+              <Badge
+                variant="secondary"
+                className="h-4 rounded px-1 text-[10px]"
+              >
+                Tools
+              </Badge>
+            )}
+            {model.supportsThinking && (
+              <Badge
+                variant="secondary"
+                className="h-4 rounded px-1 text-[10px]"
+              >
+                Thinking
+              </Badge>
+            )}
+            {model.supportsVision && (
+              <Badge
+                variant="secondary"
+                className="h-4 rounded px-1 text-[10px]"
+              >
+                Vision
+              </Badge>
+            )}
+            {model.contextLimit && (
+              <span className="text-[10px] text-adam-neutral-500">
+                {model.contextLimit.toLocaleString()} ctx
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="ml-2 flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onEdit}
+          disabled={isDeleting}
+          className="h-6 rounded-full px-1.5 text-[11px]"
+        >
+          <Edit2 className="mr-0.5 h-2.5 w-2.5" />
+          Edit
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          disabled={isDeleting}
+          className="text-adam-red-400 hover:text-adam-red-300 h-6 rounded-full px-1.5 text-[11px]"
+        >
+          {isDeleting ? (
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          ) : (
+            <Trash2 className="h-2.5 w-2.5" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -757,6 +1301,28 @@ export function ProvidersSettings() {
 
   // Detail for editing
   const { data: editingDetail } = useProviderDetail(editingProviderId);
+
+  // Model management state
+  const [selectedModelProviderId, setSelectedModelProviderId] = useState<
+    string | null
+  >(null);
+  const [showModelForm, setShowModelForm] = useState(false);
+  const [modelFormMode, setModelFormMode] = useState<'create' | 'edit'>(
+    'create',
+  );
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+
+  // Model data
+  const { data: modelList = [] } = useProviderModels(selectedModelProviderId);
+  const editingModel =
+    modelFormMode === 'edit' && editingModelId
+      ? modelList.find((m) => m.id === editingModelId)
+      : undefined;
+
+  // Model mutations
+  const createModelMutation = useCreateProviderModel();
+  const updateModelMutation = useUpdateProviderModel();
+  const deleteModelMutation = useDeleteProviderModel();
 
   // Mutations
   const createMutation = useCreateProvider();
@@ -845,6 +1411,68 @@ export function ProvidersSettings() {
     setShowForm(false);
     setEditingProviderId(null);
   }, []);
+
+  // Model handlers
+  const handleSelectProviderModels = useCallback((providerId: string) => {
+    setSelectedModelProviderId((prev) =>
+      prev === providerId ? null : providerId,
+    );
+  }, []);
+
+  const handleOpenModelForm = useCallback(
+    (mode: 'create' | 'edit', modelId?: string) => {
+      setModelFormMode(mode);
+      setEditingModelId(mode === 'edit' && modelId ? modelId : null);
+      setShowModelForm(true);
+    },
+    [],
+  );
+
+  const handleCloseModelForm = useCallback(() => {
+    setShowModelForm(false);
+    setEditingModelId(null);
+  }, []);
+
+  const handleSaveModel = useCallback(
+    (input: CreateProviderModelInput | UpdateProviderModelInput) => {
+      if (!selectedModelProviderId) return;
+
+      if (modelFormMode === 'edit' && editingModelId) {
+        updateModelMutation.mutate({
+          providerId: selectedModelProviderId,
+          modelId: editingModelId,
+          input: input as UpdateProviderModelInput,
+        });
+      } else {
+        createModelMutation.mutate({
+          providerId: selectedModelProviderId,
+          input: input as CreateProviderModelInput,
+        });
+      }
+      handleCloseModelForm();
+    },
+    [
+      modelFormMode,
+      selectedModelProviderId,
+      editingModelId,
+      updateModelMutation,
+      createModelMutation,
+      handleCloseModelForm,
+    ],
+  );
+
+  const handleDeleteModel = useCallback(
+    (modelId: string) => {
+      if (!selectedModelProviderId) return;
+      if (window.confirm('Delete this model? This cannot be undone.')) {
+        deleteModelMutation.mutate({
+          providerId: selectedModelProviderId,
+          modelId,
+        });
+      }
+    },
+    [selectedModelProviderId, deleteModelMutation],
+  );
 
   // Loading state
   if (isProvidersLoading) {
@@ -945,8 +1573,85 @@ export function ProvidersSettings() {
               }
               isTesting={testMutation.isPending}
               testResult={testResults[provider.id] ?? null}
+              onManageModels={() => handleSelectProviderModels(provider.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Model management panel */}
+      {selectedModelProviderId && (
+        <div className="mb-4 mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-3.5 w-3.5 text-adam-neutral-400" />
+              <span className="text-xs font-medium text-adam-neutral-400">
+                Models
+              </span>
+              <span className="text-[10px] text-adam-neutral-500">
+                ({modelList.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedModelProviderId(null)}
+                className="h-6 rounded-full px-2 text-[10px]"
+              >
+                ×
+              </Button>
+              <Button
+                size="sm"
+                variant="dark"
+                onClick={() => handleOpenModelForm('create')}
+                disabled={showModelForm}
+                className="h-6 rounded-full px-2 text-[10px]"
+              >
+                <Plus className="mr-0.5 h-2.5 w-2.5" />
+                Add Model
+              </Button>
+            </div>
+          </div>
+
+          {/* Model form */}
+          {showModelForm && (
+            <ProviderModelForm
+              mode={modelFormMode}
+              initialData={editingModel}
+              onSave={handleSaveModel}
+              onCancel={handleCloseModelForm}
+              isSaving={
+                createModelMutation.isPending || updateModelMutation.isPending
+              }
+            />
+          )}
+
+          {/* Model list */}
+          <div className="flex flex-col gap-2">
+            {modelList.map((model) => (
+              <ProviderModelCard
+                key={model.modelId}
+                model={model}
+                onEdit={() => handleOpenModelForm('edit', model.modelId)}
+                onDelete={() => handleDeleteModel(model.modelId)}
+                isDeleting={
+                  deleteModelMutation.isPending &&
+                  deleteModelMutation.variables?.modelId === model.modelId
+                }
+              />
+            ))}
+            {modelList.length === 0 && !showModelForm && (
+              <div className="rounded-md border border-dashed border-adam-neutral-800 px-3 py-4 text-center">
+                <div className="text-xs text-adam-neutral-500">
+                  No models configured
+                </div>
+                <div className="text-adam-neutral-600 mt-0.5 text-[10px]">
+                  Add models available through this provider
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
