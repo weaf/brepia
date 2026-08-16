@@ -7,8 +7,10 @@
 // NOTE: The `prompt_profiles` table does NOT have a `mode` column.
 // The mode is always "fork" for user-created profiles.
 
+import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
+import { PARAMETRIC_AGENT_PROMPT } from './aiChat';
 import type {
   CreatePromptProfileInput,
   UpdatePromptProfileInput,
@@ -22,28 +24,30 @@ import type {
 
 export const BUILTIN_PROFILE_ID = 'builtin:parametric';
 
-let _cachedBuiltinTemplate: string | null = null;
-let _cachedBuiltinRev: string | null = null;
+let _cachedBuiltinFingerprint: string | null = null;
 
 /**
- * Load the built-in prompt profile.
+ * SHA-256 hex digest of the built-in prompt template.
  *
- * The template is read from the upstream CADAM prompt source.
- * A cached copy is kept to avoid repeated I/O on every API call.
+ * Used by settings UI to detect when the upstream prompt changes — the
+ * fingerprint is deterministic for any given template text, so a mismatch
+ * between the stored fingerprint and the current one indicates a new
+ * upstream revision.
+ */
+function fingerprint(text: string): string {
+  return crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
+}
+
+/**
+ * Load the built-in prompt profile from the upstream constant.
+ *
+ * The template is imported from `aiChat.ts` (PARAMETRIC_AGENT_PROMPT) so
+ * there is zero duplication between the chat transport and the settings API.
+ * A cached fingerprint is kept to avoid recomputing on every API call.
  */
 function loadBuiltinProfile(): PromptProfileDetailDto {
-  if (_cachedBuiltinTemplate) {
-    return {
-      id: BUILTIN_PROFILE_ID,
-      userId: '',
-      name: 'CADAM Original',
-      description: null,
-      promptTemplate: _cachedBuiltinTemplate,
-      baseRevision: _cachedBuiltinRev,
-      archived: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  if (_cachedBuiltinFingerprint === null) {
+    _cachedBuiltinFingerprint = fingerprint(PARAMETRIC_AGENT_PROMPT);
   }
 
   return {
@@ -51,25 +55,15 @@ function loadBuiltinProfile(): PromptProfileDetailDto {
     userId: '',
     name: 'CADAM Original',
     description: null,
-    promptTemplate: '',
+    promptTemplate: PARAMETRIC_AGENT_PROMPT,
+    fingerprint: _cachedBuiltinFingerprint,
+    editable: false,
+    deletable: false,
     baseRevision: null,
     archived: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-}
-
-function readBuiltinTemplate(): void {
-  try {
-    // Read the parametric prompt template from the upstream source.
-    // This is a placeholder that will be wired to the actual prompt
-    // overlay system in P04.
-    _cachedBuiltinTemplate = '';
-    _cachedBuiltinRev = null;
-  } catch {
-    _cachedBuiltinTemplate = '';
-    _cachedBuiltinRev = null;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +101,9 @@ export async function getUserPromptProfiles(
     userId: row.user_id,
     name: row.name,
     description: row.description,
+    fingerprint: null,
+    editable: true,
+    deletable: true,
     archived: row.archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -123,12 +120,7 @@ export async function getPromptProfile(
   profileId: string,
 ): Promise<PromptProfileDetailDto | null> {
   if (profileId === BUILTIN_PROFILE_ID) {
-    const builtin = loadBuiltinProfile();
-    if (!_cachedBuiltinTemplate) {
-      readBuiltinTemplate();
-      return loadBuiltinProfile();
-    }
-    return builtin;
+    return loadBuiltinProfile();
   }
 
   const supabase = getServiceRoleSupabaseClient();
@@ -152,6 +144,9 @@ export async function getPromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
+    fingerprint: null,
+    editable: true,
+    deletable: true,
     baseRevision: data.base_revision,
     archived: data.archived,
     createdAt: data.created_at,
@@ -191,6 +186,9 @@ export async function createPromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
+    fingerprint: null,
+    editable: true,
+    deletable: true,
     baseRevision: data.base_revision,
     archived: data.archived,
     createdAt: data.created_at,
@@ -246,6 +244,9 @@ export async function updatePromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
+    fingerprint: null,
+    editable: true,
+    deletable: true,
     baseRevision: data.base_revision,
     archived: data.archived,
     createdAt: data.created_at,
