@@ -19,6 +19,7 @@ import { BILLING_URL, BILLING_UPGRADE_URL } from '@/config/billing';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { AiModelsSettings } from '@/components/settings/AiModelsSettings';
+import { PromptProfilesSettings } from '@/components/settings/PromptProfilesSettings';
 
 function formatPeriodEnd(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -495,6 +496,9 @@ export default function SettingsView() {
 
           {/* P03G: Model visibility settings */}
           <AiModelsSettings />
+
+          {/* P04D: Prompt profiles settings */}
+          <PromptProfilesSettings />
 
           <div className="mt-2 flex items-center justify-center gap-3 text-xs text-adam-neutral-300">
             <Link
