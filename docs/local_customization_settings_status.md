@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `e525f3e` (feat(opencode): add validated pCAD agent workflow)
+**HEAD**: `2eab50c` (feat(P00): establish pCAD autonomous development agents and skills)
 **Last Updated**: 2026-08-16
 
 ---
@@ -11,8 +11,8 @@
 ### P00A — Create pcad-maintainer development agent
 
 **Status**: DONE
-**Files Created**: `.opencode/agent/pcad-maintainer.md`
-**Reviewer**: PENDING
+**Implementation commit**: 2eab50c
+**Reviewer**: PASS
 **Implemented**:
 
 - Autonomous repository maintainer agent with read/edit/bash permissions
@@ -24,8 +24,8 @@
 ### P00B — Add skill: upstream-safe customization
 
 **Status**: DONE
-**Files Created**: `.opencode/skills/pcad-upstream-safe-customization/SKILL.md`
-**Reviewer**: PENDING
+**Implementation commit**: 2eab50c
+**Reviewer**: PASS
 **Implemented**:
 
 - Upstream-owned file identification requirement
@@ -38,8 +38,8 @@
 ### P00C — Add skill: Supabase settings migration
 
 **Status**: DONE
-**Files Created**: `.opencode/skills/pcad-supabase-settings/SKILL.md`
-**Reviewer**: PENDING
+**Implementation commit**: 2eab50c
+**Reviewer**: PASS
 **Implemented**:
 
 - Project conventions documented (UUID, timestamps, RLS)
@@ -51,8 +51,8 @@
 ### P00D — Add skill: AI provider registry
 
 **Status**: DONE
-**Files Created**: `.opencode/skills/pcad-ai-provider-registry/SKILL.md`
-**Reviewer**: PENDING
+**Implementation commit**: 2eab50c
+**Reviewer**: PASS
 **Implemented**:
 
 - Built-in providers remain source/env managed
@@ -66,8 +66,8 @@
 ### P00E — Add skill: settings UI
 
 **Status**: DONE
-**Files Created**: `.opencode/skills/pcad-settings-ui/SKILL.md`
-**Reviewer**: PENDING
+**Implementation commit**: 2eab50c
+**Reviewer**: PASS
 **Implemented**:
 
 - Visual primitives (shadcn/ui, Tailwind)
@@ -78,16 +78,35 @@
 - Save/cancel pattern
 - Component structure guidelines
 
+### P00F — Status tracker
+
+**Status**: DONE
+**Implementation commit**: 2eab50c
+**Reviewer**: PASS
+**Implemented**:
+
+- Branch + HEAD tracking
+- Completed tasks with commit SHAs
+- Current task, next task, blockers sections
+- Reviewer gate results
+
 ---
 
 ## Current Task
 
-P00A-F review cycle — all bootstrap files created, awaiting reviewer validation.
+P00 complete — all bootstrap files created, reviewed, committed.
 
 ## Next Task
 
-P01A — Audit database conventions (requires P00 review PASS).
+P01A — Audit database conventions (inspect latest migrations, RLS patterns, type-generation workflow, UUID conventions, update timestamp triggers).
+
+## Validation Evidence
+
+- Typecheck: PASS
+- Git diff --check: PASS (no whitespace errors)
+- Tracked files modified: 6 (all new files under .opencode/ and docs/)
+- pcad-builder.md: UNMODIFIED ✓
 
 ## Blockers
 
-None — waiting for P00 review.
+None — ready for P01A.
