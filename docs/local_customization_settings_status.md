@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `7d4d0ee` (B1 repair complete)
+**HEAD**: `fe2480f` (P08B completed)
 **Last Updated**: 2026-08-16
-**Current Task**: P08B in progress (RetryModelDropdown hidden model fix)
+**Current Task**: P08B completed — P08C/D in progress
 
 ---
 
@@ -305,11 +305,26 @@
 ✓ No silent fallback to built-in when all models hidden
 ✓ Historical conversations retain selected hidden model
 
+### P08B — RetryModelDropdown uses catalog-aware model list
+
+**Status**: DONE
+**Commit**: `fe2480f`
+
+**Changes**:
+
+- `MessageBubble.tsx`: Replaced hardcoded `PARAMETRIC_MODELS` import with `useSelectableParametricModelCatalog` hook. Parametric conversations now use the catalog-aware list (hidden models excluded); creative conversations keep `CREATIVE_MODELS`.
+
+**Acceptance criteria**:
+✓ Hidden models excluded from retry-with-another-model dropdown
+✓ Parametric retry respects user's hiddenModelIds preference
+✓ Creative retry unaffected (fixed CREATIVE_MODELS set)
+✓ Typecheck: clean
+
 ---
 
 ## Current Task
 
-P00-P06 complete. Ready for P08 — Conversation integration and reproducibility.
+P00-P08B complete. P08C — Deleted/disabled custom provider handling in historical conversations; P08D — Default prompt changes only affect future conversations.
 
 ## Validation Evidence
 
@@ -321,4 +336,4 @@ P00-P06 complete. Ready for P08 — Conversation integration and reproducibility
 
 ## Blockers
 
-None — ready for P08 (Conversation integration).
+None — P08C/D next (conversation integration).
