@@ -357,16 +357,27 @@
 
 ## Current Task
 
-P00-P08 complete. All local customization settings features implemented and verified.
+B2 complete (Settings API authenticated migration). B3 next: CADAM Original prompt viewer + safe Edit → Overlay/Fork.
 
-## Validation Evidence
+## Repair Phase Progress (Settings Integration Repair Plan)
 
-- Typecheck: PASS (zero errors)
-- ESLint: PASS (zero errors)
-- Git diff --check: PASS (no whitespace errors)
-- No tracked upstream files modified
-- pcad-builder.md: UNMODIFIED ✓
+- **A1** — authenticated catalog request (`useParametricModelCatalog`) — DONE
+- **A2** — restore Codex to unified catalog (`modelCatalog.ts`) — DONE
+- **A3** — authenticate model preference reads/writes (`AiModelsSettings`) — DONE
+- **A4** — provider Test Connection collection route — DONE
+- **B1** — full catalog vs selectable catalog + hidden model behavior — DONE
+- **B2** — migrate all Settings API calls to authenticated apiJson/apiUrl — DONE (commit `93d6a6e`)
+- **B3** — CADAM Original prompt viewer + safe Edit → Overlay/Fork — NEXT
 
-## Blockers
+### B2 Details
 
-None — P08C/D next (conversation integration).
+Migrated raw `fetch()` calls to authenticated `apiJson()` helper in:
+
+- `PromptProfilesSettings.tsx`: 7 raw fetch() → `apiJson()`, removed dead `useAuth` import
+- `ProvidersSettings.tsx`: 11 raw fetch() → `apiJson()`, removed dead `useAuth` import
+
+All 9 route files verified with `requireUser()` (28 total auth guards).
+
+### OLD PLAN P00-P08
+
+P00-P08 completed in prior sessions (committed as `82ec7ab`). Those changes remain on branch.
