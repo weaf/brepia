@@ -15,7 +15,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Test 1: Built-in models are the default
