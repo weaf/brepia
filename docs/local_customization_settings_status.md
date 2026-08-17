@@ -1,7 +1,7 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `0f9ab91` (P07 complete — P08A verified complete)
+**HEAD**: `7d4d0ee` (B1 repair complete)
 **Last Updated**: 2026-08-16
 **Current Task**: P08B in progress (RetryModelDropdown hidden model fix)
 
@@ -282,6 +282,28 @@
 **Status**: DONE
 **Reviewer**: PASS (typecheck + eslint)
 **Features**: Credentials never returned in API responses (only `hasCredential: boolean`); "Credential saved" / "No credential" badge; blank input preserves existing credential; `__REMOVE__` sentinel clears credential; "Remove existing" button in edit form.
+
+---
+
+### B1 — Hidden model catalog filtering (Repair Plan)
+
+**Status**: DONE
+**Implementation commit**: `7d4d0ee`
+**Repair plan**: `docs/settings_integration_repair_plan.md`
+
+**Changes**:
+
+- `modelCatalog.ts`: `getHiddenModelIds()` — fetches hidden model IDs from `user_ai_preferences.hiddenModelIds`; `filterSelectableCatalog()` — excludes hidden/unavailable models from selectable dropdown.
+- `/api/models/catalog/all`: new route for unfiltered full catalog (hidden models visible in settings).
+- `useParametricModelCatalog.ts`: `useFullParametricModelCatalog` hook for settings UI.
+- `AiModelsSettings.tsx`: uses full catalog hook for hidden model management.
+- `tests/modelCatalog.test.ts`: 10 new B1 tests for filter logic.
+
+**Acceptance criteria**:
+✓ Hidden models excluded from chat model dropdown (selectable catalog)
+✓ Hidden models visible in settings (full catalog)
+✓ No silent fallback to built-in when all models hidden
+✓ Historical conversations retain selected hidden model
 
 ---
 
