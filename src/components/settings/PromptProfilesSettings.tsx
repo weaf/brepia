@@ -13,7 +13,7 @@
 //      /api/ai-settings/profiles/:id (GET detail, PATCH update, DELETE archive/delete),
 //      /api/ai-settings/preferences (PUT to update defaultPromptProfileId)
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -41,14 +41,20 @@ interface PromptProfileSummary {
   userId: string;
   name: string;
   description: string | null;
-  mode: 'overlay' | 'fork';
-  archived: boolean;
-  fingerprint: string | null;
+  mode: string | null;
   editable: boolean;
   deletable: boolean;
+  isDefault: boolean;
+  fingerprint: string | null;
   baseRevision: string | null;
-  createdAt: string;
-  updatedAt: string;
+}
+
+interface CreatePromptProfileInput {
+  name: string;
+  promptTemplate: string;
+  description: string | null;
+  mode: 'overlay' | 'fork' | null;
+  baseRevision: string | null;
 }
 
 interface PromptProfileDetail extends PromptProfileSummary {
@@ -76,6 +82,10 @@ async function fetchPreferences(): Promise<AiPreferences> {
   return apiJson('ai-settings/preferences') as Promise<AiPreferences>;
 }
 
+async function fetchBuiltinProfileDetail(): Promise<unknown> {
+  return apiJson('ai-settings/profiles/builtin:parametric');
+}
+
 // ---------------------------------------------------------------------------
 // React Query hooks
 // ---------------------------------------------------------------------------
@@ -101,6 +111,14 @@ function useAiPreferences() {
   return useQuery({
     queryKey: ['ai-preferences'],
     queryFn: fetchPreferences,
+    staleTime: 0,
+  });
+}
+
+function useBuiltinProfileDetail() {
+  return useQuery({
+    queryKey: ['prompt-profile', 'builtin'],
+    queryFn: fetchBuiltinProfileDetail,
     staleTime: 0,
   });
 }
@@ -247,13 +265,10 @@ function getProfileMode(
   isBuiltIn: boolean,
 ): 'built-in' | 'overlay' | 'fork' {
   if (isBuiltIn) return 'built-in';
-  if (!profile) return 'fork';
-  // Overlay: has a baseRevision that matches the current built-in fingerprint
-  if (profile.baseRevision) {
-    return 'fork'; // fork profile (full copy with baseRevision)
-  }
-  // No baseRevision → treat as overlay (user just added custom instructions)
-  return 'overlay';
+  // Use explicit mode field — this is the authoritative value.
+  // baseRevision is metadata for stale-fork detection, not the mode itself.
+  if (!profile) return 'overlay'; // fallback: no profile yet → overlay
+  return (profile.mode as 'overlay' | 'fork') ?? 'overlay';
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +407,9 @@ function ProfileListItem({
                 CADAM Original
               </Badge>
             ) : (
-              <ModeBadge mode={profile.mode} />
+              <ModeBadge
+                mode={(profile.mode as 'overlay' | 'fork') ?? 'overlay'}
+              />
             )}
             <DefaultBadge profileId={profile.id} defaultId={defaultId} />
           </div>
@@ -432,6 +449,72 @@ function ProfileListItem({
 }
 
 // ---------------------------------------------------------------------------
+// Mode selection dialog (Overlay / Fork choice)
+// ---------------------------------------------------------------------------
+
+function ModeSelectionDialog({
+  onSelect,
+}: {
+  onSelect: (mode: 'overlay' | 'fork') => void;
+}) {
+  return (
+    <div className="rounded-xl border border-adam-neutral-700 bg-adam-background-2 p-4">
+      <h3 className="mb-1 text-sm font-medium text-adam-neutral-100">
+        Edit CADAM Original — choose how to customize
+      </h3>
+      <p className="mb-4 text-xs text-adam-neutral-400">
+        CADAM Original cannot be modified. Your customization will be stored as
+        a separate prompt profile.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => onSelect('overlay')}
+          className="border-adam-emerald-800 hover:bg-adam-emerald-950/20 rounded-lg border bg-adam-background-1 p-4 text-left"
+        >
+          <div className="mb-1 flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-adam-emerald-500/30 bg-adam-emerald-950/30 text-adam-emerald text-[10px]"
+            >
+              Recommended
+            </Badge>
+          </div>
+          <div className="mb-1 text-sm font-medium text-adam-neutral-100">
+            Overlay
+          </div>
+          <p className="text-xs text-adam-neutral-400">
+            Add custom instructions on top of the current CADAM prompt.
+            Automatically inherits future CADAM updates.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelect('fork')}
+          className="border-adam-amber-800 hover:bg-adam-amber-950/20 rounded-lg border bg-adam-background-1 p-4 text-left"
+        >
+          <div className="mb-1 flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-adam-amber-500/30 bg-adam-amber-950/30 text-adam-amber text-[10px]"
+            >
+              Full Copy
+            </Badge>
+          </div>
+          <div className="mb-1 text-sm font-medium text-adam-neutral-100">
+            Fork
+          </div>
+          <p className="text-xs text-adam-neutral-400">
+            Full editable copy of the current CADAM prompt. Does not inherit
+            future updates.
+          </p>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Profile editor (inline dialog for creating/editing)
 // ---------------------------------------------------------------------------
 
@@ -439,6 +522,9 @@ interface ProfileEditorProps {
   mode: 'create' | 'edit';
   initialData?: PromptProfileDetail;
   builtInFingerprint: string | null;
+  overlayMode?: boolean;
+  forkMode?: boolean;
+  builtInPromptTemplate?: string;
   onSave: (input: {
     name: string;
     promptTemplate: string;
@@ -453,22 +539,29 @@ function ProfileEditor({
   mode,
   initialData,
   builtInFingerprint,
+  overlayMode,
+  forkMode,
+  builtInPromptTemplate,
   onSave,
   onCancel,
   isSaving,
 }: ProfileEditorProps) {
-  const [name, setName] = useState(initialData?.name ?? '');
+  const [name, setName] = useState(
+    initialData?.name ?? (overlayMode ? '' : 'Custom Prompt'),
+  );
   const [promptTemplate, setPromptTemplate] = useState(
-    initialData?.promptTemplate ?? '',
+    overlayMode
+      ? ''
+      : forkMode && builtInPromptTemplate
+        ? builtInPromptTemplate
+        : (initialData?.promptTemplate ?? ''),
   );
   const [description, setDescription] = useState(
     initialData?.description ?? '',
   );
-  const [baseRevision] = useState<string | null>(
-    initialData?.baseRevision ?? null,
-  );
 
-  const isFork = !!baseRevision;
+  const isFork = forkMode ?? !!initialData?.baseRevision;
+  const promptLabel = overlayMode ? 'Custom instructions' : 'Prompt template';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -477,7 +570,7 @@ function ProfileEditor({
       name: name.trim(),
       promptTemplate: promptTemplate.trim(),
       description: description.trim() || null,
-      baseRevision,
+      baseRevision: isFork ? (initialData?.baseRevision ?? null) : null,
     });
   };
 
@@ -509,10 +602,11 @@ function ProfileEditor({
 
         {/* Fingerprint warning for forks */}
         {isFork &&
+          initialData?.baseRevision &&
           builtInFingerprint &&
-          baseRevision !== builtInFingerprint && (
+          initialData.baseRevision !== builtInFingerprint && (
             <FingerprintWarning
-              baseRevision={baseRevision}
+              baseRevision={initialData.baseRevision}
               builtInFingerprint={builtInFingerprint}
             />
           )}
@@ -520,7 +614,7 @@ function ProfileEditor({
         {/* Prompt template (monospaced) */}
         <div>
           <label className="mb-1 block text-xs font-medium text-adam-neutral-300">
-            Prompt template
+            {promptLabel}
           </label>
           <textarea
             value={promptTemplate}
@@ -585,12 +679,24 @@ export function PromptProfilesSettings() {
   const { data: prefs } = useAiPreferences();
   const defaultPromptProfileId = prefs?.defaultPromptProfileId ?? null;
 
+  // Fetch real built-in prompt detail from the API
+  const { data: builtinDetailFromApi } = useBuiltinProfileDetail();
+  const builtinPromptTemplate =
+    (builtinDetailFromApi as PromptProfileDetail | undefined)?.promptTemplate ??
+    null;
+
   // State
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     null,
   );
   const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
+
+  // Overlay/Fork mode selection for editing CADAM Original
+  const [showModeSelection, setShowModeSelection] = useState(false);
+  const [pendingMode, setPendingMode] = useState<'overlay' | 'fork' | null>(
+    null,
+  );
 
   // Derived
   const customProfiles = profiles.filter((p) => p.editable);
@@ -624,8 +730,20 @@ export function PromptProfilesSettings() {
   );
 
   const handleEdit = useCallback((_profile: PromptProfileDetail) => {
+    if (!(_profile as { editable?: boolean }).editable) {
+      // CADAM Original → show Overlay/Fork choice
+      setShowModeSelection(true);
+      return;
+    }
     setEditorMode('edit');
     setShowEditor(true);
+  }, []);
+
+  const handleModeSelect = useCallback((mode: 'overlay' | 'fork') => {
+    setPendingMode(mode);
+    setEditorMode('create');
+    setShowEditor(true);
+    setShowModeSelection(false);
   }, []);
 
   const handleDuplicate = useCallback(() => {
@@ -648,12 +766,32 @@ export function PromptProfilesSettings() {
     }) => {
       if (showEditor && editorMode === 'edit' && selectedDetail) {
         updateMutation.mutate({ profileId: selectedDetail.id, input });
+      } else if (isBuiltInEdit()) {
+        // Creating overlay or fork from CADAM Original
+        const baseRevision =
+          (builtinDetailFromApi as PromptProfileDetail | undefined)
+            ?.fingerprint ?? null;
+        createMutation.mutate({
+          name: input.name,
+          promptTemplate: input.promptTemplate,
+          description: input.description ?? null,
+          mode: pendingMode,
+          baseRevision,
+        } as CreatePromptProfileInput);
       } else {
         createMutation.mutate(input);
       }
       setShowEditor(false);
     },
-    [showEditor, editorMode, selectedDetail, updateMutation, createMutation],
+    [
+      showEditor,
+      editorMode,
+      selectedDetail,
+      pendingMode,
+      createMutation,
+      updateMutation,
+      builtinDetailFromApi,
+    ],
   );
 
   const handleArchiveSelected = useCallback(() => {
@@ -662,16 +800,9 @@ export function PromptProfilesSettings() {
     setSelectedProfileId(null);
   }, [selectedDetail, archiveMutation]);
 
-  // Built-in profile detail (always available)
-  const builtinDetail = useMemo(() => {
-    if (!builtinProfile) return null;
-    return {
-      ...builtinProfile,
-      promptTemplate: '', // built-in template is loaded server-side
-      baseRevision: null,
-      fingerprint: builtInFingerprint,
-    } as PromptProfileDetail;
-  }, [builtinProfile, builtInFingerprint]);
+  const isBuiltInEdit = useCallback(() => {
+    return editorMode === 'create' && pendingMode !== null;
+  }, [editorMode, pendingMode]);
 
   // Loading state
   const isLoading = isProfilesLoading;
@@ -735,160 +866,175 @@ export function PromptProfilesSettings() {
         ))}
       </div>
 
-      {/* Detail panel (when a profile is selected and no editor is open) */}
-      {!showEditor && selectedDetail && (
-        <div className="mt-4 rounded-xl border border-adam-neutral-700 bg-adam-background-1 p-4">
-          {/* Header */}
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ModeBadge mode={mode} />
-              {!selectedDetail.editable && (
-                <Badge
-                  variant="outline"
-                  className="border-adam-blue/30 bg-adam-blue/10 text-[10px] text-adam-blue"
-                >
-                  Read-only
-                </Badge>
-              )}
-              <DefaultBadge
-                profileId={selectedDetail.id}
-                defaultId={defaultPromptProfileId}
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              {selectedDetail.editable && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(selectedDetail)}
-                    className="h-7 w-7 rounded-full p-0"
-                    title="Edit profile"
-                  >
-                    <Edit2 className="h-3.5 w-3.5 text-adam-neutral-400" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDuplicate}
-                    className="h-7 w-7 rounded-full p-0"
-                    title="Duplicate profile"
-                  >
-                    <Copy className="h-3.5 w-3.5 text-adam-neutral-400" />
-                  </Button>
-                </>
-              )}
-              {!selectedDetail.deletable && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSetDefault(null)}
-                  className="h-7 w-7 rounded-full p-0"
-                  title="Restore CADAM Original"
-                >
-                  <X className="h-3.5 w-3.5 text-adam-neutral-400" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Prompt template display */}
-          <div className="rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3">
-            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-adam-neutral-200">
-              {selectedDetail.promptTemplate || '(no prompt text)'}
-            </pre>
-          </div>
-
-          {/* Fork warning */}
-          {selectedDetail.baseRevision && (
-            <FingerprintWarning
-              baseRevision={selectedDetail.baseRevision}
-              builtInFingerprint={builtInFingerprint}
-            />
-          )}
-
-          {/* Actions */}
-          <div className="mt-3 flex items-center justify-between">
-            <div className="text-xs text-adam-neutral-400">
-              {mode === 'fork' && (
-                <span className="text-adam-amber-300/80">
-                  Fork — does not inherit future CADAM updates
-                </span>
-              )}
-            </div>
-            <Button
-              variant="dark"
-              size="sm"
-              onClick={() =>
-                handleSetDefault(
-                  selectedDetail.id === defaultPromptProfileId
-                    ? null
-                    : selectedDetail.id,
-                )
-              }
-              disabled={
-                defaultPromptProfileId === selectedDetail.id ||
-                setDefaultMutation.isPending
-              }
-              className="h-7 rounded-full px-2 text-xs"
-            >
-              {defaultPromptProfileId === selectedDetail.id ? (
-                <>
-                  <Check className="mr-1 h-3 w-3" />
-                  Set as default
-                </>
-              ) : (
-                'Set as default'
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Built-in prompt viewer (when built-in is selected) */}
+      {/* Detail panel (when a custom profile is selected and no editor is open) */}
       {!showEditor &&
-        selectedProfileId === builtinProfile?.id &&
-        builtinDetail && (
+        selectedDetail &&
+        selectedProfileId !== builtinProfile?.id && (
           <div className="mt-4 rounded-xl border border-adam-neutral-700 bg-adam-background-1 p-4">
+            {/* Header */}
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ModeBadge mode="built-in" />
-                <Badge
-                  variant="outline"
-                  className="border-adam-blue/30 bg-adam-blue/10 text-[10px] text-adam-blue"
-                >
-                  Read-only
-                </Badge>
+                <ModeBadge mode={mode} />
+                {!selectedDetail.editable && (
+                  <Badge
+                    variant="outline"
+                    className="border-adam-blue/30 bg-adam-blue/10 text-[10px] text-adam-blue"
+                  >
+                    Read-only
+                  </Badge>
+                )}
+                <DefaultBadge
+                  profileId={selectedDetail.id}
+                  defaultId={defaultPromptProfileId}
+                />
               </div>
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSetDefault(null)}
-                  className="h-7 w-7 rounded-full p-0"
-                  title="Restore CADAM Original"
-                >
-                  <X className="h-3.5 w-3.5 text-adam-neutral-400" />
-                </Button>
+                {selectedDetail.editable && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(selectedDetail)}
+                      className="h-7 w-7 rounded-full p-0"
+                      title="Edit profile"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-adam-neutral-400" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleDuplicate}
+                      className="h-7 w-7 rounded-full p-0"
+                      title="Duplicate profile"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-adam-neutral-400" />
+                    </Button>
+                  </>
+                )}
+                {!selectedDetail.deletable && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSetDefault(null)}
+                    className="h-7 w-7 rounded-full p-0"
+                    title="Restore CADAM Original"
+                  >
+                    <X className="h-3.5 w-3.5 text-adam-neutral-400" />
+                  </Button>
+                )}
               </div>
             </div>
+
+            {/* Prompt template display */}
             <div className="rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3">
-              <p className="text-sm italic text-adam-neutral-400">
-                Built-in prompt loaded from upstream — edit to create a custom
-                profile.
-              </p>
+              <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-adam-neutral-200">
+                {selectedDetail.promptTemplate || '(no prompt text)'}
+              </pre>
+            </div>
+
+            {/* Fork warning */}
+            {selectedDetail.baseRevision && (
+              <FingerprintWarning
+                baseRevision={selectedDetail.baseRevision}
+                builtInFingerprint={builtInFingerprint}
+              />
+            )}
+
+            {/* Actions */}
+            <div className="mt-3 flex items-center justify-between">
+              <div className="text-xs text-adam-neutral-400">
+                {mode === 'fork' && (
+                  <span className="text-adam-amber-300/80">
+                    Fork — does not inherit future CADAM updates
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="dark"
+                size="sm"
+                onClick={() =>
+                  handleSetDefault(
+                    selectedDetail.id === defaultPromptProfileId
+                      ? null
+                      : selectedDetail.id,
+                  )
+                }
+                disabled={
+                  defaultPromptProfileId === selectedDetail.id ||
+                  setDefaultMutation.isPending
+                }
+                className="h-7 rounded-full px-2 text-xs"
+              >
+                {defaultPromptProfileId === selectedDetail.id ? (
+                  <>
+                    <Check className="mr-1 h-3 w-3" />
+                    Set as default
+                  </>
+                ) : (
+                  'Set as default'
+                )}
+              </Button>
             </div>
           </div>
         )}
+
+      {/* CADAM Original detail viewer (real prompt from API) */}
+      {!showEditor && selectedProfileId === builtinProfile?.id && (
+        <div className="mt-4 rounded-xl border border-adam-neutral-700 bg-adam-background-1 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ModeBadge mode="built-in" />
+              <Badge
+                variant="outline"
+                className="border-adam-blue/30 bg-adam-blue/10 text-[10px] text-adam-blue"
+              >
+                Read-only
+              </Badge>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSetDefault(null)}
+                className="h-7 w-7 rounded-full p-0"
+                title="Restore CADAM Original"
+              >
+                <X className="h-3.5 w-3.5 text-adam-neutral-400" />
+              </Button>
+            </div>
+          </div>
+          {builtinPromptTemplate ? (
+            <pre className="max-h-[500px] overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3 font-mono text-xs leading-relaxed text-adam-neutral-200">
+              {builtinPromptTemplate}
+            </pre>
+          ) : (
+            <div className="flex items-center gap-2 rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3">
+              <Loader2 className="h-4 w-4 animate-spin text-adam-neutral-400" />
+              <span className="text-xs text-adam-neutral-400">
+                Loading CADAM prompt…
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mode selection dialog (Overlay / Fork choice when editing CADAM Original) */}
+      {showModeSelection && <ModeSelectionDialog onSelect={handleModeSelect} />}
 
       {/* Editor (create or edit) */}
       {showEditor && (
         <ProfileEditor
           mode={editorMode}
+          overlayMode={pendingMode === 'overlay'}
+          forkMode={pendingMode === 'fork'}
           initialData={selectedDetail ?? undefined}
           builtInFingerprint={builtInFingerprint}
+          builtInPromptTemplate={builtinPromptTemplate ?? undefined}
           onSave={handleSave}
-          onCancel={() => setShowEditor(false)}
+          onCancel={() => {
+            setShowEditor(false);
+            setPendingMode(null);
+          }}
           isSaving={createMutation.isPending || updateMutation.isPending}
         />
       )}
