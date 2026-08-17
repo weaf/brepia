@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `31ca0fa` (B3-R1 complete)
+**HEAD**: `f12cbc7` (B3-R2 complete, B3 fully closed)
 **Last Updated**: 2026-08-17
-**Current Task**: B3-R1 complete — B4 next
+**Current Task**: B3 fully complete — B4 next
 
 ---
 
@@ -411,6 +411,23 @@ Repair cycle: 6 defects found by independent review, fixed and verified.
 
 Validation: typecheck clean, 0 lint errors, build clean, 29/29 prompt profile tests pass.
 Reviewer: PASS (all findings accepted and fixed).
+
+### B3-R2 Details
+
+Final state cleanup — centralize Overlay/Fork flow state management.
+
+- **handleSelectProfile**: Added `setShowModeSelection(false)` — switching profiles now closes Overlay/Fork choice dialog.
+- **handleCreate**: Added `setShowModeSelection(false)` + `setPendingMode(null)` — New Profile never reuses stale CADAM edit state.
+- **handleDuplicate**: Added `setShowModeSelection(false)` + `setPendingMode(null)` — Duplicate never inherits stale Overlay/Fork mode.
+- **handleEdit**: Removed unnecessary `as { editable?: boolean }` cast — now uses typed `profile.editable` directly. Added `setShowModeSelection(false)` + `setPendingMode(null)` before opening custom profile editor.
+- **handleModeSelect**: Moved `setShowModeSelection(false)` to top — closes dialog before opening editor.
+
+State invariants after this fix:
+
+- `showModeSelection === true` ONLY while choosing Overlay/Fork for CADAM Original
+- `pendingMode == null` ONLY while actively creating an Overlay/Fork derived from CADAM Original
+
+Validation: typecheck clean, 0 lint errors, build clean, 29/29 prompt profile tests pass.
 
 ### OLD PLAN P00-P08
 
