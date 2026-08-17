@@ -20,8 +20,9 @@ export const Route = createFileRoute(
       GET: async ({ request, params }) => {
         try {
           // Require auth to access provider models
-          await requireUser(request);
-          const models = await getProviderModels(params.providerId);
+          const user = await requireUser(request);
+          // B6: Ownership guard — pass userId to prevent cross-user model enumeration
+          const models = await getProviderModels(params.providerId, user.id);
           return json(models);
         } catch (err) {
           return json(

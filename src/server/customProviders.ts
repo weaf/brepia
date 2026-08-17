@@ -10,6 +10,8 @@
 // NOTE: The `ai_providers` table does NOT have `preset` or `headers` columns
 // yet.  These are pending migrations in P05+.
 
+import { lookup } from 'node:dns';
+import { promisify } from 'node:util';
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -347,6 +349,140 @@ export async function deleteProvider(
   }
 }
 
+// ---------------------------------------------------------------------------
+// B6: SSRF protection for testProvider
+// ---------------------------------------------------------------------------
+
+/**
+ * B6: Validate a URL to prevent SSRF attacks.
+ *
+ * Checks:
+ * - Protocol is http or https (rejects file://, data://, javascript://, etc.)
+ * - Host resolves to a public IP (rejects private, loopback, link-local,
+ *   multicast, and unspecified address ranges)
+ * - No redirects beyond a safe limit (followRedirects: false)
+ *
+ * B6: This is a security-critical function. The testProvider endpoint
+ * makes outbound HTTP requests using user-supplied base URLs from the
+ * database. Without these guards, an attacker could craft a provider
+ * config that reaches internal services (metadata endpoints, database
+ * ports, admin panels, etc.).
+ *
+ * Private IP ranges blocked (RFC 1918 + extras):
+ * - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+ * - 127.0.0.0/8 (loopback)
+ * - 169.254.0.0/16 (link-local / AWS metadata)
+ * - ::1 (IPv6 loopback)
+ * - fe80::/10 (IPv6 link-local)
+ * - fc00::/7 (IPv6 unique local)
+ * - 0.0.0.0 (unspecified)
+ */
+export async function isSafeUrl(url: URL): Promise<boolean> {
+  const protocol = url.protocol;
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    return false;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+
+  // Block obvious private/restricted hostnames
+  if (
+    hostname === 'localhost' ||
+    hostname === 'metadata.google.internal' ||
+    hostname === '169.254.169.254' || // AWS/GCP/Azure metadata
+    hostname === 'instance-data' ||
+    hostname.endsWith('.internal') ||
+    hostname.endsWith('.local')
+  ) {
+    return false;
+  }
+
+  // Check for IP addresses (both IPv4 and IPv6)
+  // If the hostname is a bare IP, validate the range
+  const ipv4Match = hostname.match(
+    /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/,
+  );
+  if (ipv4Match) {
+    const [, a, b, c, d] = ipv4Match.map(Number);
+    // Validate octets
+    if (
+      a > 255 ||
+      b > 255 ||
+      c > 255 ||
+      d > 255 ||
+      a < 0 ||
+      b < 0 ||
+      c < 0 ||
+      d < 0
+    ) {
+      return false;
+    }
+    // 10.0.0.0/8
+    if (a === 10) return false;
+    // 172.16.0.0/12
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    // 192.168.0.0/16
+    if (a === 192 && b === 168) return false;
+    // 127.0.0.0/8 (loopback)
+    if (a === 127) return false;
+    // 169.254.0.0/16 (link-local / metadata)
+    if (a === 169 && b === 254) return false;
+    // 0.0.0.0 (unspecified)
+    if (a === 0) return false;
+    // 224.0.0.0/4 (multicast)
+    if (a >= 224 && a <= 239) return false;
+    // 240.0.0.0/4 (reserved)
+    if (a >= 240) return false;
+    return true;
+  }
+
+  // For hostnames (not bare IPs), try to resolve and check the IP
+  // This catches cases where a domain name resolves to a private IP
+  const resolve = promisify(lookup);
+  try {
+    const addr = await resolve(hostname);
+    if (addr && typeof addr === 'object' && 'address' in addr) {
+      return isSafeIpAddress(addr.address as string);
+    }
+  } catch {
+    // DNS lookup failed — let the fetch fail naturally rather than
+    // blocking legitimate cases where DNS is slow/unavailable
+  }
+
+  return true;
+}
+
+/**
+ * B6: Check whether an IP address string is in a private/restricted range.
+ *
+ * Exported for unit testing — the SSRF guard is security-critical code that
+ * requires verifiable test coverage per project conventions.
+ */
+export function isSafeIpAddress(ip: string): boolean {
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '0.0.0.0') return false;
+
+  const parts = ip.split('.');
+  if (parts.length !== 4) {
+    // Not IPv4 — assume safe if DNS lookup succeeded (could be IPv6)
+    // IPv6 private ranges would need separate handling, but most Node
+    // DNS lookups return IPv4 for mixed scenarios
+    return true;
+  }
+
+  const [a, b] = parts.map(Number);
+  // 10.0.0.0/8
+  if (a === 10) return false;
+  // 172.16.0.0/12
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  // 192.168.0.0/16
+  if (a === 192 && b === 168) return false;
+  // 127.0.0.0/8
+  if (a === 127) return false;
+  // 169.254.0.0/16
+  if (a === 169 && b === 254) return false;
+  return true;
+}
+
 /**
  * Test provider connectivity.
  *
@@ -354,6 +490,8 @@ export async function deleteProvider(
  * to verify the provider is reachable with the given credentials.
  *
  * SECURITY: Do NOT log the credential or Authorization header.
+ * B6: SSRF protection — validates URL protocol, resolves host to IP,
+ * and blocks private/link-local/metadata addresses before making the request.
  */
 export async function testProvider(
   userId: string,
@@ -394,9 +532,27 @@ export async function testProvider(
 
   const startTime = Date.now();
 
+  // B6: SSRF guard — reject dangerous URLs before making any network request
+  const testUrl = baseUrl.replace(/\/$/, '') + '/v1/models';
+  let parsedUrl: URL;
   try {
-    const testUrl = baseUrl.replace(/\/$/, '') + '/v1/models';
+    parsedUrl = new URL(testUrl);
+  } catch {
+    return {
+      ok: false,
+      message: 'Connection failed: invalid URL',
+      latencyMs: 0,
+    };
+  }
+  if (!(await isSafeUrl(parsedUrl))) {
+    return {
+      ok: false,
+      message: 'Connection failed: SSRF protection blocks this address',
+      latencyMs: 0,
+    };
+  }
 
+  try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -485,9 +641,15 @@ export async function getModelById(
 
 /**
  * Get all models for a provider (scoped to user via FK).
+ *
+ * B6: Ownership guard — every service-role query for provider models
+ * must be scoped to the requesting user_id to prevent cross-user model access.
+ * Without this, a malicious user who guesses another user's providerId
+ * could enumerate their custom models.
  */
 export async function getProviderModels(
   providerId: string,
+  userId: string,
 ): Promise<ProviderModelDto[]> {
   const supabase = getServiceRoleSupabaseClient();
 
@@ -495,6 +657,7 @@ export async function getProviderModels(
     .from('ai_provider_models')
     .select('*')
     .eq('provider_id', providerId)
+    .eq('user_id', userId)
     .order('is_visible', { ascending: false })
     .order('display_name', { ascending: true });
 

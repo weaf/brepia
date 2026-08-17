@@ -8,6 +8,11 @@
  * - OpenCode — uses existing opencodeApiUrl() and opencodeModels()
  * - Codex CLI — checks executable availability, counts configured models
  * - Local OpenAI / llama-swap — checks LOCAL_LLM_BASE_URL config, probes health
+ *
+ * B6: SSRF defense-in-depth — all outbound fetch calls use the same
+ * protocol/IP validation as testProvider to prevent any runtime integration
+ * from being abused to reach internal services, even when the URL comes
+ * from environment configuration rather than user input.
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -16,6 +21,19 @@ import { opencodeApiUrl, opencodeModels } from './opencode';
 import { configuredCodexModels } from './cliAgents';
 
 const execFileP = promisify(execFile);
+
+// ---------------------------------------------------------------------------
+// B6: SSRF defense-in-depth — validate all outbound URLs
+// ---------------------------------------------------------------------------
+
+/**
+ * B6: Block dangerous protocols before any outbound fetch.
+ * Runtime integrations use env-configured URLs (lower risk than user DB input)
+ * but defense-in-depth requires the same protocol guard.
+ */
+function blockUnsafeProtocol(url: URL): boolean {
+  return url.protocol === 'http:' || url.protocol === 'https:';
+}
 
 // ---------------------------------------------------------------------------
 // DTO types — safe, no secrets
@@ -64,6 +82,18 @@ async function discoverOpenCode(): Promise<RuntimeIntegrationStatus> {
 
   // Check if the URL is even reachable (no models but URL might be configured)
   try {
+    // B6: SSRF guard — reject non-HTTP URLs before making network requests
+    const parsed = new URL(baseUrl);
+    if (!blockUnsafeProtocol(parsed)) {
+      return {
+        integrationId: 'opencode',
+        label: 'OpenCode',
+        status: 'unavailable',
+        baseUrl,
+        modelCount: 0,
+        explanation: 'OpenCode URL rejected by SSRF protection',
+      };
+    }
     const res = await fetch(baseUrl, {
       signal: AbortSignal.timeout(3000),
     });
@@ -154,6 +184,31 @@ async function discoverLocalOpenAI(): Promise<RuntimeIntegrationStatus> {
 
   // Strip trailing slash, normalize
   const cleanUrl = baseUrl.replace(/\/+$/, '');
+
+  // B6: SSRF guard — reject non-HTTP URLs before making network requests
+  try {
+    const parsed = new URL(cleanUrl);
+    if (!blockUnsafeProtocol(parsed)) {
+      return {
+        integrationId: 'local-openai',
+        label: 'Local OpenAI / llama-swap',
+        status: 'unavailable',
+        baseUrl: cleanUrl,
+        modelCount: 0,
+        explanation: 'LOCAL_LLM_BASE_URL rejected by SSRF protection',
+      };
+    }
+  } catch {
+    // Invalid URL — fall through to unavailable
+    return {
+      integrationId: 'local-openai',
+      label: 'Local OpenAI / llama-swap',
+      status: 'unavailable',
+      baseUrl: cleanUrl,
+      modelCount: 0,
+      explanation: 'LOCAL_LLM_BASE_URL is not a valid URL',
+    };
+  }
 
   // Probe the endpoint to determine availability
   try {

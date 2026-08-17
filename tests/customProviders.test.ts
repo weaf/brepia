@@ -684,3 +684,124 @@ describe('B5 — buildCustomChatModel', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// B6 — SSRF protection: isSafeUrl / isSafeIpAddress
+// ---------------------------------------------------------------------------
+
+describe('B6 SSRF protection', () => {
+  describe('isSafeIpAddress', () => {
+    let mod: typeof import('@/server/customProviders');
+
+    beforeEach(async () => {
+      mod = await import('@/server/customProviders');
+    });
+
+    it('rejects loopback 127.0.0.1', () => {
+      expect(mod.isSafeIpAddress('127.0.0.1')).toBe(false);
+    });
+
+    it('rejects IPv6 loopback ::1', () => {
+      expect(mod.isSafeIpAddress('::1')).toBe(false);
+    });
+
+    it('rejects unspecified 0.0.0.0', () => {
+      expect(mod.isSafeIpAddress('0.0.0.0')).toBe(false);
+    });
+
+    it('rejects 10.0.0.0/8 private range', () => {
+      expect(mod.isSafeIpAddress('10.0.0.1')).toBe(false);
+      expect(mod.isSafeIpAddress('10.255.255.255')).toBe(false);
+    });
+
+    it('rejects 172.16.0.0/12 private range', () => {
+      expect(mod.isSafeIpAddress('172.16.0.1')).toBe(false);
+      expect(mod.isSafeIpAddress('172.31.255.255')).toBe(false);
+    });
+
+    it('allows 172.15.0.1 (outside /12)', () => {
+      expect(mod.isSafeIpAddress('172.15.0.1')).toBe(true);
+    });
+
+    it('rejects 192.168.0.0/16 private range', () => {
+      expect(mod.isSafeIpAddress('192.168.1.1')).toBe(false);
+      expect(mod.isSafeIpAddress('192.168.0.1')).toBe(false);
+    });
+
+    it('rejects 169.254.0.0/16 link-local', () => {
+      expect(mod.isSafeIpAddress('169.254.169.254')).toBe(false);
+    });
+
+    it('allows public IPs', () => {
+      expect(mod.isSafeIpAddress('8.8.8.8')).toBe(true);
+      expect(mod.isSafeIpAddress('1.1.1.1')).toBe(true);
+      expect(mod.isSafeIpAddress('203.0.113.5')).toBe(true);
+    });
+  });
+
+  describe('isSafeUrl', () => {
+    let mod: typeof import('@/server/customProviders');
+
+    beforeEach(async () => {
+      mod = await import('@/server/customProviders');
+    });
+
+    it('rejects file:// protocol', async () => {
+      expect(await mod.isSafeUrl(new URL('file:///etc/passwd'))).toBe(false);
+    });
+
+    it('rejects data:// protocol', async () => {
+      expect(
+        await mod.isSafeUrl(
+          new URL('data:text/html,<script>alert(1)</script>'),
+        ),
+      ).toBe(false);
+    });
+
+    it('rejects javascript:// protocol', async () => {
+      expect(await mod.isSafeUrl(new URL('javascript:alert(1)'))).toBe(false);
+    });
+
+    it('allows http:// and https:// for public hostnames', async () => {
+      expect(
+        await mod.isSafeUrl(new URL('https://api.openai.com/v1/chat')),
+      ).toBe(true);
+      expect(await mod.isSafeUrl(new URL('http://1.1.1.1/v1/models'))).toBe(
+        true,
+      );
+    });
+
+    it('rejects localhost hostname', async () => {
+      expect(
+        await mod.isSafeUrl(new URL('http://localhost:8080/v1/models')),
+      ).toBe(false);
+    });
+
+    it('rejects .internal hostname', async () => {
+      expect(
+        await mod.isSafeUrl(new URL('http://api.internal/v1/models')),
+      ).toBe(false);
+    });
+
+    it('rejects .local hostname', async () => {
+      expect(await mod.isSafeUrl(new URL('http://printer.local'))).toBe(false);
+    });
+
+    it('rejects AWS metadata endpoint', async () => {
+      expect(
+        await mod.isSafeUrl(
+          new URL('http://169.254.169.254/latest/meta-data/'),
+        ),
+      ).toBe(false);
+    });
+
+    it('rejects private IP addresses even with http/https', async () => {
+      expect(await mod.isSafeUrl(new URL('http://192.168.1.1:8080/api'))).toBe(
+        false,
+      );
+      expect(await mod.isSafeUrl(new URL('https://10.0.0.1/v1/models'))).toBe(
+        false,
+      );
+    });
+  });
+});

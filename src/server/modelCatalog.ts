@@ -183,7 +183,7 @@ export async function getCustomProviderModels(
     const results: CatalogEntry[] = [];
 
     for (const provider of providers) {
-      const models = await getProviderModels(provider.id);
+      const models = await getProviderModels(provider.id, user.id);
       for (const model of models) {
         results.push(
           toCustomCatalogEntry(model, provider.name, provider.enabled),
