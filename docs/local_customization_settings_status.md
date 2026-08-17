@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `fe2480f` (P08B completed)
-**Last Updated**: 2026-08-16
-**Current Task**: P08B completed — P08C/D in progress
+**HEAD**: `31ca0fa` (B3-R1 complete)
+**Last Updated**: 2026-08-17
+**Current Task**: B3-R1 complete — B4 next
 
 ---
 
@@ -357,7 +357,7 @@
 
 ## Current Task
 
-B3 complete (CADAM Original prompt viewer + safe Edit → Overlay/Fork). B4 next.
+B3-R1 complete (repair cycle). B4 next.
 
 ## Repair Phase Progress (Settings Integration Repair Plan)
 
@@ -368,6 +368,7 @@ B3 complete (CADAM Original prompt viewer + safe Edit → Overlay/Fork). B4 next
 - **B1** — full catalog vs selectable catalog + hidden model behavior — DONE
 - **B2** — migrate all Settings API calls to authenticated apiJson/apiUrl — DONE (commit `93d6a6e`)
 - **B3** — CADAM Original prompt viewer + safe Edit → Overlay/Fork — DONE (commit `8d11755`)
+- **B3-R1** — CADAM Original Edit button, error state, pendingMode leakage, baseRevision semantics, strong types, B3 tests — DONE (commit `31ca0fa`)
 - **B4** — NEXT
 
 ### B2 Details
@@ -394,8 +395,22 @@ Replaced placeholder CADAM Original panel with real prompt viewer:
 - **Guarded detail panel** to not show for CADAM Original (dedicated viewer handles it)
 - **Verified server-side immutability**: 3 throw guards in `promptProfiles.ts` for update/archive/delete of `builtin:parametric`
 
-Validation: typecheck clean, 0 lint errors, build clean, 18/18 prompt profile tests pass.
+Validation: typecheck clean, 0 lint errors, build clean, 29/29 prompt profile tests pass.
 Reviewer: PASS (2 minor findings accepted).
+
+### B3-R1 Details
+
+Repair cycle: 6 defects found by independent review, fixed and verified.
+
+- **FIX 1 — CADAM Original Edit button**: Added visible "Edit" button to CADAM Original detail viewer → opens `ModeSelectionDialog` → Overlay or Fork. Never PATCHes `builtin:parametric`.
+- **FIX 2 — Builtin prompt error/loading state**: `useBuiltinProfileDetail()` hook now returns `{ data, isPending, isError }`. Component renders clear error state with retry button. No more infinite "Loading CADAM prompt…" on API failure.
+- **FIX 3 — pendingMode state leakage**: `handleSelectProfile` and `handleSave` now reset `pendingMode` to `null`. `pendingMode` only active for Edit Original → Overlay/Fork flow. Normal "New Profile" never reuses stale mode.
+- **FIX 4 — baseRevision semantics**: Overlay creates with `mode='overlay'`, `baseRevision=null`. Fork creates with `mode='fork'`, `baseRevision=current fingerprint`. ProfileEditor's `handleSubmit` passes correct value based on `isFork` flag.
+- **FIX 5 — Strong types**: `getProfileMode()` returns `profile.mode` directly (type `'overlay' | 'fork'`). Removed unnecessary `as 'overlay' | 'fork'` casts. `PromptProfileSummary.mode` typed as `'overlay' | 'fork'`.
+- **FIX 6 — B3-focused tests**: 11 new tests added — overlay/fork creation payloads, mode semantics, baseRevision policy, existing profile editing, schema validation, built-in prompt verification. Total: 29/29 tests pass.
+
+Validation: typecheck clean, 0 lint errors, build clean, 29/29 prompt profile tests pass.
+Reviewer: PASS (all findings accepted and fixed).
 
 ### OLD PLAN P00-P08
 
