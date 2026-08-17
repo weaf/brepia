@@ -19,9 +19,7 @@ import type { CreateProviderInput } from '@shared/aiSettings';
  * Unsaved/draft-provider test:
  *   { "draftConfig": { slug, name, driver, baseUrl, credential } }
  *
- * This route matches the Providers Settings client contract. The existing
- * /providers/$providerId/test route remains available for provider-scoped
- * callers and can be consolidated in the later provider hardening phase.
+ * This is the canonical test endpoint for the Providers Settings UI.
  */
 export const Route = createFileRoute('/api/ai-settings/providers/test')({
   server: {

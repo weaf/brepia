@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { apiJson } from '@/services/api';
 import { cn } from '@/lib/utils';
+import { TestProviderResultDto } from '@shared/aiSettings';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,12 +80,6 @@ interface UpdateProviderInput {
 interface TestProviderRequest {
   id?: string;
   draftConfig?: Partial<CreateProviderInput>;
-}
-
-interface TestProviderResult {
-  ok: boolean;
-  message: string;
-  latencyMs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,11 +185,11 @@ async function deleteProvider(providerId: string): Promise<void> {
 
 async function testProviderConnection(
   req: TestProviderRequest,
-): Promise<TestProviderResult> {
+): Promise<TestProviderResultDto> {
   return apiJson('ai-settings/providers/test', {
     method: 'POST',
     body: JSON.stringify(req),
-  }) as Promise<TestProviderResult>;
+  }) as Promise<TestProviderResultDto>;
 }
 
 async function fetchProviderModels(
@@ -551,20 +546,30 @@ function CredentialBadge({ hasCredential }: { hasCredential: boolean }) {
   );
 }
 
-function TestStatusBadge({ result }: { result?: TestProviderResult | null }) {
+function TestStatusBadge({
+  result,
+}: {
+  result?: TestProviderResultDto | null;
+}) {
   if (!result) return null;
   if (result.ok) {
     return (
-      <span className="border-adam-emerald-800/50 bg-adam-emerald-950/20 text-adam-emerald-400 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]">
+      <span
+        className="border-adam-emerald-800/50 bg-adam-emerald-950/20 text-adam-emerald-400 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
+        title={result.message}
+      >
         <CheckCircle2 className="h-2.5 w-2.5" />
         {result.latencyMs}ms
       </span>
     );
   }
   return (
-    <span className="border-adam-red-800/50 bg-adam-red-950/20 text-adam-red-400 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]">
+    <span
+      className="border-adam-red-800/50 bg-adam-red-950/20 text-adam-red-400 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
+      title={result.message}
+    >
       <XCircle className="h-2.5 w-2.5" />
-      Failed
+      {result.message || 'Failed'}
     </span>
   );
 }
@@ -618,7 +623,7 @@ interface ProviderCardProps {
   onManageModels?: () => void;
   isDeleting: boolean;
   isTesting: boolean;
-  testResult: TestProviderResult | null;
+  testResult: TestProviderResultDto | null;
 }
 
 function ProviderCard({
@@ -1407,7 +1412,7 @@ export function ProvidersSettings() {
 
   // Test state (per-provider)
   const [testResults, setTestResults] = useState<
-    Record<string, TestProviderResult | null>
+    Record<string, TestProviderResultDto | null>
   >({});
 
   // Handlers
