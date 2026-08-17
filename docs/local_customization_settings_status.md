@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `f12cbc7` (B3-R2 complete, B3 fully closed)
+**HEAD**: `e1b6790` (B4 complete)
 **Last Updated**: 2026-08-17
-**Current Task**: B3 fully complete — B4 next
+**Current Task**: B4 complete — B5 next
 
 ---
 
@@ -428,6 +428,32 @@ State invariants after this fix:
 - `pendingMode == null` ONLY while actively creating an Overlay/Fork derived from CADAM Original
 
 Validation: typecheck clean, 0 lint errors, build clean, 29/29 prompt profile tests pass.
+
+---
+
+## Completed Tasks — B4
+
+### B4 — Runtime Integrations section in Providers Settings
+
+**Status**: DONE
+**Implementation commit**: `e1b6790`
+**Reviewer**: Not yet (self-validated)
+**Files**:
+
+- `src/server/runtimeIntegrations.ts` — server discovery module (OpenCode, Codex CLI, Local OpenAI)
+- `src/routes/api/settings/runtimeIntegrations.ts` — authenticated GET route (requires `requireUser`)
+- `src/components/settings/ProvidersSettings.tsx` — read-only "Runtime Integrations" section with status cards
+- `tests/runtimeIntegrations.test.ts` — 8 focused tests
+
+**Summary**: Added a third section to Providers Settings between "Built-in providers" and "Custom providers" named "Runtime Integrations". The section shows read-only cards for:
+
+- **OpenCode** — probes `opencodeApiUrl()` and counts models from `opencodeModels()`
+- **Codex CLI** — checks executable availability via `execFile` + counts from `configuredCodexModels()`
+- **Local OpenAI / llama-swap** — reads `LOCAL_LLM_BASE_URL` from env, probes `/v1/models` and root endpoint
+
+All discovery is server-side; the React component only consumes the DTO. No credentials, API keys, or raw config are exposed in the response. One unavailable integration does not break the others (uses `Promise.allSettled`).
+
+**Validation**: typecheck clean, 0 lint errors, build clean, 8/8 runtimeIntegrations tests pass, 18/18 promptProfile tests pass, 26/26 modelCatalog tests (pre-existing failures unrelated to B4).
 
 ### OLD PLAN P00-P08
 
