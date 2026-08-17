@@ -20,9 +20,12 @@ import {
   Key,
   Loader2,
   MessageSquare,
+  Network,
   Plug,
   Plus,
+  Server,
   Settings2,
+  Terminal,
   TestTubes,
   Trash2,
   XCircle,
@@ -106,6 +109,19 @@ interface ProviderModelSummary {
 
 type ProviderModelDetail = ProviderModelSummary;
 
+// ---------------------------------------------------------------------------
+// Types — runtime integrations
+// ---------------------------------------------------------------------------
+
+interface RuntimeIntegrationStatus {
+  integrationId: 'opencode' | 'codex' | 'local-openai';
+  label: string;
+  status: 'connected' | 'available' | 'unavailable' | 'not-configured';
+  baseUrl: string | null;
+  modelCount: number;
+  explanation: string;
+}
+
 interface CreateProviderModelInput {
   modelId: string;
   displayName: string;
@@ -135,6 +151,12 @@ interface UpdateProviderModelInput {
 
 async function fetchProviders(): Promise<ProviderSummary[]> {
   return apiJson('ai-settings/providers') as Promise<ProviderSummary[]>;
+}
+
+async function fetchRuntimeIntegrations(): Promise<RuntimeIntegrationStatus[]> {
+  return apiJson('settings/runtime-integrations') as Promise<
+    RuntimeIntegrationStatus[]
+  >;
 }
 
 async function fetchProviderDetail(id: string): Promise<ProviderDetail> {
@@ -230,6 +252,14 @@ function useProviders() {
   return useQuery({
     queryKey: ['providers'],
     queryFn: fetchProviders,
+    staleTime: 0,
+  });
+}
+
+function useRuntimeIntegrations() {
+  return useQuery({
+    queryKey: ['runtime-integrations'],
+    queryFn: fetchRuntimeIntegrations,
     staleTime: 0,
   });
 }
@@ -704,6 +734,96 @@ function ProviderCard({
           Delete
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Runtime integration card
+// ---------------------------------------------------------------------------
+
+const INTEGRATION_ICONS: Record<
+  RuntimeIntegrationStatus['integrationId'],
+  typeof Terminal
+> = {
+  opencode: Terminal,
+  codex: Network,
+  'local-openai': Server,
+};
+
+function RuntimeIntegrationCard({
+  integration,
+}: {
+  integration: RuntimeIntegrationStatus;
+}) {
+  const Icon = INTEGRATION_ICONS[integration.integrationId];
+
+  const statusColors: Record<
+    RuntimeIntegrationStatus['status'],
+    { bg: string; text: string; label: string }
+  > = {
+    connected: {
+      bg: 'bg-adam-green/10',
+      text: 'text-adam-green',
+      label: 'Connected',
+    },
+    available: {
+      bg: 'bg-adam-blue/10',
+      text: 'text-adam-blue',
+      label: 'Available',
+    },
+    unavailable: {
+      bg: 'bg-adam-orange/10',
+      text: 'text-adam-orange',
+      label: 'Unavailable',
+    },
+    'not-configured': {
+      bg: 'bg-adam-neutral-800',
+      text: 'text-adam-neutral-500',
+      label: 'Not configured',
+    },
+  };
+
+  const status = statusColors[integration.status];
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-adam-neutral-800">
+            <Icon className="h-4 w-4 text-adam-neutral-400" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-adam-neutral-50">
+              {integration.label}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium">
+                <span className={`h-1.5 w-1.5 rounded-full ${status.bg}`} />
+                {status.label}
+              </span>
+              {integration.baseUrl && (
+                <span className="text-xs text-adam-neutral-500">
+                  {integration.baseUrl.replace(/\/+$/, '')}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {integration.modelCount > 0 && (
+          <div className="flex items-center gap-1">
+            <MessageSquare className="h-3 w-3 text-adam-neutral-500" />
+            <span className="text-xs text-adam-neutral-400">
+              {integration.modelCount}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] text-adam-neutral-500">
+        {integration.explanation}
+      </p>
     </div>
   );
 }
@@ -1233,6 +1353,9 @@ export function ProvidersSettings() {
   const { data: providers = [], isLoading: isProvidersLoading } =
     useProviders();
 
+  // Runtime integrations
+  const runtimeIntegrations = useRuntimeIntegrations();
+
   // Separate built-in vs custom
   const customProviders = providers.filter(
     (p) => !BUILTIN_DRIVERS.includes(p.driver) || false,
@@ -1471,6 +1594,39 @@ export function ProvidersSettings() {
               driver={driver as ProviderSummary['driver']}
             />
           ))}
+        </div>
+      </div>
+
+      {/* Runtime integrations */}
+      <div className="mb-4">
+        <div className="mb-2 flex items-center gap-2">
+          <Network className="h-3.5 w-3.5 text-adam-neutral-400" />
+          <span className="text-xs font-medium text-adam-neutral-400">
+            Runtime Integrations
+          </span>
+        </div>
+        <div className="flex flex-col gap-2">
+          {runtimeIntegrations.isLoading && (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="h-3 w-3 animate-spin text-adam-neutral-500" />
+              <span className="text-xs text-adam-neutral-500">
+                Discovering runtimes…
+              </span>
+            </div>
+          )}
+          {runtimeIntegrations.isError && (
+            <div className="border-adam-orange/20 bg-adam-orange/5 text-adam-orange rounded-md border px-3 py-2 text-xs">
+              Failed to discover runtime integrations
+            </div>
+          )}
+          {!runtimeIntegrations.isLoading &&
+            !runtimeIntegrations.isError &&
+            runtimeIntegrations.data?.map((integration) => (
+              <RuntimeIntegrationCard
+                key={integration.integrationId}
+                integration={integration}
+              />
+            ))}
         </div>
       </div>
 
