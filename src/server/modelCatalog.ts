@@ -31,6 +31,7 @@ import type { User } from '@supabase/supabase-js';
 import { opencodeModels } from './opencode';
 import { configuredCodexModels } from './cliAgents';
 import type { ModelConfig } from '../../src/types/misc';
+import { getPreferences } from './aiSettings';
 
 // ---------------------------------------------------------------------------
 // Catalog entry type — the canonical shape returned by every catalog consumer.
@@ -294,6 +295,74 @@ export async function buildCatalog(
     ...mergedOpencode.filter((e) => e.source === 'opencode'),
     ...mergedCustom,
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Hidden-model awareness — B1 repair.
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the hidden model IDs for the authenticated user.
+ * Tolerates missing rows and DB errors — stale hidden IDs are harmless.
+ */
+async function getHiddenModelIds(user: User): Promise<Set<string>> {
+  try {
+    const prefs = await getPreferences(user);
+    return new Set(prefs.hiddenModelIds ?? []);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Filter the catalog to the set of models a user can actually select.
+ *
+ * A model is excluded when: hidden by the user, unavailable at runtime,
+ * or (custom) from a disabled provider.
+ *
+ * Built-in/opencode models remain selectable so historical conversations
+ * can still display their chosen model.
+ */
+export function filterSelectableCatalog(
+  catalog: CatalogEntry[],
+  hiddenIds: Set<string>,
+): CatalogEntry[] {
+  return catalog.filter((entry) => {
+    if (hiddenIds.has(entry.id)) return false;
+    if (entry.source === 'custom' && !entry.enabled && entry.unavailableReason)
+      return false;
+    if (!entry.available) return false;
+    return true;
+  });
+}
+
+// Full-catalog builder (B1 — includes hidden models for Settings UI).
+
+/**
+ * Build a full catalog that includes hidden models.
+ * Settings UI needs to see hidden models so they can be re-enabled.
+ */
+export async function buildFullCatalog(
+  user: User | null = null,
+): Promise<CatalogEntry[]> {
+  return buildCatalog(user);
+}
+
+// Selectable catalog builder (B1 — excludes hidden models).
+
+/**
+ * Build the selectable catalog for the authenticated user.
+ * Excludes hidden models, unavailable models, and custom models from
+ * disabled providers. Stale hidden IDs are harmless.
+ */
+export async function buildSelectableCatalog(
+  user: User | null = null,
+): Promise<CatalogEntry[]> {
+  const catalog = await buildCatalog(user);
+  const hiddenIds = user
+    ? await getHiddenModelIds(user)
+    : (new Set<string>() as Set<string>);
+  return filterSelectableCatalog(catalog, hiddenIds);
 }
 
 // ---------------------------------------------------------------------------

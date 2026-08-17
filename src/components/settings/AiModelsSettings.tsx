@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { EyeOff, Loader2, RotateCcw, Search, SquareCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
+import { useFullParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { apiJson } from '@/services/api';
 import type { CatalogEntry } from '@/server/modelCatalog';
 
@@ -198,7 +198,7 @@ export function AiModelsSettings() {
     models: allEntries = [],
     isLoading: isCatalogLoading,
     error: catalogError,
-  } = useParametricModelCatalog();
+  } = useFullParametricModelCatalog();
 
   const {
     data: prefs,
@@ -250,7 +250,8 @@ export function AiModelsSettings() {
   }, [updateMutation]);
 
   const isLoading = isCatalogLoading || isPrefsLoading;
-  const error = catalogError ?? (prefsError instanceof Error ? prefsError.message : null);
+  const error =
+    catalogError ?? (prefsError instanceof Error ? prefsError.message : null);
 
   if (error) {
     return (

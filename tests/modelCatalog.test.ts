@@ -1,7 +1,7 @@
 /**
- * P03H — Model catalog tests
+ * P03H + B1 — Model catalog tests
  *
- * Covers the 9 required test cases from the local customization plan:
+ * Covers the 9 required P03H test cases plus B1 repair tests:
  *  1. Built-in models are the default
  *  2. New built-in model (PARAMETRIC_MODELS has expected entries)
  *  3. Hidden model absent from picker (isCustomProviderModel)
@@ -11,26 +11,26 @@
  *  7. Stale hidden model ID is harmless
  *  8. All-hidden model blocks send
  *  9. Creative model picker unchanged
+ *  B1. filterSelectableCatalog: hidden models, disabled providers, stale IDs
  */
 
-import { describe, it, expect } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 
 // ---------------------------------------------------------------------------
 // Test 1: Built-in models are the default
 // ---------------------------------------------------------------------------
 
-describe('built-in models', () => {
+describe('built-in models', async () => {
   it('getBuiltInModels returns all PARAMETRIC_MODELS as catalog entries', async () => {
-    // Dynamic import avoids running opencode API at test time
     const { getBuiltInModels } = await import('../src/server/modelCatalog');
     const entries = getBuiltInModels();
 
-    expect(entries.length).toBeGreaterThan(0);
-    // Every entry should be marked as builtin
+    assert.ok(entries.length > 0);
     entries.forEach((e) => {
-      expect(e.source).toBe('builtin');
-      expect(e.enabled).toBe(true);
-      expect(e.available).toBe(true);
+      assert.strictEqual(e.source, 'builtin');
+      assert.strictEqual(e.enabled, true);
+      assert.strictEqual(e.available, true);
     });
   });
 
@@ -38,8 +38,7 @@ describe('built-in models', () => {
     const { getDefaultModel } = await import('../src/server/modelCatalog');
     const defaultId = getDefaultModel();
 
-    // PARAMETRIC_MODELS[0] is 'google/gemini-3.1-pro-preview'
-    expect(defaultId).toBe('google/gemini-3.1-pro-preview');
+    assert.strictEqual(defaultId, 'google/gemini-3.1-pro-preview');
   });
 
   it('PARAMETRIC_MODELS contains expected providers', async () => {
@@ -47,9 +46,8 @@ describe('built-in models', () => {
     const entries = getBuiltInModels();
     const providers = new Set(entries.map((e) => e.provider));
 
-    // Verify known providers are present
-    expect(providers.has('Google')).toBe(true);
-    expect(providers.has('Anthropic')).toBe(true);
+    assert.strictEqual(providers.has('Google'), true);
+    assert.strictEqual(providers.has('Anthropic'), true);
   });
 });
 
@@ -57,27 +55,26 @@ describe('built-in models', () => {
 // Test 2: New built-in model — verify structure integrity
 // ---------------------------------------------------------------------------
 
-describe('new built-in model structure', () => {
+describe('new built-in model structure', async () => {
   it('every built-in entry has required fields', async () => {
     const { getBuiltInModels } = await import('../src/server/modelCatalog');
     const entries = getBuiltInModels();
 
     entries.forEach((e) => {
-      expect(e.id).toBeDefined();
-      expect(e.name).toBeDefined();
-      expect(typeof e.supportsTools).toBe('boolean');
-      expect(typeof e.supportsThinking).toBe('boolean');
-      expect(typeof e.supportsVision).toBe('boolean');
+      assert.ok(e.id !== undefined);
+      assert.ok(e.name !== undefined);
+      assert.strictEqual(typeof e.supportsTools, 'boolean');
+      assert.strictEqual(typeof e.supportsThinking, 'boolean');
+      assert.strictEqual(typeof e.supportsVision, 'boolean');
     });
   });
 
   it('built-in entry count matches PARAMETRIC_MODELS', async () => {
     const { getBuiltInModels } = await import('../src/server/modelCatalog');
-    // Import directly to get raw count
     const { PARAMETRIC_MODELS } = await import('../src/lib/utils');
     const entries = getBuiltInModels();
 
-    expect(entries.length).toBe(PARAMETRIC_MODELS.length);
+    assert.strictEqual(entries.length, PARAMETRIC_MODELS.length);
   });
 });
 
@@ -85,28 +82,37 @@ describe('new built-in model structure', () => {
 // Test 3: Hidden model absent from picker
 // ---------------------------------------------------------------------------
 
-describe('hidden model identification', () => {
+describe('hidden model identification', async () => {
   it('isCustomProviderModel returns true for custom/ prefixed IDs', async () => {
     const { isCustomProviderModel } = await import('../shared/customModelIds');
 
-    expect(isCustomProviderModel('custom/abc-123/gpt-4')).toBe(true);
-    expect(isCustomProviderModel('custom/xyz-789/openai/gpt-4')).toBe(true);
+    assert.strictEqual(isCustomProviderModel('custom/abc-123/gpt-4'), true);
+    assert.strictEqual(
+      isCustomProviderModel('custom/xyz-789/openai/gpt-4'),
+      true,
+    );
   });
 
   it('isCustomProviderModel returns false for non-custom IDs', async () => {
     const { isCustomProviderModel } = await import('../shared/customModelIds');
 
-    expect(isCustomProviderModel('google/gemini-3.1-pro-preview')).toBe(false);
-    expect(isCustomProviderModel('anthropic/claude-sonnet-5')).toBe(false);
-    expect(isCustomProviderModel('openai/gpt-5.6-sol')).toBe(false);
+    assert.strictEqual(
+      isCustomProviderModel('google/gemini-3.1-pro-preview'),
+      false,
+    );
+    assert.strictEqual(
+      isCustomProviderModel('anthropic/claude-sonnet-5'),
+      false,
+    );
+    assert.strictEqual(isCustomProviderModel('openai/gpt-5.6-sol'), false);
   });
 
   it('isCustomProviderModel returns false for short/malformed IDs', async () => {
     const { isCustomProviderModel } = await import('../shared/customModelIds');
 
-    expect(isCustomProviderModel('custom/only')).toBe(false);
-    expect(isCustomProviderModel('custom')).toBe(false);
-    expect(isCustomProviderModel('')).toBe(false);
+    assert.strictEqual(isCustomProviderModel('custom/only'), false);
+    assert.strictEqual(isCustomProviderModel('custom'), false);
+    assert.strictEqual(isCustomProviderModel(''), false);
   });
 });
 
@@ -114,7 +120,7 @@ describe('hidden model identification', () => {
 // Test 4-6: Custom model helpers
 // ---------------------------------------------------------------------------
 
-describe('custom model ID builder and parser', () => {
+describe('custom model ID builder and parser', async () => {
   it('makeCustomProviderModelId produces stable IDs', async () => {
     const { makeCustomProviderModelId } = await import(
       '../shared/customModelIds'
@@ -123,8 +129,8 @@ describe('custom model ID builder and parser', () => {
     const id1 = makeCustomProviderModelId('abc-123', 'gpt-4');
     const id2 = makeCustomProviderModelId('abc-123', 'gpt-4');
 
-    expect(id1).toBe(id2);
-    expect(id1).toBe('custom/abc-123/gpt-4');
+    assert.strictEqual(id1, id2);
+    assert.strictEqual(id1, 'custom/abc-123/gpt-4');
   });
 
   it('parseCustomProviderModelId correctly parses valid IDs', async () => {
@@ -133,7 +139,10 @@ describe('custom model ID builder and parser', () => {
     );
 
     const parsed = parseCustomProviderModelId('custom/abc-123-def/gpt-4');
-    expect(parsed).toEqual({ providerId: 'abc-123-def', modelId: 'gpt-4' });
+    assert.deepStrictEqual(parsed, {
+      providerId: 'abc-123-def',
+      modelId: 'gpt-4',
+    });
   });
 
   it('parseCustomProviderModelId handles model IDs with slashes', async () => {
@@ -142,7 +151,7 @@ describe('custom model ID builder and parser', () => {
     );
 
     const parsed = parseCustomProviderModelId('custom/xyz-789/openai/gpt-4');
-    expect(parsed).toEqual({
+    assert.deepStrictEqual(parsed, {
       providerId: 'xyz-789',
       modelId: 'openai/gpt-4',
     });
@@ -153,10 +162,11 @@ describe('custom model ID builder and parser', () => {
       '../shared/customModelIds'
     );
 
-    expect(parseCustomProviderModelId('google/gemini-3.1-pro-preview')).toBe(
+    assert.strictEqual(
+      parseCustomProviderModelId('google/gemini-3.1-pro-preview'),
       null,
     );
-    expect(parseCustomProviderModelId('invalid')).toBeNull();
+    assert.strictEqual(parseCustomProviderModelId('invalid'), null);
   });
 });
 
@@ -164,12 +174,14 @@ describe('custom model ID builder and parser', () => {
 // Test 7: Stale hidden model ID is harmless
 // ---------------------------------------------------------------------------
 
-describe('stale hidden model ID handling', () => {
+describe('stale hidden model ID handling', async () => {
   it('non-custom IDs are not treated as custom', async () => {
     const { isCustomProviderModel } = await import('../shared/customModelIds');
 
-    // A stale hidden ID from a deleted provider would not be a 'custom/' ID
-    expect(isCustomProviderModel('deleted-provider/some-model')).toBe(false);
+    assert.strictEqual(
+      isCustomProviderModel('deleted-provider/some-model'),
+      false,
+    );
   });
 
   it('parse returns null for unknown format — no crash', async () => {
@@ -177,9 +189,187 @@ describe('stale hidden model ID handling', () => {
       '../shared/customModelIds'
     );
 
-    // Should never throw
-    expect(() => parseCustomProviderModelId('garbage!@#')).not.toThrow();
-    expect(parseCustomProviderModelId('garbage!@#')).toBeNull();
+    assert.doesNotThrow(() => parseCustomProviderModelId('garbage!@#'));
+    assert.strictEqual(parseCustomProviderModelId('garbage!@#'), null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B1 — full catalog vs selectable catalog + hidden model behavior
+// ---------------------------------------------------------------------------
+
+describe('B1 — filterSelectableCatalog', async () => {
+  const { filterSelectableCatalog } = await import(
+    '../src/server/modelCatalog'
+  );
+
+  it('built-in visible by default', () => {
+    const catalog = [
+      {
+        id: 'google/gemini-3.1-pro',
+        name: 'Gemini',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+    ];
+    const result = filterSelectableCatalog(catalog, new Set());
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].id, 'google/gemini-3.1-pro');
+  });
+
+  it('hidden built-in absent from selectable but present in full catalog', () => {
+    const catalog = [
+      {
+        id: 'google/gemini-3.1-pro',
+        name: 'Gemini',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+    ];
+    const hidden = new Set(['google/gemini-3.1-pro']);
+    assert.strictEqual(filterSelectableCatalog(catalog, hidden).length, 0);
+    assert.strictEqual(catalog.length, 1);
+  });
+
+  it('hidden OpenCode model excluded from selectable', () => {
+    const catalog = [
+      {
+        id: 'agent/opencode/my-agent',
+        name: 'OpenCode',
+        source: 'opencode',
+        enabled: true,
+        available: true,
+      },
+    ];
+    assert.strictEqual(
+      filterSelectableCatalog(catalog, new Set(['agent/opencode/my-agent']))
+        .length,
+      0,
+    );
+  });
+
+  it('hidden Codex model excluded from selectable (same source as opencode)', () => {
+    const catalog = [
+      {
+        id: 'agent/opencode/codex',
+        name: 'Codex',
+        source: 'opencode',
+        enabled: true,
+        available: true,
+      },
+    ];
+    assert.strictEqual(
+      filterSelectableCatalog(catalog, new Set(['agent/opencode/codex']))
+        .length,
+      0,
+    );
+  });
+
+  it('hidden custom model excluded from selectable', () => {
+    const catalog = [
+      {
+        id: 'custom/provider-1/gpt-4',
+        name: 'GPT-4',
+        source: 'custom',
+        enabled: true,
+        available: true,
+      },
+    ];
+    assert.strictEqual(
+      filterSelectableCatalog(catalog, new Set(['custom/provider-1/gpt-4']))
+        .length,
+      0,
+    );
+  });
+
+  it('stale hidden ID is harmless', () => {
+    const catalog = [
+      {
+        id: 'google/gemini-3.1-pro',
+        name: 'Gemini',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+    ];
+    const staleHidden = new Set(['nonexistent-model-xyz']);
+    const result = filterSelectableCatalog(catalog, staleHidden);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].id, 'google/gemini-3.1-pro');
+  });
+
+  it('new built-in automatically visible', () => {
+    const catalog = [
+      {
+        id: 'google/gemini-3.1-pro',
+        name: 'Gemini',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+      {
+        id: 'google/gemini-3.1-flash',
+        name: 'Gemini Flash',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+    ];
+    assert.strictEqual(filterSelectableCatalog(catalog, new Set()).length, 2);
+  });
+
+  it('historical selected hidden model can still render', () => {
+    const catalog = [
+      {
+        id: 'google/gemini-3.1-pro',
+        name: 'Gemini',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+    ];
+    assert.strictEqual(catalog.length, 1);
+    assert.strictEqual(catalog[0].id, 'google/gemini-3.1-pro');
+  });
+
+  it('all hidden -> selectable catalog empty (no silent default)', () => {
+    const catalog = [
+      {
+        id: 'google/gemini-3.1-pro',
+        name: 'Gemini',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+      {
+        id: 'anthropic/claude-sonnet-5',
+        name: 'Claude',
+        source: 'builtin',
+        enabled: true,
+        available: true,
+      },
+    ];
+    const allHidden = new Set([
+      'google/gemini-3.1-pro',
+      'anthropic/claude-sonnet-5',
+    ]);
+    assert.strictEqual(filterSelectableCatalog(catalog, allHidden).length, 0);
+  });
+
+  it('custom model from disabled provider is excluded', () => {
+    const catalog = [
+      {
+        id: 'custom/provider-1/gpt-4',
+        name: 'GPT-4',
+        source: 'custom',
+        enabled: false,
+        available: true,
+        unavailableReason: 'Provider disabled',
+      },
+    ];
+    assert.strictEqual(filterSelectableCatalog(catalog, new Set()).length, 0);
   });
 });
 
@@ -187,20 +377,17 @@ describe('stale hidden model ID handling', () => {
 // Test 8-9: Creative model picker unchanged
 // ---------------------------------------------------------------------------
 
-describe('creative model picker unchanged', () => {
+describe('creative model picker unchanged', async () => {
   it('buildCatalog returns builtin entries even when opencode is unavailable', async () => {
-    // Mock opencodeModels to throw
     const { buildCatalog } = await import('../src/server/modelCatalog');
     const { PARAMETRIC_MODELS } = await import('../src/lib/utils');
 
     const catalog = await buildCatalog(null);
 
-    // Must always have at least the built-in models
-    expect(catalog.length).toBeGreaterThanOrEqual(PARAMETRIC_MODELS.length);
+    assert.ok(catalog.length >= PARAMETRIC_MODELS.length);
 
-    // All builtin entries should be present
     const builtinEntries = catalog.filter((e) => e.source === 'builtin');
-    expect(builtinEntries.length).toBe(PARAMETRIC_MODELS.length);
+    assert.strictEqual(builtinEntries.length, PARAMETRIC_MODELS.length);
   });
 
   it('getDefaultModel is deterministic', async () => {
@@ -209,8 +396,8 @@ describe('creative model picker unchanged', () => {
     const d1 = getDefaultModel();
     const d2 = getDefaultModel();
 
-    expect(d1).toBe(d2);
-    expect(typeof d1).toBe('string');
-    expect(d1.length).toBeGreaterThan(0);
+    assert.strictEqual(d1, d2);
+    assert.ok(typeof d1 === 'string');
+    assert.ok(d1.length > 0);
   });
 });
