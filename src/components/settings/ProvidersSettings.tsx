@@ -33,8 +33,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { apiJson } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -134,103 +134,72 @@ interface UpdateProviderModelInput {
 // ---------------------------------------------------------------------------
 
 async function fetchProviders(): Promise<ProviderSummary[]> {
-  const res = await fetch('/api/ai-settings/providers');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson('ai-settings/providers') as Promise<ProviderSummary[]>;
 }
 
 async function fetchProviderDetail(id: string): Promise<ProviderDetail> {
-  const res = await fetch(`/api/ai-settings/providers/${id}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson(`ai-settings/providers/${id}`) as Promise<ProviderDetail>;
 }
 
 async function createProvider(
   input: CreateProviderInput,
 ): Promise<ProviderDetail> {
-  const res = await fetch('/api/ai-settings/providers', {
+  return apiJson('ai-settings/providers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? 'Failed to create provider');
-  }
-  return res.json();
+  }) as Promise<ProviderDetail>;
 }
 
 async function updateProvider(
   providerId: string,
   input: UpdateProviderInput,
 ): Promise<ProviderDetail> {
-  const res = await fetch(`/api/ai-settings/providers/${providerId}`, {
+  return apiJson(`ai-settings/providers/${providerId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? 'Failed to update provider');
-  }
-  return res.json();
+  }) as Promise<ProviderDetail>;
 }
 
 async function deleteProvider(providerId: string): Promise<void> {
-  const res = await fetch(`/api/ai-settings/providers/${providerId}`, {
+  await apiJson(`ai-settings/providers/${providerId}`, {
     method: 'DELETE',
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? 'Failed to delete provider');
-  }
 }
 
 async function testProviderConnection(
   req: TestProviderRequest,
 ): Promise<TestProviderResult> {
-  const res = await fetch('/api/ai-settings/providers/test', {
+  return apiJson('ai-settings/providers/test', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  }) as Promise<TestProviderResult>;
 }
 
 async function fetchProviderModels(
   providerId: string,
 ): Promise<ProviderModelSummary[]> {
-  const res = await fetch(`/api/ai-settings/providers/${providerId}/models`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson(`ai-settings/providers/${providerId}/models`) as Promise<
+    ProviderModelSummary[]
+  >;
 }
 
 async function _fetchProviderModelDetail(
   providerId: string,
   modelId: string,
 ): Promise<ProviderModelDetail> {
-  const res = await fetch(
-    `/api/ai-settings/providers/${providerId}/models/${modelId}`,
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson(
+    `ai-settings/providers/${providerId}/models/${modelId}`,
+  ) as Promise<ProviderModelDetail>;
 }
 
 async function createProviderModel(
   providerId: string,
   input: CreateProviderModelInput,
 ): Promise<ProviderModelDetail> {
-  const res = await fetch(`/api/ai-settings/providers/${providerId}/models`, {
+  return apiJson(`ai-settings/providers/${providerId}/models`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? 'Failed to create provider model');
-  }
-  return res.json();
+  }) as Promise<ProviderModelDetail>;
 }
 
 async function updateProviderModel(
@@ -238,35 +207,19 @@ async function updateProviderModel(
   modelId: string,
   input: UpdateProviderModelInput,
 ): Promise<ProviderModelDetail> {
-  const res = await fetch(
-    `/api/ai-settings/providers/${providerId}/models/${modelId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
-  );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? 'Failed to update provider model');
-  }
-  return res.json();
+  return apiJson(`ai-settings/providers/${providerId}/models/${modelId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  }) as Promise<ProviderModelDetail>;
 }
 
 async function deleteProviderModel(
   providerId: string,
   modelId: string,
 ): Promise<void> {
-  const res = await fetch(
-    `/api/ai-settings/providers/${providerId}/models/${modelId}`,
-    {
-      method: 'DELETE',
-    },
-  );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? 'Failed to delete provider model');
-  }
+  await apiJson(`ai-settings/providers/${providerId}/models/${modelId}`, {
+    method: 'DELETE',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1274,7 +1227,6 @@ function ProviderModelCard({
 // ---------------------------------------------------------------------------
 
 export function ProvidersSettings() {
-  const { user: _user } = useAuth();
   const _queryClient = useQueryClient();
 
   // Fetch data

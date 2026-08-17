@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
+import { apiJson } from '@/services/api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,21 +65,15 @@ interface AiPreferences {
 // ---------------------------------------------------------------------------
 
 async function fetchProfiles(): Promise<PromptProfileSummary[]> {
-  const res = await fetch('/api/ai-settings/profiles');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson('ai-settings/profiles') as Promise<PromptProfileSummary[]>;
 }
 
 async function fetchProfileDetail(id: string): Promise<PromptProfileDetail> {
-  const res = await fetch(`/api/ai-settings/profiles/${id}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson(`ai-settings/profiles/${id}`) as Promise<PromptProfileDetail>;
 }
 
 async function fetchPreferences(): Promise<AiPreferences> {
-  const res = await fetch('/api/ai-settings/preferences');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiJson('ai-settings/preferences') as Promise<AiPreferences>;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,13 +111,10 @@ function useSetDefaultPromptProfile() {
 
   return useMutation({
     mutationFn: async (profileId: string | null) => {
-      const res = await fetch('/api/ai-settings/preferences', {
+      return apiJson('ai-settings/preferences', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultPromptProfileId: profileId }),
       });
-      if (!res.ok) throw new Error('Failed to set default profile');
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-preferences'] });
@@ -153,16 +144,10 @@ function useCreateProfile() {
       description?: string | null;
       baseRevision?: string | null;
     }) => {
-      const res = await fetch('/api/ai-settings/profiles', {
+      return apiJson('ai-settings/profiles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Failed to create profile');
-      }
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prompt-profiles'] });
@@ -198,16 +183,11 @@ function useUpdateProfile() {
         baseRevision?: string | null;
       };
     }) => {
-      const res = await fetch(`/api/ai-settings/profiles/${profileId}`, {
+      const res = await apiJson(`ai-settings/profiles/${profileId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Failed to update profile');
-      }
-      return res.json();
+      return res as typeof input & { id?: string };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['prompt-profiles'] });
@@ -237,14 +217,9 @@ function useArchiveProfile() {
 
   return useMutation({
     mutationFn: async (profileId: string) => {
-      const res = await fetch(`/api/ai-settings/profiles/${profileId}`, {
+      await apiJson(`ai-settings/profiles/${profileId}`, {
         method: 'DELETE',
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Failed to archive profile');
-      }
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prompt-profiles'] });
@@ -602,7 +577,6 @@ function ProfileEditor({
 // ---------------------------------------------------------------------------
 
 export function PromptProfilesSettings() {
-  const { user: _user } = useAuth();
   const _queryClient = useQueryClient();
 
   // Fetch data
