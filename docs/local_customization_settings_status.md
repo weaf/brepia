@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `bb214e6` (B5 complete)
+**HEAD**: `d88993b` (B6 complete)
 **Last Updated**: 2026-08-17
-**Current Task**: B5 complete — B6 next
+**Current Task**: B6 complete — B7 next
 
 ---
 
@@ -489,3 +489,34 @@ All discovery is server-side; the React component only consumes the DTO. No cred
 ### OLD PLAN P00-P08
 
 P00-P08 completed in prior sessions (committed as `82ec7ab`). Those changes remain on branch.
+
+---
+
+## Completed Tasks — B6
+
+### B6 — Provider access-control + SSRF hardening
+
+**Status**: DONE
+**Implementation commit**: `d88993b`
+**Reviewer**: Not yet (self-validated)
+**Files**:
+
+- `src/server/customProviders.ts` — SSRF guard (`isSafeUrl`, `isSafeIpAddress`), protocol/IP/redirect/timeout enforcement in `testProvider`, exported validators
+- `src/server/runtimeIntegrations.ts` — Defense-in-depth: `blockUnsafeProtocol` applied to `discoverOpenCode` and `discoverLocalOpenAI` before fetch
+- `src/routes/api/ai-settings/providers/$providerId/models.ts` — Ownership: GET passes `user.id` to `getProviderModels`
+- `src/server/modelCatalog.ts` — Ownership: catalog merge passes `user.id` to `getProviderModels`
+- `tests/customProviders.test.ts` — 18 new SSRF tests (48 total: 30 B5 + 18 B6)
+
+**Ownership fix**: `getProviderModels()` now queries with `eq('user_id', user.id)` so service-role queries cannot leak one user's provider models to another. Both callers wired.
+
+**SSRF protection in `testProvider`** (user-controlled server-side destination):
+
+- Protocol whitelist: `http:` and `https:` only — blocks `file:`, `data:`, `javascript:`
+- Hostname blocklist: `localhost`, `metadata.google.internal`, `169.254.169.254`, `instance-data`, `*.internal`, `*.local`
+- IP address blocklist: 127.0.0.1/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 0.0.0.0, ::1
+- DNS resolution check: domains resolve to private IPs are blocked
+- Timeout: 15-second fetch timeout
+
+**Defense-in-depth**: Runtime integrations (env-configured, lower risk) also blocked from unsafe protocols.
+
+**Validation**: typecheck clean, 0 lint errors, 85/85 tests pass (modelCatalog empty suite is pre-existing).
