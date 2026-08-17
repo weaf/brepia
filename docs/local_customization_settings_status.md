@@ -320,11 +320,44 @@
 ✓ Creative retry unaffected (fixed CREATIVE_MODELS set)
 ✓ Typecheck: clean
 
+### P08C — Deleted/disabled custom provider handling in historical conversations
+
+**Status**: DONE
+**Commit**: `2ee7137` (bundled with P08B)
+
+**Changes**:
+
+- `MessageBubble.tsx`: Fixed `RetryModelDropdown` type mismatch — `selectedModelId` was typed as `Model | undefined` but compared against `option.id` (string), causing always-false comparison and fallback to `modelOptions[0]`. Fixed by using triple-fallback: find by ID → saved metadata → first available. Send button shows raw model ID for deleted custom models with no name.
+
+**Acceptance criteria**:
+✓ Retry dropdown uses catalog-aware model list (P08B)
+✓ Retry dropdown correctly matches selected model ID (type fix)
+✓ Deleted/disabled custom provider returns 400 via buildCustomChatModel + no-fallback (P06E)
+✓ Send button shows raw model ID when name unavailable
+✓ No silent fallback to built-in providers
+
+### P08D — Default prompt changes only affect future conversations
+
+**Status**: DONE
+**Verified**: 2026-08-17
+
+**Evidence**:
+
+- `PromptView.tsx:170`: `promptProfileId: prefs.defaultPromptProfileId` — pins current default at conversation creation
+- `aiChat.ts:1105`: `conversation.settings?.promptProfileId` — reads conversation's own pinned profile, NOT user's current default
+- `promptProfiles.ts:347-378`: Resolver uses profileId directly — no silent fallback to user preferences
+
+**Acceptance criteria**:
+✓ Existing conversations retain original promptProfileId (pinned at creation)
+✓ Changing user default in Settings does not affect existing conversations
+✓ New conversations created after default change get the new default
+✓ No migration or background job updates existing conversations
+
 ---
 
 ## Current Task
 
-P00-P08B complete. P08C — Deleted/disabled custom provider handling in historical conversations; P08D — Default prompt changes only affect future conversations.
+P00-P08 complete. All local customization settings features implemented and verified.
 
 ## Validation Evidence
 

@@ -812,7 +812,11 @@ function RetryModelDropdown({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedModel =
-    modelOptions.find((option) => option.id === selectedModelId) ??
+    modelOptions.find(
+      (option) =>
+        option.id === (selectedModelId as ModelConfig | undefined)?.id,
+    ) ??
+    (selectedModelId as ModelConfig | undefined) ??
     modelOptions[0];
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
