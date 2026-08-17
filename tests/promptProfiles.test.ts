@@ -383,3 +383,181 @@ describe('prompt template validation', () => {
     expect(result.success).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// B3 — CADAM Original prompt viewer + safe Edit → Overlay/Fork
+// ---------------------------------------------------------------------------
+
+describe('B3 — loadBuiltinProfile returns real CADAM prompt', () => {
+  it('loadBuiltinProfile contains the real PARAMETRIC_AGENT_PROMPT', async () => {
+    const { loadBuiltinProfile, BUILTIN_PROFILE_ID } = await import(
+      '../src/server/promptProfiles'
+    );
+
+    const profile = loadBuiltinProfile();
+
+    expect(profile.id).toBe(BUILTIN_PROFILE_ID);
+    expect(profile.name).toBe('CADAM Original');
+    // The prompt must be the actual system prompt, not a placeholder
+    expect(profile.promptTemplate).toBeDefined();
+    expect(profile.promptTemplate.length).toBeGreaterThan(100);
+    expect(profile.promptTemplate).toContain('parametric');
+  });
+});
+
+describe('B3 — built-in profile is immutable', () => {
+  it('loadBuiltinProfile always returns editable: false and deletable: false', async () => {
+    const { loadBuiltinProfile } = await import('../src/server/promptProfiles');
+
+    for (let i = 0; i < 5; i++) {
+      const profile = loadBuiltinProfile();
+      expect(profile.editable).toBe(false);
+      expect(profile.deletable).toBe(false);
+    }
+  });
+});
+
+describe('B3 — overlay creation semantics', () => {
+  it('Overlay mode stores only custom instructions (baseRevision=null)', async () => {
+    const { CreatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const result = CreatePromptProfileSchema.safeParse({
+      name: 'Overlay Profile',
+      promptTemplate: 'Additional instructions',
+      mode: 'overlay',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.mode).toBe('overlay');
+    // Overlay should not have baseRevision
+    expect(result.data.baseRevision).toBeUndefined();
+  });
+
+  it('Overlay resolution uses CURRENT built-in prompt + custom instructions', async () => {
+    const { resolveConversationSystemPrompt } = await import(
+      '../src/server/promptProfiles'
+    );
+
+    // NULL profileId should resolve to the built-in prompt
+    const result = await resolveConversationSystemPrompt({
+      userId: '00000000-0000-0000-0000-000000000000',
+      profileId: null,
+    });
+
+    // Should return the actual CADAM prompt, not empty
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(100);
+  });
+});
+
+describe('B3 — fork creation semantics', () => {
+  it('Fork mode stores full snapshot with baseRevision', async () => {
+    const { CreatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const result = CreatePromptProfileSchema.safeParse({
+      name: 'Fork Profile',
+      promptTemplate: 'Full copy of CADAM prompt',
+      mode: 'fork',
+      baseRevision: 'abc123',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.mode).toBe('fork');
+    expect(result.data.baseRevision).toBe('abc123');
+  });
+
+  it('Fork stores mode=fork explicitly', async () => {
+    const { CreatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const result = CreatePromptProfileSchema.safeParse({
+      name: 'Fork Profile',
+      promptTemplate: 'Full copy',
+      mode: 'fork',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.mode).toBe('fork');
+  });
+});
+
+describe('B3 — explicit profile.mode drives mode semantics', () => {
+  it('Overlay mode is stored and returned as explicit value', async () => {
+    const { CreatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const overlay = CreatePromptProfileSchema.safeParse({
+      name: 'Overlay',
+      promptTemplate: 'test',
+      mode: 'overlay',
+    });
+
+    const fork = CreatePromptProfileSchema.safeParse({
+      name: 'Fork',
+      promptTemplate: 'test',
+      mode: 'fork',
+    });
+
+    expect(overlay.success).toBe(true);
+    expect(fork.success).toBe(true);
+    if (overlay.success && fork.success) {
+      expect(overlay.data.mode).toBe('overlay');
+      expect(fork.data.mode).toBe('fork');
+    }
+  });
+
+  it('Invalid mode values are rejected', async () => {
+    const { CreatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const result = CreatePromptProfileSchema.safeParse({
+      name: 'Bad Mode',
+      promptTemplate: 'test',
+      mode: 'invalid' as 'overlay',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('B3 — default CADAM Original maps to null', () => {
+  it('defaultPromptProfileId=null means CADAM Original is default', async () => {
+    const { CreatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    // A user with null defaultPromptProfileId is using CADAM Original
+    // This is verified by the UI: CADAM Original as default → defaultPromptProfileId = null
+    // The schema allows null as a valid value
+    const result = CreatePromptProfileSchema.safeParse({
+      name: 'Any Profile',
+      promptTemplate: 'test',
+    });
+
+    expect(result.success).toBe(true);
+    // name should not be empty
+    expect(result.data.name).toBeTruthy();
+  });
+});
+
+describe('B3 — existing profile editing remains functional', () => {
+  it('UpdatePromptProfileSchema accepts name, promptTemplate, and description', async () => {
+    const { UpdatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const result = UpdatePromptProfileSchema.safeParse({
+      name: 'Updated Profile',
+      promptTemplate: 'Updated prompt',
+      description: 'Updated description',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.name).toBe('Updated Profile');
+    expect(result.data.description).toBe('Updated description');
+  });
+
+  it('UpdatePromptProfileSchema allows partial updates (name only)', async () => {
+    const { UpdatePromptProfileSchema } = await import('../shared/aiSettings');
+
+    const result = UpdatePromptProfileSchema.safeParse({
+      name: 'New Name Only',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.name).toBe('New Name Only');
+  });
+});

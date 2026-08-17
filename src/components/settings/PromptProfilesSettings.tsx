@@ -41,7 +41,7 @@ interface PromptProfileSummary {
   userId: string;
   name: string;
   description: string | null;
-  mode: string | null;
+  mode: 'overlay' | 'fork' | null;
   editable: boolean;
   deletable: boolean;
   isDefault: boolean;
@@ -268,7 +268,7 @@ function getProfileMode(
   // Use explicit mode field — this is the authoritative value.
   // baseRevision is metadata for stale-fork detection, not the mode itself.
   if (!profile) return 'overlay'; // fallback: no profile yet → overlay
-  return (profile.mode as 'overlay' | 'fork') ?? 'overlay';
+  return profile.mode ?? 'overlay';
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ function getProfileMode(
 // ---------------------------------------------------------------------------
 
 function ModeBadge({ mode }: { mode: 'built-in' | 'overlay' | 'fork' }) {
-  const config = {
+  const config: Record<string, { label: string; className: string }> = {
     'built-in': {
       label: 'CADAM Original',
       className: 'bg-adam-blue/15 text-adam-blue border-adam-blue/20',
@@ -407,9 +407,7 @@ function ProfileListItem({
                 CADAM Original
               </Badge>
             ) : (
-              <ModeBadge
-                mode={(profile.mode as 'overlay' | 'fork') ?? 'overlay'}
-              />
+              <ModeBadge mode={profile.mode ?? 'overlay'} />
             )}
             <DefaultBadge profileId={profile.id} defaultId={defaultId} />
           </div>
@@ -570,6 +568,7 @@ function ProfileEditor({
       name: name.trim(),
       promptTemplate: promptTemplate.trim(),
       description: description.trim() || null,
+      // Fork gets baseRevision, overlay does NOT
       baseRevision: isFork ? (initialData?.baseRevision ?? null) : null,
     });
   };
@@ -671,7 +670,7 @@ function ProfileEditor({
 // ---------------------------------------------------------------------------
 
 export function PromptProfilesSettings() {
-  const _queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
   // Fetch data
   const { data: profiles = [], isLoading: isProfilesLoading } =
@@ -680,10 +679,15 @@ export function PromptProfilesSettings() {
   const defaultPromptProfileId = prefs?.defaultPromptProfileId ?? null;
 
   // Fetch real built-in prompt detail from the API
-  const { data: builtinDetailFromApi } = useBuiltinProfileDetail();
-  const builtinPromptTemplate =
-    (builtinDetailFromApi as PromptProfileDetail | undefined)?.promptTemplate ??
-    null;
+  const {
+    data: builtinDetailFromApi,
+    isFetching: isBuiltinLoading,
+    isError: isBuiltinError,
+  } = useBuiltinProfileDetail();
+  const builtinPromptTemplate = builtinDetailFromApi
+    ? ((builtinDetailFromApi as PromptProfileDetail | undefined)
+        ?.promptTemplate ?? null)
+    : null;
 
   // State
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
@@ -720,6 +724,7 @@ export function PromptProfilesSettings() {
   const handleSelectProfile = useCallback((id: string) => {
     setSelectedProfileId(id);
     setShowEditor(false);
+    setPendingMode(null); // Reset create-flow state to prevent mode leakage
   }, []);
 
   const handleSetDefault = useCallback(
@@ -768,9 +773,13 @@ export function PromptProfilesSettings() {
         updateMutation.mutate({ profileId: selectedDetail.id, input });
       } else if (isBuiltInEdit()) {
         // Creating overlay or fork from CADAM Original
+        // Overlay: store only custom instructions, baseRevision = null
+        // Fork: store full snapshot, baseRevision = current built-in fingerprint
         const baseRevision =
-          (builtinDetailFromApi as PromptProfileDetail | undefined)
-            ?.fingerprint ?? null;
+          pendingMode === 'fork'
+            ? ((builtinDetailFromApi as PromptProfileDetail | undefined)
+                ?.fingerprint ?? null)
+            : null;
         createMutation.mutate({
           name: input.name,
           promptTemplate: input.promptTemplate,
@@ -782,6 +791,7 @@ export function PromptProfilesSettings() {
         createMutation.mutate(input);
       }
       setShowEditor(false);
+      setPendingMode(null); // FIX 3: Reset create-flow state after save
     },
     [
       showEditor,
@@ -995,6 +1005,15 @@ export function PromptProfilesSettings() {
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => setShowModeSelection(true)}
+                className="h-7 w-7 rounded-full p-0"
+                title="Edit CADAM Original (creates new profile)"
+              >
+                <Edit2 className="h-3.5 w-3.5 text-adam-neutral-400" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => handleSetDefault(null)}
                 className="h-7 w-7 rounded-full p-0"
                 title="Restore CADAM Original"
@@ -1003,16 +1022,40 @@ export function PromptProfilesSettings() {
               </Button>
             </div>
           </div>
-          {builtinPromptTemplate ? (
-            <pre className="max-h-[500px] overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3 font-mono text-xs leading-relaxed text-adam-neutral-200">
-              {builtinPromptTemplate}
-            </pre>
-          ) : (
+          {isBuiltinLoading ? (
             <div className="flex items-center gap-2 rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3">
               <Loader2 className="h-4 w-4 animate-spin text-adam-neutral-400" />
               <span className="text-xs text-adam-neutral-400">
                 Loading CADAM prompt…
               </span>
+            </div>
+          ) : isBuiltinError ? (
+            <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <span className="text-xs text-red-300">
+                  Failed to load CADAM prompt.{' '}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      queryClient.invalidateQueries({
+                        queryKey: ['prompt-profile', 'builtin'],
+                      })
+                    }
+                    className="underline"
+                  >
+                    Retry
+                  </button>
+                </span>
+              </div>
+            </div>
+          ) : builtinPromptTemplate ? (
+            <pre className="max-h-[500px] overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3 font-mono text-xs leading-relaxed text-adam-neutral-200">
+              {builtinPromptTemplate}
+            </pre>
+          ) : (
+            <div className="rounded-lg border border-adam-neutral-800 bg-adam-background-2 p-3 text-xs text-adam-neutral-500">
+              No prompt template available.
             </div>
           )}
         </div>
