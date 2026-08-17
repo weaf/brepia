@@ -357,7 +357,7 @@
 
 ## Current Task
 
-B2 complete (Settings API authenticated migration). B3 next: CADAM Original prompt viewer + safe Edit → Overlay/Fork.
+B3 complete (CADAM Original prompt viewer + safe Edit → Overlay/Fork). B4 next.
 
 ## Repair Phase Progress (Settings Integration Repair Plan)
 
@@ -367,7 +367,8 @@ B2 complete (Settings API authenticated migration). B3 next: CADAM Original prom
 - **A4** — provider Test Connection collection route — DONE
 - **B1** — full catalog vs selectable catalog + hidden model behavior — DONE
 - **B2** — migrate all Settings API calls to authenticated apiJson/apiUrl — DONE (commit `93d6a6e`)
-- **B3** — CADAM Original prompt viewer + safe Edit → Overlay/Fork — NEXT
+- **B3** — CADAM Original prompt viewer + safe Edit → Overlay/Fork — DONE (commit `8d11755`)
+- **B4** — NEXT
 
 ### B2 Details
 
@@ -377,6 +378,24 @@ Migrated raw `fetch()` calls to authenticated `apiJson()` helper in:
 - `ProvidersSettings.tsx`: 11 raw fetch() → `apiJson()`, removed dead `useAuth` import
 
 All 9 route files verified with `requireUser()` (28 total auth guards).
+
+### B3 Details
+
+Replaced placeholder CADAM Original panel with real prompt viewer:
+
+- **`useBuiltinProfileDetail`** hook — fetches actual `PARAMETRIC_AGENT_PROMPT` from `/api/ai-settings/profiles/builtin:parametric`
+- **Dedicated monospaced viewer** — `<pre>` with `max-h-[500px] overflow-auto font-mono`, labelled "CADAM Original" + "Read-only"
+- **`ModeSelectionDialog`** — explicit Overlay vs Fork choice:
+  - Overlay: stores only custom instructions, inherits future upstream updates, `mode = 'overlay'`
+  - Fork: stores full prompt snapshot, no inheritance, `mode = 'fork'`
+- **Fixed `getProfileMode()`** — uses `profile.mode` directly; `baseRevision` is metadata only
+- **Pre-populated fork editor** with full CADAM prompt text
+- **Removed duplicate placeholder** panel that said "Built-in prompt loaded from upstream..."
+- **Guarded detail panel** to not show for CADAM Original (dedicated viewer handles it)
+- **Verified server-side immutability**: 3 throw guards in `promptProfiles.ts` for update/archive/delete of `builtin:parametric`
+
+Validation: typecheck clean, 0 lint errors, build clean, 18/18 prompt profile tests pass.
+Reviewer: PASS (2 minor findings accepted).
 
 ### OLD PLAN P00-P08
 
