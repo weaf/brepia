@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `d88993b` (B6 complete)
+**HEAD**: `aca1d41` (B7 complete)
 **Last Updated**: 2026-08-17
-**Current Task**: B6 complete — B7 next
+**Current Task**: B7 complete — B8 next
 
 ---
 
@@ -520,3 +520,31 @@ P00-P08 completed in prior sessions (committed as `82ec7ab`). Those changes rema
 **Defense-in-depth**: Runtime integrations (env-configured, lower risk) also blocked from unsafe protocols.
 
 **Validation**: typecheck clean, 0 lint errors, 85/85 tests pass (modelCatalog empty suite is pre-existing).
+
+---
+
+## Completed Tasks — B7
+
+### B7 — Provider Test Connection integration
+
+**Status**: DONE
+**Implementation commit**: `aca1d41`
+**Reviewer**: Not yet (self-validated)
+**Files**:
+
+- `src/routes/api/ai-settings/providers/$providerId/test.ts` — **removed** (dead-end route, inconsistent contract)
+- `src/routes/api/ai-settings/providers/test.ts` — canonical endpoint: accepts `id` (existing provider) or `draftConfig` (unsaved provider), authenticated with `requireUser()`, delegates to `testProvider()`, SSRF guard on `draftConfig.baseUrl`
+- `src/components/settings/ProvidersSettings.tsx` — `TestStatusBadge` now imports `TestProviderResultDto` (no local duplicate), surfaces `message` field from server on failure
+- `src/hooks/useProvidersSettings.ts` — `testProvider` hook uses canonical `/api/ai-settings/providers/test` endpoint with `draftConfig` for draft providers, `id` for stored providers
+
+**Canonical contract** (single endpoint):
+
+- **Existing provider test**: POST `/api/ai-settings/providers/test` with `{ id: "stored-id" }` — uses stored credentials from DB, never returns them
+- **Draft provider test**: POST `/api/ai-settings/providers/test` with `{ draftConfig: { name, type, baseUrl, apiKey } }` — credential only in request body, SSRF-validated
+- **Response**: `{ ok: boolean, latencyMs?: number, message?: string }` — consistent contract
+
+**SSRF protection**: Draft-provider test path validates `draftConfig.baseUrl` with `isSafeUrl`/`isSafeIpAddress` (same guards as B6 `testProvider`). Blocks unsafe protocols, private IPs, metadata endpoints, redirects.
+
+**TestStatusBadge improvement**: Now shows server-provided `message` on failure (was previously just "Failed" without context).
+
+**Validation**: typecheck clean, 0 lint errors, 185/185 tests pass (3 pre-existing failures in `opencodeStreamLifecycle.test.ts` unrelated to B7).
