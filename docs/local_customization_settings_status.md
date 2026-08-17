@@ -1,9 +1,9 @@
 # Local Customization Settings — Implementation Status
 
 **Branch**: `local-dev-continue`
-**HEAD**: `e1b6790` (B4 complete)
+**HEAD**: `bb214e6` (B5 complete)
 **Last Updated**: 2026-08-17
-**Current Task**: B4 complete — B5 next
+**Current Task**: B5 complete — B6 next
 
 ---
 
@@ -454,6 +454,37 @@ Validation: typecheck clean, 0 lint errors, build clean, 29/29 prompt profile te
 All discovery is server-side; the React component only consumes the DTO. No credentials, API keys, or raw config are exposed in the response. One unavailable integration does not break the others (uses `Promise.allSettled`).
 
 **Validation**: typecheck clean, 0 lint errors, build clean, 8/8 runtimeIntegrations tests pass, 18/18 promptProfile tests pass, 26/26 modelCatalog tests (pre-existing failures unrelated to B4).
+
+---
+
+## Completed Tasks — B5
+
+### B5 — Custom-provider runtime execution tests
+
+**Status**: DONE
+**Implementation commit**: `bb214e6`
+**Reviewer**: Not yet (self-validated)
+**Files**:
+
+- `tests/customProviders.test.ts` — 30 focused tests
+
+**Summary**: `buildCustomChatModel` (P06 implementation) had zero covering tests. This test file covers all 10 B5 requirements:
+
+1. **ID parsing** (3 tests): `parseCustomProviderModelId` handles `custom/<id>/<id>`, embedded `/`, rejects non-custom IDs
+2. **User-scoped loading** (1 test): queries provider + model with user_id filter
+3. **Disabled rejection** (3 tests): disabled provider, missing provider, invisible model all throw
+4. **Credential decryption** (2 tests): null ciphertext throws; valid credentials decrypt and instantiate
+5. **Driver instantiation** (6 tests): openai-compatible with baseURL/slug, anthropic, anthropic+thinking, google, openrouter, unsupported driver throws
+6. **Base URL + native model ID** (2 tests): configured vs absent baseURL
+7. **Capability mapping** (4 tests): supports_tools, supports_vision, defaults, anthropic vision default
+8. **No-silent-fallback / P06E** (3 tests): provider missing, credential missing, model missing — all throw explicit errors
+9. **Billing source** (4 tests): all 4 drivers return `billingSource: "custom"`
+10. **Invalid model ID** (1 test): non-custom IDs throw before DB queries
+11. **Security/no-secrets** (1 test): credential/ciphertext never leak in build result
+
+**Mock architecture**: Uses `vi.hoisted()` for crypto/provider mocks (Vitest hoists `vi.mock` factories before top-level `vi.fn()` declarations). Uses real AES-256-GCM ciphertext generated in `beforeAll` for credential decryption tests. Uses a queue-based Supabase mock to handle multiple sequential queries (provider then model).
+
+**Validation**: typecheck clean, 0 lint errors, 30/30 customProviders tests pass, 67/67 total tests pass.
 
 ### OLD PLAN P00-P08
 
