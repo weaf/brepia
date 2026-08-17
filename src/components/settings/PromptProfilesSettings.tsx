@@ -724,6 +724,7 @@ export function PromptProfilesSettings() {
   const handleSelectProfile = useCallback((id: string) => {
     setSelectedProfileId(id);
     setShowEditor(false);
+    setShowModeSelection(false); // Close Overlay/Fork choice
     setPendingMode(null); // Reset create-flow state to prevent mode leakage
   }, []);
 
@@ -734,30 +735,37 @@ export function PromptProfilesSettings() {
     [setDefaultMutation],
   );
 
-  const handleEdit = useCallback((_profile: PromptProfileDetail) => {
-    if (!(_profile as { editable?: boolean }).editable) {
+  const handleEdit = useCallback((profile: PromptProfileDetail) => {
+    if (!profile.editable) {
       // CADAM Original → show Overlay/Fork choice
       setShowModeSelection(true);
       return;
     }
+    // Custom profile edit — close any stale Overlay/Fork flow
+    setShowModeSelection(false);
+    setPendingMode(null);
     setEditorMode('edit');
     setShowEditor(true);
   }, []);
 
   const handleModeSelect = useCallback((mode: 'overlay' | 'fork') => {
+    setShowModeSelection(false); // Close choice dialog
     setPendingMode(mode);
     setEditorMode('create');
     setShowEditor(true);
-    setShowModeSelection(false);
   }, []);
 
   const handleDuplicate = useCallback(() => {
     if (!selectedDetail) return;
+    setShowModeSelection(false); // Close Overlay/Fork choice
+    setPendingMode(null); // Clear stale mode
     setEditorMode('create');
     setShowEditor(true);
   }, [selectedDetail]);
 
   const handleCreate = useCallback(() => {
+    setShowModeSelection(false); // Close Overlay/Fork choice
+    setPendingMode(null); // Clear stale mode
     setEditorMode('create');
     setShowEditor(true);
   }, []);
