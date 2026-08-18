@@ -123,11 +123,11 @@ function ModelRow({
   isUpdating: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-adam-neutral-800/40">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-lg px-3 py-3 transition-colors hover:bg-adam-neutral-800/40">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
           <span
-            className={`truncate text-sm ${
+            className={`min-w-0 break-words text-sm leading-snug sm:truncate ${
               isHidden
                 ? 'text-adam-neutral-400 line-through'
                 : 'text-adam-neutral-50'
@@ -145,50 +145,52 @@ function ModelRow({
             }
             className={
               entry.source === 'builtin'
-                ? 'bg-adam-blue/15 text-adam-blue hover:bg-adam-blue/20'
+                ? 'shrink-0 bg-adam-blue/15 text-adam-blue hover:bg-adam-blue/20'
                 : entry.source === 'opencode'
-                  ? 'bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20'
-                  : ''
+                  ? 'shrink-0 bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20'
+                  : 'shrink-0'
             }
           >
             {entry.source === 'opencode' ? 'agent' : entry.source}
           </Badge>
         </div>
-        <div className="flex items-center gap-1.5">
+
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
           {entry.provider && (
-            <span className="text-xs text-adam-neutral-400">
+            <span className="min-w-0 break-words text-xs text-adam-neutral-400">
               {entry.provider}
             </span>
           )}
           {entry.supportsTools && (
-            <Badge variant="outline" className="h-4 px-1 text-[10px]">
+            <Badge variant="outline" className="h-4 shrink-0 px-1 text-[10px]">
               Tools
             </Badge>
           )}
           {entry.supportsThinking && (
-            <Badge variant="outline" className="h-4 px-1 text-[10px]">
+            <Badge variant="outline" className="h-4 shrink-0 px-1 text-[10px]">
               Thinking
             </Badge>
           )}
           {entry.supportsVision && (
-            <Badge variant="outline" className="h-4 px-1 text-[10px]">
+            <Badge variant="outline" className="h-4 shrink-0 px-1 text-[10px]">
               Vision
             </Badge>
           )}
         </div>
-      </div>
-      <div className="flex items-center gap-2">
+
         {isHidden && entry.unavailableReason && (
-          <span className="text-xs text-adam-neutral-500">
+          <div className="mt-1 break-words text-xs text-adam-neutral-500">
             {entry.unavailableReason}
-          </span>
+          </div>
         )}
-        <Switch
-          checked={!isHidden}
-          onCheckedChange={onToggle}
-          disabled={isUpdating || !entry.enabled}
-        />
       </div>
+
+      <Switch
+        className="mt-0.5 shrink-0"
+        checked={!isHidden}
+        onCheckedChange={onToggle}
+        disabled={isUpdating || !entry.enabled}
+      />
     </div>
   );
 }
@@ -255,7 +257,7 @@ export function AiModelsSettings() {
 
   if (error) {
     return (
-      <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
+      <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
         <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
           Models
         </h2>
@@ -267,8 +269,8 @@ export function AiModelsSettings() {
   }
 
   return (
-    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-adam-neutral-50">Models</h2>
         <span className="text-xs text-adam-neutral-400">
           {visibleModels} of {totalModels} visible
