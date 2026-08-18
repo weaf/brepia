@@ -612,6 +612,33 @@ export function processBatch(
 }
 
 /**
+ * Convert a fully accepted OpenCode terminal envelope into pCAD's semantic
+ * AI SDK stream. The agent's {code,message} JSON is an internal transport
+ * contract and must never be emitted as ordinary assistant text.
+ */
+export function finalizeAcceptedAgentResult(
+  text: string,
+  finishPart: Extract<LanguageModelV2StreamPart, { type: 'finish' }>,
+): LanguageModelV2StreamPart[] {
+  const result = parseAgentResult(text);
+
+  if (result.code) {
+    return finishWithParametricToolCall(text, finishPart);
+  }
+
+  const message = result.message.trim();
+  if (!message) return [finishPart];
+
+  const id = 'validated-message-1';
+  return [
+    { type: 'text-start', id },
+    { type: 'text-delta', id, delta: message },
+    { type: 'text-end', id },
+    finishPart,
+  ];
+}
+
+/**
  * Interrupt an active OpenCode session via the server API.
  *
  * OpenCode 1.18+ uses POST /api/session/{id}/interrupt (not /abort).
@@ -771,7 +798,7 @@ async function* streamParts(
         for await (const events of eventReader) {
           const { newParts } = processBatch(state, events);
           for (const part of newParts) {
-            // Hold text/reasoning until a candidate is accepted.  Otherwise
+            // Hold text/reasoning until a candidate is accepted. Otherwise
             // the browser could display or parse a known-invalid draft.
             if (
               part.type !== 'text-start' &&
@@ -856,18 +883,22 @@ async function* streamParts(
       };
       yield { type: 'reasoning-end', id: reasoningId };
     }
-    if (state.totalText) {
-      const textId = 'validated-text-1';
-      yield { type: 'text-start', id: textId };
-      yield { type: 'text-delta', id: textId, delta: state.totalText };
-      yield { type: 'text-end', id: textId };
-    }
 
-    yield {
+    const finishPart: Extract<
+      LanguageModelV2StreamPart,
+      { type: 'finish' }
+    > = {
       type: 'finish',
       finishReason: state.finishReason,
       usage: state.usage ?? USAGE(),
     };
+
+    for (const part of finalizeAcceptedAgentResult(
+      state.totalText,
+      finishPart,
+    )) {
+      yield part;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // AbortError from intentional cancellation (user Stop, timeout) is NOT a
@@ -1026,26 +1057,11 @@ export function streamingOpencodeChatModel(
       const stream = new ReadableStream<LanguageModelV2StreamPart>({
         async start(controller) {
           try {
-            const textDeltas: string[] = [];
+            // streamParts now performs the one terminal envelope conversion
+            // after server-side OpenSCAD validation. Forward semantic parts
+            // verbatim so the internal {code,message} JSON never reaches UI.
             for await (const part of gen) {
-              if (part.type === 'text-delta') {
-                textDeltas.push(part.delta);
-              }
-              if (part.type === 'finish') {
-                // R05: progressive text (already streamed per-delta above)
-                // is separated from final artifact detection.  Only the
-                // complete terminal result is parsed — exactly once — via
-                // the shared final-result handler shared with the CLI path.
-                const accumulated = textDeltas.join('');
-                for (const out of finishWithParametricToolCall(
-                  accumulated,
-                  part,
-                )) {
-                  controller.enqueue(out);
-                }
-              } else {
-                controller.enqueue(part);
-              }
+              controller.enqueue(part);
             }
           } finally {
             controller.close();
