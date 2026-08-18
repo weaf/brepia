@@ -36,6 +36,37 @@ export function opencodeApiUrl(): string {
   return 'http://127.0.0.1:4096';
 }
 
+/**
+ * Build the HTTP headers required by an authenticated `opencode serve`.
+ * OpenCode uses HTTP Basic Auth when OPENCODE_SERVER_PASSWORD is set; the
+ * username defaults to `opencode` unless OPENCODE_SERVER_USERNAME overrides it.
+ * Existing Authorization headers are preserved so callers can explicitly
+ * override this behavior when needed.
+ */
+export function opencodeAuthHeaders(headers?: HeadersInit): Headers {
+  const result = new Headers(headers);
+  const password = env('OPENCODE_SERVER_PASSWORD');
+  if (!password || result.has('Authorization')) return result;
+
+  const username = env('OPENCODE_SERVER_USERNAME') || 'opencode';
+  const credentials = Buffer.from(`${username}:${password}`, 'utf8').toString(
+    'base64',
+  );
+  result.set('Authorization', `Basic ${credentials}`);
+  return result;
+}
+
+/** Central HTTP transport for every pCAD → OpenCode server request. */
+async function opencodeFetch(
+  input: string | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    headers: opencodeAuthHeaders(init.headers),
+  });
+}
+
 export type OpenCodeModelInfo = {
   /** Full `provider/model` id as `opencode models` prints it. */
   cliId: string;
@@ -70,7 +101,7 @@ function humanName(bareID: string): string {
 async function listModelsViaApi(): Promise<OpenCodeModelInfo[]> {
   try {
     const url = `${opencodeApiUrl()}/api/model`;
-    const res = await fetch(url);
+    const res = await opencodeFetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const items = (json['data'] as OpenCodeModelItem[]) ?? [];
@@ -594,7 +625,7 @@ async function interruptSession(
   apiUrl: string,
   sessionId: string,
 ): Promise<void> {
-  await fetch(`${apiUrl}/api/session/${sessionId}/interrupt`, {
+  await opencodeFetch(`${apiUrl}/api/session/${sessionId}/interrupt`, {
     method: 'POST',
     signal: AbortSignal.timeout(3_000),
   }).catch(() => {});
@@ -629,7 +660,7 @@ async function* streamParts(
     }, 8 * 60_000);
 
     try {
-      const sessionRes = await fetch(`${apiUrl}/api/session`, {
+      const sessionRes = await opencodeFetch(`${apiUrl}/api/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -663,14 +694,17 @@ async function* streamParts(
     }
 
     // Step 2: Send prompt
-    const promptRes = await fetch(`${apiUrl}/api/session/${sessionId}/prompt`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: { role: 'user', text: prompt },
-      }),
-      signal: ac.signal,
-    });
+    const promptRes = await opencodeFetch(
+      `${apiUrl}/api/session/${sessionId}/prompt`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: { role: 'user', text: prompt },
+        }),
+        signal: ac.signal,
+      },
+    );
     if (!promptRes.ok) {
       const body = await promptRes.text();
       throw new Error(
@@ -721,7 +755,7 @@ async function* streamParts(
         | ReturnType<typeof createIncrementalSseReader>
         | undefined;
       try {
-        const eventRes = await fetch(eventsUrl.toString(), {
+        const eventRes = await opencodeFetch(eventsUrl, {
           signal: ac.signal,
         });
 
@@ -784,7 +818,7 @@ async function* streamParts(
       const previousCursor = state.cursor;
       state = makeState();
       state.cursor = previousCursor;
-      const repairRes = await fetch(
+      const repairRes = await opencodeFetch(
         `${apiUrl}/api/session/${sessionId}/prompt`,
         {
           method: 'POST',
