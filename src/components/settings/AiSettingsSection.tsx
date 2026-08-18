@@ -5,8 +5,8 @@ import { ProvidersSettings } from './ProvidersSettings';
 
 export function AiSettingsSection() {
   return (
-    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
-      <h2 className="text-adam-text-1 mb-4 text-lg font-semibold">
+    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 text-adam-neutral-100 sm:p-6">
+      <h2 className="mb-4 text-lg font-semibold text-adam-neutral-50">
         AI Settings
       </h2>
       <Tabs defaultValue="models">
