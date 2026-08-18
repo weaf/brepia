@@ -12,7 +12,10 @@
 
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
-import { getServiceRoleSupabaseClient } from './supabaseClient';
+import {
+  getServiceRoleSupabaseClient,
+  type SupabaseClient,
+} from './supabaseClient';
 import { PARAMETRIC_AGENT_PROMPT } from './aiChat';
 import type {
   CreatePromptProfileInput,
@@ -122,16 +125,21 @@ export async function getUserPromptProfiles(
 
 /**
  * Get a single prompt profile by ID (including the built-in profile).
+ *
+ * Runtime callers should pass the already-authenticated user-scoped client so
+ * RLS enforces ownership without requiring service-role credentials. Settings
+ * CRUD keeps the historical service-role fallback for now.
  */
 export async function getPromptProfile(
   userId: string,
   profileId: string,
+  supabaseClient?: SupabaseClient,
 ): Promise<PromptProfileDetailDto | null> {
   if (profileId === BUILTIN_PROFILE_ID) {
     return loadBuiltinProfile();
   }
 
-  const supabase = getServiceRoleSupabaseClient();
+  const supabase = supabaseClient ?? getServiceRoleSupabaseClient();
 
   const { data, error } = await supabase
     .from('prompt_profiles')
@@ -347,9 +355,11 @@ export async function deletePromptProfile(
 export async function resolveConversationSystemPrompt({
   userId,
   profileId,
+  supabaseClient,
 }: {
   userId: string;
   profileId: string | null | undefined;
+  supabaseClient?: SupabaseClient;
 }): Promise<string> {
   // NULL / undefined / empty → built-in
   if (!profileId) {
@@ -361,8 +371,9 @@ export async function resolveConversationSystemPrompt({
     return PARAMETRIC_AGENT_PROMPT;
   }
 
-  // Fetch custom profile from DB
-  const profile = await getPromptProfile(userId, profileId);
+  // Runtime callers pass the authenticated request client so the profile read
+  // is governed by the user's RLS policy rather than a service-role bypass.
+  const profile = await getPromptProfile(userId, profileId, supabaseClient);
 
   if (!profile) {
     throw new Error(
