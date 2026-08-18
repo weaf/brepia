@@ -156,11 +156,15 @@ function ModelRow({
         </div>
 
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-          {entry.provider && (
+          {entry.source === 'opencode' && entry.description ? (
+            <span className="min-w-0 break-words text-xs text-adam-neutral-400">
+              {entry.description.replace(/^OpenCode agent via /, 'via ')}
+            </span>
+          ) : entry.provider ? (
             <span className="min-w-0 break-words text-xs text-adam-neutral-400">
               {entry.provider}
             </span>
-          )}
+          ) : null}
           {entry.supportsTools && (
             <Badge variant="outline" className="h-4 shrink-0 px-1 text-[10px]">
               Tools
