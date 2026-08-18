@@ -5,7 +5,7 @@ import {
   preflight,
   requireUser,
 } from '@/server/api';
-import { buildCatalog } from '@/server/modelCatalog';
+import { buildSelectableCatalog } from '@/server/modelCatalog';
 
 export const Route = createFileRoute('/api/models/catalog')({
   server: {
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/api/models/catalog')({
       GET: async ({ request }) => {
         try {
           const user = await requireUser(request);
-          const catalog = await buildCatalog(user);
+          const catalog = await buildSelectableCatalog(user);
           return json(catalog);
         } catch (err) {
           return json(
