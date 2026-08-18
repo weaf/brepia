@@ -1,5 +1,16 @@
+function vitePublicEnv(name: string): string {
+  switch (name) {
+    case 'VITE_SUPABASE_URL':
+      return import.meta.env.VITE_SUPABASE_URL ?? '';
+    case 'VITE_SUPABASE_ANON_KEY':
+      return import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+    default:
+      return '';
+  }
+}
+
 export function env(name: string): string {
-  return process.env[name] ?? '';
+  return process.env[name] ?? vitePublicEnv(name);
 }
 
 export function requiredEnv(name: string): string {
