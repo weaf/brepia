@@ -39,6 +39,43 @@ export PATH="${SCRIPT_DIR}/scripts/podman:${PATH}"
 echo "=== Starting Supabase ==="
 npx supabase start
 
+# Make the running local Supabase credentials available to the TanStack/Vite
+# server process. Recent Supabase CLI pretty output shows publishable/secret
+# keys, while `status -o env` still provides the legacy ANON_KEY and
+# SERVICE_ROLE_KEY names used by this app. Never print these values here.
+SUPABASE_STATUS_ENV="$(npx supabase status -o env 2>/dev/null || true)"
+supabase_env_value() {
+  printf '%s\n' "${SUPABASE_STATUS_ENV}" | awk -F= -v wanted="$1" '
+    $1 == wanted {
+      sub(/^[^=]*=/, "")
+      gsub(/^"|"$/, "")
+      print
+      exit
+    }
+  '
+}
+
+if [ -z "${VITE_SUPABASE_URL:-}" ]; then
+  SUPABASE_API_URL="$(supabase_env_value API_URL)"
+  if [ -n "${SUPABASE_API_URL}" ]; then
+    export VITE_SUPABASE_URL="${SUPABASE_API_URL}"
+  fi
+fi
+
+if [ -z "${VITE_SUPABASE_ANON_KEY:-}" ]; then
+  SUPABASE_ANON_KEY="$(supabase_env_value ANON_KEY)"
+  if [ -n "${SUPABASE_ANON_KEY}" ]; then
+    export VITE_SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"
+  fi
+fi
+
+if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+  LOCAL_SERVICE_ROLE_KEY="$(supabase_env_value SERVICE_ROLE_KEY)"
+  if [ -n "${LOCAL_SERVICE_ROLE_KEY}" ]; then
+    export SUPABASE_SERVICE_ROLE_KEY="${LOCAL_SERVICE_ROLE_KEY}"
+  fi
+fi
+
 echo "=== Starting OpenCode server ==="
 # OpenCode server configuration:
 #   OPENCODE_BASE_URL        — full URL (overrides OPENCODE_PORT and default)
