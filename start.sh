@@ -83,10 +83,41 @@ echo "=== Starting OpenCode server ==="
 #   OPENCODE_SERVER_PASSWORD — optional HTTP Basic Auth password
 #   OPENCODE_SERVER_USERNAME — optional Basic Auth username (default: opencode)
 #   Default: http://127.0.0.1:4096  (matches opencodeApiUrl() default)
+#
+# OpenCode can consume project .env values itself, while the pCAD/TanStack
+# server reads OPENCODE_* from process.env. Load ONLY the OpenCode connection
+# settings from Vite's development env files so both processes use the same
+# credentials. This deliberately avoids the previous broad server-env import.
+vite_env_value() {
+  node --input-type=module - "$1" <<'NODE'
+import { loadEnv } from 'vite';
+const key = process.argv[2];
+const values = loadEnv('development', process.cwd(), '');
+process.stdout.write(values[key] ?? '');
+NODE
+}
+
+for key in OPENCODE_BASE_URL OPENCODE_PORT OPENCODE_SERVER_USERNAME OPENCODE_SERVER_PASSWORD; do
+  if [ -z "${!key}" ]; then
+    value="$(vite_env_value "$key")"
+    if [ -n "${value}" ]; then
+      printf -v "$key" '%s' "$value"
+      export "$key"
+    fi
+  fi
+done
+unset key value
+
 OPENCODE_HOST="127.0.0.1"
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 OPENCODE_URL="http://${OPENCODE_HOST}:${OPENCODE_PORT}"
 OPENCODE_HEALTH="${OPENCODE_BASE_URL:-${OPENCODE_URL}}/api/health"
+
+if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+  echo "OpenCode auth: configured (user ${OPENCODE_SERVER_USERNAME:-opencode})"
+else
+  echo "OpenCode auth: not configured in pCAD environment"
+fi
 
 # Use the same Basic Auth credentials as `opencode serve` when configured.
 # This prevents an authenticated healthy server from being mistaken for a
@@ -109,6 +140,18 @@ if ! opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
     opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1 && break
     sleep 1
   done
+fi
+
+if opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
+  echo "OpenCode: up"
+else
+  OPENCODE_HTTP_STATUS="$(opencode_curl -s -o /dev/null -w '%{http_code}' -m 2 "${OPENCODE_HEALTH}" 2>/dev/null || true)"
+  if [ "${OPENCODE_HTTP_STATUS}" = "401" ]; then
+    echo "OpenCode: WARNING - server requires Basic Auth but pCAD credentials are missing or rejected"
+    echo "OpenCode: set matching OPENCODE_SERVER_PASSWORD/USERNAME in .env.local or the shell environment"
+  else
+    echo "OpenCode: WARNING - not healthy (HTTP ${OPENCODE_HTTP_STATUS:-unreachable})"
+  fi
 fi
 
 echo "=== Starting dev server ==="
