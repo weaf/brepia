@@ -1,16 +1,3 @@
-// P05A: Provider settings UI — ProvidersSettings section.
-//
-// Renders the provider settings panel in SettingsView.
-// Displays two groups:
-// - Built-in providers (read-only, managed by the application)
-// - Custom providers (CRUD operations via /api/ai-settings/providers/)
-// Supports:
-// - Create, edit, delete custom providers
-// - Enable/disable toggle
-// - Test connection
-// - Model count display
-// - Credential saved status
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -23,6 +10,7 @@ import {
   Network,
   Plug,
   Plus,
+  RotateCcw,
   Server,
   Settings2,
   Terminal,
@@ -30,7 +18,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,18 +27,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { apiJson } from '@/services/api';
 import { cn } from '@/lib/utils';
-import { TestProviderResultDto } from '@shared/aiSettings';
+import type { TestProviderResultDto } from '@shared/aiSettings';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+type ProviderDriver =
+  | 'openai-compatible'
+  | 'anthropic'
+  | 'google'
+  | 'openrouter';
 
 interface ProviderSummary {
   id: string;
   userId: string;
   slug: string;
   name: string;
-  driver: 'openai-compatible' | 'anthropic' | 'google' | 'openrouter';
+  driver: ProviderDriver;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -64,27 +54,38 @@ interface ProviderDetail extends ProviderSummary {
 interface CreateProviderInput {
   slug: string;
   name: string;
-  driver: 'openai-compatible' | 'anthropic' | 'google' | 'openrouter';
+  driver: ProviderDriver;
   baseUrl?: string;
   credential?: string;
 }
 
 interface UpdateProviderInput {
   name?: string;
-  driver?: 'openai-compatible' | 'anthropic' | 'google' | 'openrouter';
+  driver?: ProviderDriver;
   baseUrl?: string;
   credential?: string | null;
   enabled?: boolean;
 }
 
-interface TestProviderRequest {
-  id?: string;
-  draftConfig?: Partial<CreateProviderInput>;
+interface BuiltinProviderSettings {
+  driver: ProviderDriver;
+  label: string;
+  overrideId: string | null;
+  customized: boolean;
+  enabled: boolean;
+  baseUrl: string;
+  hasCredential: boolean;
+  credentialSource: 'override' | 'server' | 'none';
 }
 
-// ---------------------------------------------------------------------------
-// Types — provider models
-// ---------------------------------------------------------------------------
+interface RuntimeIntegrationStatus {
+  integrationId: 'opencode' | 'codex' | 'local-openai';
+  label: string;
+  status: 'connected' | 'available' | 'unavailable' | 'not-configured';
+  baseUrl: string | null;
+  modelCount: number;
+  explanation: string;
+}
 
 interface ProviderModelSummary {
   id: string;
@@ -103,19 +104,6 @@ interface ProviderModelSummary {
 }
 
 type ProviderModelDetail = ProviderModelSummary;
-
-// ---------------------------------------------------------------------------
-// Types — runtime integrations
-// ---------------------------------------------------------------------------
-
-interface RuntimeIntegrationStatus {
-  integrationId: 'opencode' | 'codex' | 'local-openai';
-  label: string;
-  status: 'connected' | 'available' | 'unavailable' | 'not-configured';
-  baseUrl: string | null;
-  modelCount: number;
-  explanation: string;
-}
 
 interface CreateProviderModelInput {
   modelId: string;
@@ -140,22 +128,60 @@ interface UpdateProviderModelInput {
   isVisible?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
+const DRIVER_LABELS: Record<ProviderDriver, string> = {
+  'openai-compatible': 'OpenAI Compatible',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  openrouter: 'OpenRouter',
+};
+
+const DRIVER_ICONS: Record<ProviderDriver, typeof Code2> = {
+  'openai-compatible': Code2,
+  anthropic: Plug,
+  google: Plug,
+  openrouter: Plug,
+};
+
+const PRESET_ENDPOINTS: Record<ProviderDriver, string> = {
+  anthropic: 'https://api.anthropic.com/v1',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
+  openrouter: 'https://openrouter.ai/api/v1',
+  'openai-compatible': '',
+};
+
+const BUILTIN_SLUG_PREFIX = 'builtin-';
 
 async function fetchProviders(): Promise<ProviderSummary[]> {
   return apiJson('ai-settings/providers') as Promise<ProviderSummary[]>;
+}
+
+async function fetchProviderDetail(id: string): Promise<ProviderDetail> {
+  return apiJson(`ai-settings/providers/${id}`) as Promise<ProviderDetail>;
+}
+
+async function fetchBuiltinProviders(): Promise<BuiltinProviderSettings[]> {
+  return apiJson('ai-settings/providers/builtins') as Promise<
+    BuiltinProviderSettings[]
+  >;
+}
+
+async function saveBuiltinProvider(input: {
+  driver: ProviderDriver;
+  baseUrl?: string;
+  credential?: string | null;
+  enabled?: boolean;
+  reset?: boolean;
+}): Promise<BuiltinProviderSettings> {
+  return apiJson('ai-settings/providers/builtins', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  }) as Promise<BuiltinProviderSettings>;
 }
 
 async function fetchRuntimeIntegrations(): Promise<RuntimeIntegrationStatus[]> {
   return apiJson('settings/runtime-integrations') as Promise<
     RuntimeIntegrationStatus[]
   >;
-}
-
-async function fetchProviderDetail(id: string): Promise<ProviderDetail> {
-  return apiJson(`ai-settings/providers/${id}`) as Promise<ProviderDetail>;
 }
 
 async function createProvider(
@@ -178,17 +204,16 @@ async function updateProvider(
 }
 
 async function deleteProvider(providerId: string): Promise<void> {
-  await apiJson(`ai-settings/providers/${providerId}`, {
-    method: 'DELETE',
-  });
+  await apiJson(`ai-settings/providers/${providerId}`, { method: 'DELETE' });
 }
 
-async function testProviderConnection(
-  req: TestProviderRequest,
-): Promise<TestProviderResultDto> {
+async function testProviderConnection(input: {
+  id?: string;
+  draftConfig?: Partial<CreateProviderInput>;
+}): Promise<TestProviderResultDto> {
   return apiJson('ai-settings/providers/test', {
     method: 'POST',
-    body: JSON.stringify(req),
+    body: JSON.stringify(input),
   }) as Promise<TestProviderResultDto>;
 }
 
@@ -198,15 +223,6 @@ async function fetchProviderModels(
   return apiJson(`ai-settings/providers/${providerId}/models`) as Promise<
     ProviderModelSummary[]
   >;
-}
-
-async function _fetchProviderModelDetail(
-  providerId: string,
-  modelId: string,
-): Promise<ProviderModelDetail> {
-  return apiJson(
-    `ai-settings/providers/${providerId}/models/${modelId}`,
-  ) as Promise<ProviderModelDetail>;
 }
 
 async function createProviderModel(
@@ -221,10 +237,10 @@ async function createProviderModel(
 
 async function updateProviderModel(
   providerId: string,
-  modelId: string,
+  modelRowId: string,
   input: UpdateProviderModelInput,
 ): Promise<ProviderModelDetail> {
-  return apiJson(`ai-settings/providers/${providerId}/models/${modelId}`, {
+  return apiJson(`ai-settings/providers/${providerId}/models/${modelRowId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   }) as Promise<ProviderModelDetail>;
@@ -232,21 +248,34 @@ async function updateProviderModel(
 
 async function deleteProviderModel(
   providerId: string,
-  modelId: string,
+  modelRowId: string,
 ): Promise<void> {
-  await apiJson(`ai-settings/providers/${providerId}/models/${modelId}`, {
+  await apiJson(`ai-settings/providers/${providerId}/models/${modelRowId}`, {
     method: 'DELETE',
   });
 }
-
-// ---------------------------------------------------------------------------
-// React Query hooks
-// ---------------------------------------------------------------------------
 
 function useProviders() {
   return useQuery({
     queryKey: ['providers'],
     queryFn: fetchProviders,
+    staleTime: 0,
+  });
+}
+
+function useProviderDetail(id: string | null) {
+  return useQuery({
+    queryKey: ['provider', id ?? ''],
+    queryFn: () => (id ? fetchProviderDetail(id) : null),
+    enabled: Boolean(id),
+    staleTime: 0,
+  });
+}
+
+function useBuiltinProviders() {
+  return useQuery({
+    queryKey: ['builtin-providers'],
+    queryFn: fetchBuiltinProviders,
     staleTime: 0,
   });
 }
@@ -259,46 +288,37 @@ function useRuntimeIntegrations() {
   });
 }
 
-function useProviderDetail(id: string | null) {
+function useProviderModels(providerId: string | null) {
   return useQuery({
-    queryKey: ['provider', id ?? ''],
-    queryFn: () => (id ? fetchProviderDetail(id) : null),
-    enabled: !!id,
+    queryKey: ['providerModels', providerId ?? ''],
+    queryFn: () =>
+      providerId ? fetchProviderModels(providerId) : Promise.resolve([]),
+    enabled: Boolean(providerId),
     staleTime: 0,
   });
 }
 
-function _useProviderModelDetail(
-  _providerId: string | null,
-  _modelModelId: string | null,
-) {
-  return { data: null };
-}
-
 function useCreateProvider() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-
+  const { toast } = useToast();
   return useMutation({
     mutationFn: createProvider,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast({ title: 'Success', description: 'Provider created.' });
+      toast({ title: 'Provider created' });
     },
-    onError: (e: Error) => {
+    onError: (error: Error) =>
       toast({
-        title: 'Error',
-        description: e.message ?? 'Failed to create provider.',
+        title: 'Could not create provider',
+        description: error.message,
         variant: 'destructive',
-      });
-    },
+      }),
   });
 }
 
 function useUpdateProvider() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({
       providerId,
@@ -307,83 +327,81 @@ function useUpdateProvider() {
       providerId: string;
       input: UpdateProviderInput;
     }) => updateProvider(providerId, input),
-    onSuccess: () => {
+    onSuccess: (provider) => {
       queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast({ title: 'Success', description: 'Provider updated.' });
+      queryClient.invalidateQueries({ queryKey: ['provider', provider.id] });
+      toast({ title: 'Provider updated' });
     },
-    onError: (e: Error) => {
+    onError: (error: Error) =>
       toast({
-        title: 'Error',
-        description: e.message ?? 'Failed to update provider.',
+        title: 'Could not update provider',
+        description: error.message,
         variant: 'destructive',
-      });
-    },
+      }),
   });
 }
 
 function useDeleteProvider() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-
+  const { toast } = useToast();
   return useMutation({
     mutationFn: deleteProvider,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast({ title: 'Success', description: 'Provider deleted.' });
+      toast({ title: 'Provider deleted' });
     },
-    onError: (e: Error) => {
+    onError: (error: Error) =>
       toast({
-        title: 'Error',
-        description: e.message ?? 'Failed to delete provider.',
+        title: 'Could not delete provider',
+        description: error.message,
         variant: 'destructive',
-      });
+      }),
+  });
+}
+
+function useSaveBuiltinProvider() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: saveBuiltinProvider,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['builtin-providers'] });
+      queryClient.invalidateQueries({ queryKey: ['providers'] });
+      toast({ title: 'Provider settings saved' });
     },
+    onError: (error: Error) =>
+      toast({
+        title: 'Could not save provider settings',
+        description: error.message,
+        variant: 'destructive',
+      }),
   });
 }
 
 function useTestProvider() {
   const { toast } = useToast();
-
   return useMutation({
     mutationFn: testProviderConnection,
-    onSuccess: (result) => {
-      if (result.ok) {
-        toast({
-          title: 'Connection successful',
-          description: `${result.message} (${result.latencyMs}ms)`,
-        });
-      } else {
-        toast({
-          title: 'Connection failed',
-          description: result.message,
-          variant: 'destructive',
-        });
-      }
-    },
-    onError: (e: Error) => {
+    onSuccess: (result) =>
       toast({
-        title: 'Test failed',
-        description: e.message,
+        title: result.ok ? 'Connection successful' : 'Connection failed',
+        description: result.ok
+          ? `${result.message} (${result.latencyMs}ms)`
+          : result.message,
+        ...(result.ok ? {} : { variant: 'destructive' as const }),
+      }),
+    onError: (error: Error) =>
+      toast({
+        title: 'Connection test failed',
+        description: error.message,
         variant: 'destructive',
-      });
-    },
-  });
-}
-
-function useProviderModels(providerId: string | null) {
-  return useQuery({
-    queryKey: ['providerModels', providerId ?? ''],
-    queryFn: () =>
-      providerId ? fetchProviderModels(providerId) : Promise.resolve([]),
-    enabled: !!providerId,
-    staleTime: 0,
+      }),
   });
 }
 
 function useCreateProviderModel() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({
       providerId,
@@ -392,322 +410,635 @@ function useCreateProviderModel() {
       providerId: string;
       input: CreateProviderModelInput;
     }) => createProviderModel(providerId, input),
-    onSuccess: (_, { providerId }) => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['providerModels', providerId],
+        queryKey: ['providerModels', variables.providerId],
       });
-      toast({ title: 'Success', description: 'Provider model created.' });
-    },
-    onError: (e: Error) => {
-      toast({
-        title: 'Error',
-        description: e.message ?? 'Failed to create provider model.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Model added' });
     },
   });
 }
 
 function useUpdateProviderModel() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({
       providerId,
-      modelId,
+      modelRowId,
       input,
     }: {
       providerId: string;
-      modelId: string;
+      modelRowId: string;
       input: UpdateProviderModelInput;
-    }) => updateProviderModel(providerId, modelId, input),
-    onSuccess: (_, { providerId }) => {
+    }) => updateProviderModel(providerId, modelRowId, input),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['providerModels', providerId],
+        queryKey: ['providerModels', variables.providerId],
       });
-      toast({ title: 'Success', description: 'Provider model updated.' });
-    },
-    onError: (e: Error) => {
-      toast({
-        title: 'Error',
-        description: e.message ?? 'Failed to update provider model.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Model updated' });
     },
   });
 }
 
 function useDeleteProviderModel() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ({
       providerId,
-      modelId,
+      modelRowId,
     }: {
       providerId: string;
-      modelId: string;
-    }) => deleteProviderModel(providerId, modelId),
-    onSuccess: (_, { providerId }) => {
+      modelRowId: string;
+    }) => deleteProviderModel(providerId, modelRowId),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['providerModels', providerId],
+        queryKey: ['providerModels', variables.providerId],
       });
-      toast({ title: 'Success', description: 'Provider model deleted.' });
-    },
-    onError: (e: Error) => {
-      toast({
-        title: 'Error',
-        description: e.message ?? 'Failed to delete provider model.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Model deleted' });
     },
   });
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const DRIVER_LABELS: Record<string, string> = {
-  'openai-compatible': 'OpenAI Compatible',
-  anthropic: 'Anthropic',
-  google: 'Google',
-  openrouter: 'OpenRouter',
-};
-
-const DRIVER_ICONS: Record<string, typeof Code2> = {
-  'openai-compatible': Code2,
-  anthropic: Plug,
-  google: Plug,
-  openrouter: Plug,
-};
-
-const BUILTIN_DRIVERS: Array<
-  'openai-compatible' | 'anthropic' | 'google' | 'openrouter'
-> = ['anthropic', 'google', 'openrouter', 'openai-compatible'];
-
-const PRESET_ENDPOINTS: Record<string, string> = {
-  anthropic: 'https://api.anthropic.com/v1',
-  google: 'https://generativelanguage.googleapis.com/v1beta',
-  openrouter: 'https://openrouter.ai/api/v1',
-  'openai-compatible': '',
-};
-
-// ---------------------------------------------------------------------------
-// Badge rendering
-// ---------------------------------------------------------------------------
-
-function DriverBadge({ driver }: { driver: ProviderSummary['driver'] }) {
-  const config = {
-    'openai-compatible': {
-      label: DRIVER_LABELS['openai-compatible'],
-      className: 'bg-adam-blue/15 text-adam-blue border-adam-blue/20',
-    },
-    anthropic: {
-      label: DRIVER_LABELS.anthropic,
-      className: 'bg-adam-emerald/15 text-adam-emerald border-adam-emerald/20',
-    },
-    google: {
-      label: DRIVER_LABELS.google,
-      className:
-        'bg-adad-green-500/15 text-adam-green-500 border-adad-green-500/20',
-    },
-    openrouter: {
-      label: DRIVER_LABELS.openrouter,
-      className: 'bg-adam-amber/15 text-adam-amber border-adam-amber/20',
-    },
-  };
-  const { label, className } = config[driver];
+function DriverBadge({ driver }: { driver: ProviderDriver }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${className}`}
-    >
-      {label}
-    </span>
+    <Badge variant="outline" className="text-adam-neutral-200">
+      {DRIVER_LABELS[driver]}
+    </Badge>
   );
 }
 
-function CredentialBadge({ hasCredential }: { hasCredential: boolean }) {
+function CredentialBadge({
+  hasCredential,
+  source,
+}: {
+  hasCredential: boolean;
+  source?: 'override' | 'server' | 'none';
+}) {
   if (!hasCredential) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-adam-neutral-700 bg-adam-background-2 px-2 py-0.5 text-[10px] text-adam-neutral-400">
-        <Key className="h-2.5 w-2.5" />
-        No credential
-      </span>
-    );
-  }
-  return (
-    <span className="border-adad-green-500/30 bg-adam-green-950/20 text-adad-green-500 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]">
-      <CheckCircle2 className="h-2.5 w-2.5" />
-      Credential saved
-    </span>
-  );
-}
-
-function TestStatusBadge({
-  result,
-}: {
-  result?: TestProviderResultDto | null;
-}) {
-  if (!result) return null;
-  if (result.ok) {
-    return (
-      <span
-        className="border-adam-emerald-800/50 bg-adam-emerald-950/20 text-adam-emerald-400 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
-        title={result.message}
-      >
-        <CheckCircle2 className="h-2.5 w-2.5" />
-        {result.latencyMs}ms
-      </span>
-    );
-  }
-  return (
-    <span
-      className="border-adam-red-800/50 bg-adam-red-950/20 text-adam-red-400 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
-      title={result.message}
-    >
-      <XCircle className="h-2.5 w-2.5" />
-      {result.message || 'Failed'}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Built-in provider card
-// ---------------------------------------------------------------------------
-
-function BuiltinProviderCard({
-  driver,
-}: {
-  driver: ProviderSummary['driver'];
-}) {
-  const Icon = DRIVER_ICONS[driver] ?? Code2;
-  const label = DRIVER_LABELS[driver];
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-adam-blue/10">
-          <Icon className="h-4 w-4 text-adam-blue" />
-        </div>
-        <div>
-          <div className="text-sm font-medium text-adam-neutral-50">
-            {label}
-          </div>
-          <div className="text-xs text-adam-neutral-400">
-            Built-in / server managed
-          </div>
-        </div>
-      </div>
       <Badge
         variant="outline"
-        className="border-adam-neutral-700 bg-adam-background-1 text-adam-neutral-400"
+        className="border-adam-neutral-700 text-adam-neutral-300"
       >
-        Managed
+        <Key className="mr-1 h-3 w-3" /> No credential
       </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="border-adam-emerald/30 bg-adam-emerald/10 text-adam-emerald"
+    >
+      <Key className="mr-1 h-3 w-3" />
+      {source === 'server'
+        ? 'Server credential'
+        : source === 'override'
+          ? 'Custom credential'
+          : 'Credential saved'}
+    </Badge>
+  );
+}
+
+function BuiltinProviderCard({
+  provider,
+  onEdit,
+  onToggle,
+  onReset,
+  busy,
+}: {
+  provider: BuiltinProviderSettings;
+  onEdit: () => void;
+  onToggle: () => void;
+  onReset: () => void;
+  busy: boolean;
+}) {
+  const Icon = DRIVER_ICONS[provider.driver] ?? Code2;
+  return (
+    <div
+      className={cn(
+        'rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-4 py-3',
+        !provider.enabled && 'opacity-60',
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-adam-blue/10">
+            <Icon className="h-4 w-4 text-adam-blue" />
+          </div>
+          <div className="min-w-0">
+            <div className="break-words text-sm font-medium text-adam-neutral-50">
+              {provider.label}
+            </div>
+            <div className="mt-0.5 break-all text-xs text-adam-neutral-300">
+              {provider.baseUrl}
+            </div>
+          </div>
+        </div>
+        <Switch
+          checked={provider.enabled}
+          onCheckedChange={onToggle}
+          disabled={busy}
+          aria-label={`Enable ${provider.label}`}
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <DriverBadge driver={provider.driver} />
+        <CredentialBadge
+          hasCredential={provider.hasCredential}
+          source={provider.credentialSource}
+        />
+        <Badge
+          variant="outline"
+          className={
+            provider.customized
+              ? 'border-adam-blue/30 bg-adam-blue/10 text-adam-blue'
+              : 'border-adam-neutral-700 text-adam-neutral-300'
+          }
+        >
+          {provider.customized ? 'User override' : 'Server defaults'}
+        </Badge>
+      </div>
+
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        {provider.customized && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onReset}
+            disabled={busy}
+            className="h-7 rounded-full px-2 text-xs text-adam-neutral-200"
+          >
+            <RotateCcw className="mr-1 h-3 w-3" /> Reset
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onEdit}
+          disabled={busy}
+          className="h-7 rounded-full px-2 text-xs text-adam-neutral-100"
+        >
+          <Edit2 className="mr-1 h-3 w-3" /> Edit settings
+        </Button>
+      </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Custom provider card
-// ---------------------------------------------------------------------------
+function BuiltinProviderForm({
+  provider,
+  onSave,
+  onReset,
+  onCancel,
+  busy,
+}: {
+  provider: BuiltinProviderSettings;
+  onSave: (input: {
+    driver: ProviderDriver;
+    baseUrl: string;
+    credential?: string | null;
+    enabled: boolean;
+  }) => void;
+  onReset: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const [baseUrl, setBaseUrl] = useState(provider.baseUrl);
+  const [enabled, setEnabled] = useState(provider.enabled);
+  const [credential, setCredential] = useState('');
+  const [showCredential, setShowCredential] = useState(false);
+  const [removeOverrideCredential, setRemoveOverrideCredential] = useState(false);
 
-interface ProviderCardProps {
-  provider: ProviderDetail;
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggleEnabled: () => void;
-  onTest: () => void;
-  onManageModels?: () => void;
-  isDeleting: boolean;
-  isTesting: boolean;
-  testResult: TestProviderResultDto | null;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    onSave({
+      driver: provider.driver,
+      baseUrl: baseUrl.trim(),
+      enabled,
+      ...(removeOverrideCredential
+        ? { credential: null }
+        : credential
+          ? { credential }
+          : {}),
+    });
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      className="mt-2 space-y-4 rounded-lg border border-adam-blue/30 bg-adam-background-1 p-4"
+    >
+      <div>
+        <div className="text-sm font-medium text-adam-neutral-50">
+          {provider.label}
+        </div>
+        <div className="text-xs text-adam-neutral-300">
+          Override the server defaults for your account. Leave the credential
+          blank to keep using the current {provider.credentialSource === 'server' ? 'server' : 'saved'} credential.
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-adam-neutral-200">
+          Driver
+        </label>
+        <Input
+          value={DRIVER_LABELS[provider.driver]}
+          readOnly
+          className="h-9 text-adam-neutral-300"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-adam-neutral-200">
+          Base URL
+        </label>
+        <Input
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          className="h-9 text-adam-neutral-50"
+          required
+        />
+      </div>
+
+      <div>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <label className="text-xs font-medium text-adam-neutral-200">
+            API key / token
+          </label>
+          {provider.credentialSource === 'override' && (
+            <button
+              type="button"
+              onClick={() => {
+                setRemoveOverrideCredential((value) => !value);
+                setCredential('');
+              }}
+              className="text-[11px] text-adam-blue hover:text-adam-blue/80"
+            >
+              {removeOverrideCredential
+                ? 'Keep custom credential'
+                : 'Use server credential'}
+            </button>
+          )}
+        </div>
+        <Input
+          type={showCredential ? 'text' : 'password'}
+          value={credential}
+          onChange={(event) => {
+            setCredential(event.target.value);
+            setRemoveOverrideCredential(false);
+          }}
+          disabled={removeOverrideCredential}
+          placeholder={
+            removeOverrideCredential
+              ? 'Custom credential will be removed'
+              : provider.hasCredential
+                ? 'Enter a new credential to replace the current one'
+                : 'API key or token'
+          }
+          className="h-9 text-adam-neutral-50"
+        />
+        {credential && (
+          <button
+            type="button"
+            onClick={() => setShowCredential((value) => !value)}
+            className="mt-1 text-[11px] text-adam-neutral-300 underline"
+          >
+            {showCredential ? 'Hide credential' : 'Show credential'}
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border border-adam-neutral-700 px-3 py-2">
+        <div>
+          <div className="text-xs font-medium text-adam-neutral-100">Enabled</div>
+          <div className="text-[11px] text-adam-neutral-400">
+            Disabled providers cannot be used for new requests.
+          </div>
+        </div>
+        <Switch checked={enabled} onCheckedChange={setEnabled} />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {provider.customized && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onReset}
+            disabled={busy}
+            className="h-8 rounded-full px-3 text-xs text-adam-neutral-200"
+          >
+            <RotateCcw className="mr-1 h-3 w-3" /> Server defaults
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="dark"
+          onClick={onCancel}
+          disabled={busy}
+          className="h-8 rounded-full px-3 text-xs"
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={busy || !baseUrl.trim()}
+          className="h-8 rounded-full px-3 text-xs"
+        >
+          {busy ? (
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          ) : (
+            <Check className="mr-1 h-3 w-3" />
+          )}
+          Save settings
+        </Button>
+      </div>
+    </form>
+  );
 }
 
-function ProviderCard({
-  provider,
+function ProviderForm({
+  mode,
+  initialData,
+  onSave,
+  onCancel,
+  busy,
+}: {
+  mode: 'create' | 'edit';
+  initialData?: ProviderDetail;
+  onSave: (input: CreateProviderInput | UpdateProviderInput) => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const [name, setName] = useState(initialData?.name ?? '');
+  const [driver, setDriver] = useState<ProviderDriver>(
+    initialData?.driver ?? 'openai-compatible',
+  );
+  const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? '');
+  const [credential, setCredential] = useState('');
+  const [showCredential, setShowCredential] = useState(false);
+  const [removeCredential, setRemoveCredential] = useState(false);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const cleanName = name.trim();
+    if (!cleanName) return;
+
+    if (mode === 'create') {
+      const slug = cleanName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      onSave({
+        slug,
+        name: cleanName,
+        driver,
+        baseUrl: baseUrl.trim() || PRESET_ENDPOINTS[driver],
+        ...(credential ? { credential } : {}),
+      });
+      return;
+    }
+
+    onSave({
+      name: cleanName,
+      driver,
+      baseUrl: baseUrl.trim(),
+      ...(removeCredential
+        ? { credential: null }
+        : credential
+          ? { credential }
+          : {}),
+    });
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-4 rounded-lg border border-adam-neutral-700 bg-adam-background-1 p-4"
+    >
+      <div className="text-sm font-medium text-adam-neutral-50">
+        {mode === 'create' ? 'Add provider' : `Edit ${initialData?.name ?? 'provider'}`}
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-adam-neutral-200">
+          Display name
+        </label>
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          className="h-9 text-adam-neutral-50"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-adam-neutral-200">
+          Driver
+        </label>
+        <select
+          value={driver}
+          onChange={(event) => setDriver(event.target.value as ProviderDriver)}
+          className="h-9 w-full rounded-md border border-adam-neutral-700 bg-adam-background-1 px-3 text-sm text-adam-neutral-100 outline-none focus:border-adam-blue/50"
+        >
+          <option value="openai-compatible">OpenAI Compatible</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="google">Google</option>
+          <option value="openrouter">OpenRouter</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-adam-neutral-200">
+          Base URL
+        </label>
+        <Input
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          placeholder={PRESET_ENDPOINTS[driver] || 'http://127.0.0.1:8080/v1'}
+          className="h-9 text-adam-neutral-50"
+        />
+      </div>
+
+      <div>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <label className="text-xs font-medium text-adam-neutral-200">
+            API key / token
+          </label>
+          {initialData?.hasCredential && (
+            <button
+              type="button"
+              onClick={() => {
+                setRemoveCredential((value) => !value);
+                setCredential('');
+              }}
+              className="text-[11px] text-adam-blue hover:text-adam-blue/80"
+            >
+              {removeCredential ? 'Keep credential' : 'Remove credential'}
+            </button>
+          )}
+        </div>
+        <Input
+          type={showCredential ? 'text' : 'password'}
+          value={credential}
+          onChange={(event) => {
+            setCredential(event.target.value);
+            setRemoveCredential(false);
+          }}
+          disabled={removeCredential}
+          placeholder={
+            removeCredential
+              ? 'Credential will be removed'
+              : initialData?.hasCredential
+                ? 'Enter a new credential to replace it'
+                : 'API key or token'
+          }
+          className="h-9 text-adam-neutral-50"
+        />
+        {credential && (
+          <button
+            type="button"
+            onClick={() => setShowCredential((value) => !value)}
+            className="mt-1 text-[11px] text-adam-neutral-300 underline"
+          >
+            {showCredential ? 'Hide credential' : 'Show credential'}
+          </button>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="dark"
+          onClick={onCancel}
+          disabled={busy}
+          className="h-8 rounded-full px-3 text-xs"
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={busy || !name.trim()}
+          className="h-8 rounded-full px-3 text-xs"
+        >
+          {busy ? (
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          ) : (
+            <Check className="mr-1 h-3 w-3" />
+          )}
+          {mode === 'create' ? 'Create provider' : 'Save settings'}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function CustomProviderCard({
+  summary,
   onEdit,
   onDelete,
-  onToggleEnabled,
-  onTest,
-  isDeleting,
-  isTesting,
-  testResult,
   onManageModels,
-}: ProviderCardProps) {
-  const Icon = DRIVER_ICONS[provider.driver] ?? Code2;
+}: {
+  summary: ProviderSummary;
+  onEdit: (provider: ProviderDetail) => void;
+  onDelete: (providerId: string) => void;
+  onManageModels: (providerId: string) => void;
+}) {
+  const detailQuery = useProviderDetail(summary.id);
+  const updateMutation = useUpdateProvider();
+  const testMutation = useTestProvider();
+  const [testResult, setTestResult] = useState<TestProviderResultDto | null>(null);
+  const detail = detailQuery.data;
+  const Icon = DRIVER_ICONS[summary.driver] ?? Code2;
+
+  if (!detail) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-adam-neutral-700 px-4 py-4 text-xs text-adam-neutral-300">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading {summary.name}…
+      </div>
+    );
+  }
 
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 rounded-lg border px-4 py-3 transition-colors',
-        provider.enabled
-          ? 'border-adam-neutral-700 bg-adam-background-2'
-          : 'border-adam-neutral-800 bg-adam-background-1/50 opacity-60',
+        'rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-4 py-3',
+        !detail.enabled && 'opacity-60',
       )}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full',
-              provider.enabled ? 'bg-adam-blue/10' : 'bg-adam-neutral-800',
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-adam-blue/10">
+            <Icon className="h-4 w-4 text-adam-blue" />
+          </div>
+          <div className="min-w-0">
+            <div className="break-words text-sm font-medium text-adam-neutral-50">
+              {detail.name}
+            </div>
+            <div className="mt-0.5 break-all text-xs text-adam-neutral-300">
+              {detail.baseUrl || 'No endpoint configured'}
+            </div>
+          </div>
+        </div>
+        <Switch
+          checked={detail.enabled}
+          onCheckedChange={() =>
+            updateMutation.mutate({
+              providerId: detail.id,
+              input: { enabled: !detail.enabled },
+            })
+          }
+          disabled={updateMutation.isPending}
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <DriverBadge driver={detail.driver} />
+        <CredentialBadge hasCredential={detail.hasCredential} />
+        {testResult && (
+          <Badge
+            variant="outline"
+            className={
+              testResult.ok
+                ? 'border-adam-emerald/30 text-adam-emerald'
+                : 'border-adam-red-400/30 text-adam-red-400'
+            }
+          >
+            {testResult.ok ? (
+              <CheckCircle2 className="mr-1 h-3 w-3" />
+            ) : (
+              <XCircle className="mr-1 h-3 w-3" />
             )}
-          >
-            <Icon
-              className={cn(
-                'h-4 w-4',
-                provider.enabled ? 'text-adam-blue' : 'text-adam-neutral-500',
-              )}
-            />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-adam-neutral-50">
-              {provider.name}
-            </div>
-            <div className="text-xs text-adam-neutral-400">
-              {provider.baseUrl ?? 'No endpoint configured'}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={provider.enabled}
-            onCheckedChange={onToggleEnabled}
-            disabled={isDeleting || isTesting}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <DriverBadge driver={provider.driver} />
-        <CredentialBadge hasCredential={provider.hasCredential} />
-        <TestStatusBadge result={testResult} />
-      </div>
-
-      <div className="flex items-center justify-end gap-2">
-        {onManageModels && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onManageModels}
-            className="h-7 rounded-full px-2 text-xs text-adam-neutral-400 hover:text-adam-neutral-200"
-          >
-            <MessageSquare className="mr-1 h-3 w-3" />
-            Manage Models
-          </Button>
+            {testResult.ok ? `${testResult.latencyMs}ms` : 'Failed'}
+          </Badge>
         )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
         <Button
           variant="ghost"
           size="sm"
-          onClick={onTest}
-          disabled={isTesting || !provider.enabled}
-          className="h-7 rounded-full px-2 text-xs"
+          onClick={() => onManageModels(detail.id)}
+          className="h-7 rounded-full px-2 text-xs text-adam-neutral-200"
         >
-          {isTesting ? (
+          <MessageSquare className="mr-1 h-3 w-3" /> Models
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!detail.enabled || testMutation.isPending}
+          onClick={() =>
+            testMutation.mutate(
+              { id: detail.id },
+              { onSettled: (result) => setTestResult(result ?? null) },
+            )
+          }
+          className="h-7 rounded-full px-2 text-xs text-adam-neutral-200"
+        >
+          {testMutation.isPending ? (
             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
           ) : (
             <TestTubes className="mr-1 h-3 w-3" />
@@ -717,35 +1048,23 @@ function ProviderCard({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onEdit}
-          disabled={isDeleting}
-          className="h-7 rounded-full px-2 text-xs"
+          onClick={() => onEdit(detail)}
+          className="h-7 rounded-full px-2 text-xs text-adam-neutral-100"
         >
-          <Edit2 className="mr-1 h-3 w-3" />
-          Edit
+          <Edit2 className="mr-1 h-3 w-3" /> Edit settings
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          onClick={onDelete}
-          disabled={isDeleting}
-          className="text-adam-red-400 hover:text-adam-red-300 h-7 rounded-full px-2 text-xs"
+          onClick={() => onDelete(detail.id)}
+          className="h-7 rounded-full px-2 text-xs text-adam-red-400 hover:text-adam-red-300"
         >
-          {isDeleting ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <Trash2 className="mr-1 h-3 w-3" />
-          )}
-          Delete
+          <Trash2 className="mr-1 h-3 w-3" /> Delete
         </Button>
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Runtime integration card
-// ---------------------------------------------------------------------------
 
 const INTEGRATION_ICONS: Record<
   RuntimeIntegrationStatus['integrationId'],
@@ -762,291 +1081,50 @@ function RuntimeIntegrationCard({
   integration: RuntimeIntegrationStatus;
 }) {
   const Icon = INTEGRATION_ICONS[integration.integrationId];
-
-  const statusColors: Record<
-    RuntimeIntegrationStatus['status'],
-    { bg: string; text: string; label: string }
-  > = {
-    connected: {
-      bg: 'bg-adam-green/10',
-      text: 'text-adam-green',
-      label: 'Connected',
-    },
-    available: {
-      bg: 'bg-adam-blue/10',
-      text: 'text-adam-blue',
-      label: 'Available',
-    },
-    unavailable: {
-      bg: 'bg-adam-orange/10',
-      text: 'text-adam-orange',
-      label: 'Unavailable',
-    },
-    'not-configured': {
-      bg: 'bg-adam-neutral-800',
-      text: 'text-adam-neutral-500',
-      label: 'Not configured',
-    },
-  };
-
-  const status = statusColors[integration.status];
+  const statusClass =
+    integration.status === 'connected'
+      ? 'text-adam-emerald'
+      : integration.status === 'available'
+        ? 'text-adam-blue'
+        : integration.status === 'unavailable'
+          ? 'text-adam-amber'
+          : 'text-adam-neutral-300';
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-adam-neutral-800">
-            <Icon className="h-4 w-4 text-adam-neutral-400" />
+    <div className="rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-adam-neutral-800">
+            <Icon className="h-4 w-4 text-adam-neutral-200" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-adam-neutral-50">
               {integration.label}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium">
-                <span className={`h-1.5 w-1.5 rounded-full ${status.bg}`} />
-                {status.label}
-              </span>
-              {integration.baseUrl && (
-                <span className="text-xs text-adam-neutral-500">
-                  {integration.baseUrl.replace(/\/+$/, '')}
-                </span>
-              )}
+            <div className={cn('text-xs font-medium', statusClass)}>
+              {integration.status === 'not-configured'
+                ? 'Not configured'
+                : integration.status.charAt(0).toUpperCase() +
+                  integration.status.slice(1)}
             </div>
+            {integration.baseUrl && (
+              <div className="mt-1 break-all text-xs text-adam-neutral-300">
+                {integration.baseUrl.replace(/\/+$/, '')}
+              </div>
+            )}
           </div>
         </div>
-
         {integration.modelCount > 0 && (
-          <div className="flex items-center gap-1">
-            <MessageSquare className="h-3 w-3 text-adam-neutral-500" />
-            <span className="text-xs text-adam-neutral-400">
-              {integration.modelCount}
-            </span>
-          </div>
+          <Badge variant="outline" className="text-adam-neutral-200">
+            {integration.modelCount} models
+          </Badge>
         )}
       </div>
-
-      <p className="text-[11px] text-adam-neutral-500">
+      <p className="mt-2 text-xs text-adam-neutral-300">
         {integration.explanation}
       </p>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Provider form (inline editor)
-// ---------------------------------------------------------------------------
-
-interface ProviderFormProps {
-  mode: 'create' | 'edit';
-  initialData?: ProviderDetail;
-  onSave: (input: CreateProviderInput | UpdateProviderInput) => void;
-  onCancel: () => void;
-  isSaving: boolean;
-}
-
-function ProviderForm({
-  mode,
-  initialData,
-  onSave,
-  onCancel,
-  isSaving,
-}: ProviderFormProps) {
-  const [name, setName] = useState(initialData?.name ?? '');
-  const [slug, setSlug] = useState(initialData?.slug ?? '');
-  const [driver, setDriver] = useState<ProviderSummary['driver']>(
-    initialData?.driver ?? 'openai-compatible',
-  );
-  const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? '');
-  const [credential, setCredential] = useState('');
-  const [_showCredential, setShowCredential] = useState(false);
-
-  const presetUrl = PRESET_ENDPOINTS[driver] ?? '';
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-
-    const isEdit = mode === 'edit';
-    const base = {
-      name: name.trim(),
-      driver,
-      baseUrl: baseUrl || undefined,
-    };
-
-    if (isEdit && initialData) {
-      const input: UpdateProviderInput = { ...base };
-      if (credential) {
-        input.credential = credential;
-      }
-      onSave(input);
-    } else {
-      const input: CreateProviderInput = {
-        ...base,
-        slug:
-          slug.trim() ||
-          name
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, ''),
-        ...(credential ? { credential } : {}),
-      };
-      onSave(input);
-    }
-  };
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-4 rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-4"
-    >
-      {/* Name */}
-      <div>
-        <label className="mb-1 block text-xs font-medium text-adam-neutral-300">
-          Display name
-        </label>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. My Local Model"
-          className="h-9"
-          required
-        />
-      </div>
-
-      {/* Slug (create only) */}
-      {mode === 'create' && (
-        <div>
-          <label className="mb-1 block text-xs font-medium text-adam-neutral-300">
-            Slug (auto-generated from name)
-          </label>
-          <Input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="auto-generated"
-            className="h-9 text-adam-neutral-400"
-            readOnly
-          />
-        </div>
-      )}
-
-      {/* Driver */}
-      <div>
-        <label className="mb-1 block text-xs font-medium text-adam-neutral-300">
-          Driver preset
-        </label>
-        <select
-          value={driver}
-          onChange={(e) =>
-            setDriver(e.target.value as ProviderSummary['driver'])
-          }
-          className="h-9 w-full rounded-md border border-adam-neutral-700 bg-adam-background-1 px-3 text-xs text-adam-neutral-300 focus:border-adam-blue/40 focus:outline-none"
-        >
-          <option value="openai-compatible">OpenAI Compatible</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="google">Google</option>
-          <option value="openrouter">OpenRouter</option>
-        </select>
-      </div>
-
-      {/* Base URL */}
-      <div>
-        <label className="mb-1 block text-xs font-medium text-adam-neutral-300">
-          Base URL{' '}
-          {presetUrl && (
-            <span className="text-adad-green-500/60 ml-1">
-              (preset: {presetUrl})
-            </span>
-          )}
-        </label>
-        <Input
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder={presetUrl || 'https://...'}
-          className="h-9"
-        />
-      </div>
-
-      {/* Credential */}
-      <div>
-        <label className="mb-1 flex items-center justify-between text-xs font-medium text-adam-neutral-300">
-          <span className="flex items-center gap-1">
-            <Key className="h-3 w-3" />
-            API key / token
-          </span>
-          {initialData?.hasCredential && (
-            <button
-              type="button"
-              onClick={() => {
-                setCredential('__REMOVE__');
-              }}
-              className="text-adam-red-400 hover:text-adam-red-300 text-[10px]"
-            >
-              Remove existing
-            </button>
-          )}
-        </label>
-        <Input
-          type={_showCredential ? 'text' : 'password'}
-          value={credential}
-          onChange={(e) => setCredential(e.target.value)}
-          placeholder={
-            initialData?.hasCredential
-              ? 'Enter new key to update, or remove existing'
-              : 'API key or token'
-          }
-          className="h-9"
-        />
-        {credential && (
-          <button
-            type="button"
-            onClick={() => setShowCredential((v) => !v)}
-            className="mt-1 text-[10px] text-adam-neutral-400 underline"
-          >
-            {_showCredential ? 'Hide' : 'Show'}
-          </button>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="dark"
-          onClick={onCancel}
-          disabled={isSaving}
-          className="h-8 rounded-full px-3 text-xs"
-        >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          disabled={isSaving || !name.trim()}
-          className="h-8 rounded-full px-3 text-xs"
-        >
-          {isSaving ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <Check className="mr-1 h-3 w-3" />
-          )}
-          {mode === 'create' ? 'Create' : 'Save'}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Provider model form (inline editor)
-// ---------------------------------------------------------------------------
-
-interface ProviderModelFormProps {
-  mode: 'create' | 'edit';
-  initialData?: ProviderModelDetail;
-  onSave: (input: CreateProviderModelInput | UpdateProviderModelInput) => void;
-  onCancel: () => void;
-  isSaving: boolean;
 }
 
 function ProviderModelForm({
@@ -1054,732 +1132,533 @@ function ProviderModelForm({
   initialData,
   onSave,
   onCancel,
-  isSaving,
-}: ProviderModelFormProps) {
-  const [modelId, setModelId] = useState(
-    mode === 'edit' ? (initialData?.modelId ?? '') : '',
-  );
-  const [displayName, setDisplayName] = useState(
-    mode === 'edit' ? (initialData?.displayName ?? '') : '',
-  );
-  const [description, setDescription] = useState(
-    mode === 'edit' ? (initialData?.description ?? '') : '',
-  );
+  busy,
+}: {
+  mode: 'create' | 'edit';
+  initialData?: ProviderModelDetail;
+  onSave: (input: CreateProviderModelInput | UpdateProviderModelInput) => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const [modelId, setModelId] = useState(initialData?.modelId ?? '');
+  const [displayName, setDisplayName] = useState(initialData?.displayName ?? '');
+  const [description, setDescription] = useState(initialData?.description ?? '');
   const [supportsTools, setSupportsTools] = useState(
-    mode === 'edit' ? (initialData?.supportsTools ?? false) : false,
+    initialData?.supportsTools ?? false,
   );
   const [supportsThinking, setSupportsThinking] = useState(
-    mode === 'edit' ? (initialData?.supportsThinking ?? false) : false,
+    initialData?.supportsThinking ?? false,
   );
   const [supportsVision, setSupportsVision] = useState(
-    mode === 'edit' ? (initialData?.supportsVision ?? false) : false,
+    initialData?.supportsVision ?? false,
   );
   const [contextLimit, setContextLimit] = useState(
-    mode === 'edit' ? (initialData?.contextLimit?.toString() ?? '') : '',
+    initialData?.contextLimit?.toString() ?? '',
   );
   const [outputLimit, setOutputLimit] = useState(
-    mode === 'edit' ? (initialData?.outputLimit?.toString() ?? '') : '',
+    initialData?.outputLimit?.toString() ?? '',
   );
-  const [isVisible, setIsVisible] = useState(
-    mode === 'edit' ? (initialData?.isVisible ?? true) : true,
-  );
+  const [isVisible, setIsVisible] = useState(initialData?.isVisible ?? true);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const base = {
-      displayName,
-      description: description || null,
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const base: UpdateProviderModelInput = {
+      displayName: displayName.trim(),
+      description: description.trim() || null,
       supportsTools,
       supportsThinking,
       supportsVision,
-      contextLimit: contextLimit ? parseInt(contextLimit, 10) : null,
-      outputLimit: outputLimit ? parseInt(outputLimit, 10) : null,
+      contextLimit: contextLimit ? Number(contextLimit) : null,
+      outputLimit: outputLimit ? Number(outputLimit) : null,
       isVisible,
     };
     if (mode === 'create') {
-      onSave({ ...base, modelId } as CreateProviderModelInput);
+      onSave({
+        ...base,
+        modelId: modelId.trim(),
+        displayName: displayName.trim(),
+      } as CreateProviderModelInput);
     } else {
-      onSave(base as UpdateProviderModelInput);
+      onSave(base);
     }
   };
 
   return (
     <form
-      onSubmit={handleSubmit}
-      className="mb-3 rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-3"
+      onSubmit={submit}
+      className="mb-3 space-y-3 rounded-lg border border-adam-neutral-700 bg-adam-background-1 p-3"
     >
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-medium text-adam-neutral-300">
-          {mode === 'create' ? 'Add Model' : 'Edit Model'}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-          className="h-6 rounded-full px-2 text-xs"
-        >
-          Cancel
-        </Button>
+      <div className="text-xs font-medium text-adam-neutral-100">
+        {mode === 'create' ? 'Add model' : 'Edit model'}
       </div>
-
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs text-adam-neutral-400">
-            Model ID *
-          </label>
+          <label className="mb-1 block text-xs text-adam-neutral-300">Model ID</label>
           <Input
             value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            placeholder="e.g. claude-sonnet-4-20250514"
+            onChange={(event) => setModelId(event.target.value)}
             disabled={mode === 'edit'}
             required
-            className="h-7 rounded-full bg-adam-background-1 text-xs"
+            className="h-8 text-xs text-adam-neutral-50"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-adam-neutral-400">
-            Display Name *
+          <label className="mb-1 block text-xs text-adam-neutral-300">
+            Display name
           </label>
           <Input
             value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="e.g. Claude Sonnet 4"
+            onChange={(event) => setDisplayName(event.target.value)}
             required
-            className="h-7 rounded-full bg-adam-background-1 text-xs"
+            className="h-8 text-xs text-adam-neutral-50"
           />
         </div>
       </div>
-
-      <div className="mb-2">
-        <label className="mb-1 block text-xs text-adam-neutral-400">
-          Description
-        </label>
+      <div>
+        <label className="mb-1 block text-xs text-adam-neutral-300">Description</label>
         <Textarea
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Optional description..."
+          onChange={(event) => setDescription(event.target.value)}
           rows={2}
-          className="rounded-md bg-adam-background-1 text-xs"
+          className="text-xs text-adam-neutral-50"
         />
       </div>
-
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={supportsTools}
-            onCheckedChange={setSupportsTools}
-            aria-label="Supports tools"
-          />
-          <span className="text-xs text-adam-neutral-400">Tools</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={supportsThinking}
-            onCheckedChange={setSupportsThinking}
-            aria-label="Supports thinking"
-          />
-          <span className="text-xs text-adam-neutral-400">Thinking</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={supportsVision}
-            onCheckedChange={setSupportsVision}
-            aria-label="Supports vision"
-          />
-          <span className="text-xs text-adam-neutral-400">Vision</span>
-        </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {[
+          ['Tools', supportsTools, setSupportsTools],
+          ['Thinking', supportsThinking, setSupportsThinking],
+          ['Vision', supportsVision, setSupportsVision],
+        ].map(([label, checked, setter]) => (
+          <label
+            key={label as string}
+            className="flex items-center gap-2 text-xs text-adam-neutral-200"
+          >
+            <Switch
+              checked={checked as boolean}
+              onCheckedChange={setter as (value: boolean) => void}
+            />
+            {label as string}
+          </label>
+        ))}
       </div>
-
-      <div className="mb-3 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="mb-1 block text-xs text-adam-neutral-400">
-            Context Limit
+          <label className="mb-1 block text-xs text-adam-neutral-300">
+            Context limit
           </label>
           <Input
+            type="number"
             value={contextLimit}
-            onChange={(e) => setContextLimit(e.target.value)}
-            placeholder="e.g. 128000"
-            type="number"
-            className="h-7 rounded-full bg-adam-background-1 text-xs"
+            onChange={(event) => setContextLimit(event.target.value)}
+            className="h-8 text-xs text-adam-neutral-50"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-adam-neutral-400">
-            Output Limit
+          <label className="mb-1 block text-xs text-adam-neutral-300">
+            Output limit
           </label>
           <Input
-            value={outputLimit}
-            onChange={(e) => setOutputLimit(e.target.value)}
-            placeholder="e.g. 8192"
             type="number"
-            className="h-7 rounded-full bg-adam-background-1 text-xs"
+            value={outputLimit}
+            onChange={(event) => setOutputLimit(event.target.value)}
+            className="h-8 text-xs text-adam-neutral-50"
           />
         </div>
       </div>
-
-      <div className="flex items-center justify-end gap-2">
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={isVisible}
-            onCheckedChange={setIsVisible}
-            aria-label="Enable model"
-          />
-          <span className="text-xs text-adam-neutral-400">Enabled</span>
+      <div className="flex items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs text-adam-neutral-200">
+          <Switch checked={isVisible} onCheckedChange={setIsVisible} /> Enabled
+        </label>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="dark"
+            size="sm"
+            onClick={onCancel}
+            className="h-7 rounded-full px-2 text-xs"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={busy || !displayName.trim() || (mode === 'create' && !modelId.trim())}
+            className="h-7 rounded-full px-2 text-xs"
+          >
+            {busy && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+            Save
+          </Button>
         </div>
-        <Button
-          type="submit"
-          size="sm"
-          variant="dark"
-          disabled={isSaving}
-          className="h-7 rounded-full px-2 text-xs"
-        >
-          {isSaving ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : mode === 'create' ? (
-            <Plus className="mr-1 h-3 w-3" />
-          ) : (
-            <Check className="mr-1 h-3 w-3" />
-          )}
-          {mode === 'create' ? 'Add Model' : 'Save'}
-        </Button>
       </div>
     </form>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Provider model card
-// ---------------------------------------------------------------------------
+function ProviderModelsPanel({
+  providerId,
+  onClose,
+}: {
+  providerId: string;
+  onClose: () => void;
+}) {
+  const modelsQuery = useProviderModels(providerId);
+  const createMutation = useCreateProviderModel();
+  const updateMutation = useUpdateProviderModel();
+  const deleteMutation = useDeleteProviderModel();
+  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const editingModel = modelsQuery.data?.find((model) => model.id === editingRowId);
 
-interface ProviderModelCardProps {
-  model: ProviderModelDetail;
-  onEdit: () => void;
-  onDelete: () => void;
-  isDeleting: boolean;
-}
+  const save = (input: CreateProviderModelInput | UpdateProviderModelInput) => {
+    if (formMode === 'edit' && editingRowId) {
+      updateMutation.mutate({
+        providerId,
+        modelRowId: editingRowId,
+        input: input as UpdateProviderModelInput,
+      });
+    } else {
+      createMutation.mutate({
+        providerId,
+        input: input as CreateProviderModelInput,
+      });
+    }
+    setFormMode(null);
+    setEditingRowId(null);
+  };
 
-function ProviderModelCard({
-  model,
-  onEdit,
-  onDelete,
-  isDeleting,
-}: ProviderModelCardProps) {
   return (
-    <div
-      className={cn(
-        'flex items-center justify-between rounded-md border px-3 py-2 transition-colors',
-        model.isVisible
-          ? 'border-adam-neutral-700 bg-adam-background-1/50'
-          : 'border-adam-neutral-800 bg-adam-background-1/30 opacity-50',
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate font-mono text-xs text-adam-neutral-300">
-              {model.modelId}
-            </span>
-            <span className="text-xs text-adam-neutral-500">—</span>
-            <span className="truncate text-xs text-adam-neutral-400">
-              {model.displayName}
-            </span>
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1">
-            {model.supportsTools && (
-              <Badge
-                variant="secondary"
-                className="h-4 rounded px-1 text-[10px]"
-              >
-                Tools
-              </Badge>
-            )}
-            {model.supportsThinking && (
-              <Badge
-                variant="secondary"
-                className="h-4 rounded px-1 text-[10px]"
-              >
-                Thinking
-              </Badge>
-            )}
-            {model.supportsVision && (
-              <Badge
-                variant="secondary"
-                className="h-4 rounded px-1 text-[10px]"
-              >
-                Vision
-              </Badge>
-            )}
-            {model.contextLimit && (
-              <span className="text-[10px] text-adam-neutral-500">
-                {model.contextLimit.toLocaleString()} ctx
-              </span>
-            )}
-          </div>
+    <div className="mt-4 rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-xs font-medium text-adam-neutral-100">
+          Provider models ({modelsQuery.data?.length ?? 0})
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="dark"
+            onClick={() => {
+              setFormMode('create');
+              setEditingRowId(null);
+            }}
+            className="h-7 rounded-full px-2 text-xs"
+          >
+            <Plus className="mr-1 h-3 w-3" /> Add model
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onClose}
+            className="h-7 rounded-full px-2 text-xs text-adam-neutral-200"
+          >
+            Close
+          </Button>
         </div>
       </div>
 
-      <div className="ml-2 flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onEdit}
-          disabled={isDeleting}
-          className="h-6 rounded-full px-1.5 text-[11px]"
-        >
-          <Edit2 className="mr-0.5 h-2.5 w-2.5" />
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onDelete}
-          disabled={isDeleting}
-          className="text-adam-red-400 hover:text-adam-red-300 h-6 rounded-full px-1.5 text-[11px]"
-        >
-          {isDeleting ? (
-            <Loader2 className="h-2.5 w-2.5 animate-spin" />
-          ) : (
-            <Trash2 className="h-2.5 w-2.5" />
+      {formMode && (
+        <ProviderModelForm
+          key={`${formMode}:${editingRowId ?? 'new'}`}
+          mode={formMode}
+          initialData={editingModel}
+          onSave={save}
+          onCancel={() => {
+            setFormMode(null);
+            setEditingRowId(null);
+          }}
+          busy={createMutation.isPending || updateMutation.isPending}
+        />
+      )}
+
+      {modelsQuery.isLoading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-4 w-4 animate-spin text-adam-neutral-300" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(modelsQuery.data ?? []).map((model) => (
+            <div
+              key={model.id}
+              className={cn(
+                'rounded-md border border-adam-neutral-700 bg-adam-background-1 px-3 py-2',
+                !model.isVisible && 'opacity-50',
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="break-all font-mono text-xs text-adam-neutral-100">
+                    {model.modelId}
+                  </div>
+                  <div className="text-xs text-adam-neutral-300">
+                    {model.displayName}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {model.supportsTools && <Badge variant="outline">Tools</Badge>}
+                    {model.supportsThinking && <Badge variant="outline">Thinking</Badge>}
+                    {model.supportsVision && <Badge variant="outline">Vision</Badge>}
+                    {model.contextLimit && (
+                      <span className="text-[11px] text-adam-neutral-400">
+                        {model.contextLimit.toLocaleString()} ctx
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditingRowId(model.id);
+                      setFormMode('edit');
+                    }}
+                    className="h-7 px-2 text-xs text-adam-neutral-200"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm('Delete this model?')) {
+                        deleteMutation.mutate({
+                          providerId,
+                          modelRowId: model.id,
+                        });
+                      }
+                    }}
+                    className="h-7 px-2 text-adam-red-400"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {(modelsQuery.data ?? []).length === 0 && (
+            <div className="rounded-md border border-dashed border-adam-neutral-700 px-3 py-4 text-center text-xs text-adam-neutral-300">
+              No models configured for this provider.
+            </div>
           )}
-        </Button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
 export function ProvidersSettings() {
-  const _queryClient = useQueryClient();
-
-  // Fetch data
-  const { data: providers = [], isLoading: isProvidersLoading } =
-    useProviders();
-
-  // Runtime integrations
-  const runtimeIntegrations = useRuntimeIntegrations();
-
-  // Separate built-in vs custom
-  const customProviders = providers.filter(
-    (p) => !BUILTIN_DRIVERS.includes(p.driver) || false,
-  );
-
-  // Built-in drivers (static)
-  const builtinDrivers = useMemo(
-    () => ['anthropic', 'google', 'openrouter', 'openai-compatible'],
-    [],
-  );
-
-  // State
-  const [showForm, setShowForm] = useState(false);
-  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [editingProviderId, setEditingProviderId] = useState<string | null>(
-    null,
-  );
-
-  // Detail for editing
-  const { data: editingDetail } = useProviderDetail(editingProviderId);
-
-  // Model management state
-  const [selectedModelProviderId, setSelectedModelProviderId] = useState<
-    string | null
-  >(null);
-  const [showModelForm, setShowModelForm] = useState(false);
-  const [modelFormMode, setModelFormMode] = useState<'create' | 'edit'>(
-    'create',
-  );
-  const [editingModelId, setEditingModelId] = useState<string | null>(null);
-
-  // Model data
-  const { data: modelList = [] } = useProviderModels(selectedModelProviderId);
-  const editingModel =
-    modelFormMode === 'edit' && editingModelId
-      ? modelList.find((m) => m.id === editingModelId)
-      : undefined;
-
-  // Model mutations
-  const createModelMutation = useCreateProviderModel();
-  const updateModelMutation = useUpdateProviderModel();
-  const deleteModelMutation = useDeleteProviderModel();
-
-  // Mutations
+  const providersQuery = useProviders();
+  const builtinQuery = useBuiltinProviders();
+  const runtimeQuery = useRuntimeIntegrations();
   const createMutation = useCreateProvider();
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
-  const testMutation = useTestProvider();
+  const builtinMutation = useSaveBuiltinProvider();
 
-  // Test state (per-provider)
-  const [testResults, setTestResults] = useState<
-    Record<string, TestProviderResultDto | null>
-  >({});
+  const [editingBuiltin, setEditingBuiltin] = useState<ProviderDriver | null>(null);
+  const [customFormMode, setCustomFormMode] = useState<'create' | 'edit' | null>(
+    null,
+  );
+  const [editingCustom, setEditingCustom] = useState<ProviderDetail | null>(null);
+  const [modelProviderId, setModelProviderId] = useState<string | null>(null);
 
-  // Handlers
-  const handleCreate = useCallback(() => {
-    setFormMode('create');
-    setShowForm(true);
-  }, []);
-
-  const handleEdit = useCallback((provider: ProviderSummary) => {
-    setFormMode('edit');
-    setEditingProviderId(provider.id);
-    setShowForm(true);
-  }, []);
-
-  const handleSave = useCallback(
-    (input: CreateProviderInput | UpdateProviderInput) => {
-      if (formMode === 'edit' && editingDetail) {
-        const updateInput = input as UpdateProviderInput;
-        if (updateInput.credential === '__REMOVE__') {
-          updateInput.credential = null;
-        }
-        updateMutation.mutate({
-          providerId: editingDetail.id,
-          input: updateInput,
-        });
-      } else {
-        const createInput = input as CreateProviderInput;
-        if (createInput.credential === '__REMOVE__') {
-          createInput.credential = undefined;
-        }
-        createMutation.mutate(createInput);
-      }
-      setShowForm(false);
-      setEditingProviderId(null);
-    },
-    [formMode, editingDetail, updateMutation, createMutation],
+  const providers = providersQuery.data ?? [];
+  const customProviders = providers.filter(
+    (provider) => !provider.slug.startsWith(BUILTIN_SLUG_PREFIX),
+  );
+  const builtinProviders = builtinQuery.data ?? [];
+  const editedBuiltin = builtinProviders.find(
+    (provider) => provider.driver === editingBuiltin,
   );
 
-  const handleDelete = useCallback(
-    (providerId: string) => {
-      if (window.confirm('Delete this provider? This cannot be undone.')) {
-        deleteMutation.mutate(providerId);
-      }
-    },
-    [deleteMutation],
-  );
-
-  const handleToggleEnabled = useCallback(
-    (provider: ProviderDetail) => {
+  const saveCustom = (input: CreateProviderInput | UpdateProviderInput) => {
+    if (customFormMode === 'edit' && editingCustom) {
       updateMutation.mutate({
-        providerId: provider.id,
-        input: { enabled: !provider.enabled },
+        providerId: editingCustom.id,
+        input: input as UpdateProviderInput,
       });
+    } else {
+      createMutation.mutate(input as CreateProviderInput);
+    }
+    setCustomFormMode(null);
+    setEditingCustom(null);
+  };
+
+  const resetBuiltin = useCallback(
+    (driver: ProviderDriver) => {
+      builtinMutation.mutate({ driver, reset: true });
+      setEditingBuiltin(null);
     },
-    [updateMutation],
+    [builtinMutation],
   );
 
-  const handleTest = useCallback(
-    (provider: ProviderDetail) => {
-      testMutation.mutate(
-        { id: provider.id },
-        {
-          onSettled: (result) => {
-            setTestResults((prev) => ({
-              ...prev,
-              [provider.id]: result ?? null,
-            }));
-          },
-        },
-      );
-    },
-    [testMutation],
-  );
-
-  const handleCancel = useCallback(() => {
-    setShowForm(false);
-    setEditingProviderId(null);
-  }, []);
-
-  // Model handlers
-  const handleSelectProviderModels = useCallback((providerId: string) => {
-    setSelectedModelProviderId((prev) =>
-      prev === providerId ? null : providerId,
-    );
-  }, []);
-
-  const handleOpenModelForm = useCallback(
-    (mode: 'create' | 'edit', modelId?: string) => {
-      setModelFormMode(mode);
-      setEditingModelId(mode === 'edit' && modelId ? modelId : null);
-      setShowModelForm(true);
-    },
-    [],
-  );
-
-  const handleCloseModelForm = useCallback(() => {
-    setShowModelForm(false);
-    setEditingModelId(null);
-  }, []);
-
-  const handleSaveModel = useCallback(
-    (input: CreateProviderModelInput | UpdateProviderModelInput) => {
-      if (!selectedModelProviderId) return;
-
-      if (modelFormMode === 'edit' && editingModelId) {
-        updateModelMutation.mutate({
-          providerId: selectedModelProviderId,
-          modelId: editingModelId,
-          input: input as UpdateProviderModelInput,
-        });
-      } else {
-        createModelMutation.mutate({
-          providerId: selectedModelProviderId,
-          input: input as CreateProviderModelInput,
-        });
-      }
-      handleCloseModelForm();
-    },
-    [
-      modelFormMode,
-      selectedModelProviderId,
-      editingModelId,
-      updateModelMutation,
-      createModelMutation,
-      handleCloseModelForm,
-    ],
-  );
-
-  const handleDeleteModel = useCallback(
-    (modelId: string) => {
-      if (!selectedModelProviderId) return;
-      if (window.confirm('Delete this model? This cannot be undone.')) {
-        deleteModelMutation.mutate({
-          providerId: selectedModelProviderId,
-          modelId,
-        });
-      }
-    },
-    [selectedModelProviderId, deleteModelMutation],
-  );
-
-  // Loading state
-  if (isProvidersLoading) {
+  if (providersQuery.isLoading || builtinQuery.isLoading) {
     return (
-      <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
-        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
-          Providers
-        </h2>
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-500" />
+      <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
+        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">Providers</h2>
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-300" />
         </div>
       </section>
     );
   }
 
   return (
-    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-adam-neutral-50">Providers</h2>
+    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 text-adam-neutral-100 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium text-adam-neutral-50">Providers</h2>
+          <p className="mt-1 text-xs text-adam-neutral-300">
+            Configure endpoints, credentials, availability and custom model metadata from one place.
+          </p>
+        </div>
         <Button
           size="sm"
           variant="dark"
-          onClick={handleCreate}
-          disabled={showForm}
-          className="h-7 rounded-full px-2 text-xs"
+          onClick={() => {
+            setEditingCustom(null);
+            setCustomFormMode('create');
+          }}
+          disabled={customFormMode !== null}
+          className="h-8 rounded-full px-3 text-xs text-adam-neutral-100"
         >
-          <Plus className="mr-1 h-3 w-3" />
-          Add Provider
+          <Plus className="mr-1 h-3 w-3" /> Add provider
         </Button>
       </div>
 
-      {/* Built-in providers */}
-      <div className="mb-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Settings2 className="h-3.5 w-3.5 text-adam-neutral-400" />
-          <span className="text-xs font-medium text-adam-neutral-400">
-            Built-in providers
-          </span>
+      <div className="mb-6">
+        <div className="mb-2 flex items-center gap-2 text-adam-neutral-200">
+          <Settings2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Built-in providers</span>
         </div>
-        <div className="flex flex-col gap-2">
-          {builtinDrivers.map((driver) => (
-            <BuiltinProviderCard
-              key={driver}
-              driver={driver as ProviderSummary['driver']}
-            />
-          ))}
-        </div>
+        {builtinQuery.isError ? (
+          <div className="rounded-md border border-adam-red-400/30 bg-adam-red-400/5 px-3 py-2 text-xs text-adam-red-300">
+            Failed to load built-in provider settings.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {builtinProviders.map((provider) => (
+              <div key={provider.driver}>
+                <BuiltinProviderCard
+                  provider={provider}
+                  busy={builtinMutation.isPending}
+                  onEdit={() => setEditingBuiltin(provider.driver)}
+                  onToggle={() =>
+                    builtinMutation.mutate({
+                      driver: provider.driver,
+                      enabled: !provider.enabled,
+                      baseUrl: provider.baseUrl,
+                    })
+                  }
+                  onReset={() => resetBuiltin(provider.driver)}
+                />
+                {editedBuiltin?.driver === provider.driver && (
+                  <BuiltinProviderForm
+                    key={`${provider.driver}:${provider.overrideId ?? 'default'}`}
+                    provider={provider}
+                    busy={builtinMutation.isPending}
+                    onSave={(input) => {
+                      builtinMutation.mutate(input);
+                      setEditingBuiltin(null);
+                    }}
+                    onReset={() => resetBuiltin(provider.driver)}
+                    onCancel={() => setEditingBuiltin(null)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Runtime integrations */}
-      <div className="mb-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Network className="h-3.5 w-3.5 text-adam-neutral-400" />
-          <span className="text-xs font-medium text-adam-neutral-400">
-            Runtime Integrations
-          </span>
+      <div className="mb-6">
+        <div className="mb-2 flex items-center gap-2 text-adam-neutral-200">
+          <Network className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Runtime integrations</span>
         </div>
-        <div className="flex flex-col gap-2">
-          {runtimeIntegrations.isLoading && (
-            <div className="flex items-center gap-2 py-2">
-              <Loader2 className="h-3 w-3 animate-spin text-adam-neutral-500" />
-              <span className="text-xs text-adam-neutral-500">
-                Discovering runtimes…
-              </span>
-            </div>
-          )}
-          {runtimeIntegrations.isError && (
-            <div className="border-adam-orange/20 bg-adam-orange/5 text-adam-orange rounded-md border px-3 py-2 text-xs">
-              Failed to discover runtime integrations
-            </div>
-          )}
-          {!runtimeIntegrations.isLoading &&
-            !runtimeIntegrations.isError &&
-            runtimeIntegrations.data?.map((integration) => (
+        {runtimeQuery.isLoading ? (
+          <div className="flex items-center gap-2 py-3 text-xs text-adam-neutral-300">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Discovering runtimes…
+          </div>
+        ) : runtimeQuery.isError ? (
+          <div className="rounded-md border border-adam-amber/30 bg-adam-amber/5 px-3 py-2 text-xs text-adam-amber">
+            Failed to discover runtime integrations.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {(runtimeQuery.data ?? []).map((integration) => (
               <RuntimeIntegrationCard
                 key={integration.integrationId}
                 integration={integration}
               />
             ))}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Divider */}
-      {customProviders.length > 0 && (
-        <div className="my-4 border-t border-adam-neutral-800" />
-      )}
-
-      {/* Custom providers form */}
-      {showForm && (
-        <div className="mb-4">
-          <ProviderForm
-            mode={formMode}
-            initialData={editingDetail ?? undefined}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            isSaving={createMutation.isPending || updateMutation.isPending}
-          />
+      <div className="border-t border-adam-neutral-800 pt-5">
+        <div className="mb-3 flex items-center gap-2 text-adam-neutral-200">
+          <Plug className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Custom providers</span>
         </div>
-      )}
 
-      {/* Custom provider list */}
-      {customProviders.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {customProviders.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={{
-                ...provider,
-                baseUrl: null,
-                hasCredential: false,
+        {customFormMode && (
+          <div className="mb-4">
+            <ProviderForm
+              key={`${customFormMode}:${editingCustom?.id ?? 'new'}`}
+              mode={customFormMode}
+              initialData={editingCustom ?? undefined}
+              onSave={saveCustom}
+              onCancel={() => {
+                setCustomFormMode(null);
+                setEditingCustom(null);
               }}
-              onEdit={() => handleEdit(provider)}
-              onDelete={() => handleDelete(provider.id)}
-              onToggleEnabled={() =>
-                handleToggleEnabled({
-                  ...provider,
-                  baseUrl: null,
-                  hasCredential: false,
-                } as ProviderDetail)
-              }
-              onTest={() =>
-                handleTest({
-                  ...provider,
-                  baseUrl: null,
-                  hasCredential: false,
-                } as ProviderDetail)
-              }
-              isDeleting={
-                deleteMutation.isPending &&
-                deleteMutation.variables === provider.id
-              }
-              isTesting={testMutation.isPending}
-              testResult={testResults[provider.id] ?? null}
-              onManageModels={() => handleSelectProviderModels(provider.id)}
+              busy={createMutation.isPending || updateMutation.isPending}
             />
-          ))}
-        </div>
-      )}
-
-      {/* Model management panel */}
-      {selectedModelProviderId && (
-        <div className="mb-4 mt-6">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-3.5 w-3.5 text-adam-neutral-400" />
-              <span className="text-xs font-medium text-adam-neutral-400">
-                Models
-              </span>
-              <span className="text-[10px] text-adam-neutral-500">
-                ({modelList.length})
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedModelProviderId(null)}
-                className="h-6 rounded-full px-2 text-[10px]"
-              >
-                ×
-              </Button>
-              <Button
-                size="sm"
-                variant="dark"
-                onClick={() => handleOpenModelForm('create')}
-                disabled={showModelForm}
-                className="h-6 rounded-full px-2 text-[10px]"
-              >
-                <Plus className="mr-0.5 h-2.5 w-2.5" />
-                Add Model
-              </Button>
-            </div>
           </div>
+        )}
 
-          {/* Model form */}
-          {showModelForm && (
-            <ProviderModelForm
-              mode={modelFormMode}
-              initialData={editingModel}
-              onSave={handleSaveModel}
-              onCancel={handleCloseModelForm}
-              isSaving={
-                createModelMutation.isPending || updateModelMutation.isPending
-              }
-            />
-          )}
-
-          {/* Model list */}
-          <div className="flex flex-col gap-2">
-            {modelList.map((model) => (
-              <ProviderModelCard
-                key={model.modelId}
-                model={model}
-                onEdit={() => handleOpenModelForm('edit', model.modelId)}
-                onDelete={() => handleDeleteModel(model.modelId)}
-                isDeleting={
-                  deleteModelMutation.isPending &&
-                  deleteModelMutation.variables?.modelId === model.modelId
+        {customProviders.length > 0 ? (
+          <div className="space-y-2">
+            {customProviders.map((provider) => (
+              <CustomProviderCard
+                key={provider.id}
+                summary={provider}
+                onEdit={(detail) => {
+                  setEditingCustom(detail);
+                  setCustomFormMode('edit');
+                }}
+                onDelete={(providerId) => {
+                  if (window.confirm('Delete this provider and its models?')) {
+                    deleteMutation.mutate(providerId);
+                    if (modelProviderId === providerId) setModelProviderId(null);
+                  }
+                }}
+                onManageModels={(providerId) =>
+                  setModelProviderId((current) =>
+                    current === providerId ? null : providerId,
+                  )
                 }
               />
             ))}
-            {modelList.length === 0 && !showModelForm && (
-              <div className="rounded-md border border-dashed border-adam-neutral-800 px-3 py-4 text-center">
-                <div className="text-xs text-adam-neutral-500">
-                  No models configured
-                </div>
-                <div className="text-adam-neutral-600 mt-0.5 text-[10px]">
-                  Add models available through this provider
-                </div>
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="rounded-lg border border-dashed border-adam-neutral-700 bg-adam-background-1/50 px-4 py-7 text-center">
+            <Plug className="mx-auto mb-2 h-5 w-5 text-adam-neutral-300" />
+            <div className="text-sm text-adam-neutral-200">
+              No custom providers configured
+            </div>
+            <div className="mt-1 text-xs text-adam-neutral-400">
+              Add a provider to connect another API or local OpenAI-compatible endpoint.
+            </div>
+          </div>
+        )}
 
-      {/* Empty state */}
-      {customProviders.length === 0 && !showForm && (
-        <div className="rounded-lg border border-dashed border-adam-neutral-800 bg-adam-background-1/50 px-4 py-8 text-center">
-          <Plug className="text-adam-neutral-600 mx-auto mb-2 h-5 w-5" />
-          <div className="text-sm text-adam-neutral-400">
-            No custom providers configured
-          </div>
-          <div className="mt-1 text-xs text-adam-neutral-500">
-            Add a provider to connect to custom AI endpoints
-          </div>
-        </div>
-      )}
+        {modelProviderId && (
+          <ProviderModelsPanel
+            providerId={modelProviderId}
+            onClose={() => setModelProviderId(null)}
+          />
+        )}
+      </div>
     </section>
   );
 }
