@@ -8,18 +8,6 @@
  *   2. Dynamic OpenCode agent models (fetched from opencode serve HTTP API/CLI)
  *   3. Configured Codex CLI agent models
  *   4. Custom provider models (from the ai_provider_models DB table)
- *
- * Deduplication strategy:
- *   - Built-in models always win (first source).
- *   - Agent models with IDs matching built-in entries are skipped.
- *   - Custom provider models with IDs matching either built-in or agent
- *     entries are skipped (by stable ID format, collisions should be rare).
- *
- * Provider-aware merge:
- *   - When a custom provider shares the same provider name as an opencode
- *     provider, custom models overlay the same provider bucket.
- *   - Custom models override opencode models for matching provider-native
- *     model IDs.
  */
 
 import {
@@ -32,46 +20,24 @@ import { opencodeModels } from './opencode';
 import { configuredCodexModels } from './cliAgents';
 import type { ModelConfig } from '../../src/types/misc';
 import { getPreferences } from './aiSettings';
-
-// ---------------------------------------------------------------------------
-// Catalog entry type — the canonical shape returned by every catalog consumer.
-// ---------------------------------------------------------------------------
+import {
+  loadBuiltinProviderRuntimeOverrides,
+  type BuiltinProviderDriver,
+} from './builtinProviderOverrides';
 
 export type CatalogEntrySource = 'builtin' | 'opencode' | 'custom';
 
 export interface CatalogEntry extends ModelConfig {
-  /**
-   * Which source this entry came from.
-   * - 'builtin' — from PARAMETRIC_MODELS
-   * - 'opencode' — local CLI/agent discovery (OpenCode and Codex for now)
-   * - 'custom' — from ai_provider_models table
-   */
   source: CatalogEntrySource;
-
-  /** Whether the model is enabled for user selection. */
   enabled: boolean;
-
-  /** Whether the model is available at runtime. */
   available: boolean;
-
-  /** If available is false, a human-readable reason. */
   unavailableReason?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Type guards
-// ---------------------------------------------------------------------------
-
-/** Returns true if the given entry is a custom provider model. */
 export function isCustomCatalogEntry(entry: CatalogEntry): boolean {
   return entry.source === 'custom';
 }
 
-// ---------------------------------------------------------------------------
-// Built-in models — always available, always enabled.
-// ---------------------------------------------------------------------------
-
-// Import PARAMETRIC_MODELS — the canonical built-in list.
 import { PARAMETRIC_MODELS } from '../../src/lib/utils';
 
 function toBuiltinCatalogEntry(m: ModelConfig): CatalogEntry {
@@ -87,9 +53,40 @@ export function getBuiltInModels(): CatalogEntry[] {
   return PARAMETRIC_MODELS.map(toBuiltinCatalogEntry);
 }
 
-// ---------------------------------------------------------------------------
-// Local agents — OpenCode discovery plus configured Codex CLI models.
-// ---------------------------------------------------------------------------
+function builtinDriverForModelId(
+  modelId: string,
+): BuiltinProviderDriver {
+  if (modelId.startsWith('anthropic/')) return 'anthropic';
+  if (modelId.startsWith('google/')) return 'google';
+  if (modelId.startsWith('local/')) return 'openai-compatible';
+  return 'openrouter';
+}
+
+async function applyBuiltinProviderAvailability(
+  models: CatalogEntry[],
+  user: User | null,
+): Promise<CatalogEntry[]> {
+  if (!user) return models;
+
+  try {
+    const overrides = await loadBuiltinProviderRuntimeOverrides(user.id);
+    return models.map((entry) => {
+      const driver = builtinDriverForModelId(entry.id);
+      if (overrides[driver]?.enabled !== false) return entry;
+      return {
+        ...entry,
+        enabled: false,
+        available: false,
+        unavailableReason: `${entry.provider ?? driver} is disabled in AI Settings`,
+      };
+    });
+  } catch {
+    // Catalog discovery should remain usable if provider preference storage is
+    // temporarily unavailable. The actual inference path still fails closed
+    // when it cannot load provider overrides.
+    return models;
+  }
+}
 
 function toOpencodeCatalogEntry(m: {
   cliId: string;
@@ -117,9 +114,6 @@ function toCodexCatalogEntry(
 ): CatalogEntry {
   return {
     ...model,
-    // Keep the existing source union stable for this repair pass. The follow-up
-    // provider/settings work can split OpenCode and Codex into separate runtime
-    // integration groups without changing their canonical model IDs.
     source: 'opencode' as const,
     enabled: true,
     available: true,
@@ -141,10 +135,6 @@ export async function getOpencodeModels(): Promise<CatalogEntry[]> {
   return [...openCodeEntries, ...codexEntries];
 }
 
-// ---------------------------------------------------------------------------
-// Custom provider models.
-// ---------------------------------------------------------------------------
-
 function toCustomCatalogEntry(
   model: {
     id: string;
@@ -152,6 +142,10 @@ function toCustomCatalogEntry(
     userId: string;
     modelId: string;
     displayName: string;
+    description?: string | null;
+    supportsTools?: boolean;
+    supportsThinking?: boolean;
+    supportsVision?: boolean;
     isVisible: boolean;
     createdAt: string;
     updatedAt: string;
@@ -162,14 +156,17 @@ function toCustomCatalogEntry(
   return {
     id: makeCustomProviderModelId(model.providerId, model.modelId),
     name: model.displayName,
-    description: '',
+    description: model.description ?? '',
     provider: providerName,
-    supportsTools: false,
-    supportsThinking: false,
-    supportsVision: false,
+    supportsTools: model.supportsTools ?? false,
+    supportsThinking: model.supportsThinking ?? false,
+    supportsVision: model.supportsVision ?? false,
     source: 'custom' as const,
     enabled: enabled && model.isVisible,
     available: true,
+    ...(!enabled
+      ? { unavailableReason: `${providerName} is disabled in AI Settings` }
+      : {}),
   };
 }
 
@@ -183,6 +180,9 @@ export async function getCustomProviderModels(
     const results: CatalogEntry[] = [];
 
     for (const provider of providers) {
+      // Reserved builtin-* rows are configuration overlays for the canonical
+      // built-in catalog, not independent custom providers/models.
+      if (provider.slug.startsWith('builtin-')) continue;
       const models = await getProviderModels(provider.id, user.id);
       for (const model of models) {
         results.push(
@@ -193,22 +193,10 @@ export async function getCustomProviderModels(
 
     return results;
   } catch {
-    // Provider DB unreachable — return empty list.
     return [];
   }
 }
 
-// ---------------------------------------------------------------------------
-// Provider-aware merge.
-// ---------------------------------------------------------------------------
-
-/**
- * Merge opencode and custom models by provider name.
- *
- * For providers with matching names, custom models override opencode
- * models on provider-native model ID match. Custom models that don't
- * match any opencode model ID are appended.
- */
 function mergeByProvider(
   opencode: CatalogEntry[],
   custom: CatalogEntry[],
@@ -262,15 +250,10 @@ function mergeByProvider(
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Full catalog builder.
-// ---------------------------------------------------------------------------
-
-/** Build the effective parametric model catalog by merging all sources. */
 export async function buildCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
-  const builtin = getBuiltInModels();
+  const builtin = await applyBuiltinProviderAvailability(getBuiltInModels(), user);
   const opencode = await getOpencodeModels();
   const custom = await getCustomProviderModels(user);
 
@@ -297,14 +280,6 @@ export async function buildCatalog(
   ];
 }
 
-// ---------------------------------------------------------------------------
-// Hidden-model awareness — B1 repair.
-// ---------------------------------------------------------------------------
-
-/**
- * Fetch the hidden model IDs for the authenticated user.
- * Tolerates missing rows and DB errors — stale hidden IDs are harmless.
- */
 async function getHiddenModelIds(user: User): Promise<Set<string>> {
   try {
     const prefs = await getPreferences(user);
@@ -314,47 +289,24 @@ async function getHiddenModelIds(user: User): Promise<Set<string>> {
   }
 }
 
-/**
- * Filter the catalog to the set of models a user can actually select.
- *
- * A model is excluded when: hidden by the user, unavailable at runtime,
- * or (custom) from a disabled provider.
- *
- * Built-in/opencode models remain selectable so historical conversations
- * can still display their chosen model.
- */
 export function filterSelectableCatalog(
   catalog: CatalogEntry[],
   hiddenIds: Set<string>,
 ): CatalogEntry[] {
   return catalog.filter((entry) => {
     if (hiddenIds.has(entry.id)) return false;
-    if (entry.source === 'custom' && !entry.enabled && entry.unavailableReason)
-      return false;
+    if (!entry.enabled) return false;
     if (!entry.available) return false;
     return true;
   });
 }
 
-// Full-catalog builder (B1 — includes hidden models for Settings UI).
-
-/**
- * Build a full catalog that includes hidden models.
- * Settings UI needs to see hidden models so they can be re-enabled.
- */
 export async function buildFullCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
   return buildCatalog(user);
 }
 
-// Selectable catalog builder (B1 — excludes hidden models).
-
-/**
- * Build the selectable catalog for the authenticated user.
- * Excludes hidden models, unavailable models, and custom models from
- * disabled providers. Stale hidden IDs are harmless.
- */
 export async function buildSelectableCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
@@ -365,11 +317,6 @@ export async function buildSelectableCatalog(
   return filterSelectableCatalog(catalog, hiddenIds);
 }
 
-// ---------------------------------------------------------------------------
-// Default model resolution
-// ---------------------------------------------------------------------------
-
-/** Resolve the default model ID from the canonical built-in catalog. */
 export function getDefaultModel(): string {
   return PARAMETRIC_MODELS[0].id;
 }
