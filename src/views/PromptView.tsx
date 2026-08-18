@@ -21,7 +21,6 @@ import posthog from 'posthog-js';
 import * as Sentry from '@sentry/react';
 import { useProfile } from '@/services/profileService';
 import { useLayoutContext } from '@/contexts/LayoutContext';
-import { getPreferences } from '@/server/aiSettings';
 import { apiUrl } from '@/services/api';
 import {
   DefaultChatTransport,
@@ -152,10 +151,19 @@ export function PromptView() {
         conversation_id: conversationId,
       });
 
+      // P04F: pin the user's current default prompt profile on creation.
+      // This is a normal user-owned preference read, so use the already
+      // authenticated browser Supabase client and let RLS enforce ownership.
+      // A missing preferences row is the documented default: CADAM Original.
+      const { data: aiPreferences, error: preferencesError } = await supabase
+        .from('user_ai_preferences')
+        .select('default_prompt_profile_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (preferencesError) throw preferencesError;
+      const promptProfileId = aiPreferences?.default_prompt_profile_id ?? null;
+
       // Create conversation immediately with 'New Conversation'
-      // P04F: pin the user's default prompt profile (null = built-in) so
-      // changing Settings later does not silently alter existing chats.
-      const prefs = await getPreferences(user);
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
         .insert([
@@ -167,7 +175,7 @@ export function PromptView() {
             settings: {
               model: model,
               openCodeExecutionMode: executionMode,
-              promptProfileId: prefs.defaultPromptProfileId,
+              promptProfileId,
             },
           },
         ])
