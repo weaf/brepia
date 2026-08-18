@@ -41,22 +41,35 @@ npx supabase start
 
 echo "=== Starting OpenCode server ==="
 # OpenCode server configuration:
-#   OPENCODE_BASE_URL  — full URL (overrides OPENCODE_PORT and default)
-#   OPENCODE_PORT      — port only (legacy, ignored when OPENCODE_BASE_URL is set)
+#   OPENCODE_BASE_URL        — full URL (overrides OPENCODE_PORT and default)
+#   OPENCODE_PORT            — port only (legacy, ignored when OPENCODE_BASE_URL is set)
+#   OPENCODE_SERVER_PASSWORD — optional HTTP Basic Auth password
+#   OPENCODE_SERVER_USERNAME — optional Basic Auth username (default: opencode)
 #   Default: http://127.0.0.1:4096  (matches opencodeApiUrl() default)
 OPENCODE_HOST="127.0.0.1"
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 OPENCODE_URL="http://${OPENCODE_HOST}:${OPENCODE_PORT}"
 OPENCODE_HEALTH="${OPENCODE_BASE_URL:-${OPENCODE_URL}}/api/health"
 
-if ! curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
+# Use the same Basic Auth credentials as `opencode serve` when configured.
+# This prevents an authenticated healthy server from being mistaken for a
+# failed server because its health endpoint correctly returns HTTP 401.
+opencode_curl() {
+  if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+    curl -u "${OPENCODE_SERVER_USERNAME:-opencode}:${OPENCODE_SERVER_PASSWORD}" "$@"
+  else
+    curl "$@"
+  fi
+}
+
+if ! opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
   # Server not ready — start it (binds loopback by default)
   nohup opencode serve --port "${OPENCODE_PORT}" \
     --hostname "${OPENCODE_HOST}" \
     > /tmp/opencode-serve.log 2>&1 &
   # Wait for server to be healthy (max 20 s)
   for _ in $(seq 1 20); do
-    curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1 && break
+    opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1 && break
     sleep 1
   done
 fi
