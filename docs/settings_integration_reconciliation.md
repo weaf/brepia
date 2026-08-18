@@ -1,14 +1,14 @@
 # Settings integration — completion and master reconciliation
 
-Status: **REPAIR B1-B9 COMPLETE; PRE-MERGE CLEANUP COMPLETE; READY FOR PR REVIEW**
+Status: **REPAIR B1-B9 IMPLEMENTED; FINAL B9 ASSERTION HARDENING REQUIRED BEFORE PR REVIEW**
 
 Branch: `local-dev-continue`
 
 Reviewed: 2026-08-18
 
-## Completion state
+## Current state
 
-The Models / Prompts / Providers repair work B1-B9 is functionally complete on `local-dev-continue`.
+The Models / Prompts / Providers repair work B1-B9 is implemented on `local-dev-continue`, and current `master` has already been reconciled into the feature branch.
 
 Evidence recorded in the branch:
 
@@ -21,44 +21,43 @@ Evidence recorded in the branch:
 - signed-in Settings flows no longer show Unauthorized failures;
 - a missing local `prompt_profiles` migration was discovered during B9 and local migrations were applied.
 
-All pre-merge cleanup items have been addressed:
+Completed cleanup:
 
-- B9 credentials moved to environment variables (B9_EMAIL, B9_PASSWORD);
-- Silent conditional passes removed and hardened with real assertions;
-- CADAM Original Edit expectation corrected (verify Edit button → Overlay/Fork dialog);
-- Playwright added as a dev dependency with `test:b9` npm script;
-- vitest config excludes B9 Playwright suite from `npm test` (env-var guard at module load);
-- debug_test.ts removed (stale file);
-- All lint errors fixed (empty catch blocks);
-- typecheck, lint, build, and full test suite pass clean.
+- B9 credentials moved to environment variables (`B9_EMAIL`, `B9_PASSWORD`);
+- CADAM Original Edit expectation corrected to require the safe Edit-to-Overlay/Fork flow;
+- `@playwright/test` is a declared dev dependency;
+- `npm run test:b9` is the canonical B9 command;
+- B9 artifacts are ignored by git;
+- typecheck, lint, build, Vitest and the current Playwright suite were reported green after master reconciliation.
 
-## Visual audit result
+## Final independent review findings
 
-Desktop and mobile review found no blocking visual defects.
+The final independent review found that several Playwright tests still pass without proving the behavior named by the test. These are merge blockers because B9 is intended to be a behavior gate, not only a page-presence smoke test.
 
-One non-blocking UX improvement remains: the Runtime Integrations error text `Failed to discover runtime integrations` is technically correct for a discovery failure, but can be made friendlier later. Do not replace it with `No local runtimes detected` unless the server can distinguish an empty successful discovery from an actual discovery error.
+### Models
 
-## Repository state before reconciliation
+- `hide a model in Settings and confirm it disappears from picker` toggles a Settings switch but only checks that generic visibility-count text exists. It must capture the exact model being hidden, open the new-conversation model picker and assert that model is absent.
+- `re-enable a hidden model and confirm it returns` still contains a conditional path and only checks generic visibility text. It must assert that the exact model returns to the picker.
 
-At the reconciliation check:
+### Prompts
 
-- `master`: `c7802231a18cfabfd39f9bcc676651ff4c711c3a`;
-- feature branch after acceptance-artifact cleanup: `3358925afa89193f98d6d9b0df37b0dabc28040b`;
-- comparison status: **diverged**;
-- feature branch: **124 commits ahead** of master;
-- feature branch: **4 commits behind** master;
-- merge base: `ba182f9aab35d476d70661cbc13bfb58e8ad5df4`.
+- `create an Overlay via Edit button on CADAM Original` still conditionally clicks Overlay only when visible and has no postcondition proving the Overlay editor/profile flow was reached. Overlay must be a required assertion.
+- `set a prompt profile as default and verify new conversation pins it` currently only verifies that a CADAM profile entry exists. It must actually set a custom profile as default, create a new conversation and verify that conversation is pinned to the selected profile.
+- `changing default does not affect existing conversation prompt profile` currently only verifies that a CADAM profile entry exists. It must actually prove an existing conversation keeps its pinned profile after the default changes.
+- Fork creation/prefill should remain explicitly covered by browser acceptance, or be clearly classified as manual vision-only acceptance instead of implied automated coverage.
 
-Do not fast-forward `master` directly to the feature branch. Reconcile the four master-side commits first and rerun validation.
+### Providers
 
-## Pre-merge findings — all resolved
+- `OpenCode runtime state displayed correctly` and `Codex runtime state displayed correctly` only assert that the Runtime Integrations section exists; they do not assert the corresponding runtime entry/state.
+- `custom provider CRUD — Add provider button visible` only verifies the Add button. Either restore actual create/edit/delete coverage or rename the test and do not claim CRUD browser coverage.
+- `test connection endpoint visible` only verifies the Runtime Integrations section and does not exercise or observe the custom-provider Test Connection action/request.
 
-### B9 test credentials ✅ RESOLVED
+### Documentation
 
-B9 credentials are now read from environment variables (`B9_EMAIL`, `B9_PASSWORD`).
-The test module throws a clear error at import time when either is missing.
+- `docs/settings_integration_repair_plan.md` still says `NEARLY COMPLETE — B9 passed, B10+ pending` and still records `24/24`; this is stale.
+- `docs/local_customization_settings_status.md` still reports B8 complete and B9 next; this is stale.
 
-### B9 test strictness ✅ RESOLVED
+## Security note
 
 All silent conditional passes removed. Required UI assertions now fail when absent.
 CADAM Edit expectation corrected: Edit button must exist and open Overlay/Fork dialog.
@@ -66,39 +65,9 @@ Runtime Integrations tests check for section existence without assuming specific
 
 - All 23 Playwright tests pass.
 
-### Playwright reproducibility ✅ RESOLVED
+## Final merge gate
 
-`@playwright/test` added as a dev dependency in `package.json`.
-`test:b9` script defined: `playwright test -c playwright.config.ts`.
-`playwright.config.ts` committed.
-`vitest.config.ts` excludes `b9_acceptance.test.ts` from `npm test`.
-
-## Master reconciliation procedure
-
-Use a normal merge of current `master` into `local-dev-continue`; avoid rebasing the large validated feature history unless there is a specific reason to rewrite it.
-
-During conflict resolution:
-
-- preserve current working Settings, OpenCode, Codex, provider and prompt implementations from the feature branch;
-- preserve master-side documentation/audit information that is still accurate;
-- do not resurrect stale OpenCode assumptions that were superseded by the implemented and validated feature branch;
-- do not modify `pcad-builder` merely to resolve documentation conflicts;
-- do not weaken authentication, ownership checks, provider routing or no-fallback behavior.
-
-After reconciliation, rerun:
-
-- project typecheck;
-- lint;
-- production build;
-- full automated test suite;
-- hardened B9 browser acceptance;
-- one final visual check at desktop and approximately 390px.
-
-Only after all checks pass should the feature PR be marked ready for merge into `master`.
-
-## Merge gate
-
-The final merge is allowed only when all of the following are true:
+PR #1 may be marked ready only when all of the following are true:
 
 - feature branch contains current master;
 - no unresolved conflicts;
@@ -107,4 +76,6 @@ The final merge is allowed only when all of the following are true:
 - no committed browser-test credentials remain in the current tree (env vars only);
 - Playwright maintenance policy is explicit (dev dependency with test:b9 script);
 - final diff review finds no silent fallback or auth regression;
-- status/plan documentation reflects B1-B9 complete (no stale B10+ claims).
+- repair/status documentation is current and contains no stale B10+ claim.
+
+Do not merge PR #1 until this gate passes.
