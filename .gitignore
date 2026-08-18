@@ -33,3 +33,9 @@ dist-ssr
 # other secret files
 .env.local
 .env.langfuse
+
+# Playwright / B9 browser acceptance artifacts
+playwright-report/
+test-results/
+b9-report/
+b9-*.png
