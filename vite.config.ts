@@ -183,6 +183,6 @@ export default defineConfig({
     allowedHosts: ['alpine.0r4cl3.se', 'db.noty.se'],
   },
   optimizeDeps: {
-    exclude: ['@zip.js/zip.js', 'three', 'three-stdlib', '@sentry-vite-plugin'],
+    exclude: ['@zip.js/zip.js', 'three', 'three-stdlib', '@sentry/vite-plugin'],
   },
 });
