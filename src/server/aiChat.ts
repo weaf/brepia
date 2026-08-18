@@ -54,22 +54,10 @@ import {
 import { getAnonSupabaseClient } from './supabaseClient';
 import { resolveConversationSystemPrompt } from './promptProfiles';
 
-/**
- * USD list price per **million** tokens, keyed by the same model IDs the
- * client picker uses. `cacheRead` / `cacheWrite` are per-million prices
- * for cached input — when omitted we apply provider-typical defaults:
- *   - Anthropic: read = input × 0.10, write = input × 1.25 (5-min cache)
- *
- * Keep this in sync with each provider's pricing page. Any model that
- * isn't listed here falls through to {@link FALLBACK_MODEL_PRICE}, which
- * is intentionally set to the most expensive entry so an unrecognized
- * model never free-bills the platform.
- */
 const MODEL_PRICES: Record<
   string,
   { input: number; output: number; cacheRead?: number; cacheWrite?: number }
 > = {
-  // Anthropic
   'anthropic/claude-fable-5': { input: 10, output: 50 },
   'anthropic/claude-opus-4.8': { input: 5, output: 25 },
   'anthropic/claude-sonnet-5': { input: 2, output: 10 },
@@ -77,11 +65,6 @@ const MODEL_PRICES: Record<
   'anthropic/claude-sonnet-4.6': { input: 3, output: 15 },
   'anthropic/claude-sonnet-4.5': { input: 3, output: 15 },
   'anthropic/claude-haiku-4.5': { input: 1, output: 5 },
-
-  // Google — cached content reads at a fraction of input price
-  // (~25% for 3.1 Pro, 10% for 3.6 Flash); there is no cache-write
-  // surcharge (cache storage is billed per-hour, which we don't track
-  // here).
   'google/gemini-3.1-pro-preview': {
     input: 1.25,
     output: 10,
@@ -94,36 +77,19 @@ const MODEL_PRICES: Record<
     cacheRead: 0.15,
     cacheWrite: 1.5,
   },
-
-  // OpenAI — prompt-cache reads at 10% of input, cache writes at 1.25x.
   'openai/gpt-5.6-sol': {
     input: 5,
     output: 30,
     cacheRead: 0.5,
     cacheWrite: 6.25,
   },
-
-  // xAI — cached input reads at 25% of input; no cache-write surcharge.
   'x-ai/grok-4.5': { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 2 },
-
-  // MoonshotAI — cached input reads at 10% of input; no cache-write surcharge.
   'moonshotai/kimi-k2.6': { input: 0.6, output: 2.5 },
   'moonshotai/kimi-k3': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3 },
-
-  // Z.AI
   'z-ai/glm-5.2': { input: 1.2, output: 4.1 },
 };
 
 const FALLBACK_MODEL_PRICE = { input: 15, output: 75 };
-
-/**
- * One billing token represents this many USD of inference cost.
- * Tune to set the margin between subscription price and the model spend
- * a tier covers. At $0.01:
- *   - Pro (5,000 tokens) covers ~$50 of inference
- *   - Standard (1,000) covers ~$10
- *   - Free (50/day) covers ~$0.50/day
- */
 const USD_PER_BILLING_TOKEN = 0.01;
 
 export const PARAMETRIC_AGENT_PROMPT = `You are Adam, an agentic AI CAD editor that creates and modifies OpenSCAD models. The user can see a live preview of the model on the right while you work.
@@ -445,7 +411,7 @@ function createChatProviders(
             env('LOCAL_LLM_BASE_URL') ||
             'http://localhost:11434/v1',
           apiKey:
-            override?.credential ?? env('LOCAL_LLM_API_KEY') || 'ollama',
+            (override?.credential ?? env('LOCAL_LLM_API_KEY')) || 'ollama',
         });
       }
       return local;
