@@ -76,6 +76,46 @@ if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
   fi
 fi
 
+# Read one server-only value from Vite development env files without broadly
+# exporting every .env entry into the shell. This keeps the earlier narrow env
+# behavior while allowing persistent provider credentials to work in local dev.
+vite_env_value() {
+  node --input-type=module - "$1" <<'NODE'
+import { loadEnv } from 'vite';
+const key = process.argv[2];
+const values = loadEnv('development', process.cwd(), '');
+process.stdout.write(values[key] ?? '');
+NODE
+}
+
+if [ -z "${PCAD_CREDENTIAL_ENCRYPTION_KEY:-}" ]; then
+  value="$(vite_env_value PCAD_CREDENTIAL_ENCRYPTION_KEY)"
+  if [ -n "${value}" ]; then
+    export PCAD_CREDENTIAL_ENCRYPTION_KEY="${value}"
+  fi
+fi
+
+# Provider credentials are encrypted at rest. For local development, create a
+# persistent 256-bit key if the operator did not supply one. The *.local file
+# is gitignored and mode 600; the key is never printed.
+if [ -z "${PCAD_CREDENTIAL_ENCRYPTION_KEY:-}" ]; then
+  PCAD_LOCAL_KEY_FILE="${SCRIPT_DIR}/.pcad-credential-key.local"
+  if [ ! -s "${PCAD_LOCAL_KEY_FILE}" ]; then
+    umask 077
+    node --input-type=module <<'NODE' > "${PCAD_LOCAL_KEY_FILE}"
+import crypto from 'node:crypto';
+process.stdout.write(crypto.randomBytes(32).toString('hex'));
+NODE
+    chmod 600 "${PCAD_LOCAL_KEY_FILE}" 2>/dev/null || true
+  fi
+  PCAD_CREDENTIAL_ENCRYPTION_KEY="$(cat "${PCAD_LOCAL_KEY_FILE}")"
+  export PCAD_CREDENTIAL_ENCRYPTION_KEY
+  echo "Provider credential encryption: local key ready"
+else
+  echo "Provider credential encryption: configured"
+fi
+unset value
+
 echo "=== Starting OpenCode server ==="
 # OpenCode server configuration:
 #   OPENCODE_BASE_URL        - use an explicitly configured external server;
@@ -87,15 +127,6 @@ echo "=== Starting OpenCode server ==="
 #
 # Load ONLY OpenCode connection settings from Vite development env files so
 # pCAD and a managed OpenCode server inherit the same explicit configuration.
-vite_env_value() {
-  node --input-type=module - "$1" <<'NODE'
-import { loadEnv } from 'vite';
-const key = process.argv[2];
-const values = loadEnv('development', process.cwd(), '');
-process.stdout.write(values[key] ?? '');
-NODE
-}
-
 for key in OPENCODE_BASE_URL OPENCODE_PORT OPENCODE_SERVER_USERNAME OPENCODE_SERVER_PASSWORD; do
   if [ -z "${!key}" ]; then
     value="$(vite_env_value "$key")"
