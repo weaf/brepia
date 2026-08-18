@@ -1,70 +1,207 @@
 // P03G: Model settings UI — AiModelsSettings section.
 //
-// Renders a searchable, groupable model visibility panel in SettingsView.
-// Users can show/hide individual models, enable-all, hide-all, and restore
-// defaults. Changes persist to user_ai_preferences.hidden_model_ids.
+// Renders a searchable, filterable model visibility panel in SettingsView.
+// Users can show/hide individual models, bulk-edit the current result set,
+// group models by their effective runtime/provider, and restore defaults.
+// Changes persist to user_ai_preferences.hidden_model_ids.
 
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { EyeOff, Loader2, RotateCcw, Search, SquareCheck } from 'lucide-react';
+import {
+  EyeOff,
+  Loader2,
+  RotateCcw,
+  Search,
+  SquareCheck,
+  X,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFullParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { apiJson } from '@/services/api';
 import type { CatalogEntry } from '@/server/modelCatalog';
 
-type SourceGroup = {
-  source: 'builtin' | 'opencode' | 'custom';
+type VisibilityFilter = 'all' | 'visible' | 'hidden';
+type SourceFilter = 'all' | 'builtin' | 'opencode' | 'codex' | 'custom';
+type CapabilityFilter = 'tools' | 'thinking' | 'vision';
+
+type ModelGroup = {
+  key: string;
   label: string;
+  detail?: string;
   models: CatalogEntry[];
 };
 
-const SOURCE_LABELS: Record<string, string> = {
-  builtin: 'Built-in models',
-  // Codex is temporarily carried by the existing agent source during the
-  // repair pass. The later Runtime Integrations task will split the UI groups.
-  opencode: 'Local agents',
-  custom: 'Custom providers',
-};
+const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
+  { value: 'all', label: 'All sources' },
+  { value: 'builtin', label: 'Built-in' },
+  { value: 'opencode', label: 'OpenCode' },
+  { value: 'codex', label: 'Codex' },
+  { value: 'custom', label: 'Custom' },
+];
 
-function groupBySource(models: CatalogEntry[]): SourceGroup[] {
-  const groups: Record<string, CatalogEntry[]> = {};
-  for (const m of models) {
-    const src = m.source;
-    if (!groups[src]) groups[src] = [];
-    groups[src].push(m);
-  }
-  return [
-    {
-      source: 'builtin' as const,
-      label: SOURCE_LABELS.builtin,
-      models: groups.builtin ?? [],
-    },
-    {
-      source: 'opencode' as const,
-      label: SOURCE_LABELS.opencode,
-      models: groups.opencode ?? [],
-    },
-    {
-      source: 'custom' as const,
-      label: SOURCE_LABELS.custom,
-      models: groups.custom ?? [],
-    },
-  ].filter((g) => g.models.length > 0);
+const VISIBILITY_FILTERS: { value: VisibilityFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'visible', label: 'Enabled' },
+  { value: 'hidden', label: 'Hidden' },
+];
+
+const CAPABILITY_FILTERS: {
+  value: CapabilityFilter;
+  label: string;
+}[] = [
+  { value: 'tools', label: 'Tools' },
+  { value: 'thinking', label: 'Thinking' },
+  { value: 'vision', label: 'Vision' },
+];
+
+function isCodexEntry(entry: CatalogEntry): boolean {
+  return entry.source === 'opencode' && entry.id.startsWith('agent/codex/');
 }
 
-function filterBySearch(models: CatalogEntry[], query: string): CatalogEntry[] {
-  if (!query.trim()) return models;
-  const q = query.toLowerCase();
-  return models.filter(
-    (m) =>
-      m.name.toLowerCase().includes(q) ||
-      m.description?.toLowerCase().includes(q) ||
-      m.provider?.toLowerCase().includes(q),
-  );
+function isOpenCodeEntry(entry: CatalogEntry): boolean {
+  return entry.source === 'opencode' && !isCodexEntry(entry);
+}
+
+function entrySource(entry: CatalogEntry): Exclude<SourceFilter, 'all'> {
+  if (isCodexEntry(entry)) return 'codex';
+  if (entry.source === 'opencode') return 'opencode';
+  return entry.source;
+}
+
+function providerFromModelId(entry: CatalogEntry): string | undefined {
+  if (entry.source === 'builtin') {
+    const slash = entry.id.indexOf('/');
+    if (slash > 0) return entry.id.slice(0, slash);
+  }
+
+  if (isOpenCodeEntry(entry)) {
+    const prefix = 'agent/opencode/';
+    if (entry.id.startsWith(prefix)) {
+      const rest = entry.id.slice(prefix.length);
+      const slash = rest.indexOf('/');
+      if (slash > 0) return rest.slice(0, slash);
+    }
+  }
+
+  return undefined;
+}
+
+function sentenceCase(value: string): string {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function openCodeRuntime(entry: CatalogEntry): string {
+  const match = /^OpenCode agent via (.+)$/i.exec(entry.description ?? '');
+  return match?.[1] ?? providerFromModelId(entry) ?? 'OpenCode';
+}
+
+function groupForEntry(entry: CatalogEntry): Omit<ModelGroup, 'models'> {
+  if (isCodexEntry(entry)) {
+    return {
+      key: 'codex',
+      label: 'Codex',
+      detail: 'Local Codex CLI models',
+    };
+  }
+
+  if (isOpenCodeEntry(entry)) {
+    const runtime = openCodeRuntime(entry);
+    return {
+      key: `opencode:${runtime.toLowerCase()}`,
+      label: `OpenCode · ${runtime}`,
+      detail: 'OpenCode agent runtime',
+    };
+  }
+
+  if (entry.source === 'custom') {
+    const provider = entry.provider || 'Custom provider';
+    return {
+      key: `custom:${provider.toLowerCase()}`,
+      label: provider,
+      detail: 'Custom provider',
+    };
+  }
+
+  const provider = entry.provider || providerFromModelId(entry) || 'Built-in';
+  return {
+    key: `builtin:${provider.toLowerCase()}`,
+    label: sentenceCase(provider),
+    detail: 'Built-in provider',
+  };
+}
+
+function groupModels(models: CatalogEntry[]): ModelGroup[] {
+  const groups = new Map<string, ModelGroup>();
+
+  for (const entry of models) {
+    const meta = groupForEntry(entry);
+    const existing = groups.get(meta.key);
+    if (existing) {
+      existing.models.push(entry);
+    } else {
+      groups.set(meta.key, { ...meta, models: [entry] });
+    }
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      models: [...group.models].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+}
+
+function modelMatchesSearch(entry: CatalogEntry, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+
+  const group = groupForEntry(entry);
+  const haystack = [
+    entry.id,
+    entry.name,
+    entry.description,
+    entry.provider,
+    group.label,
+    group.detail,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(q);
+}
+
+function supportsCapability(
+  entry: CatalogEntry,
+  capability: CapabilityFilter,
+): boolean {
+  if (capability === 'tools') return Boolean(entry.supportsTools);
+  if (capability === 'thinking') return Boolean(entry.supportsThinking);
+  return Boolean(entry.supportsVision);
+}
+
+function displayModelName(entry: CatalogEntry): string {
+  if (isOpenCodeEntry(entry)) return entry.name.replace(/^OpenCode · /, '');
+  return entry.name;
+}
+
+function sourceBadgeLabel(entry: CatalogEntry): string {
+  if (isCodexEntry(entry)) return 'Codex';
+  if (isOpenCodeEntry(entry)) return 'OpenCode';
+  return entry.source === 'builtin' ? 'Built-in' : 'Custom';
+}
+
+function modelOriginText(entry: CatalogEntry): string | undefined {
+  if (isOpenCodeEntry(entry)) return `via ${openCodeRuntime(entry)}`;
+  if (isCodexEntry(entry)) return entry.description || 'Codex CLI';
+  return entry.provider || entry.description || undefined;
 }
 
 interface AiPreferences {
@@ -111,6 +248,29 @@ function useUpdateHiddenModels() {
   });
 }
 
+function FilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={active ? 'light' : 'dark'}
+      aria-pressed={active}
+      onClick={onClick}
+      className="h-7 rounded-full px-2.5 text-xs"
+    >
+      {children}
+    </Button>
+  );
+}
+
 function ModelRow({
   entry,
   isHidden,
@@ -122,6 +282,9 @@ function ModelRow({
   onToggle: () => void;
   isUpdating: boolean;
 }) {
+  const source = entrySource(entry);
+  const origin = modelOriginText(entry);
+
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-lg px-3 py-3 transition-colors hover:bg-adam-neutral-800/40">
       <div className="min-w-0">
@@ -133,36 +296,28 @@ function ModelRow({
                 : 'text-adam-neutral-50'
             }`}
           >
-            {entry.name}
+            {displayModelName(entry)}
           </span>
           <Badge
-            variant={
-              entry.source === 'builtin'
-                ? 'default'
-                : entry.source === 'opencode'
-                  ? 'secondary'
-                  : 'outline'
-            }
+            variant={source === 'builtin' ? 'default' : source === 'custom' ? 'outline' : 'secondary'}
             className={
-              entry.source === 'builtin'
+              source === 'builtin'
                 ? 'shrink-0 bg-adam-blue/15 text-adam-blue hover:bg-adam-blue/20'
-                : entry.source === 'opencode'
+                : source === 'opencode'
                   ? 'shrink-0 bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20'
-                  : 'shrink-0'
+                  : source === 'codex'
+                    ? 'shrink-0 bg-adam-neutral-700 text-adam-neutral-200 hover:bg-adam-neutral-700'
+                    : 'shrink-0'
             }
           >
-            {entry.source === 'opencode' ? 'agent' : entry.source}
+            {sourceBadgeLabel(entry)}
           </Badge>
         </div>
 
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-          {entry.source === 'opencode' && entry.description ? (
+          {origin ? (
             <span className="min-w-0 break-words text-xs text-adam-neutral-400">
-              {entry.description.replace(/^OpenCode agent via /, 'via ')}
-            </span>
-          ) : entry.provider ? (
-            <span className="min-w-0 break-words text-xs text-adam-neutral-400">
-              {entry.provider}
+              {origin}
             </span>
           ) : null}
           {entry.supportsTools && (
@@ -216,20 +371,68 @@ export function AiModelsSettings() {
     () => prefs?.hiddenModelIds ?? [],
     [prefs?.hiddenModelIds],
   );
+  const hiddenSet = useMemo(() => new Set(hiddenIds), [hiddenIds]);
   const updateMutation = useUpdateHiddenModels();
-  const [searchQuery, setSearchQuery] = useState('');
 
-  const groups = useMemo<SourceGroup[]>(() => {
-    const filtered = filterBySearch(allEntries, searchQuery);
-    return groupBySource(filtered);
-  }, [allEntries, searchQuery]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [visibilityFilter, setVisibilityFilter] =
+    useState<VisibilityFilter>('all');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [capabilityFilters, setCapabilityFilters] = useState<CapabilityFilter[]>(
+    [],
+  );
+
+  const filteredEntries = useMemo(() => {
+    return allEntries.filter((entry) => {
+      if (!modelMatchesSearch(entry, searchQuery)) return false;
+
+      if (sourceFilter !== 'all' && entrySource(entry) !== sourceFilter) {
+        return false;
+      }
+
+      const hidden = hiddenSet.has(entry.id);
+      if (visibilityFilter === 'visible' && hidden) return false;
+      if (visibilityFilter === 'hidden' && !hidden) return false;
+
+      return capabilityFilters.every((capability) =>
+        supportsCapability(entry, capability),
+      );
+    });
+  }, [
+    allEntries,
+    searchQuery,
+    sourceFilter,
+    visibilityFilter,
+    capabilityFilters,
+    hiddenSet,
+  ]);
+
+  const groups = useMemo(() => groupModels(filteredEntries), [filteredEntries]);
 
   const totalModels = allEntries.length;
-  const hiddenKnownModels = hiddenIds.filter((id) =>
-    allEntries.some((entry) => entry.id === id),
-  ).length;
+  const hiddenKnownModels = allEntries.filter((entry) => hiddenSet.has(entry.id)).length;
   const visibleModels = Math.max(0, totalModels - hiddenKnownModels);
-  const allHidden = totalModels > 0 && visibleModels === 0;
+  const shownVisibleModels = filteredEntries.filter(
+    (entry) => !hiddenSet.has(entry.id),
+  ).length;
+  const shownHiddenModels = filteredEntries.length - shownVisibleModels;
+
+  const sourceCounts = useMemo(() => {
+    const counts: Record<Exclude<SourceFilter, 'all'>, number> = {
+      builtin: 0,
+      opencode: 0,
+      codex: 0,
+      custom: 0,
+    };
+    for (const entry of allEntries) counts[entrySource(entry)] += 1;
+    return counts;
+  }, [allEntries]);
+
+  const activeFilterCount =
+    (sourceFilter === 'all' ? 0 : 1) +
+    (visibilityFilter === 'all' ? 0 : 1) +
+    capabilityFilters.length;
+  const hasResultFilter = Boolean(searchQuery.trim()) || activeFilterCount > 0;
 
   const handleToggle = useCallback(
     (modelId: string) => {
@@ -242,18 +445,35 @@ export function AiModelsSettings() {
     [hiddenIds, updateMutation],
   );
 
-  const handleEnableAll = useCallback(() => {
-    updateMutation.mutate([]);
-  }, [updateMutation]);
-
-  const handleHideAll = useCallback(() => {
-    if (allHidden || allEntries.length === 0) return;
-    updateMutation.mutate(allEntries.map((e: CatalogEntry) => e.id));
-  }, [allEntries, allHidden, updateMutation]);
+  const setEntriesVisible = useCallback(
+    (entries: CatalogEntry[], visible: boolean) => {
+      const ids = new Set(entries.map((entry) => entry.id));
+      const nextHidden = visible
+        ? hiddenIds.filter((id) => !ids.has(id))
+        : [...new Set([...hiddenIds, ...ids])];
+      updateMutation.mutate(nextHidden);
+    },
+    [hiddenIds, updateMutation],
+  );
 
   const handleRestoreDefaults = useCallback(() => {
     updateMutation.mutate([]);
   }, [updateMutation]);
+
+  const handleClearFilters = useCallback(() => {
+    setSearchQuery('');
+    setVisibilityFilter('all');
+    setSourceFilter('all');
+    setCapabilityFilters([]);
+  }, []);
+
+  const toggleCapability = useCallback((capability: CapabilityFilter) => {
+    setCapabilityFilters((current) =>
+      current.includes(capability)
+        ? current.filter((item) => item !== capability)
+        : [...current, capability],
+    );
+  }, []);
 
   const isLoading = isCatalogLoading || isPrefsLoading;
   const error =
@@ -275,21 +495,122 @@ export function AiModelsSettings() {
   return (
     <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-adam-neutral-50">Models</h2>
+        <div>
+          <h2 className="text-sm font-medium text-adam-neutral-50">Models</h2>
+          <p className="mt-1 text-xs text-adam-neutral-500">
+            Choose which models appear in the model picker.
+          </p>
+        </div>
         <span className="text-xs text-adam-neutral-400">
-          {visibleModels} of {totalModels} visible
+          {visibleModels} of {totalModels} enabled
         </span>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 space-y-3 rounded-xl border border-adam-neutral-800 bg-adam-background-1/40 p-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-adam-neutral-500" />
           <Input
-            placeholder="Search models..."
+            placeholder="Search name, provider or model ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 pl-9"
+            className="h-9 pl-9 pr-9"
           />
+          {searchQuery ? (
+            <button
+              type="button"
+              aria-label="Clear model search"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-adam-neutral-500 transition-colors hover:bg-adam-neutral-800 hover:text-adam-neutral-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+
+        <div>
+          <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-500">
+            Source
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SOURCE_FILTERS.map((filter) => {
+              const count =
+                filter.value === 'all'
+                  ? totalModels
+                  : sourceCounts[filter.value];
+              return (
+                <FilterButton
+                  key={filter.value}
+                  active={sourceFilter === filter.value}
+                  onClick={() => setSourceFilter(filter.value)}
+                >
+                  {filter.label}
+                  <span className="ml-1 text-[10px] opacity-70">{count}</span>
+                </FilterButton>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-500">
+              Visibility
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {VISIBILITY_FILTERS.map((filter) => (
+                <FilterButton
+                  key={filter.value}
+                  active={visibilityFilter === filter.value}
+                  onClick={() => setVisibilityFilter(filter.value)}
+                >
+                  {filter.label}
+                  <span className="ml-1 text-[10px] opacity-70">
+                    {filter.value === 'all'
+                      ? totalModels
+                      : filter.value === 'visible'
+                        ? visibleModels
+                        : hiddenKnownModels}
+                  </span>
+                </FilterButton>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-500">
+              Capabilities
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {CAPABILITY_FILTERS.map((filter) => (
+                <FilterButton
+                  key={filter.value}
+                  active={capabilityFilters.includes(filter.value)}
+                  onClick={() => toggleCapability(filter.value)}
+                >
+                  {filter.label}
+                </FilterButton>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-adam-neutral-800 pt-3">
+          <span className="text-xs text-adam-neutral-400">
+            {filteredEntries.length} shown · {shownVisibleModels} enabled ·{' '}
+            {shownHiddenModels} hidden
+          </span>
+          {hasResultFilter ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="dark"
+              onClick={handleClearFilters}
+              className="h-7 rounded-full px-2.5 text-xs"
+            >
+              <X className="mr-1 h-3 w-3" />
+              Clear filters
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -297,24 +618,30 @@ export function AiModelsSettings() {
         <Button
           size="sm"
           variant="light"
-          onClick={handleEnableAll}
-          disabled={updateMutation.isPending || hiddenIds.length === 0}
+          onClick={() => setEntriesVisible(filteredEntries, true)}
+          disabled={
+            updateMutation.isPending ||
+            filteredEntries.length === 0 ||
+            shownHiddenModels === 0
+          }
           className="h-7 rounded-full px-2 text-xs"
         >
           <SquareCheck className="mr-1 h-3 w-3" />
-          Enable all
+          {hasResultFilter ? 'Enable shown' : 'Enable all'}
         </Button>
         <Button
           size="sm"
           variant="dark"
-          onClick={handleHideAll}
+          onClick={() => setEntriesVisible(filteredEntries, false)}
           disabled={
-            updateMutation.isPending || allHidden || allEntries.length === 0
+            updateMutation.isPending ||
+            filteredEntries.length === 0 ||
+            shownVisibleModels === 0
           }
           className="h-7 rounded-full px-2 text-xs"
         >
           <EyeOff className="mr-1 h-3 w-3" />
-          Hide all
+          {hasResultFilter ? 'Hide shown' : 'Hide all'}
         </Button>
         <Button
           size="sm"
@@ -333,29 +660,77 @@ export function AiModelsSettings() {
           <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-500" />
         </div>
       ) : groups.length === 0 ? (
-        <div className="text-center text-sm text-adam-neutral-400">
-          No models found.
+        <div className="rounded-lg border border-dashed border-adam-neutral-800 py-8 text-center text-sm text-adam-neutral-400">
+          No models match the current filters.
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
-          {groups.map((group) => (
-            <div key={group.source}>
-              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-adam-neutral-400">
-                {group.label}
+        <div className="flex flex-col gap-4">
+          {groups.map((group) => {
+            const groupVisible = group.models.filter(
+              (entry) => !hiddenSet.has(entry.id),
+            ).length;
+            const groupHidden = group.models.length - groupVisible;
+
+            return (
+              <div
+                key={group.key}
+                className="overflow-hidden rounded-xl border border-adam-neutral-800"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-adam-neutral-800 bg-adam-background-1/40 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="break-words text-xs font-medium text-adam-neutral-200">
+                        {group.label}
+                      </span>
+                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                        {groupVisible}/{group.models.length} enabled
+                      </Badge>
+                    </div>
+                    {group.detail ? (
+                      <div className="mt-0.5 text-[11px] text-adam-neutral-500">
+                        {group.detail}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="dark"
+                      onClick={() => setEntriesVisible(group.models, true)}
+                      disabled={updateMutation.isPending || groupHidden === 0}
+                      className="h-6 rounded-full px-2 text-[10px]"
+                    >
+                      Enable
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="dark"
+                      onClick={() => setEntriesVisible(group.models, false)}
+                      disabled={updateMutation.isPending || groupVisible === 0}
+                      className="h-6 rounded-full px-2 text-[10px]"
+                    >
+                      Hide
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col divide-y divide-adam-neutral-800/60">
+                  {group.models.map((entry) => (
+                    <ModelRow
+                      key={entry.id}
+                      entry={entry}
+                      isHidden={hiddenSet.has(entry.id)}
+                      onToggle={() => handleToggle(entry.id)}
+                      isUpdating={updateMutation.isPending}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-col gap-1">
-                {group.models.map((entry) => (
-                  <ModelRow
-                    key={entry.id}
-                    entry={entry}
-                    isHidden={hiddenIds.includes(entry.id)}
-                    onToggle={() => handleToggle(entry.id)}
-                    isUpdating={updateMutation.isPending}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
