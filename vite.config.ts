@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'path';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 const appBase = '/cadam';
 const normalizedAppBase = appBase.replace(/\/$/, '');
@@ -107,100 +107,82 @@ function serveOpenScadWasmInDev(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
-  // Vite only exposes VITE_-prefixed values through import.meta.env by
-  // default, and it does not populate process.env with all values from
-  // .env/.env.local. Server modules deliberately read secrets from
-  // process.env, so load the complete env set into this Node process while
-  // preserving any variables that were explicitly exported by the caller.
-  // This does not expose non-VITE_ secrets to browser code.
-  const fileEnv = loadEnv(mode, process.cwd(), '');
-  for (const [key, value] of Object.entries(fileEnv)) {
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-
-  return {
-    base: appBase,
-    plugins: [
-      serveOpenScadWasmInDev(),
-      supabaseProxyPlugin(),
-      tanstackStart({
-        router: {
-          basepath: normalizedAppBase,
-        },
-        spa: {
-          enabled: true,
-          maskPath: normalizedAppBase,
-        },
-      }),
-      nitro({
-        baseURL: normalizedAppBase,
-        inlineDynamicImports: true,
-      }),
-      react(),
-      sentryVitePlugin({
-        org: 'adamcad',
-        project: 'adamcad',
-      }),
-    ],
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, './src'),
-        '@shared': path.resolve(__dirname, './shared'),
+export default defineConfig({
+  base: appBase,
+  plugins: [
+    serveOpenScadWasmInDev(),
+    supabaseProxyPlugin(),
+    tanstackStart({
+      router: {
+        basepath: normalizedAppBase,
       },
+      spa: {
+        enabled: true,
+        maskPath: normalizedAppBase,
+      },
+    }),
+    nitro({
+      baseURL: normalizedAppBase,
+      inlineDynamicImports: true,
+    }),
+    react(),
+    sentryVitePlugin({
+      org: 'adamcad',
+      project: 'adamcad',
+    }),
+  ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@shared': path.resolve(__dirname, './shared'),
     },
-    build: {
-      chunkSizeWarningLimit: 1000,
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
 
-      outDir: 'dist/cadam',
-      emptyOutDir: true,
+    outDir: 'dist/cadam',
+    emptyOutDir: true,
 
-      sourcemap: true,
-    },
-    environments: {
-      client: {
-        build: {
-          outDir: 'dist/cadam',
-          rollupOptions: {
-            output: {
-              manualChunks(id) {
-                if (
-                  id.includes('/node_modules/react/') ||
-                  id.includes('/node_modules/react-dom/') ||
-                  id.includes('/node_modules/@tanstack/react-router/') ||
-                  id.includes('/node_modules/@tanstack/react-start/') ||
-                  id.includes('/node_modules/lucide-react/')
-                ) {
-                  return 'vendor';
-                }
-              },
+    sourcemap: true,
+  },
+  environments: {
+    client: {
+      build: {
+        outDir: 'dist/cadam',
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (
+                id.includes('/node_modules/react/') ||
+                id.includes('/node_modules/react-dom/') ||
+                id.includes('/node_modules/@tanstack/react-router/') ||
+                id.includes('/node_modules/@tanstack/react-start/') ||
+                id.includes('/node_modules/lucide-react/')
+              ) {
+                return 'vendor';
+              }
             },
           },
         },
       },
-      server: {
-        build: {
-          outDir: 'dist/server',
-        },
-      },
-    },
-    preview: {
-      port: 4173,
-      host: true,
     },
     server: {
-      port: 3000,
-      open: false,
-      host: true,
-      allowedHosts: ['alpine.0r4cl3.se', 'db.noty.se'],
+      build: {
+        outDir: 'dist/server',
+      },
     },
-    optimizeDeps: {
-      exclude: [
-        '@zip.js/zip.js',
-        'three',
-        'three-stdlib',
-        '@sentry/vite-plugin',
-      ],
-    },
-  };
+  },
+  preview: {
+    port: 4173,
+    host: true,
+  },
+  server: {
+    port: 3000,
+    open: false,
+    host: true,
+    allowedHosts: ['alpine.0r4cl3.se', 'db.noty.se'],
+  },
+  optimizeDeps: {
+    exclude: ['@zip.js/zip.js', 'three', 'three-stdlib', '@sentry-vite-plugin'],
+  },
 });
