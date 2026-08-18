@@ -78,16 +78,15 @@ fi
 
 echo "=== Starting OpenCode server ==="
 # OpenCode server configuration:
-#   OPENCODE_BASE_URL        — full URL (overrides OPENCODE_PORT and default)
-#   OPENCODE_PORT            — port only (legacy, ignored when OPENCODE_BASE_URL is set)
-#   OPENCODE_SERVER_PASSWORD — optional HTTP Basic Auth password
-#   OPENCODE_SERVER_USERNAME — optional Basic Auth username (default: opencode)
-#   Default: http://127.0.0.1:4096  (matches opencodeApiUrl() default)
+#   OPENCODE_BASE_URL        - use an explicitly configured external server;
+#                              pCAD will not start its own OpenCode process.
+#   OPENCODE_PORT            - optional fixed port for pCAD's managed server.
+#                              When unset, pCAD chooses a free loopback port.
+#   OPENCODE_SERVER_PASSWORD - optional HTTP Basic Auth password.
+#   OPENCODE_SERVER_USERNAME - optional Basic Auth username (default: opencode).
 #
-# OpenCode can consume project .env values itself, while the pCAD/TanStack
-# server reads OPENCODE_* from process.env. Load ONLY the OpenCode connection
-# settings from Vite's development env files so both processes use the same
-# credentials. This deliberately avoids the previous broad server-env import.
+# Load ONLY OpenCode connection settings from Vite development env files so
+# pCAD and a managed OpenCode server inherit the same explicit configuration.
 vite_env_value() {
   node --input-type=module - "$1" <<'NODE'
 import { loadEnv } from 'vite';
@@ -109,19 +108,41 @@ done
 unset key value
 
 OPENCODE_HOST="127.0.0.1"
-OPENCODE_PORT="${OPENCODE_PORT:-4096}"
-OPENCODE_URL="http://${OPENCODE_HOST}:${OPENCODE_PORT}"
-OPENCODE_HEALTH="${OPENCODE_BASE_URL:-${OPENCODE_URL}}/api/health"
+OPENCODE_CHILD_PID=""
+OPENCODE_LOG=""
 
-if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
-  echo "OpenCode auth: configured (user ${OPENCODE_SERVER_USERNAME:-opencode})"
-else
-  echo "OpenCode auth: not configured in pCAD environment"
-fi
+# Ask the OS for an available loopback port. The tiny race between releasing
+# the probe socket and starting OpenCode is handled by checking whether the
+# child survives and becomes healthy; an explicit port instead fails loudly.
+choose_free_port() {
+  node --input-type=module <<'NODE'
+import net from 'node:net';
+const server = net.createServer();
+server.unref();
+server.on('error', (error) => {
+  console.error(error.message);
+  process.exit(1);
+});
+server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  process.stdout.write(String(address.port));
+  server.close();
+});
+NODE
+}
 
-# Use the same Basic Auth credentials as `opencode serve` when configured.
-# This prevents an authenticated healthy server from being mistaken for a
-# failed server because its health endpoint correctly returns HTTP 401.
+cleanup_opencode() {
+  if [ -n "${OPENCODE_CHILD_PID:-}" ] && kill -0 "${OPENCODE_CHILD_PID}" 2>/dev/null; then
+    echo "Stopping pCAD OpenCode server (pid ${OPENCODE_CHILD_PID})..."
+    kill "${OPENCODE_CHILD_PID}" 2>/dev/null || true
+    wait "${OPENCODE_CHILD_PID}" 2>/dev/null || true
+  fi
+}
+trap cleanup_opencode EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 opencode_curl() {
   if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
     curl -u "${OPENCODE_SERVER_USERNAME:-opencode}:${OPENCODE_SERVER_PASSWORD}" "$@"
@@ -130,27 +151,69 @@ opencode_curl() {
   fi
 }
 
-if ! opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
-  # Server not ready — start it (binds loopback by default)
-  nohup opencode serve --port "${OPENCODE_PORT}" \
-    --hostname "${OPENCODE_HOST}" \
-    > /tmp/opencode-serve.log 2>&1 &
-  # Wait for server to be healthy (max 20 s)
-  for _ in $(seq 1 20); do
-    opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1 && break
-    sleep 1
-  done
+if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+  echo "OpenCode auth: configured (user ${OPENCODE_SERVER_USERNAME:-opencode})"
+else
+  echo "OpenCode auth: not configured in pCAD environment"
 fi
 
-if opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
-  echo "OpenCode: up"
-else
-  OPENCODE_HTTP_STATUS="$(opencode_curl -s -o /dev/null -w '%{http_code}' -m 2 "${OPENCODE_HEALTH}" 2>/dev/null || true)"
-  if [ "${OPENCODE_HTTP_STATUS}" = "401" ]; then
-    echo "OpenCode: WARNING - server requires Basic Auth but pCAD credentials are missing or rejected"
-    echo "OpenCode: set matching OPENCODE_SERVER_PASSWORD/USERNAME in .env.local or the shell environment"
+if [ -n "${OPENCODE_BASE_URL:-}" ]; then
+  # Explicit base URL means the caller owns the OpenCode server lifecycle.
+  OPENCODE_BASE_URL="${OPENCODE_BASE_URL%/}"
+  export OPENCODE_BASE_URL
+  OPENCODE_HEALTH="${OPENCODE_BASE_URL}/api/health"
+  echo "OpenCode: using configured server ${OPENCODE_BASE_URL}"
+
+  if opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
+    echo "OpenCode: up"
   else
-    echo "OpenCode: WARNING - not healthy (HTTP ${OPENCODE_HTTP_STATUS:-unreachable})"
+    OPENCODE_HTTP_STATUS="$(opencode_curl -s -o /dev/null -w '%{http_code}' -m 2 "${OPENCODE_HEALTH}" 2>/dev/null || true)"
+    echo "OpenCode: WARNING - configured server is not healthy (HTTP ${OPENCODE_HTTP_STATUS:-unreachable})"
+  fi
+else
+  # No external server was configured. Start a pCAD-owned OpenCode instance.
+  if [ -n "${OPENCODE_PORT:-}" ]; then
+    echo "OpenCode: using configured port ${OPENCODE_PORT}"
+  else
+    OPENCODE_PORT="$(choose_free_port)"
+    export OPENCODE_PORT
+    echo "OpenCode: dynamically selected port ${OPENCODE_PORT}"
+  fi
+
+  export OPENCODE_BASE_URL="http://${OPENCODE_HOST}:${OPENCODE_PORT}"
+  OPENCODE_HEALTH="${OPENCODE_BASE_URL}/api/health"
+  OPENCODE_LOG="/tmp/pcad-opencode-${OPENCODE_PORT}.log"
+  echo "OpenCode: ${OPENCODE_BASE_URL}"
+
+  opencode serve --port "${OPENCODE_PORT}" \
+    --hostname "${OPENCODE_HOST}" \
+    > "${OPENCODE_LOG}" 2>&1 &
+  OPENCODE_CHILD_PID=$!
+
+  # Wait for the managed server to become healthy (max 20 s). If the selected
+  # port was stolen in the tiny allocation race, OpenCode exits and we fail
+  # with its log instead of accidentally connecting to somebody else's server.
+  OPENCODE_READY=0
+  for _ in $(seq 1 20); do
+    if opencode_curl -sf -m 2 "${OPENCODE_HEALTH}" > /dev/null 2>&1; then
+      OPENCODE_READY=1
+      break
+    fi
+    if ! kill -0 "${OPENCODE_CHILD_PID}" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [ "${OPENCODE_READY}" -eq 1 ]; then
+    echo "OpenCode: up (pid ${OPENCODE_CHILD_PID})"
+  else
+    echo "OpenCode: ERROR - managed server failed to start on ${OPENCODE_BASE_URL}"
+    if [ -f "${OPENCODE_LOG}" ]; then
+      echo "OpenCode log: ${OPENCODE_LOG}"
+      tail -n 20 "${OPENCODE_LOG}" || true
+    fi
+    exit 1
   fi
 fi
 
