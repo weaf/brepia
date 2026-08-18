@@ -1,12 +1,12 @@
 # Settings integration repair plan
 
-Status: **NEARLY COMPLETE — B9 passed, B10+ pending**
+Status: **COMPLETE — B1-B9 done, pre-merge cleanup done**
 
 Branch: `local-dev-continue`
 
 Purpose: repair the first browser integration pass for Models / Prompts / Providers without discarding the customization architecture already implemented.
 
-**Completion summary:** B1-B9 all done. 24/24 Playwright acceptance tests pass. All automated tests pass (137+).
+**Completion summary:** B1-B9 all done. 23/23 Playwright acceptance tests pass. All automated tests pass (137).
 
 This is a repair phase. Do not rewrite the feature from scratch.
 

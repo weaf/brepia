@@ -13,7 +13,7 @@ The Models / Prompts / Providers repair work B1-B9 is functionally complete on `
 Evidence recorded in the branch:
 
 - automated integration/regression suite: 137 tests passing;
-- Playwright B9 run: 22/22 scenarios passing in Chromium (all hardened assertions);
+- Playwright B9 run: 23/23 scenarios passing in Chromium (all hardened assertions);
 - visual audit completed at 1280x800 and 390px;
 - Models, Prompts and Providers passed the visual audit;
 - CADAM Original shows the real prompt and remains read-only while Edit creates Overlay/Fork profiles;
@@ -63,7 +63,8 @@ The test module throws a clear error at import time when either is missing.
 All silent conditional passes removed. Required UI assertions now fail when absent.
 CADAM Edit expectation corrected: Edit button must exist and open Overlay/Fork dialog.
 Runtime Integrations tests check for section existence without assuming specific runtime state.
-All 22 Playwright tests pass.
+
+- All 23 Playwright tests pass.
 
 ### Playwright reproducibility ✅ RESOLVED
 
@@ -102,7 +103,7 @@ The final merge is allowed only when all of the following are true:
 - feature branch contains current master;
 - no unresolved conflicts;
 - automated validation passes (137 vitest tests, typecheck clean, lint clean, build succeeds);
-- browser acceptance passes (22/22 hardened Playwright assertions);
+- browser acceptance passes (23/23 hardened Playwright assertions);
 - no committed browser-test credentials remain in the current tree (env vars only);
 - Playwright maintenance policy is explicit (dev dependency with test:b9 script);
 - final diff review finds no silent fallback or auth regression;
