@@ -31,6 +31,11 @@ import imageType from 'image-type';
 import { z } from 'zod';
 import { billing, BillingClientError } from './billingClient';
 import { corsHeaders, isRecord } from './api';
+import {
+  loadBuiltinProviderRuntimeOverrides,
+  type BuiltinProviderDriver,
+  type BuiltinProviderRuntimeOverrides,
+} from './builtinProviderOverrides';
 import { env } from './env';
 import { logError } from './serverLog';
 import {
@@ -73,7 +78,7 @@ const MODEL_PRICES: Record<
   'anthropic/claude-sonnet-4.5': { input: 3, output: 15 },
   'anthropic/claude-haiku-4.5': { input: 1, output: 5 },
 
-  // Google — cached content reads bill at a fraction of input price
+  // Google — cached content reads at a fraction of input price
   // (~25% for 3.1 Pro, 10% for 3.6 Flash); there is no cache-write
   // surcharge (cache storage is billed per-hour, which we don't track
   // here).
@@ -289,25 +294,6 @@ Creative rules:
 - When the user provides images, use the image IDs from file part filenames when helpful.
 - Do not mention tools, APIs, or implementation details to the user.`;
 
-/**
- * The wire format is intentionally tiny. The client expresses "given the
- * current state of this conversation, generate a response" — nothing else.
- *
- * Before POSTing, the client is responsible for landing the branch state it
- * wants in the DB:
- *  * New user turn → insert the user message and bump `current_message_leaf_id`
- *    to point at it.
- *  * Retry → bump `current_message_leaf_id` back to the user message that
- *    prompted the assistant being re-rolled.
- *  * Tool-output continuation → update the assistant row's `parts` so the
- *    completed tool call is persisted.
- *
- * The server then walks `current_message_leaf_id` up to the root and uses
- * that — and only that — to build the model context. Anything the client
- * happens to ship in the request body beyond `conversationId`/`model`/
- * `thinking` is ignored, which is what makes the system rock-solid against
- * `chat.regenerate()`-style truncation hacks.
- */
 type ChatBody = {
   conversationId: string;
   model: Model;
@@ -359,19 +345,28 @@ function providerFor(modelId: string): ChatProvider {
   return 'openrouter';
 }
 
+function builtinDriverForModelId(
+  modelId: string,
+): BuiltinProviderDriver | undefined {
+  if (
+    isCustomProviderModel(modelId) ||
+    modelId.startsWith('opencode/') ||
+    isCliAgentModel(modelId)
+  ) {
+    return undefined;
+  }
+  if (modelId.startsWith('anthropic/')) return 'anthropic';
+  if (modelId.startsWith('google/')) return 'google';
+  if (modelId.startsWith('local/')) return 'openai-compatible';
+  return 'openrouter';
+}
+
 type AnthropicProvider = ReturnType<typeof createAnthropic>;
 type GoogleProvider = ReturnType<typeof createGoogleGenerativeAI>;
 type LocalProvider = ReturnType<typeof createOpenAICompatible>;
 
-// The Vercel AI SDK's Anthropic provider expects ANTHROPIC_BASE_URL to already
-// include the "/v1" path segment (its built-in default is
-// "https://api.anthropic.com/v1"). Some environments — notably the Claude
-// Code/Desktop app — export the bare host "https://api.anthropic.com", which is
-// what the official @anthropic-ai/sdk wants but makes this provider POST to
-// "/messages" and 404. Normalize a "/v1"-less override so it still works; return
-// undefined when unset so the SDK keeps owning its own default.
-function normalizedAnthropicBaseURL(): string | undefined {
-  const raw = env('ANTHROPIC_BASE_URL').trim();
+function normalizedAnthropicBaseURL(rawOverride?: string): string | undefined {
+  const raw = (rawOverride ?? env('ANTHROPIC_BASE_URL')).trim();
   if (!raw) return undefined;
   const base = raw.replace(/\/+$/, '');
   return base.endsWith('/v1') ? base : `${base}/v1`;
@@ -384,7 +379,20 @@ type ChatProviders = {
   local: () => LocalProvider;
 };
 
-function createChatProviders(): ChatProviders {
+function enabledBuiltinOverride(
+  overrides: BuiltinProviderRuntimeOverrides,
+  driver: BuiltinProviderDriver,
+) {
+  const override = overrides[driver];
+  if (override?.enabled === false) {
+    throw new Error(`${driver} provider is disabled in AI Settings`);
+  }
+  return override;
+}
+
+function createChatProviders(
+  overrides: BuiltinProviderRuntimeOverrides = {},
+): ChatProviders {
   let anthropic: AnthropicProvider | undefined;
   let google: GoogleProvider | undefined;
   let openrouter: ReturnType<typeof createOpenRouter> | undefined;
@@ -392,8 +400,9 @@ function createChatProviders(): ChatProviders {
   return {
     anthropic: () => {
       if (!anthropic) {
-        const key = env('ANTHROPIC_API_KEY');
-        const baseURL = normalizedAnthropicBaseURL();
+        const override = enabledBuiltinOverride(overrides, 'anthropic');
+        const key = override?.credential ?? env('ANTHROPIC_API_KEY');
+        const baseURL = normalizedAnthropicBaseURL(override?.baseUrl);
         anthropic = createAnthropic({
           apiKey: key,
           ...(baseURL ? { baseURL } : {}),
@@ -403,39 +412,47 @@ function createChatProviders(): ChatProviders {
     },
     google: () => {
       if (!google) {
+        const override = enabledBuiltinOverride(overrides, 'google');
+        const baseURL = override?.baseUrl || env('GOOGLE_BASE_URL').trim();
         google = createGoogleGenerativeAI({
-          apiKey: env('GOOGLE_API_KEY'),
+          apiKey: override?.credential ?? env('GOOGLE_API_KEY'),
+          ...(baseURL ? { baseURL } : {}),
         });
       }
       return google;
     },
     openrouter: () => {
       if (!openrouter) {
+        const override = enabledBuiltinOverride(overrides, 'openrouter');
+        const baseURL = override?.baseUrl || env('OPENROUTER_BASE_URL').trim();
         openrouter = createOpenRouter({
-          apiKey: env('OPENROUTER_API_KEY'),
+          apiKey: override?.credential ?? env('OPENROUTER_API_KEY'),
+          ...(baseURL ? { baseURL } : {}),
         });
       }
       return openrouter;
     },
     local: () => {
-      local ??= createOpenAICompatible({
-        name: 'local',
-        baseURL: env('LOCAL_LLM_BASE_URL') || 'http://localhost:11434/v1',
-        apiKey: env('LOCAL_LLM_API_KEY') || 'ollama',
-      });
+      if (!local) {
+        const override = enabledBuiltinOverride(
+          overrides,
+          'openai-compatible',
+        );
+        local = createOpenAICompatible({
+          name: 'local',
+          baseURL:
+            override?.baseUrl ||
+            env('LOCAL_LLM_BASE_URL') ||
+            'http://localhost:11434/v1',
+          apiKey:
+            override?.credential ?? env('LOCAL_LLM_API_KEY') || 'ollama',
+        });
+      }
       return local;
     },
   };
 }
 
-/**
- * Map a `<provider>/<model>` ID to a configured LanguageModel + the
- * provider-specific options the AI SDK expects at the streamText boundary.
- *
- * Anthropic and Google are hit directly via their respective AI SDK providers.
- * Everything else (OpenAI, MoonshotAI, …) keeps going through OpenRouter so we
- * don't have to wire a dedicated provider per vendor.
- */
 function buildChatModel(
   modelId: string,
   providers: ChatProviders,
@@ -455,8 +472,6 @@ function buildChatModel(
   }
 
   if (modelId.startsWith('anthropic/')) {
-    // Anthropic's API uses dashes everywhere ("claude-haiku-4-5"), while the
-    // OpenRouter alias uses dots ("claude-haiku-4.5"). Normalize both.
     const id = modelId.slice('anthropic/'.length).replace(/\./g, '-');
     const adaptiveThinking = usesAdaptiveAnthropicThinking(id);
     return {
@@ -515,8 +530,6 @@ function buildChatModel(
   }
 
   if (modelId.startsWith('opencode/')) {
-    // OpenCode decides reasoning internally per model; the `thinking` flag
-    // only affects direct-provider calls.
     return { model: opencodeChatModel(modelId) };
   }
 
@@ -527,48 +540,25 @@ function buildChatModel(
   throw new Error(`Unsupported chat model ${modelId}`);
 }
 
-// Capability gates below accept either the OpenRouter alias (`anthropic/claude-…`)
-// or the bare Anthropic ID — strip the prefix here so every gate is called the
-// same way regardless of which form the caller has on hand. Drop *any* provider
-// prefix (everything up to the last "/"), not just "anthropic/", so a model
-// routed through another provider (e.g. "openrouter/anthropic/claude-fable-5")
-// still matches the `^claude-…` regexes instead of silently slipping past them.
 function bareModelId(modelId: string): string {
   const id = modelId.slice(modelId.lastIndexOf('/') + 1);
-  // Anthropic's API uses dashes ("claude-opus-4-6"); the OpenRouter alias
-  // uses dots ("claude-opus-4.6"). Normalize so the version regexes match
-  // either form.
   return id.replace(/\./g, '-');
 }
 
-// The Claude 5 generation swaps the opus/sonnet/haiku tiers for code names
-// ("claude-fable-5", "claude-mythos-5", …). Match the `claude-<codename>-5`
-// shape rather than enumerating code names so future Claude 5 variants
-// inherit the same capability gates without a list update. Versioned 4.x ids
-// ("claude-opus-4-5", "claude-haiku-4-5") don't match: their tier name is
-// followed by "-4", not "-5".
 function isClaude5Model(modelId: string): boolean {
   return /^claude-[a-z]+-5\b/.test(bareModelId(modelId));
 }
 
 function usesAdaptiveAnthropicThinking(modelId: string) {
-  // The Claude 5 generation uses adaptive thinking, as do Claude Opus/Sonnet
-  // 4.6+. Older 4.x models take the fixed-budget path.
   if (isClaude5Model(modelId)) return true;
   const match = /^claude-(?:opus|sonnet)-4-(\d+)/.exec(bareModelId(modelId));
   return match ? Number(match[1]) >= 6 : false;
 }
 
-// The reasoning-tier Claude 5 models (Fable, Mythos) reject a forced
-// `tool_choice` outright ("tool_choice forces tool use is not compatible with
-// this model"). Other Claude 5 tiers — notably Sonnet 5 — accept a forced
-// tool_choice on the first-party API, provided thinking is disabled for that
-// step (see the per-step override in the parametric flow).
 function rejectsForcedToolChoice(modelId: string): boolean {
   return /^claude-(?:fable|mythos)\b/.test(bareModelId(modelId));
 }
 
-// Whether a model accepts a forced `tool_choice` (type: "tool" / "any").
 function supportsForcedToolChoice(modelId: string): boolean {
   return !rejectsForcedToolChoice(modelId);
 }
@@ -583,22 +573,6 @@ function priceFor(modelId: string) {
   };
 }
 
-/**
- * Compute USD inference cost from the AI SDK's `LanguageModelUsage`
- * breakdown.
- *
- * Field semantics (`ai`'s `LanguageModelUsage`):
- *   - `inputTokens` — total of all input categories.
- *   - `inputTokenDetails.noCacheTokens` — uncached portion (full price).
- *   - `inputTokenDetails.cacheReadTokens` — cached-input read (discounted).
- *   - `inputTokenDetails.cacheWriteTokens` — cache-creation write (surcharged).
- *   - `outputTokens` — total output, **already including reasoning tokens**.
- *     Providers bill reasoning at the output rate, so we never add
- *     `outputTokenDetails.reasoningTokens` on top of `outputTokens`.
- *
- * When a provider omits the breakdown we treat the whole `inputTokens`
- * value as uncached so we don't under-bill on a missing field.
- */
 function usdCostFromUsage(modelId: string, usage: LanguageModelUsage): number {
   const price = priceFor(modelId);
   const cacheRead = usage.inputTokenDetails.cacheReadTokens ?? 0;
@@ -628,7 +602,7 @@ function billingTokensFromUsage(
   usage: LanguageModelUsage,
   billingSource?: 'custom',
 ): number {
-  if (billingSource === 'custom') return 0; // P06D: custom/BYOK — user pays, not platform
+  if (billingSource === 'custom') return 0;
   const usdCost = usdCostFromUsage(modelId, usage) * billingMultiplier();
   return Math.max(1, Math.ceil(usdCost / USD_PER_BILLING_TOKEN));
 }
@@ -640,19 +614,6 @@ type BranchMessageRow = Pick<
   'id' | 'role' | 'parts' | 'metadata' | 'parent_message_id'
 >;
 
-/**
- * Promote any `state: 'streaming'` parts to `'done'` before we persist a
- * message. Some providers (notably Gemini via OpenRouter, but it's not
- * specific to them) don't emit the closing chunk that the AI SDK's
- * reducer uses to flip a part from `'streaming'` to `'done'` — so the
- * SDK keeps the part in `'streaming'` even after the stream completes.
- *
- * If we then persist that snapshot, the UI keeps showing the
- * "Thinking..." shimmer / streaming caret forever on the next page load
- * because the renderer reads the state straight off the part. This
- * normalises terminal-state parts at the boundary instead of trying to
- * out-think every provider's quirks.
- */
 function finalizeStreamingParts(
   parts: AppUIMessage['parts'],
 ): AppUIMessage['parts'] {
@@ -732,16 +693,6 @@ function messageRowToUIMessage(
   };
 }
 
-/**
- * Walks `parent_message_id` from `leafId` back to a root, returning the
- * branch in root-first order as `AppUIMessage`s ready for
- * `convertToModelMessages`. Source of truth is the messages table — the
- * client cannot influence the model context other than by writing rows
- * to the DB first.
- *
- * Includes a visited-set so a corrupt self-cycle in the data can't lock
- * the server (mirrors the same defense in shared/Tree.ts on the client).
- */
 async function loadBranchFromDb({
   supabaseClient,
   conversationId,
@@ -821,14 +772,6 @@ async function generateConversationTitle({
   }
 }
 
-/**
- * Produce ~2 short follow-up suggestions for the user's NEXT prompt, given
- * the current branch. Used as transient `data-suggestions-update` parts —
- * the conversation-level pills below the input. Suggestions are
- * conversation-scoped (not per-message) because that's how they appear in
- * the UI: they're tips for "what to say next", not annotations on a
- * specific assistant turn.
- */
 async function generateConversationSuggestions({
   anthropic,
   branch,
@@ -838,9 +781,6 @@ async function generateConversationSuggestions({
   branch: AppUIMessage[];
   conversationType: 'parametric' | 'creative';
 }): Promise<string[]> {
-  // Cheap prompt: the user's first request + the last assistant reply text
-  // is plenty for short follow-up tips. Walking the entire branch would
-  // burn tokens for no obvious win.
   const firstUserText =
     getParametricText(branch.find((m) => m.role === 'user')?.parts ?? []) || '';
   const lastAssistantText = getParametricText(
@@ -929,9 +869,6 @@ function creativeTools({
   };
 }
 
-// The only image media types Anthropic (and our other providers) accept. We
-// gate `image-type`'s broader detection to this set so we never hand the model
-// a sniffed-but-unsupported mime (HEIC, AVIF, …) that it would reject anyway.
 const ACCEPTED_IMAGE_MEDIA_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -939,14 +876,6 @@ const ACCEPTED_IMAGE_MEDIA_TYPES = new Set([
   'image/webp',
 ]);
 
-/**
- * Sniff an image's real media type from its leading magic bytes. The stored
- * object's content-type metadata is NOT trustworthy: uploads don't pin a
- * content type and file parts hardcode a `.png` filename, so a JPEG routinely
- * ends up labeled `image/png` in storage. Providers like Anthropic reject a
- * declared-mime/actual-bytes mismatch ("specified image/png … appears to be
- * image/jpeg"), so we derive the type from the bytes themselves.
- */
 async function sniffImageMediaType(bytes: Uint8Array): Promise<string | null> {
   const sniffed = (await imageType(bytes))?.mime;
   return sniffed && ACCEPTED_IMAGE_MEDIA_TYPES.has(sniffed) ? sniffed : null;
@@ -968,11 +897,6 @@ async function downloadAsBase64(
   for (let index = 0; index < bytes.length; index += chunkSize) {
     binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
   }
-  // Trust the bytes over the stored content type: the metadata mislabels
-  // JPEG/WebP uploads as PNG, and providers reject a mime/bytes mismatch.
-  // `||` (not `??`) on purpose: a Blob with no Content-Type header reports
-  // `data.type` as `''`, which must fall through to the PNG default rather
-  // than emit an empty media type.
   const mediaType =
     (await sniffImageMediaType(bytes)) || data.type || 'image/png';
   return { base64: btoa(binary), mediaType };
@@ -995,11 +919,6 @@ function parametricTools({
         toolCallId: string;
         output: AppTools['build_parametric_model']['output'];
       }) {
-        // The client uploads a multi-view render of the compiled SCAD to a path
-        // derived from toolCallId BEFORE sending the tool result (see
-        // ChatSession's `onToolCall`). If for any reason the upload
-        // didn't land, `downloadAsBase64` returns null and we fall back
-        // to text-only — never block the loop on a missing inspection sheet.
         const downloaded = await downloadAsBase64(
           supabaseClient,
           'images',
@@ -1084,22 +1003,11 @@ export async function handleAiChatRequest(req: Request) {
     );
   }
 
-  // E01: Read the execution mode for this conversation (defaults to 'cli'
-  // for backward compatibility). This determines whether opencode/ models
-  // use the CLI transport or the HTTP/SSE streaming transport.
-  //
-  // Prefer the explicit `openCodeExecutionMode` sent in the request body
-  // (set by the user's transport toggle) so the current request always
-  // uses the most recent selection even before the DB write completes.
   const executionMode: 'cli' | 'streaming' =
     rawBody.openCodeExecutionMode ??
     conversation.settings?.openCodeExecutionMode ??
     'cli';
 
-  // Resolve the system prompt from the prompt profile pinned to this
-  // conversation.  The resolver returns the built-in prompt when
-  // `promptProfileId` is NULL / the synthetic built-in ID, and fetches the
-  // custom template from the database for user-created profiles.
   let resolvedSystemPrompt: string;
   try {
     const promptProfileId = conversation.settings?.promptProfileId as
@@ -1124,11 +1032,6 @@ export async function handleAiChatRequest(req: Request) {
     );
   }
 
-  // Pre-flight balance gate. A chat costs at least 1 billing token, so a
-  // total of 0 means we cannot let the stream start. We don't try to
-  // estimate the exact cost up front — chat is variable, and the billing
-  // service drains the remainder to zero if the actual usage exceeds
-  // what's left (see onFinish below).
   try {
     const status = await billing.getStatus(user.email);
     if (status.tokens.total <= 0) {
@@ -1185,11 +1088,11 @@ export async function handleAiChatRequest(req: Request) {
 
   const leafMessageId = conversation.current_message_leaf_id;
 
-  // Provider instances are lazy so a missing key only fails the selected
-  // provider. Keep this guarded anyway so setup errors return a clear 503.
   let providers: ChatProviders;
+  let builtinProviderOverrides: BuiltinProviderRuntimeOverrides = {};
   try {
-    providers = createChatProviders();
+    builtinProviderOverrides = await loadBuiltinProviderRuntimeOverrides(user.id);
+    providers = createChatProviders(builtinProviderOverrides);
   } catch (error) {
     logError(error, {
       functionName: 'ai-chat',
@@ -1198,25 +1101,17 @@ export async function handleAiChatRequest(req: Request) {
       conversationId: conversation.id,
       additionalContext: { operation: 'create_providers' },
     });
-    return jsonResponse({ error: 'AI provider not configured on server' }, 503);
+    return jsonResponse({ error: 'AI provider settings could not be loaded' }, 503);
   }
 
-  // Title is generated INSIDE the stream's execute (below), as a transient
-  // `data-title-update` part — that way the client receives it without a
-  // round-trip to refetch the conversation, AND the title gen runs in
-  // parallel with the model stream instead of blocking it. Only fires on
-  // the very first user turn.
+  const anthropicAuxiliaryAvailable =
+    builtinProviderOverrides.anthropic?.enabled !== false &&
+    Boolean(
+      builtinProviderOverrides.anthropic?.credential || env('ANTHROPIC_API_KEY'),
+    );
+
   const isFirstUserTurn = branchMessages.length === 1 && leafRole === 'user';
 
-  // Rehydrate image file parts before handing them to the model. The
-  // persisted `url` is a storage reference (or, for the oldest backfilled
-  // rows, a dead `/public/` path), neither of which the provider can fetch —
-  // `convertToModelMessages` passes `part.url` straight through as the file
-  // payload. So we download the bytes from the private `images` bucket and
-  // inline them as a base64 data URL. Parts that already carry a `data:` URL
-  // (legacy rows that inlined base64) pass through untouched; anything we
-  // can't resolve is dropped so a missing image never poisons the request
-  // with an unfetchable URL.
   const hydratedMessages = await Promise.all(
     branchMessages.map(async (message) => ({
       ...message,
@@ -1282,10 +1177,6 @@ export async function handleAiChatRequest(req: Request) {
     },
   );
 
-  // Resolve the actual model ID the request will run against. For
-  // `creative` conversations this is hardcoded to Sonnet regardless of
-  // what the client picked — billing has to price the model that ran,
-  // not the one the user requested.
   const actualModelId = chatModel(conversation, rawBody.model);
   const resolvedProvider = providerFor(actualModelId);
   const baseLogContext = {
@@ -1296,25 +1187,13 @@ export async function handleAiChatRequest(req: Request) {
     provider: resolvedProvider,
   };
 
-  // Adaptive-thinking Anthropic models (Claude 5 — Fable/Mythos — and
-  // Opus/Sonnet 4.6+) get thinking enabled unconditionally: adaptive thinking
-  // lets the model decide when and how much to think, and on Fable 5 omitting
-  // it disables thinking entirely — no reasoning ever streams, and complex
-  // parametric turns degrade (especially combined with the auto tool-choice
-  // fallback). The client never sends `thinking: true` today, so without this
-  // the Anthropic thinking branch is dead code.
   const thinkingEnabled =
     (rawBody.thinking ?? false) ||
     (resolvedProvider === 'anthropic' &&
       usesAdaptiveAnthropicThinking(actualModelId));
 
-  // E03/R03: Transport selection — the canonical OpenCode agent ID
-  // (agent/opencode/<provider>/<model>) picks CLI vs Streaming purely by
-  // executionMode; the transport is never a different model ID.
   const transport = selectChatTransport(actualModelId, executionMode);
 
-  // I09E: minimal transport observability — distinguish cli vs streaming in
-  // server logs so the selected transport can be verified without tracing.
   console.info(`transport`, {
     modelId: actualModelId,
     executionMode,
@@ -1326,16 +1205,18 @@ export async function handleAiChatRequest(req: Request) {
 
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
-  let customBillingSource: 'custom' | undefined;
+  const builtinDriver = builtinDriverForModelId(actualModelId);
+  let customBillingSource: 'custom' | undefined =
+    builtinDriver && builtinProviderOverrides[builtinDriver]?.credential
+      ? 'custom'
+      : undefined;
   try {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
         transport.underlyingModelId,
       );
-      // Streaming opencode handles reasoning internally; no provider options.
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
-      // P06: Custom provider models — resolve via buildCustomChatModel
       try {
         const built = await buildCustomChatModel(
           actualModelId,
@@ -1343,7 +1224,6 @@ export async function handleAiChatRequest(req: Request) {
           thinkingEnabled,
         );
 
-        // P06C: Capability gates — reject if model lacks required capabilities
         const supportsTools = built.capabilities.supportsTools;
         if (!supportsTools) {
           return jsonResponse(
@@ -1354,10 +1234,8 @@ export async function handleAiChatRequest(req: Request) {
 
         chatLanguageModel = built.model;
         chatProviderOptions = built.providerOptions;
-        // P06D: Mark billing source as custom — caller must not use FALLBACK_MODEL_PRICE
         customBillingSource = 'custom';
       } catch (error) {
-        // P06E: Custom provider failures — NO fallback to OpenRouter/OpenCode/default
         logError(error, {
           functionName: 'ai-chat',
           statusCode: 400,
@@ -1388,8 +1266,9 @@ export async function handleAiChatRequest(req: Request) {
         operation: 'build_chat_model',
       },
     });
+    const message = error instanceof Error ? error.message : String(error);
     return jsonResponse(
-      { error: `Failed to initialize model ${actualModelId}` },
+      { error: `Failed to initialize model ${actualModelId}: ${message}` },
       500,
     );
   }
@@ -1399,22 +1278,6 @@ export async function handleAiChatRequest(req: Request) {
     thinking: thinkingEnabled,
   };
 
-  // Parametric step 0 pins `build_parametric_model` via a forced tool_choice
-  // whenever the model accepts one. Anthropic rejects a forced tool_choice
-  // while thinking is on ("Thinking may not be enabled when tool_choice forces
-  // tool use"), so for thinking-enabled Anthropic models we disable thinking
-  // for just that first step (see `prepareStep` below); later steps keep their
-  // adaptive thinking. Only the reasoning-tier Claude 5 models (Fable/Mythos),
-  // which reject forced tool use outright, fall back to auto tool choice and
-  // rely on the system prompt to steer the build call — a fragile path where
-  // the model *might* answer with text instead of building. Track that fallback
-  // so we can detect — and log — a turn that finished without building.
-  // The streaming OpenCode adapter emits the shared { code, message } artifact
-  // and then synthesizes pCAD's build tool call. Do not force that tool choice
-  // for the underlying agent: it has a text protocol, and a forced native tool
-  // choice can make it stop after reasoning without producing an artifact.
-  // The tool registry stays available so AI SDK can execute the adapter's
-  // synthetic build_parametric_model call after the artifact is returned.
   const streamingOpenCode = transport.kind === 'streaming-opencode';
   const forceBuildToolChoice =
     !streamingOpenCode && supportsForcedToolChoice(actualModelId);
@@ -1438,14 +1301,6 @@ export async function handleAiChatRequest(req: Request) {
         leafRole === 'user' &&
         stepNumber === 0
       ) {
-        // Restrict the toolset to the build tool on the first step. Models that
-        // accept a forced tool_choice get it pinned; the reasoning-tier Claude 5
-        // models (Fable/Mythos) reject forced tool use and fall back to auto,
-        // relying on the system prompt to call build_parametric_model.
-        // When pinning the tool on a thinking-enabled Anthropic model, thinking
-        // must be off for this step (Anthropic rejects forced tool use while
-        // thinking is on) — disable it here only; later steps keep the adaptive
-        // thinking configured in buildChatModel.
         return {
           activeTools: ['build_parametric_model' as never],
           ...(forceBuildToolChoice
@@ -1467,18 +1322,9 @@ export async function handleAiChatRequest(req: Request) {
       }
       return {};
     },
-    // OpenCode Streaming returns one complete artifact and the adapter turns
-    // it into the build tool call. Stop after that first model step so the
-    // normal CADAM screenshot/revision loop cannot ask the text-only agent to
-    // produce duplicate artifacts after a successful build.
     stopWhen: streamingOpenCode
       ? hasToolCall('build_parametric_model')
       : stepCountIs(conversation.type === 'parametric' ? 60 : 5),
-    // Thinking and visible response tokens share this pool. With adaptive
-    // thinking now always-on for Claude 5 / 4.6+, a heavy reasoning turn can
-    // spend 10k+ tokens before the answer starts — 32k keeps the visible
-    // response from getting squeezed. We stream, so SDK HTTP timeouts aren't
-    // a concern at this size.
     maxOutputTokens:
       conversation.type === 'parametric'
         ? PARAMETRIC_MAX_OUTPUT_TOKENS
@@ -1486,17 +1332,7 @@ export async function handleAiChatRequest(req: Request) {
           ? 32000
           : 16000,
     abortSignal: req.signal,
-    // Decouple our render cadence from the provider's native chunking.
-    // OpenRouter (and the underlying provider) sometimes emits text in
-    // paragraph-sized frames; smoothStream rebuckets the deltas into
-    // word-sized chunks at a steady cadence so the chat panel reads
-    // word-by-word the way the rest of the AI ecosystem does. Default
-    // delay is 10ms — bumped to 30ms for a more readable cadence.
     experimental_transform: smoothStream({ delayInMs: 30 }),
-    // Without this, provider errors mid-stream become silent `error`
-    // parts on the SSE stream — never logged, never visible in
-    // production. This is the primary observability hook for "the model
-    // call failed and I have no idea why".
     onError: ({ error }) => {
       logError(error, {
         functionName: 'ai-chat',
@@ -1509,10 +1345,6 @@ export async function handleAiChatRequest(req: Request) {
         },
       });
     },
-    // Observability for the auto-tool-choice fallback (Claude 5 / Fable /
-    // Mythos): without a forced tool_choice the model can finish a parametric
-    // turn as plain text, leaving the user with no built model and no error.
-    // Surface that degraded outcome so it's measurable instead of silent.
     onFinish: ({ steps }) => {
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
@@ -1541,19 +1373,7 @@ export async function handleAiChatRequest(req: Request) {
     },
   });
 
-  // Stream construction follows the onshape-extension pattern:
-  // `createUIMessageStream({ execute })` gives us a `writer` that can emit
-  // out-of-band transient parts (title / suggestions) alongside the actual
-  // assistant message stream. The transient parts never land in
-  // `messages.parts`; the client picks them up via `useChat`'s `onData`
-  // and pokes the conversation query cache directly.
   const stream = createUIMessageStream<AppUIMessage>({
-    // `onError` runs for anything thrown inside `execute` OR inside the
-    // merged streamText output. Without overriding it, the AI SDK
-    // replaces the real error with a generic "An error occurred." string
-    // before serializing — useful for hiding stack traces from end users,
-    // useless for debugging. Log here and pass through a short message
-    // to the client so the failure is visible in the UI too.
     onError: (error) => {
       logError(error, {
         functionName: 'ai-chat',
@@ -1569,9 +1389,7 @@ export async function handleAiChatRequest(req: Request) {
       return `Model call failed (${resolvedProvider}/${actualModelId}): ${message}`;
     },
     execute: async ({ writer }) => {
-      // Title (first user turn only) runs in parallel with the model
-      // stream — fire-and-forget; the assistant doesn't wait on it.
-      if (isFirstUserTurn && env('ANTHROPIC_API_KEY')) {
+      if (isFirstUserTurn && anthropicAuxiliaryAvailable) {
         void emitConversationTitle({
           writer,
           anthropic: providers.anthropic(),
@@ -1610,43 +1428,7 @@ export async function handleAiChatRequest(req: Request) {
               parts: JSON.parse(JSON.stringify(finalizedParts)),
             };
 
-            // Does this turn end awaiting a CLIENT-side tool result? Our
-            // parametric tools (`build_parametric_model`, `answer_user`) have
-            // no server `execute` — the browser compiles / answers and is the
-            // sole authority for their result. The server only ever sees them
-            // `input-available` (pending).
             const hasPendingToolCall = hasPendingClientToolCall(finalizedParts);
-
-            // Persist the row BEFORE billing. `build_parametric_model` is
-            // resolved client-side: the browser compiles, then UPDATEs this
-            // row to attach the tool output (`persistAssistantParts`). That
-            // UPDATE matches nothing until this INSERT lands, so the browser
-            // retries on a ~1.7s window and otherwise surfaces "Couldn't save
-            // this step". `billing.consume` is a non-fatal external round-trip
-            // (caught + logged below) and the persist doesn't depend on it —
-            // running it after keeps its latency out of the browser's race
-            // window. The row must exist as soon as the stream closes.
-            //
-            // What to do with this row — see `decidePersistAction`:
-            //   insert → new assistant row.
-            //   update → continuation with everything resolved / pure text.
-            //   skip   → continuation still ending in a pending CLIENT tool.
-            //            The browser persists the `output-available` version
-            //            itself (`onToolOutput`); a server write here — delayed
-            //            behind `result.totalUsage` — would land last and
-            //            clobber it back to `input-available`, leaving a
-            //            dangling tool call that 500s the next send. Mid-loop
-            //            builds dodge the race because the client's compile
-            //            takes seconds; the terminal `answer_user` is instant,
-            //            so the server reliably wins. Defer to client.
-            //
-            // Insert places a NEW assistant under whatever the leaf was: for a
-            // fresh user turn that's the user message; for a retry (client
-            // repointed the leaf back at the parent user message) it's the same
-            // parent, so the new assistant becomes a sibling — which is what
-            // makes BranchNavigation light up. The `update_leaf_trigger` on
-            // `public.messages` auto-advances `current_message_leaf_id`, so we
-            // don't touch the conversation row here.
             const persistAction = decidePersistAction({
               isContinuation,
               hasPendingToolCall,
@@ -1667,12 +1449,6 @@ export async function handleAiChatRequest(req: Request) {
                 parent_message_id: leafMessageId,
               }));
             } else {
-              // persistAction === 'skip': the client owns this row's `parts`
-              // (it persists the resolved tool output). Still record this
-              // turn's billing metadata via a metadata-ONLY update — it touches
-              // a different column than the client's `parts` write, and
-              // Postgres re-evaluates concurrent same-row updates, so the
-              // client's parts are never clobbered.
               ({ error } = await supabaseClient
                 .from('messages')
                 .update({ metadata: serializedMessage.metadata })
@@ -1691,14 +1467,6 @@ export async function handleAiChatRequest(req: Request) {
             }
 
             try {
-              // Drains the user's remaining balance to zero if the
-              // request cost more than they had. The billing service
-              // accepts the partial deduction, writes an audit row as
-              // `<operation>_partial`, and the pre-flight gate above
-              // will block the next request. Not an error path —
-              // intentional terminal state. Runs after the persist above so
-              // its latency never delays the row the client is waiting on.
-              // P06D: Skip billing for custom/BYOK providers — user pays directly.
               if (customBillingSource !== 'custom') {
                 await billing.consume(user.email!, {
                   tokens: billingTokens,
@@ -1718,24 +1486,7 @@ export async function handleAiChatRequest(req: Request) {
               });
             }
 
-            // Only generate suggestions once the assistant has actually
-            // finished talking. Mid-tool-roundtrip (parts ends with a
-            // tool-call awaiting client output) we skip — the next
-            // continuation `onFinish` will fire suggestions for the real
-            // final state. Avoids a wasted Haiku call AND prevents
-            // mid-turn placeholder pills.
-            if (!hasPendingToolCall && env('ANTHROPIC_API_KEY')) {
-              // MUST be awaited (not `void`). `createUIMessageStream`
-              // closes the SSE controller as soon as the merged stream
-              // drains — and the merged stream resolves once this
-              // `onFinish` returns. A fire-and-forget here would race
-              // the close, and the `writer.write` inside
-              // `emitConversationSuggestions` would silently no-op
-              // because `safeEnqueue` swallows enqueue errors on a
-              // closed controller (see ai/dist/index.mjs:8264). The
-              // ~200-500ms Haiku call delays the client's "streaming"
-              // → "ready" transition by the same amount, which is the
-              // tradeoff for getting pills delivered.
+            if (!hasPendingToolCall && anthropicAuxiliaryAvailable) {
               await emitConversationSuggestions({
                 writer,
                 anthropic: providers.anthropic(),
@@ -1760,14 +1511,6 @@ export async function handleAiChatRequest(req: Request) {
   });
 }
 
-/**
- * Generate a short conversation title from the first user message,
- * persist it on the conversation row, AND emit a transient
- * `data-title-update` part so the client's title bar updates without a
- * round-trip refetch. Fire-and-forget — runs in parallel with the
- * assistant message stream so the user sees their message echo back
- * immediately even if Haiku is still naming the thread.
- */
 async function emitConversationTitle({
   writer,
   anthropic,
@@ -1803,13 +1546,6 @@ async function emitConversationTitle({
   }
 }
 
-/**
- * Generate fresh per-conversation suggestions, persist them on the
- * conversation's `settings.suggestions`, and emit a transient
- * `data-suggestions-update` part. Suggestions are conversation-level
- * (not per-message) because that's how they appear in the UI: pills
- * below the chat input that drive the user's next prompt.
- */
 async function emitConversationSuggestions({
   writer,
   anthropic,
@@ -1831,8 +1567,6 @@ async function emitConversationSuggestions({
     });
     if (suggestions.length === 0) return;
 
-    // Merge into existing settings (which holds `model`, etc.) instead of
-    // clobbering — keep the row's other fields intact.
     const { data: convRow } = await supabaseClient
       .from('conversations')
       .select('settings')
