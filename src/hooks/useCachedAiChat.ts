@@ -18,6 +18,7 @@ type CallbackRefs = {
 };
 
 const callbackRefs = new Map<string, CallbackRefs>();
+const handledToolCallIds = new Map<string, Set<string>>();
 
 function refsFor(id: string): CallbackRefs {
   let refs = callbackRefs.get(id);
@@ -32,6 +33,15 @@ function refsFor(id: string): CallbackRefs {
     callbackRefs.set(id, refs);
   }
   return refs;
+}
+
+function handledToolsFor(id: string): Set<string> {
+  let handled = handledToolCallIds.get(id);
+  if (!handled) {
+    handled = new Set<string>();
+    handledToolCallIds.set(id, handled);
+  }
+  return handled;
 }
 
 function touch(id: string) {
@@ -50,6 +60,7 @@ function evictIfNeeded() {
     if (result.done) break;
     chatCache.delete(result.value);
     callbackRefs.delete(result.value);
+    handledToolCallIds.delete(result.value);
   }
 }
 
@@ -85,6 +96,39 @@ function canReplaceWithPersistedMessages(
   return true;
 }
 
+function pendingClientToolCalls(messages: readonly AppUIMessage[]) {
+  const pending: Array<{
+    toolName: 'build_parametric_model' | 'answer_user';
+    toolCallId: string;
+    input: unknown;
+  }> = [];
+
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    for (const part of message.parts) {
+      if (
+        (part.type === 'tool-build_parametric_model' ||
+          part.type === 'tool-answer_user') &&
+        part.state === 'input-available' &&
+        'toolCallId' in part &&
+        typeof part.toolCallId === 'string' &&
+        'input' in part
+      ) {
+        pending.push({
+          toolName:
+            part.type === 'tool-build_parametric_model'
+              ? 'build_parametric_model'
+              : 'answer_user',
+          toolCallId: part.toolCallId,
+          input: part.input,
+        });
+      }
+    }
+  }
+
+  return pending;
+}
+
 export type CachedAiChatOptions = Omit<ReactChatInit, 'id'> & {
   id: string;
 };
@@ -101,6 +145,7 @@ export function useCachedAiChat({
   ...rest
 }: CachedAiChatOptions) {
   const refs = refsFor(id);
+  const handled = handledToolsFor(id);
   const initialConfigRef = useRef({ id, messages, transport, rest });
   if (initialConfigRef.current.id !== id) {
     initialConfigRef.current = { id, messages, transport, rest };
@@ -130,7 +175,10 @@ export function useCachedAiChat({
       onError: (error) => refs.onError.current?.(error),
       onFinish: (ctx) => refs.onFinish.current?.(ctx),
       onData: (ctx) => refs.onData.current?.(ctx),
-      onToolCall: (ctx) => refs.onToolCall.current?.(ctx),
+      onToolCall: (ctx) => {
+        handled.add(ctx.toolCall.toolCallId);
+        return refs.onToolCall.current?.(ctx);
+      },
       sendAutomaticallyWhen: (ctx) =>
         refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
     });
@@ -138,7 +186,7 @@ export function useCachedAiChat({
     chatCache.set(id, created);
     evictIfNeeded();
     return created;
-  }, [id, refs]);
+  }, [handled, id, refs]);
 
   // Android browsers can suspend a background tab and tear down its HTTP/SSE
   // connection. The server keeps consuming/persisting the AI stream, but the
@@ -148,12 +196,29 @@ export function useCachedAiChat({
   // clears the transient network error once the authoritative branch arrives.
   useEffect(() => {
     if (chat.status === 'streaming' || chat.status === 'submitted') return;
-    if (!canReplaceWithPersistedMessages(chat.messages, messages)) return;
-    if (messageSnapshot(chat.messages) === messageSnapshot(messages)) return;
 
-    chat.messages = messages;
-    if (chat.status === 'error') chat.clearError();
-  }, [chat, messages]);
+    if (
+      canReplaceWithPersistedMessages(chat.messages, messages) &&
+      messageSnapshot(chat.messages) !== messageSnapshot(messages)
+    ) {
+      chat.messages = messages;
+    }
+
+    if (chat.status === 'error' && chat.messages.length > 0) {
+      chat.clearError();
+    }
+
+    // A disconnect can happen after the server has emitted and persisted a
+    // client-executed CAD tool call but before the browser received it. Re-run
+    // only known idempotent client tools that are still input-available. The
+    // normal live onToolCall path records the same id first, preventing a
+    // duplicate execution when no disconnect occurred.
+    for (const toolCall of pendingClientToolCalls(chat.messages)) {
+      if (handled.has(toolCall.toolCallId)) continue;
+      handled.add(toolCall.toolCallId);
+      void refs.onToolCall.current?.({ toolCall });
+    }
+  }, [chat, handled, messages, refs]);
 
   return chat;
 }
@@ -168,6 +233,7 @@ export function createAndCacheAiChat(
 ) {
   const { id, sendAutomaticallyWhen, ...rest } = options;
   const refs = refsFor(id);
+  const handled = handledToolsFor(id);
   refs.sendAutomaticallyWhen.current = sendAutomaticallyWhen;
   const chat = new Chat<AppUIMessage>({
     ...rest,
@@ -175,7 +241,10 @@ export function createAndCacheAiChat(
     onError: (error) => refs.onError.current?.(error),
     onFinish: (ctx) => refs.onFinish.current?.(ctx),
     onData: (ctx) => refs.onData.current?.(ctx),
-    onToolCall: (ctx) => refs.onToolCall.current?.(ctx),
+    onToolCall: (ctx) => {
+      handled.add(ctx.toolCall.toolCallId);
+      return refs.onToolCall.current?.(ctx);
+    },
     sendAutomaticallyWhen: (ctx) =>
       refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
   });
