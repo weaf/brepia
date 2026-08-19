@@ -35,7 +35,7 @@ describe('collectStuckToolRecovery', () => {
     }
   });
 
-  it('rewrites stuck tool calls to output-error on an idle chat', () => {
+  it('rewrites incomplete streaming tool calls to output-error on an idle chat', () => {
     for (const status of ['ready', 'error']) {
       const result = collectStuckToolRecovery({
         status,
@@ -54,18 +54,44 @@ describe('collectStuckToolRecovery', () => {
     }
   });
 
-  it('handles dynamic-tool and input-available the same way', () => {
+  it('preserves complete pCAD client tools for replay after reconnect', () => {
+    const resumable = {
+      id: 'a2',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-build_parametric_model',
+          state: 'input-available',
+          toolCallId: 'call-build',
+          input: { code: 'cube(1);' },
+        },
+        {
+          type: 'tool-answer_user',
+          state: 'input-available',
+          toolCallId: 'call-answer',
+          input: { message: 'Done' },
+        },
+      ],
+    };
+    const result = collectStuckToolRecovery({
+      status: 'ready',
+      messages: [resumable],
+    });
+    assert.equal(result.size, 0);
+  });
+
+  it('still converts unknown input-available tools to output-error', () => {
     const result = collectStuckToolRecovery({
       status: 'ready',
       messages: [
         {
-          id: 'a2',
+          id: 'a3',
           role: 'assistant',
           parts: [{ type: 'dynamic-tool', state: 'input-available' }],
         },
       ],
     });
-    assert.deepEqual(result.get('a2'), [
+    assert.deepEqual(result.get('a3'), [
       {
         type: 'dynamic-tool',
         state: 'output-error',
@@ -76,7 +102,7 @@ describe('collectStuckToolRecovery', () => {
 
   it('finishes streaming text and reasoning parts', () => {
     const streamingTextMessage = {
-      id: 'a3',
+      id: 'a4',
       role: 'assistant',
       parts: [
         { type: 'reasoning', state: 'streaming' },
@@ -87,7 +113,7 @@ describe('collectStuckToolRecovery', () => {
       status: 'ready',
       messages: [streamingTextMessage],
     });
-    assert.deepEqual(result.get('a3'), [
+    assert.deepEqual(result.get('a4'), [
       { type: 'reasoning', state: 'done' },
       { type: 'text', text: 'partial', state: 'done' },
     ]);
@@ -101,7 +127,7 @@ describe('collectStuckToolRecovery', () => {
       parts: [{ type: 'text', text: 'hi', state: 'streaming' }],
     };
     const cleanAssistantMessage = {
-      id: 'a4',
+      id: 'a5',
       role: 'assistant',
       parts: [
         { type: 'text', text: 'done', state: 'done' },
