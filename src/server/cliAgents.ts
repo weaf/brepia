@@ -13,12 +13,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2Content,
-  LanguageModelV2Prompt,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3Content,
+  LanguageModelV3FinishReason,
+  LanguageModelV3Prompt,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
 } from '@ai-sdk/provider';
 import { env } from './env';
 import {
@@ -29,11 +30,25 @@ import {
 
 const TIMEOUT_MS = 8 * 60_000;
 
-const USAGE = (): LanguageModelV2Usage => ({
-  inputTokens: 0,
-  outputTokens: 0,
-  totalTokens: 0,
+const USAGE = (): LanguageModelV3Usage => ({
+  inputTokens: {
+    total: 0,
+    noCache: undefined,
+    cacheRead: undefined,
+    cacheWrite: undefined,
+  },
+  outputTokens: {
+    total: 0,
+    text: undefined,
+    reasoning: undefined,
+  },
 });
+
+function finishReason(
+  unified: LanguageModelV3FinishReason['unified'],
+): LanguageModelV3FinishReason {
+  return { unified, raw: unified };
+}
 
 type AgentKind = 'opencode' | 'codex';
 
@@ -219,7 +234,7 @@ function textFromCodex(stdout: string): string {
   return text;
 }
 
-function promptText(prompt: LanguageModelV2Prompt): string {
+function promptText(prompt: LanguageModelV3Prompt): string {
   const messages: string[] = [];
   for (const message of prompt) {
     const parts = Array.isArray(message.content)
@@ -289,21 +304,21 @@ async function invokeAgent(
   }
 }
 
-export function cliAgentChatModel(appModelId: string): LanguageModelV2 {
+export function cliAgentChatModel(appModelId: string): LanguageModelV3 {
   const { agent, model } = parseModelId(appModelId);
   return {
-    specificationVersion: 'v2',
+    specificationVersion: 'v3',
     provider: `${agent}-cli`,
     modelId: appModelId,
     supportedUrls: {},
-    async doStream(options: LanguageModelV2CallOptions) {
+    async doStream(options: LanguageModelV3CallOptions) {
       const result = await invokeAgent(
         agent,
         model,
         promptText(options.prompt),
         options.abortSignal,
       );
-      const parts: LanguageModelV2StreamPart[] = [
+      const parts: LanguageModelV3StreamPart[] = [
         { type: 'stream-start', warnings: [] },
       ];
       if (result.code) {
@@ -332,10 +347,10 @@ export function cliAgentChatModel(appModelId: string): LanguageModelV2 {
       }
       parts.push({
         type: 'finish',
-        finishReason: result.code ? 'tool-calls' : 'stop',
+        finishReason: finishReason(result.code ? 'tool-calls' : 'stop'),
         usage: USAGE(),
       });
-      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+      const stream = new ReadableStream<LanguageModelV3StreamPart>({
         start(controller) {
           for (const part of parts) controller.enqueue(part);
           controller.close();
@@ -345,38 +360,41 @@ export function cliAgentChatModel(appModelId: string): LanguageModelV2 {
         stream,
         request: {},
         response: {},
-        usage: USAGE(),
-        abort: () => {},
       };
     },
     async doGenerate(options) {
       const result = await this.doStream(options);
-      const content: LanguageModelV2Content[] = [];
+      const content: LanguageModelV3Content[] = [];
+      let finalReason = finishReason('stop');
+      let usage = USAGE();
       const reader = result.stream.getReader();
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (value.type === 'tool-call')
+          if (value.type === 'tool-call') {
             content.push({
               type: 'tool-call',
               toolCallId: value.toolCallId,
               toolName: value.toolName,
               input: value.input,
             });
-          if (value.type === 'text-delta')
+          }
+          if (value.type === 'text-delta') {
             content.push({ type: 'text', text: value.delta });
+          }
+          if (value.type === 'finish') {
+            finalReason = value.finishReason;
+            usage = value.usage;
+          }
         }
       } finally {
         reader.releaseLock();
       }
       return {
         content,
-        finishReason: content.some((part) => part.type === 'tool-call')
-          ? 'tool-calls'
-          : 'stop',
-        usage: USAGE(),
-        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: finalReason,
+        usage,
         request: {},
         response: { modelId: appModelId },
         warnings: [],
