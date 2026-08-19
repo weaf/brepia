@@ -70,33 +70,121 @@ export function buildAgentOutputContract(): string {
 
 export type AgentResult = { code?: string; message: string };
 
-export function parseAgentResult(text: string): AgentResult {
-  // Agents occasionally emit a first draft, notice a syntax error, and then
-  // provide a corrected JSON result.  The terminal artifact is the final
-  // valid structured result, not the first draft seen in the stream.
-  const jsonCandidates = [
-    ...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
-  ].map((match) => match[1]);
-  if (!jsonCandidates.length) jsonCandidates.push(text);
+type StructuredAgentResultMatch = {
+  end: number;
+  result: AgentResult;
+  start: number;
+};
 
-  for (const candidate of jsonCandidates.reverse()) {
-    try {
-      const parsed = JSON.parse(candidate.trim()) as {
-        code?: unknown;
-        message?: unknown;
-      };
-      const code =
-        typeof parsed.code === 'string' && parsed.code.trim()
-          ? parsed.code.trim()
-          : undefined;
-      return {
-        code,
-        message: typeof parsed.message === 'string' ? parsed.message : '',
-      };
-    } catch {
-      // Try the preceding structured result, then the fenced SCAD fallback.
+function structuredAgentResultMatches(
+  text: string,
+): StructuredAgentResultMatch[] {
+  const matches: StructuredAgentResultMatch[] = [];
+  const candidateStarts = [
+    ...text.matchAll(/\{\s*"(?:code|message)"\s*:/g),
+  ].flatMap((match) => (match.index === undefined ? [] : [match.index]));
+  for (const start of candidateStarts) {
+    let depth = 0;
+    let escaped = false;
+    let inString = false;
+    for (let end = start; end < text.length; end += 1) {
+      const character = text[end];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (character === '\\') {
+          escaped = true;
+        } else if (character === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (character === '"') {
+        inString = true;
+      } else if (character === '{') {
+        depth += 1;
+      } else if (character === '}') {
+        depth -= 1;
+      }
+
+      if (depth !== 0) continue;
+
+      try {
+        const parsed = JSON.parse(text.slice(start, end + 1)) as Record<
+          string,
+          unknown
+        >;
+        if (
+          !Object.prototype.hasOwnProperty.call(parsed, 'code') &&
+          !Object.prototype.hasOwnProperty.call(parsed, 'message')
+        ) {
+          break;
+        }
+
+        const code =
+          typeof parsed.code === 'string' && parsed.code.trim()
+            ? parsed.code.trim()
+            : undefined;
+        matches.push({
+          start,
+          end: end + 1,
+          result: {
+            code,
+            message: typeof parsed.message === 'string' ? parsed.message : '',
+          },
+        });
+      } catch {
+        // Not a complete JSON result envelope; try the next opening brace.
+      }
+      break;
     }
   }
+
+  return matches;
+}
+
+/** Return the final explicit `{code,message}` envelope embedded in a response. */
+export function parseStructuredAgentResult(
+  text: string,
+): AgentResult | undefined {
+  return structuredAgentResultMatches(text).at(-1)?.result;
+}
+
+/** Remove internal transport envelopes before reasoning is shown in the UI. */
+export function stripStructuredAgentResults(text: string): string {
+  let stripped = text;
+  for (const match of structuredAgentResultMatches(text).reverse()) {
+    stripped = stripped.slice(0, match.start) + stripped.slice(match.end);
+  }
+  return stripped.replace(/```(?:json)?\s*```/gi, '').trim();
+}
+
+/**
+ * OpenCode models do not agree on whether the final JSON belongs in the text
+ * or reasoning channel. Prefer a structured text result, then a structured
+ * reasoning result, while keeping the transport envelope out of displayed
+ * reasoning.
+ */
+export function resolveAgentResultChannels(
+  text: string,
+  reasoning: string,
+): { reasoningText: string; resultText: string } {
+  const textResult = parseStructuredAgentResult(text);
+  const reasoningResult = parseStructuredAgentResult(reasoning);
+  return {
+    resultText: textResult ? text : reasoningResult ? reasoning : text,
+    reasoningText: stripStructuredAgentResults(reasoning),
+  };
+}
+
+export function parseAgentResult(text: string): AgentResult {
+  // Agents occasionally emit a first draft, notice a syntax error, and then
+  // provide a corrected JSON result. The terminal artifact is the final
+  // valid structured result, even when it follows prose in a reasoning part.
+  const structured = parseStructuredAgentResult(text);
+  if (structured) return structured;
 
   const code = /```(?:scad|openscad)?\s*([\s\S]*?)```/i.exec(text)?.[1]?.trim();
   return { code, message: code ? 'Model generated.' : text.trim() };

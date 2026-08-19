@@ -13,6 +13,7 @@ import {
   buildAgentOutputContract,
   finishWithParametricToolCall,
   parseAgentResult,
+  resolveAgentResultChannels,
 } from './opencodeAgentResult';
 import { validateOpenScad } from './openScadValidation';
 import { logError, logWarning } from './serverLog';
@@ -856,7 +857,11 @@ async function* streamParts(
         continue;
       }
 
-      const candidate = parseAgentResult(state.totalText);
+      const { resultText } = resolveAgentResultChannels(
+        state.totalText,
+        state.totalReasoning,
+      );
+      const candidate = parseAgentResult(resultText);
       if (!candidate.code) break;
 
       const validation = await validateOpenScad(candidate.code, ac.signal);
@@ -900,13 +905,18 @@ async function* streamParts(
       }
     }
 
-    if (state.totalReasoning) {
+    const accepted = resolveAgentResultChannels(
+      state.totalText,
+      state.totalReasoning,
+    );
+
+    if (accepted.reasoningText) {
       const reasoningId = 'validated-reasoning-1';
       yield { type: 'reasoning-start', id: reasoningId };
       yield {
         type: 'reasoning-delta',
         id: reasoningId,
-        delta: state.totalReasoning,
+        delta: accepted.reasoningText,
       };
       yield { type: 'reasoning-end', id: reasoningId };
     }
@@ -921,7 +931,7 @@ async function* streamParts(
     };
 
     for (const part of finalizeAcceptedAgentResult(
-      state.totalText,
+      accepted.resultText,
       finishPart,
     )) {
       yield part;
