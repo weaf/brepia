@@ -18,14 +18,25 @@ export type RecoveryMessageLike = {
 export const STUCK_TOOL_ERROR_TEXT =
   'Tool execution did not complete in the previous session.';
 
+function isResumableClientTool(part: RecoveryPartLike): boolean {
+  return (
+    part.state === 'input-available' &&
+    (part.type === 'tool-build_parametric_model' ||
+      part.type === 'tool-answer_user')
+  );
+}
+
 /**
  * Scan a chat's messages for parts that never finished in a previous session
  * and return the rewritten `parts` arrays keyed by message id (empty map →
- * nothing to recover). Tool calls stuck at `input-streaming` /
- * `input-available` become `output-error`; `streaming` text / reasoning
- * becomes `done`. Every rewrite spreads the original part, so all
- * caller-specific fields survive — the caller re-narrows the structural
- * return to its own part type.
+ * nothing to recover). Incomplete streaming tool inputs become `output-error`;
+ * unknown tools stuck at `input-available` also become `output-error`.
+ *
+ * The two pCAD client-executed tools are different: once their complete input
+ * has been persisted (`input-available`) they are intentionally left intact so
+ * `useCachedAiChat` can replay them after a mobile/background disconnect.
+ * Streaming text / reasoning becomes `done`. Every rewrite spreads the
+ * original part, so caller-specific fields survive.
  *
  * Returns empty when the chat is ACTIVELY running (`streaming` /
  * `submitted`): a cached Chat instance survives ChatSession remounts
@@ -33,8 +44,6 @@ export const STUCK_TOOL_ERROR_TEXT =
  * a live stream legitimately holds `input-streaming` parts. Rewriting those
  * would kill an in-flight tool call — and the server's `onFinish` INSERT for
  * that row hasn't landed yet, so the recovery persist could never match it.
- * The live session's own handlers (`finishWithError`, `onError`) own
- * failures from here; recovery is only for chats that LOADED broken.
  */
 export function collectStuckToolRecovery({
   status,
@@ -52,6 +61,8 @@ export function collectStuckToolRecovery({
     if (msg.role !== 'assistant') continue;
     let dirty = false;
     const nextParts = msg.parts.map((p) => {
+      if (isResumableClientTool(p)) return p;
+
       if (
         (p.type.startsWith('tool-') || p.type === 'dynamic-tool') &&
         'state' in p &&
