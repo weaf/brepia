@@ -18,7 +18,7 @@
  *      keywords is NOT code and must never produce a build tool-call.
  */
 import crypto from 'node:crypto';
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
+import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 
 /**
  * The canonical agent-output contract — the single source of truth for how
@@ -136,14 +136,15 @@ export function parametricBuildInput(
  * Transform the terminal `finish` stream part of the streaming transport:
  * if the fully accumulated response text contains an explicit OpenSCAD
  * artifact, emit exactly one `build_parametric_model` tool-call followed by
- * a `finish` part with `finishReason: 'tool-calls'`.  Otherwise return the
- * original finish part unchanged.  Must only be called with the COMPLETE
- * final result — never on partial fragments (R05/R06 regression contract).
+ * a `finish` part with the native LanguageModelV3 `tool-calls` finish reason.
+ * Otherwise return the original finish part unchanged. Must only be called
+ * with the COMPLETE final result — never on partial fragments (R05/R06
+ * regression contract).
  */
 export function finishWithParametricToolCall(
   accumulated: string,
-  finishPart: Extract<LanguageModelV2StreamPart, { type: 'finish' }>,
-): LanguageModelV2StreamPart[] {
+  finishPart: Extract<LanguageModelV3StreamPart, { type: 'finish' }>,
+): LanguageModelV3StreamPart[] {
   const input = parametricBuildInput(accumulated);
   if (!input) return [finishPart];
   return [
@@ -153,6 +154,9 @@ export function finishWithParametricToolCall(
       toolName: 'build_parametric_model',
       input: JSON.stringify(input),
     },
-    { ...finishPart, finishReason: 'tool-calls' },
-  ] as LanguageModelV2StreamPart[];
+    {
+      ...finishPart,
+      finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+    },
+  ];
 }
