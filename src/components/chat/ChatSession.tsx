@@ -685,6 +685,40 @@ export function ChatSession({
   const { messages, status, stop, sendMessage, regenerate, setMessages } =
     useChat<AppUIMessage>({ chat });
 
+  const stopGeneration = useCallback(async () => {
+    try {
+      const headers = await authHeaders();
+      const response = await fetch(
+        apiUrl(
+          conversation.type === 'creative'
+            ? 'creative-chat'
+            : 'parametric-chat',
+        ),
+        {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'cancel',
+            conversationId: conversation.id,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Cancel request failed with HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error('[chat-cancel]', error);
+      toast({
+        title: 'Could not stop generation',
+        description: 'The server may still be completing this response.',
+        variant: 'destructive',
+      });
+    } finally {
+      stop();
+    }
+  }, [authHeaders, conversation.id, conversation.type, stop, toast]);
+
   // Keep the refs in sync for callbacks that were baked at Chat-init time
   // (`onToolCall`) — those captured `messages` at mount otherwise.
   useEffect(() => {
@@ -997,7 +1031,7 @@ export function ChatSession({
           onSubmit={(parts) => void handleSend(parts)}
           placeholder="Keep iterating with Adam..."
           isLoading={isLoading}
-          stopGenerating={stop}
+          stopGenerating={() => void stopGeneration()}
           disabled={isDisabled}
           model={model}
           setModel={setModel}

@@ -129,12 +129,13 @@ export const useMessagesQuery = () => {
     queryKey: ['messages', conversation.id],
     initialData: [],
     refetchOnWindowFocus: 'always',
-    refetchIntervalInBackground: false,
+    refetchIntervalInBackground: true,
     // Mobile browsers may suspend the foreground fetch/SSE connection when
     // Chrome is backgrounded. The server independently consumes the AI stream
     // and persists its response, so while the DB branch still ends in a recent
-    // user message we briefly poll for the assistant row. React Query pauses
-    // this timer while the page is hidden and resumes it on focus.
+    // user message we briefly poll for the assistant row. Keep polling while
+    // hidden whenever the browser still allows background work; focus always
+    // triggers an immediate refetch after a full mobile suspension.
     refetchInterval: (query) =>
       shouldPollForPendingAssistant(query.state.data)
         ? PENDING_ASSISTANT_POLL_MS

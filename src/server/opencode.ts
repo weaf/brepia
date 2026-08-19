@@ -927,9 +927,9 @@ async function* streamParts(
       yield part;
     }
   } catch (err) {
-    // A closed browser/SSE connection aborts the request signal. OpenCode has
-    // already been interrupted above, so end the provider stream normally
-    // instead of forwarding an error chunk that aiChat would report as 500.
+    // Explicit stop (or a replacement run) aborts the generation controller.
+    // End the provider stream normally instead of forwarding that expected
+    // cancellation as an error chunk that aiChat would report as HTTP 500.
     if (options.abortSignal && isRequestAbort(err, options.abortSignal)) {
       return;
     }

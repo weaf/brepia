@@ -54,6 +54,10 @@ import {
 } from './cliAgents';
 import { getAnonSupabaseClient } from './supabaseClient';
 import { resolveConversationSystemPrompt } from './promptProfiles';
+import {
+  beginActiveGeneration,
+  cancelActiveGeneration,
+} from './activeGeneration';
 
 const MODEL_PRICES: Record<
   string,
@@ -268,6 +272,10 @@ type ChatBody = {
   openCodeExecutionMode?: 'cli' | 'streaming';
 };
 
+type ChatRequestBody =
+  | { kind: 'generate'; body: ChatBody }
+  | { kind: 'cancel'; conversationId: string };
+
 type ConversationAccess = Pick<
   Conversation,
   'id' | 'type' | 'user_id' | 'current_message_leaf_id' | 'settings'
@@ -283,6 +291,18 @@ function isChatBody(value: unknown): value is ChatBody {
       value.openCodeExecutionMode === 'cli' ||
       value.openCodeExecutionMode === 'streaming')
   );
+}
+
+function parseChatRequestBody(value: unknown): ChatRequestBody | null {
+  if (
+    isRecord(value) &&
+    value.action === 'cancel' &&
+    typeof value.conversationId === 'string'
+  ) {
+    return { kind: 'cancel', conversationId: value.conversationId };
+  }
+
+  return isChatBody(value) ? { kind: 'generate', body: value } : null;
 }
 
 function jsonResponse(body: unknown, status: number) {
@@ -946,15 +966,20 @@ export async function handleAiChatRequest(req: Request) {
     return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
-  const rawBody = await req.json().catch(() => null);
-  if (!isChatBody(rawBody)) {
+  const parsedBody = parseChatRequestBody(await req.json().catch(() => null));
+  if (!parsedBody) {
     return jsonResponse({ error: 'Invalid request body' }, 400);
   }
+
+  const conversationId =
+    parsedBody.kind === 'cancel'
+      ? parsedBody.conversationId
+      : parsedBody.body.conversationId;
 
   const { data: conversation, error: conversationError } = await supabaseClient
     .from('conversations')
     .select('id, type, user_id, current_message_leaf_id, settings')
-    .eq('id', rawBody.conversationId)
+    .eq('id', conversationId)
     .eq('user_id', user.id)
     .single()
     .overrideTypes<ConversationAccess>();
@@ -962,6 +987,17 @@ export async function handleAiChatRequest(req: Request) {
   if (conversationError || !conversation) {
     return jsonResponse({ error: 'Conversation not found' }, 404);
   }
+
+  if (parsedBody.kind === 'cancel') {
+    return jsonResponse(
+      {
+        canceled: cancelActiveGeneration(user.id, conversation.id),
+      },
+      200,
+    );
+  }
+
+  const rawBody = parsedBody.body;
 
   if (!conversation.current_message_leaf_id) {
     return jsonResponse(
@@ -1255,6 +1291,11 @@ export async function handleAiChatRequest(req: Request) {
     leafRole === 'user' &&
     !forceBuildToolChoice;
 
+  // The response is tee'd into consumeSseStream below, so generation can keep
+  // running and persist its result after the browser disconnects. Only the
+  // explicit cancel request above aborts this controller.
+  const activeGeneration = beginActiveGeneration(user.id, conversation.id);
+
   const result = streamText({
     model: chatLanguageModel,
     providerOptions: chatProviderOptions,
@@ -1298,10 +1339,11 @@ export async function handleAiChatRequest(req: Request) {
         : thinkingEnabled
           ? 32000
           : 16000,
-    abortSignal: req.signal,
+    abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
     onError: ({ error }) => {
-      if (isRequestAbort(error, req.signal)) return;
+      activeGeneration.finish();
+      if (isRequestAbort(error, activeGeneration.signal)) return;
 
       logError(error, {
         functionName: 'ai-chat',
@@ -1315,6 +1357,7 @@ export async function handleAiChatRequest(req: Request) {
       });
     },
     onFinish: ({ steps }) => {
+      activeGeneration.finish();
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
         step.toolCalls?.some(
@@ -1344,7 +1387,8 @@ export async function handleAiChatRequest(req: Request) {
 
   const stream = createUIMessageStream<AppUIMessage>({
     onError: (error) => {
-      if (isRequestAbort(error, req.signal)) {
+      activeGeneration.finish();
+      if (isRequestAbort(error, activeGeneration.signal)) {
         return 'Generation stopped';
       }
 
