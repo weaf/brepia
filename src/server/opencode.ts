@@ -1,11 +1,11 @@
-import {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2Content,
-  LanguageModelV2FinishReason,
-  LanguageModelV2Prompt,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
+import type {
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3Content,
+  LanguageModelV3FinishReason,
+  LanguageModelV3Prompt,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
 } from '@ai-sdk/provider';
 import { spawn } from 'node:child_process';
 import { env } from './env';
@@ -17,17 +17,25 @@ import {
 import { validateOpenScad } from './openScadValidation';
 import { logError, logWarning } from './serverLog';
 
-const USAGE = (): LanguageModelV2Usage => ({
-  inputTokens: 0,
-  outputTokens: 0,
-  totalTokens: 0,
+const USAGE = (): LanguageModelV3Usage => ({
+  inputTokens: {
+    total: 0,
+    noCache: undefined,
+    cacheRead: undefined,
+    cacheWrite: undefined,
+  },
+  outputTokens: {
+    total: 0,
+    text: undefined,
+    reasoning: undefined,
+  },
 });
 
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
 
 // Opencode serve HTTP API base URL.
 // Priority: OPENCODE_BASE_URL (full URL) → OPENCODE_PORT (legacy) → default.
-// start.sh uses port 4096, so that is the canonical default.
+// start.sh normally exports the dynamically selected pCAD-owned port.
 export function opencodeApiUrl(): string {
   const baseUrl = env('OPENCODE_BASE_URL').trim();
   if (baseUrl) return baseUrl.replace(/\/+$/, '');
@@ -90,9 +98,8 @@ function humanName(bareID: string): string {
  * Fetch models from `GET /api/model` (opencode serve HTTP API).
  * The API only returns models from providers active in the project
  * (e.g. llama-swap, morph, opencode). CLI `opencode models` returns
- * ALL registered providers (434 models vs ~47 from the API).
- * `listModels()` merges both: API models by ID (rich names), then CLI
- * models that aren't already present (filling in OpenRouter, Google, etc.).
+ * ALL registered providers. `listModels()` merges both: API models by ID
+ * (rich names), then CLI models that aren't already present.
  *
  * NOTE: This function returns [] on error rather than falling back to CLI.
  * The caller `listModels()` always merges API + CLI — returning CLI here
@@ -213,12 +220,12 @@ function runOpenCode(
 }
 
 /**
- * Build a plain-text prompt from the AI SDK v2 prompt array. Tool calls and
+ * Build a plain-text prompt from the AI SDK v3 prompt array. Tool calls and
  * tool results carry no meaning for OpenCode because pCAD owns artifact
- * conversion, so they are dropped.  System/modeling context and conversation
+ * conversion, so they are dropped. System/modeling context and conversation
  * history are retained, followed by the shared final-result contract.
  */
-export function formatPrompt(prompt: LanguageModelV2Prompt): string {
+export function formatPrompt(prompt: LanguageModelV3Prompt): string {
   const lines: string[] = [
     '<environment instructions>',
     'You are an AI assistant reached from a CAD generation web app.',
@@ -255,13 +262,91 @@ export function formatPrompt(prompt: LanguageModelV2Prompt): string {
   return lines.join('\n\n');
 }
 
-function _toFinishReason(
-  reason: string | undefined,
-): LanguageModelV2FinishReason {
-  if (reason === 'length') return 'length';
-  if (reason === 'tool-calls' || reason === 'tool_use') return 'tool-calls';
-  if (reason === 'error') return 'error';
-  return 'stop';
+function toFinishReason(reason: string | undefined): LanguageModelV3FinishReason {
+  let unified: LanguageModelV3FinishReason['unified'];
+  switch (reason) {
+    case undefined:
+    case 'stop':
+      unified = 'stop';
+      break;
+    case 'length':
+      unified = 'length';
+      break;
+    case 'content-filter':
+    case 'content_filter':
+      unified = 'content-filter';
+      break;
+    case 'tool-calls':
+    case 'tool_use':
+      unified = 'tool-calls';
+      break;
+    case 'error':
+      unified = 'error';
+      break;
+    default:
+      unified = 'other';
+      break;
+  }
+  return { unified, raw: reason };
+}
+
+function numericField(
+  value: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const raw = value[key];
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function usageFromOpenCodeTokens(
+  tokens: Record<string, unknown> | undefined,
+): LanguageModelV3Usage | undefined {
+  if (!tokens) return undefined;
+
+  const input = numericField(tokens, 'input');
+  const output = numericField(tokens, 'output');
+  const reasoning = numericField(tokens, 'reasoning');
+  const cache =
+    tokens['cache'] &&
+    typeof tokens['cache'] === 'object' &&
+    !Array.isArray(tokens['cache'])
+      ? (tokens['cache'] as Record<string, unknown>)
+      : undefined;
+  const cacheRead = cache ? numericField(cache, 'read') : undefined;
+  const cacheWrite = cache ? numericField(cache, 'write') : undefined;
+
+  if (
+    input === undefined &&
+    output === undefined &&
+    reasoning === undefined &&
+    cacheRead === undefined &&
+    cacheWrite === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    inputTokens: {
+      total: input,
+      // OpenCode does not currently tell pCAD whether `input` includes cache
+      // reads, so do not invent a no-cache count.
+      noCache: undefined,
+      cacheRead,
+      cacheWrite,
+    },
+    outputTokens: {
+      total: output,
+      // `output` and `reasoning` are separate provider counters. Without an
+      // explicit text-only counter, keep text undefined rather than guessing.
+      text: undefined,
+      reasoning,
+    },
+  };
 }
 
 /**
@@ -300,16 +385,11 @@ export function parseSSE(text: string): SSEEvent[] {
  * Incremental SSE reader for long-lived OpenCode `/api/session/{id}/event`
  * subscriptions.
  *
- * The endpoint is a persistent SSE stream (see `GET /doc` → "Subscribe to
- * session events … then continue with new durable events").  Reading the
- * entire response body with `Response.text()` blocks until EOF which never
- * arrives while the session is active — this caused a 2+ minute stall
- * (I09H-R1).  This function reads `eventRes.body` incrementally, decodes
- * chunks with `TextDecoder`, buffers incomplete SSE frames between chunks,
- * and yields a batch of complete `SSEEvent[]` as soon as they are available.
- *
- * The returned object also exposes a `close()` method that the caller should
- * invoke in the `finally` block to ensure the HTTP connection is cleaned up.
+ * The endpoint is a persistent SSE stream. Reading the entire response body
+ * with `Response.text()` blocks until EOF which never arrives while the
+ * session is active. This function reads `eventRes.body` incrementally,
+ * decodes chunks, buffers incomplete SSE frames between chunks, and yields a
+ * batch of complete `SSEEvent[]` as soon as they are available.
  */
 function createIncrementalSseReader(
   eventRes: Response,
@@ -340,11 +420,9 @@ function createIncrementalSseReader(
             : new TextEncoder().encode(String(value));
         textBuffer += new TextDecoder().decode(buf, { stream: true });
 
-        // Split on double-newline (SSE event boundary).
         const parts = textBuffer.split('\n\n');
-        textBuffer = parts.pop() ?? ''; // retain incomplete frame
+        textBuffer = parts.pop() ?? '';
 
-        // Parse all complete events in this batch.
         const events: SSEEvent[] = [];
         for (const part of parts) {
           events.push(...parseSSE(part));
@@ -352,11 +430,8 @@ function createIncrementalSseReader(
         if (events.length) yield events;
       }
     } catch (err: unknown) {
-      // If the signal was already aborted (intentional cancellation),
-      // ignore the error. Otherwise re-throw.
       if (!ac.signal.aborted) throw err;
     } finally {
-      // Flush any remaining buffered text (last incomplete frame).
       if (textBuffer) {
         const events = parseSSE(textBuffer);
         if (events.length) yield events;
@@ -367,8 +442,6 @@ function createIncrementalSseReader(
   })() as AsyncIterableIterator<SSEEvent[]> & { close: () => void };
 
   gen.close = async () => {
-    // Reader may already be cancelled (e.g., generator's finally ran).
-    // This is safe to ignore — the stream is being torn down.
     try {
       await reader.cancel();
     } catch {
@@ -380,26 +453,17 @@ function createIncrementalSseReader(
 }
 
 /**
- * Extract incremental text and reasoning from the accumulated event stream.
- *
- * Opencode event shapes:
- *   session.next.text.ended   → data.text = complete text segment
- *   session.next.reasoning.ended → data.text = reasoning content
- *   session.next.step.ended   → data.tokens = { input, output, reasoning, cache }
- *
- * NOT from `message.content` (that shape lives on the /message endpoint,
- * not on the SSE event stream).
+ * Extract incremental text, reasoning and native AI SDK v3 usage from an
+ * accumulated OpenCode event batch.
  */
 export function extractText(events: SSEEvent[]): {
   text: string;
   reasoning: string;
-  tokens: LanguageModelV2Usage | undefined;
+  tokens: LanguageModelV3Usage | undefined;
 } {
   let text = '';
   let reasoning = '';
-  let tokens:
-    | { inputTokens: number; outputTokens: number; totalTokens: number }
-    | undefined;
+  let tokens: LanguageModelV3Usage | undefined;
   for (const evt of events) {
     const t = evt.type ?? '';
     if (t.includes('text.ended') && typeof evt.data['text'] === 'string') {
@@ -410,47 +474,29 @@ export function extractText(events: SSEEvent[]): {
     ) {
       reasoning += evt.data['text'] as string;
     } else if (t.includes('step.ended')) {
-      const tok = evt.data['tokens'] as Record<string, unknown> | undefined;
-      if (tok) {
-        const input = Number(tok['input'] ?? 0);
-        const output = Number(tok['output'] ?? 0);
-        const reasoningTok = Number(tok['reasoning'] ?? 0);
-        if (input || output || reasoningTok) {
-          tokens = {
-            inputTokens: input,
-            outputTokens: output,
-            totalTokens: input + output,
-          };
-        }
-      }
+      tokens =
+        usageFromOpenCodeTokens(
+          evt.data['tokens'] as Record<string, unknown> | undefined,
+        ) ?? tokens;
     }
   }
   return { text, reasoning, tokens };
 }
 
 /**
- * Process one OpenCode event batch and yield the corresponding AI SDK
- * stream parts, updating the internal lifecycle state in place.
+ * Process one OpenCode event batch and yield the corresponding native AI SDK
+ * v3 stream parts, updating the internal lifecycle state in place.
  *
- * This is the production event→stream-part state machine.  The S01/S02
- * tests exercise it directly via `processBatch()` so they share the same
- * logic as `streamParts()` (no duplicated parser/reducer).
- *
- * State is mutated in-place; `newParts` accumulates the AI SDK parts that
- * must be yielded to the controller.  `state.isTerminal` and
- * `state.isErrored` tell the caller whether polling should stop.
- *
- * LanguageModelV2 invariant:
- *   text-start → text-delta* → text-end    (one start, one end, no delta after end)
+ * LanguageModelV3 invariant:
+ *   text-start → text-delta* → text-end
  *   reasoning-start → reasoning-delta* → reasoning-end
- *   Ends are emitted only AFTER all events in the batch have been
- *   processed and only when the stream is terminal (or errored).
+ * Ends are emitted only after all events in the terminal batch are processed.
  */
 export function processBatch(
   state: {
     cursor: number;
-    finishReason: LanguageModelV2FinishReason;
-    usage: LanguageModelV2Usage | undefined;
+    finishReason: LanguageModelV3FinishReason;
+    usage: LanguageModelV3Usage | undefined;
     totalText: string;
     yieldedText: string;
     totalReasoning: string;
@@ -470,20 +516,15 @@ export function processBatch(
     }[];
   },
   events: SSEEvent[],
-): { newParts: LanguageModelV2StreamPart[] } {
-  const newParts: LanguageModelV2StreamPart[] = [];
+): { newParts: LanguageModelV3StreamPart[] } {
+  const newParts: LanguageModelV3StreamPart[] = [];
 
   for (const evt of events) {
-    // Update cursor (durable sequence number).
     const dur = evt.data['durable'] as Record<string, unknown> | undefined;
     if (dur && typeof dur['seq'] === 'number') {
       state.cursor = Math.max(state.cursor, dur['seq'] as number);
     }
 
-    // Permission request detected — log warning but do NOT auto-approve.
-    // G02B policy: no tool use allowed; Streaming path has no permission
-    // reply UI, so permission.v2.asked events may cause session hang.
-    // This is a documented limitation (see G02D in status file).
     if (evt.type?.includes('permission.v2.asked')) {
       const action = evt.data['action'] as string | undefined;
       const resources = evt.data['resources'] as string[] | undefined;
@@ -492,8 +533,6 @@ export function processBatch(
         action,
         resources,
       });
-      // Record permission request for downstream handling; we do NOT
-      // auto-approve because G02B policy explicitly denies tool use.
       if (!state.permissionRequests) state.permissionRequests = [];
       state.permissionRequests.push({
         action,
@@ -502,11 +541,10 @@ export function processBatch(
       });
     }
 
-    // Terminal: step.failed (immediate stop).
     if (evt.type?.includes('step.failed')) {
       state.isTerminal = true;
       state.isErrored = true;
-      state.finishReason = 'error';
+      state.finishReason = toFinishReason('error');
       const errorData = evt.data['error'] as
         | Record<string, unknown>
         | undefined;
@@ -518,34 +556,24 @@ export function processBatch(
         });
         newParts.push({ type: 'error', error: new Error(errMsg) });
       }
-      // No further processing after error.
       break;
     }
 
-    // A tool-calls step is an internal OpenCode agent transition, not a final
-    // response.  Agents use it to receive a custom tool result and continue
-    // their own validation/revision loop.  Only a non-tool terminal step ends
-    // the pCAD transport.
     if (evt.type?.includes('step.ended')) {
-      const finish = evt.data['finish'];
+      const finish =
+        typeof evt.data['finish'] === 'string'
+          ? (evt.data['finish'] as string)
+          : undefined;
+      state.finishReason = toFinishReason(finish);
       if (finish !== 'tool-calls' && finish !== 'tool_use') {
         state.isTerminal = true;
       }
-      const tok = evt.data['tokens'] as Record<string, unknown> | undefined;
-      if (tok) {
-        const input = Number(tok['input'] ?? 0);
-        const output = Number(tok['output'] ?? 0);
-        if (input || output) {
-          state.usage = {
-            inputTokens: input,
-            outputTokens: output,
-            totalTokens: input + output,
-          };
-        }
-      }
+      const usage = usageFromOpenCodeTokens(
+        evt.data['tokens'] as Record<string, unknown> | undefined,
+      );
+      if (usage) state.usage = usage;
     }
 
-    // Text segment.
     if (
       evt.type?.includes('text.ended') &&
       typeof evt.data['text'] === 'string'
@@ -570,7 +598,6 @@ export function processBatch(
       }
     }
 
-    // Reasoning segment.
     if (
       evt.type?.includes('reasoning.ended') &&
       typeof evt.data['text'] === 'string'
@@ -596,9 +623,6 @@ export function processBatch(
     }
   }
 
-  // Close open parts ONLY after processing all events and only when
-  // terminal/errored.  D05: LanguageModelV2 requires text-end/reasoning-end
-  // to close each part; they must come once at terminal, not per poll.
   if (state.isTerminal || state.isErrored) {
     if (state.hasStartedText) {
       newParts.push({ type: 'text-end', id: state.lastTextPartId! });
@@ -613,13 +637,13 @@ export function processBatch(
 
 /**
  * Convert a fully accepted OpenCode terminal envelope into pCAD's semantic
- * AI SDK stream. The agent's {code,message} JSON is an internal transport
- * contract and must never be emitted as ordinary assistant text.
+ * native AI SDK v3 stream. The agent's {code,message} JSON is an internal
+ * transport contract and must never be emitted as ordinary assistant text.
  */
 export function finalizeAcceptedAgentResult(
   text: string,
-  finishPart: Extract<LanguageModelV2StreamPart, { type: 'finish' }>,
-): LanguageModelV2StreamPart[] {
+  finishPart: Extract<LanguageModelV3StreamPart, { type: 'finish' }>,
+): LanguageModelV3StreamPart[] {
   const result = parseAgentResult(text);
 
   if (result.code) {
@@ -638,16 +662,7 @@ export function finalizeAcceptedAgentResult(
   ];
 }
 
-/**
- * Interrupt an active OpenCode session via the server API.
- *
- * OpenCode 1.18+ uses POST /api/session/{id}/interrupt (not /abort).
- * "Interrupt active execution owned by this OpenCode process.
- *  Idle interruption is a no-op."
- *
- * This is the canonical server-side cleanup for both user-initiated
- * Stop (aiChat.ts → options.abortSignal) and the 8-minute timeout.
- */
+/** Interrupt an active OpenCode session via the server API. */
 async function interruptSession(
   apiUrl: string,
   sessionId: string,
@@ -659,16 +674,14 @@ async function interruptSession(
 }
 
 /**
- * Execute one request through the opencode HTTP API:
- * 1. POST /api/session with model
- * 2. POST /api/session/{id}/prompt
- * 3. GET /api/session/{id}/event (SSE) — read until step.ended or step.failed
+ * Execute one request through the OpenCode HTTP API and expose it as a native
+ * LanguageModelV3 stream.
  */
 async function* streamParts(
   modelId: string,
   prompt: string,
-  options: LanguageModelV2CallOptions,
-): AsyncGenerator<LanguageModelV2StreamPart> {
+  options: LanguageModelV3CallOptions,
+): AsyncGenerator<LanguageModelV3StreamPart> {
   yield { type: 'stream-start', warnings: [] };
   const ac = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -678,9 +691,7 @@ async function* streamParts(
     const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
     const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
 
-    // Step 1: Create session with model
     let sessionId = '';
-    // 8-minute timeout — aborts streaming and interrupts server-side execution
     timeout = setTimeout(async () => {
       ac.abort();
       if (sessionId) await interruptSession(apiUrl, sessionId);
@@ -691,9 +702,6 @@ async function* streamParts(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Every pCAD OpenCode model uses the project-local agent. The model
-          // remains user-selected in the request below; the agent supplies the
-          // validation/revision workflow and restricted tool policy.
           agent: 'pcad-builder',
           model: { providerID, id: bareId },
         }),
@@ -720,7 +728,6 @@ async function* streamParts(
       );
     }
 
-    // Step 2: Send prompt
     const promptRes = await opencodeFetch(
       `${apiUrl}/api/session/${sessionId}/prompt`,
       {
@@ -739,15 +746,10 @@ async function* streamParts(
       );
     }
 
-    // Step 3: Read SSE events incrementally using the shared processBatch
-    // helper.  The OpenCode /event endpoint is a long-lived SSE subscription
-    // (not a finite batch).  `createIncrementalSseReader` consumes
-    // eventRes.body directly so events yield as soon as they arrive — no
-    // waiting for EOF.  See `createIncrementalSseReader` for details.
     const makeState = () => ({
       cursor: 0,
-      finishReason: 'stop' as LanguageModelV2FinishReason,
-      usage: undefined as LanguageModelV2Usage | undefined,
+      finishReason: toFinishReason(undefined),
+      usage: undefined as LanguageModelV3Usage | undefined,
       totalText: '',
       yieldedText: '',
       totalReasoning: '',
@@ -760,17 +762,16 @@ async function* streamParts(
       hasStartedReasoning: false,
       isTerminal: false,
       isErrored: false,
-      permissionRequests: [],
+      permissionRequests: [] as {
+        action?: string;
+        resources?: string[];
+        id: string;
+      }[],
     });
     let state = makeState();
     let validationAttempts = 0;
 
-    // The app, not the model, is the validation authority.  A model may skip
-    // its custom tool call or falsely claim success; after every completed CAD
-    // artifact pCAD compiles the exact source and, on failure, asks the same
-    // OpenCode agent to repair it (up to three total candidates).
     while (!state.isErrored) {
-      // Check for prior cancellation before fetching.
       if (ac.signal.aborted) break;
 
       const eventsUrl = new URL(`${apiUrl}/api/session/${sessionId}/event`);
@@ -814,7 +815,6 @@ async function* streamParts(
           if (state.isTerminal) break;
         }
       } catch (err) {
-        // Re-throw if this wasn't caused by intentional cancellation.
         if (!ac.signal.aborted) throw err;
       } finally {
         eventReader?.close();
@@ -840,8 +840,6 @@ async function* streamParts(
         break;
       }
 
-      // Keep the durable cursor so the next subscription receives only the
-      // repair turn, not the already-rejected candidate's historical events.
       const previousCursor = state.cursor;
       state = makeState();
       state.cursor = previousCursor;
@@ -869,8 +867,6 @@ async function* streamParts(
           `repair prompt failed HTTP ${repairRes.status}: ${body.slice(0, 300)}`,
         );
       }
-
-      // Start reading the repair turn from its own fresh event cursor.
     }
 
     if (state.totalReasoning) {
@@ -885,7 +881,7 @@ async function* streamParts(
     }
 
     const finishPart: Extract<
-      LanguageModelV2StreamPart,
+      LanguageModelV3StreamPart,
       { type: 'finish' }
     > = {
       type: 'finish',
@@ -901,9 +897,6 @@ async function* streamParts(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // AbortError from intentional cancellation (user Stop, timeout) is NOT a
-    // provider/model failure.  Log it at debug level so it doesn't pollute
-    // error logs while still leaving a trace.
     const isCancellation =
       ac.signal.aborted && /abort|canceled|cancelling/i.test(msg);
     if (!isCancellation) {
@@ -918,148 +911,75 @@ async function* streamParts(
     };
   } finally {
     if (timeout) clearTimeout(timeout);
-    if (!ac.signal.aborted) {
-      ac.abort();
-    }
+    if (!ac.signal.aborted) ac.abort();
   }
 }
 
-export function opencodeChatModel(appModelId: string): LanguageModelV2 {
+async function generateFromStream(
+  appModelId: string,
+  stream: ReadableStream<LanguageModelV3StreamPart>,
+) {
+  const content: LanguageModelV3Content[] = [];
+  let finishReason = toFinishReason(undefined);
+  let usage = USAGE();
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value.type === 'error') throw value.error;
+      if (value.type === 'reasoning-delta') {
+        content.push({ type: 'reasoning', text: value.delta });
+      } else if (value.type === 'text-delta') {
+        content.push({ type: 'text', text: value.delta });
+      } else if (value.type === 'tool-call') {
+        content.push({
+          type: 'tool-call',
+          toolCallId: value.toolCallId,
+          toolName: value.toolName,
+          input: value.input,
+          providerExecuted: value.providerExecuted,
+          dynamic: value.dynamic,
+          providerMetadata: value.providerMetadata,
+        });
+      } else if (value.type === 'finish') {
+        finishReason = value.finishReason;
+        usage = value.usage;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
   return {
-    specificationVersion: 'v2',
-    provider: 'opencode',
-    modelId: appModelId,
-    supportedUrls: {},
-    async doStream(options) {
-      const prompt = formatPrompt(options.prompt);
-      // Pass full modelId (e.g. "opencode/big-pickle" or
-      // "llama-swap/qwen3.6-35b-mtp-128k") — streamParts parses it.
-      const gen = streamParts(appModelId, prompt, options);
-      const stream = new ReadableStream<LanguageModelV2StreamPart>({
-        async start(controller) {
-          try {
-            for await (const part of gen) {
-              controller.enqueue(part);
-            }
-          } finally {
-            controller.close();
-          }
-        },
-      });
-      return {
-        stream,
-        request: {},
-        response: {},
-        usage: USAGE(),
-        abort: () => {
-          options.abortSignal?.dispatchEvent(new Event('abort'));
-        },
-      };
+    content,
+    finishReason,
+    usage,
+    request: {},
+    response: {
+      id: 'opencode',
+      modelId: appModelId,
+      timestamp: new Date(),
     },
-    async doGenerate(options) {
-      const result = await this.doStream(options);
-      const parts: LanguageModelV2StreamPart[] = [];
-      const reader = result.stream.getReader();
-      try {
-        let done = false;
-        while (!done) {
-          const { done: d, value } = await reader.read();
-          done = d;
-          if (value) parts.push(value);
-        }
-      } finally {
-        reader.releaseLock();
-      }
-      const texts = parts
-        .filter(
-          (
-            p,
-          ): p is Extract<LanguageModelV2StreamPart, { type: 'text-delta' }> =>
-            p.type === 'text-delta',
-        )
-        .map((p) => p.delta);
-      const reasonings = parts
-        .filter(
-          (
-            p,
-          ): p is Extract<
-            LanguageModelV2StreamPart,
-            { type: 'reasoning-delta' }
-          > => p.type === 'reasoning-delta',
-        )
-        .map((p) => p.delta);
-
-      // Manual findLast (no ES2023 dependency)
-      let finish:
-        | Extract<LanguageModelV2StreamPart, { type: 'finish' } | undefined>
-        | undefined;
-      for (let i = parts.length - 1; i >= 0; i--) {
-        if (parts[i].type === 'finish') {
-          finish = parts[i] as Extract<
-            LanguageModelV2StreamPart,
-            { type: 'finish' }
-          >;
-          break;
-        }
-      }
-      let errorPart:
-        | Extract<LanguageModelV2StreamPart, { type: 'error' }>
-        | undefined;
-      for (const p of parts) {
-        if (p.type === 'error') {
-          errorPart = p as Extract<
-            LanguageModelV2StreamPart,
-            { type: 'error' }
-          >;
-          break;
-        }
-      }
-      if (errorPart) throw errorPart.error;
-
-      const content: LanguageModelV2Content[] = [];
-      if (reasonings.length)
-        content.push({ type: 'reasoning', text: reasonings.join('') });
-      if (texts.length) content.push({ type: 'text', text: texts.join('') });
-
-      return {
-        content,
-        finishReason: finish?.finishReason ?? 'stop',
-        usage: finish?.usage ?? USAGE(),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        request: {},
-        response: {
-          id: 'opencode',
-          model: appModelId,
-          timestamp: new Date(Date.now()),
-          headers: {},
-          body: undefined,
-        },
-        warnings: [],
-      };
-    },
+    warnings: [],
   };
 }
 
-export function streamingOpencodeChatModel(
-  appModelId: string,
-): LanguageModelV2 {
+function createOpencodeLanguageModel(appModelId: string): LanguageModelV3 {
   return {
-    specificationVersion: 'v2',
+    specificationVersion: 'v3',
     provider: 'opencode',
     modelId: appModelId,
     supportedUrls: {},
-    async doStream(options) {
+    async doStream(options: LanguageModelV3CallOptions) {
       const gen = streamParts(
         appModelId,
         formatPrompt(options.prompt),
         options,
       );
-      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+      const stream = new ReadableStream<LanguageModelV3StreamPart>({
         async start(controller) {
           try {
-            // streamParts now performs the one terminal envelope conversion
-            // after server-side OpenSCAD validation. Forward semantic parts
-            // verbatim so the internal {code,message} JSON never reaches UI.
             for await (const part of gen) {
               controller.enqueue(part);
             }
@@ -1072,91 +992,23 @@ export function streamingOpencodeChatModel(
         stream,
         request: {},
         response: {},
-        usage: USAGE(),
-        abort: () => {
-          options.abortSignal?.dispatchEvent(new Event('abort'));
-        },
       };
     },
     async doGenerate(options) {
       const result = await this.doStream(options);
-      const parts: LanguageModelV2StreamPart[] = [];
-      const reader = result.stream.getReader();
-      try {
-        let done = false;
-        while (!done) {
-          const { done: d, value } = await reader.read();
-          done = d;
-          if (value) parts.push(value);
-        }
-      } finally {
-        reader.releaseLock();
-      }
-      const texts = parts
-        .filter(
-          (
-            p,
-          ): p is Extract<LanguageModelV2StreamPart, { type: 'text-delta' }> =>
-            p.type === 'text-delta',
-        )
-        .map((p) => p.delta);
-      const reasonings = parts
-        .filter(
-          (
-            p,
-          ): p is Extract<
-            LanguageModelV2StreamPart,
-            { type: 'reasoning-delta' }
-          > => p.type === 'reasoning-delta',
-        )
-        .map((p) => p.delta);
-
-      let finish:
-        | Extract<LanguageModelV2StreamPart, { type: 'finish' }>
-        | undefined;
-      for (let i = parts.length - 1; i >= 0; i--) {
-        if (parts[i].type === 'finish') {
-          finish = parts[i] as Extract<
-            LanguageModelV2StreamPart,
-            { type: 'finish' }
-          >;
-          break;
-        }
-      }
-      let errorPart:
-        | Extract<LanguageModelV2StreamPart, { type: 'error' }>
-        | undefined;
-      for (const p of parts) {
-        if (p.type === 'error') {
-          errorPart = p as Extract<
-            LanguageModelV2StreamPart,
-            { type: 'error' }
-          >;
-          break;
-        }
-      }
-      if (errorPart) throw errorPart.error;
-
-      const content: LanguageModelV2Content[] = [];
-      if (reasonings.length)
-        content.push({ type: 'reasoning', text: reasonings.join('') });
-      if (texts.length) content.push({ type: 'text', text: texts.join('') });
-
-      return {
-        content,
-        finishReason: finish?.finishReason ?? 'stop',
-        usage: finish?.usage ?? USAGE(),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        request: {},
-        response: {
-          id: 'opencode',
-          model: appModelId,
-          timestamp: new Date(Date.now()),
-          headers: {},
-          body: undefined,
-        },
-        warnings: [],
-      };
+      return generateFromStream(appModelId, result.stream);
     },
   };
+}
+
+/** Legacy OpenCode model factory retained for persisted model IDs. */
+export function opencodeChatModel(appModelId: string): LanguageModelV3 {
+  return createOpencodeLanguageModel(appModelId);
+}
+
+/** OpenCode HTTP/SSE transport used by the explicit Streaming execution mode. */
+export function streamingOpencodeChatModel(
+  appModelId: string,
+): LanguageModelV3 {
+  return createOpencodeLanguageModel(appModelId);
 }
