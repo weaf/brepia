@@ -6,6 +6,9 @@ const MAX_CACHE_SIZE = 10;
 
 const chatCache = new Map<string, Chat<AppUIMessage>>();
 type ReactChatInit = ConstructorParameters<typeof Chat<AppUIMessage>>[0];
+type ToolCallCallbackArg = Parameters<
+  NonNullable<ReactChatInit['onToolCall']>
+>[0];
 
 type CallbackRefs = {
   onError: { current: ReactChatInit['onError'] };
@@ -216,7 +219,7 @@ export function useCachedAiChat({
     for (const toolCall of pendingClientToolCalls(chat.messages)) {
       if (handled.has(toolCall.toolCallId)) continue;
       handled.add(toolCall.toolCallId);
-      void refs.onToolCall.current?.({ toolCall });
+      void refs.onToolCall.current?.({ toolCall } as ToolCallCallbackArg);
     }
   }, [chat, handled, messages, refs]);
 
