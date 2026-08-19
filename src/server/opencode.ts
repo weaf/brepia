@@ -34,6 +34,7 @@ const USAGE = (): LanguageModelV3Usage => ({
 });
 
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
+const PCAD_OPENCODE_AGENT = 'pcad-builder';
 
 // Opencode serve HTTP API base URL.
 // Priority: OPENCODE_BASE_URL (full URL) → OPENCODE_PORT (legacy) → default.
@@ -291,6 +292,76 @@ export function buildOpenCodeSessionTitle(
   return summary
     ? `[pCAD] ${modelLabel} · ${summary}`
     : `[pCAD] ${modelLabel}`;
+}
+
+export type OpenCodeSessionIdentity = {
+  agent: typeof PCAD_OPENCODE_AGENT;
+  model: { providerID: string; id: string };
+  title: string;
+};
+
+export function buildOpenCodeSessionIdentity(
+  modelId: string,
+  prompt: string,
+): OpenCodeSessionIdentity {
+  const slash = modelId.indexOf('/');
+  const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
+  const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
+  return {
+    title: buildOpenCodeSessionTitle(bareId, prompt),
+    agent: PCAD_OPENCODE_AGENT,
+    model: { providerID, id: bareId },
+  };
+}
+
+export function buildOpenCodePromptBody(
+  identity: OpenCodeSessionIdentity,
+  text: string,
+) {
+  return {
+    agent: identity.agent,
+    model: identity.model,
+    prompt: { role: 'user' as const, text },
+  };
+}
+
+/**
+ * OpenCode versions have differed in how reliably POST /session preserves a
+ * supplied title. Apply it through the dedicated update endpoint before the
+ * first prompt so the TUI never starts its automatic "New session" title flow.
+ */
+export async function updateOpenCodeSessionTitle(
+  apiUrl: string,
+  sessionId: string,
+  title: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const response = await opencodeFetch(
+      `${apiUrl}/api/session/${sessionId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+        signal,
+      },
+    );
+    if (response.ok) return true;
+
+    const body = await response.text();
+    logWarning(
+      `Could not label OpenCode session ${sessionId} (HTTP ${response.status}): ${body.slice(0, 160)}`,
+      { functionName: 'opencode-session-title' },
+    );
+    return false;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    logWarning(
+      `Could not label OpenCode session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
+      { functionName: 'opencode-session-title' },
+    );
+    return false;
+  }
 }
 
 function toFinishReason(reason: string | undefined): LanguageModelV3FinishReason {
@@ -718,25 +789,28 @@ async function* streamParts(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const apiUrl = opencodeApiUrl();
-    const slash = modelId.indexOf('/');
-    const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
-    const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
+    const identity = buildOpenCodeSessionIdentity(modelId, prompt);
+    const { providerID, id: bareId } = identity.model;
 
     let sessionId = '';
     timeout = setTimeout(async () => {
       ac.abort();
       if (sessionId) await interruptSession(apiUrl, sessionId);
     }, 8 * 60_000);
+    options.abortSignal?.addEventListener(
+      'abort',
+      async () => {
+        ac.abort();
+        if (sessionId) await interruptSession(apiUrl, sessionId);
+      },
+      { once: true },
+    );
 
     try {
       const sessionRes = await opencodeFetch(`${apiUrl}/api/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: buildOpenCodeSessionTitle(bareId, prompt),
-          agent: 'pcad-builder',
-          model: { providerID, id: bareId },
-        }),
+        body: JSON.stringify(identity),
         signal: ac.signal,
       });
       if (!sessionRes.ok) {
@@ -745,15 +819,26 @@ async function* streamParts(
           `session creation failed HTTP ${sessionRes.status}: ${body.slice(0, 300)}`,
         );
       }
-      sessionId = (await sessionRes.json())['data']['id'];
-      options.abortSignal?.addEventListener(
-        'abort',
-        async () => {
-          ac.abort();
-          if (sessionId) await interruptSession(apiUrl, sessionId);
-        },
-        { once: true },
+      const sessionData = (await sessionRes.json())['data'] as
+        | Record<string, unknown>
+        | undefined;
+      if (typeof sessionData?.['id'] !== 'string') {
+        throw new Error('session creation returned no session id');
+      }
+      sessionId = sessionData['id'];
+      const titleUpdated = await updateOpenCodeSessionTitle(
+        apiUrl,
+        sessionId,
+        identity.title,
+        ac.signal,
       );
+      console.info('opencode session', {
+        sessionId,
+        title: identity.title,
+        titleUpdated,
+        agent: identity.agent,
+        model: `${providerID}/${bareId}`,
+      });
     } catch (err) {
       throw new Error(
         `opencode session creation failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -765,9 +850,7 @@ async function* streamParts(
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: { role: 'user', text: prompt },
-        }),
+        body: JSON.stringify(buildOpenCodePromptBody(identity, prompt)),
         signal: ac.signal,
       },
     );
@@ -884,16 +967,16 @@ async function* streamParts(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: {
-              role: 'user',
-              text: [
+          body: JSON.stringify(
+            buildOpenCodePromptBody(
+              identity,
+              [
                 `Your OpenSCAD candidate did not compile (attempt ${validationAttempts} of 3).`,
                 'Return a corrected complete JSON artifact. Do not explain the failed draft.',
                 `Compiler diagnostics: ${validation.diagnostics ?? 'none supplied'}`,
               ].join('\n'),
-            },
-          }),
+            ),
+          ),
           signal: ac.signal,
         },
       );
