@@ -262,6 +262,35 @@ export function formatPrompt(prompt: LanguageModelV3Prompt): string {
   return lines.join('\n\n');
 }
 
+/**
+ * Give pCAD-created OpenCode sessions a deterministic, searchable identity.
+ * The formatted prompt is already available here, so use only the first line
+ * of the latest user turn and never expose system/context text in the title.
+ */
+export function buildOpenCodeSessionTitle(
+  modelId: string,
+  prompt: string,
+): string {
+  const marker = '\n\nUser: ';
+  const markerIndex = prompt.lastIndexOf(marker);
+  const rawUser = markerIndex >= 0 ? prompt.slice(markerIndex + marker.length) : '';
+  const firstLine = (rawUser.split('\n')[0] ?? '').replace(/\s+/g, ' ').trim();
+  const summary =
+    firstLine.length > 60
+      ? `${firstLine.slice(0, 57).trimEnd()}…`
+      : firstLine;
+  const bareModel = modelId.includes('/')
+    ? modelId.slice(modelId.lastIndexOf('/') + 1)
+    : modelId;
+  const modelLabel =
+    bareModel.length > 36
+      ? `${bareModel.slice(0, 33).trimEnd()}…`
+      : bareModel;
+  return summary
+    ? `[pCAD] ${modelLabel} · ${summary}`
+    : `[pCAD] ${modelLabel}`;
+}
+
 function toFinishReason(reason: string | undefined): LanguageModelV3FinishReason {
   let unified: LanguageModelV3FinishReason['unified'];
   switch (reason) {
@@ -702,6 +731,7 @@ async function* streamParts(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          title: buildOpenCodeSessionTitle(bareId, prompt),
           agent: 'pcad-builder',
           model: { providerID, id: bareId },
         }),
