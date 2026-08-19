@@ -30,6 +30,7 @@ import { createAndCacheAiChat } from '@/hooks/useCachedAiChat';
 import type { AppUIMessage } from '@shared/chatAi';
 import { ensureInputRecords } from '@/lib/aiMessages';
 import { persistUserMessage } from '@/services/messageService';
+import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
 
 export function PromptView() {
   const navigate = useNavigate();
@@ -351,6 +352,7 @@ export function PromptView() {
                   onTypeChange={handleTypeChange}
                   executionMode={executionMode}
                   onExecutionModeChange={setExecutionMode}
+                  draftStorageKey={HOME_PROMPT_DRAFT_KEY}
                 />
               </SelectedItemsContext.Provider>
               <div className="relative">

@@ -70,6 +70,11 @@ import { useMeshFiles } from '@/contexts/MeshFilesContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { apiJson } from '@/services/api';
 import { z } from 'zod';
+import {
+  getPromptDraftStorage,
+  readPromptDraft,
+  writePromptDraft,
+} from '@/lib/promptDraft';
 
 const promptResponseSchema = z.object({ prompt: z.string().optional() });
 
@@ -95,6 +100,8 @@ interface TextAreaChatProps {
   executionMode?: 'cli' | 'streaming';
   /** Called when the execution mode is toggled. Persists to conversation settings. */
   onExecutionModeChange?: (mode: 'cli' | 'streaming') => void;
+  /** Persist an unfinished prompt across remounts/reloads when provided. */
+  draftStorageKey?: string;
 }
 
 // SVG Icon component for the quads/polys toggle
@@ -486,10 +493,12 @@ function TextAreaChat({
   conversation,
   executionMode = 'cli',
   onExecutionModeChange,
+  draftStorageKey,
 }: TextAreaChatProps) {
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState('');
+  const restoredDraftKeyRef = useRef<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isDragHover, setIsDragHover] = useState(false);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
@@ -514,6 +523,21 @@ function TextAreaChat({
     null,
   );
   const [meshFilename, setMeshFilename] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!draftStorageKey) return;
+
+    const storage = getPromptDraftStorage();
+
+    if (restoredDraftKeyRef.current !== draftStorageKey) {
+      restoredDraftKeyRef.current = draftStorageKey;
+      const draft = readPromptDraft(storage, draftStorageKey);
+      if (draft) setInput(draft);
+      return;
+    }
+
+    writePromptDraft(storage, draftStorageKey, input);
+  }, [draftStorageKey, input]);
 
   // Quads vs Polys toggle state (only for ultra model)
   const [meshTopology, setMeshTopology] = useState<'quads' | 'polys'>(() => {
