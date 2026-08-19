@@ -53,6 +53,38 @@ function evictIfNeeded() {
   }
 }
 
+function messageSnapshot(messages: readonly AppUIMessage[]): string {
+  return JSON.stringify(
+    messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      parts: message.parts,
+      metadata: message.metadata,
+    })),
+  );
+}
+
+function canReplaceWithPersistedMessages(
+  liveMessages: readonly AppUIMessage[],
+  persistedMessages: readonly AppUIMessage[],
+): boolean {
+  if (persistedMessages.length === 0) return false;
+
+  // While a response is only present in the in-memory Chat, the DB branch is
+  // one message shorter and still ends at the user prompt. Do not erase that
+  // partial assistant. Once the server-side stream consumer persists the
+  // assistant, the persisted branch catches up and becomes authoritative.
+  if (persistedMessages.length < liveMessages.length) {
+    const liveLast = liveMessages.at(-1);
+    const persistedLast = persistedMessages.at(-1);
+    if (liveLast?.role === 'assistant' && persistedLast?.role === 'user') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export type CachedAiChatOptions = Omit<ReactChatInit, 'id'> & {
   id: string;
 };
@@ -82,7 +114,7 @@ export function useCachedAiChat({
     refs.sendAutomaticallyWhen.current = sendAutomaticallyWhen;
   });
 
-  return useMemo(() => {
+  const chat = useMemo(() => {
     const existing = chatCache.get(id);
     if (existing) {
       touch(id);
@@ -90,7 +122,7 @@ export function useCachedAiChat({
     }
 
     const initial = initialConfigRef.current;
-    const chat = new Chat<AppUIMessage>({
+    const created = new Chat<AppUIMessage>({
       ...initial.rest,
       id,
       messages: initial.messages,
@@ -103,10 +135,27 @@ export function useCachedAiChat({
         refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
     });
 
-    chatCache.set(id, chat);
+    chatCache.set(id, created);
     evictIfNeeded();
-    return chat;
+    return created;
   }, [id, refs]);
+
+  // Android browsers can suspend a background tab and tear down its HTTP/SSE
+  // connection. The server keeps consuming/persisting the AI stream, but the
+  // cached client Chat can remain stuck in `error` with an older in-memory
+  // branch. When React Query refreshes the DB branch on focus, adopt that
+  // persisted snapshot as long as we are not actively streaming. This also
+  // clears the transient network error once the authoritative branch arrives.
+  useEffect(() => {
+    if (chat.status === 'streaming' || chat.status === 'submitted') return;
+    if (!canReplaceWithPersistedMessages(chat.messages, messages)) return;
+    if (messageSnapshot(chat.messages) === messageSnapshot(messages)) return;
+
+    chat.messages = messages;
+    if (chat.status === 'error') chat.clearError();
+  }, [chat, messages]);
+
+  return chat;
 }
 
 export function createAndCacheAiChat(
