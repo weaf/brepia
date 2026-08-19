@@ -5,12 +5,13 @@
 // group models by their effective runtime/provider, and restore defaults.
 // Changes persist to user_ai_preferences.hidden_model_ids.
 
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import {
+  ChevronDown,
   EyeOff,
   Loader2,
   RotateCcw,
@@ -49,10 +50,7 @@ const VISIBILITY_FILTERS: { value: VisibilityFilter; label: string }[] = [
   { value: 'hidden', label: 'Hidden' },
 ];
 
-const CAPABILITY_FILTERS: {
-  value: CapabilityFilter;
-  label: string;
-}[] = [
+const CAPABILITY_FILTERS: { value: CapabilityFilter; label: string }[] = [
   { value: 'tools', label: 'Tools' },
   { value: 'thinking', label: 'Thinking' },
   { value: 'vision', label: 'Vision' },
@@ -141,11 +139,8 @@ function groupModels(models: CatalogEntry[]): ModelGroup[] {
   for (const entry of models) {
     const meta = groupForEntry(entry);
     const existing = groups.get(meta.key);
-    if (existing) {
-      existing.models.push(entry);
-    } else {
-      groups.set(meta.key, { ...meta, models: [entry] });
-    }
+    if (existing) existing.models.push(entry);
+    else groups.set(meta.key, { ...meta, models: [entry] });
   }
 
   return [...groups.values()]
@@ -155,7 +150,9 @@ function groupModels(models: CatalogEntry[]): ModelGroup[] {
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       ),
     }))
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    .sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
+    );
 }
 
 function modelMatchesSearch(entry: CatalogEntry, query: string): boolean {
@@ -170,6 +167,7 @@ function modelMatchesSearch(entry: CatalogEntry, query: string): boolean {
     entry.provider,
     group.label,
     group.detail,
+    isOpenCodeEntry(entry) ? openCodeRuntime(entry) : undefined,
   ]
     .filter(Boolean)
     .join(' ')
@@ -299,7 +297,13 @@ function ModelRow({
             {displayModelName(entry)}
           </span>
           <Badge
-            variant={source === 'builtin' ? 'default' : source === 'custom' ? 'outline' : 'secondary'}
+            variant={
+              source === 'builtin'
+                ? 'default'
+                : source === 'custom'
+                  ? 'outline'
+                  : 'secondary'
+            }
             className={
               source === 'builtin'
                 ? 'shrink-0 bg-adam-blue/15 text-adam-blue hover:bg-adam-blue/20'
@@ -360,7 +364,6 @@ export function AiModelsSettings() {
     isLoading: isCatalogLoading,
     error: catalogError,
   } = useFullParametricModelCatalog();
-
   const {
     data: prefs,
     isLoading: isPrefsLoading,
@@ -381,36 +384,38 @@ export function AiModelsSettings() {
   const [capabilityFilters, setCapabilityFilters] = useState<CapabilityFilter[]>(
     [],
   );
+  const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
 
-  const filteredEntries = useMemo(() => {
-    return allEntries.filter((entry) => {
-      if (!modelMatchesSearch(entry, searchQuery)) return false;
+  const filteredEntries = useMemo(
+    () =>
+      allEntries.filter((entry) => {
+        if (!modelMatchesSearch(entry, searchQuery)) return false;
+        if (sourceFilter !== 'all' && entrySource(entry) !== sourceFilter)
+          return false;
 
-      if (sourceFilter !== 'all' && entrySource(entry) !== sourceFilter) {
-        return false;
-      }
+        const hidden = hiddenSet.has(entry.id);
+        if (visibilityFilter === 'visible' && hidden) return false;
+        if (visibilityFilter === 'hidden' && !hidden) return false;
 
-      const hidden = hiddenSet.has(entry.id);
-      if (visibilityFilter === 'visible' && hidden) return false;
-      if (visibilityFilter === 'hidden' && !hidden) return false;
-
-      return capabilityFilters.every((capability) =>
-        supportsCapability(entry, capability),
-      );
-    });
-  }, [
-    allEntries,
-    searchQuery,
-    sourceFilter,
-    visibilityFilter,
-    capabilityFilters,
-    hiddenSet,
-  ]);
+        return capabilityFilters.every((capability) =>
+          supportsCapability(entry, capability),
+        );
+      }),
+    [
+      allEntries,
+      searchQuery,
+      sourceFilter,
+      visibilityFilter,
+      capabilityFilters,
+      hiddenSet,
+    ],
+  );
 
   const groups = useMemo(() => groupModels(filteredEntries), [filteredEntries]);
-
   const totalModels = allEntries.length;
-  const hiddenKnownModels = allEntries.filter((entry) => hiddenSet.has(entry.id)).length;
+  const hiddenKnownModels = allEntries.filter((entry) =>
+    hiddenSet.has(entry.id),
+  ).length;
   const visibleModels = Math.max(0, totalModels - hiddenKnownModels);
   const shownVisibleModels = filteredEntries.filter(
     (entry) => !hiddenSet.has(entry.id),
@@ -437,10 +442,11 @@ export function AiModelsSettings() {
   const handleToggle = useCallback(
     (modelId: string) => {
       const isCurrentlyHidden = hiddenIds.includes(modelId);
-      const newHidden = isCurrentlyHidden
-        ? hiddenIds.filter((id) => id !== modelId)
-        : [...hiddenIds, modelId];
-      updateMutation.mutate(newHidden);
+      updateMutation.mutate(
+        isCurrentlyHidden
+          ? hiddenIds.filter((id) => id !== modelId)
+          : [...hiddenIds, modelId],
+      );
     },
     [hiddenIds, updateMutation],
   );
@@ -448,10 +454,11 @@ export function AiModelsSettings() {
   const setEntriesVisible = useCallback(
     (entries: CatalogEntry[], visible: boolean) => {
       const ids = new Set(entries.map((entry) => entry.id));
-      const nextHidden = visible
-        ? hiddenIds.filter((id) => !ids.has(id))
-        : [...new Set([...hiddenIds, ...ids])];
-      updateMutation.mutate(nextHidden);
+      updateMutation.mutate(
+        visible
+          ? hiddenIds.filter((id) => !ids.has(id))
+          : [...new Set([...hiddenIds, ...ids])],
+      );
     },
     [hiddenIds, updateMutation],
   );
@@ -465,6 +472,7 @@ export function AiModelsSettings() {
     setVisibilityFilter('all');
     setSourceFilter('all');
     setCapabilityFilters([]);
+    setExpandedGroupKey(null);
   }, []);
 
   const toggleCapability = useCallback((capability: CapabilityFilter) => {
@@ -475,6 +483,10 @@ export function AiModelsSettings() {
     );
   }, []);
 
+  const toggleGroup = useCallback((groupKey: string) => {
+    setExpandedGroupKey((current) => (current === groupKey ? null : groupKey));
+  }, []);
+
   const isLoading = isCatalogLoading || isPrefsLoading;
   const error =
     catalogError ?? (prefsError instanceof Error ? prefsError.message : null);
@@ -482,9 +494,7 @@ export function AiModelsSettings() {
   if (error) {
     return (
       <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
-        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
-          Models
-        </h2>
+        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">Models</h2>
         <div className="text-adam-red-400 text-sm">
           Failed to load model settings: {error}
         </div>
@@ -497,38 +507,44 @@ export function AiModelsSettings() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-medium text-adam-neutral-50">Models</h2>
-          <p className="mt-1 text-xs text-adam-neutral-500">
-            Choose which models appear in the model picker.
+          <p className="mt-1 text-xs text-adam-neutral-400">
+            Choose which models appear in the model picker. Open one provider
+            group at a time to keep the list compact.
           </p>
         </div>
-        <span className="text-xs text-adam-neutral-400">
+        <span className="text-xs text-adam-neutral-300">
           {visibleModels} of {totalModels} enabled
         </span>
       </div>
 
       <div className="mb-4 space-y-3 rounded-xl border border-adam-neutral-800 bg-adam-background-1/40 p-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-adam-neutral-500" />
-          <Input
-            placeholder="Search name, provider or model ID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 pl-9 pr-9"
-          />
-          {searchQuery ? (
-            <button
-              type="button"
-              aria-label="Clear model search"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-adam-neutral-500 transition-colors hover:bg-adam-neutral-800 hover:text-adam-neutral-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          ) : null}
+        <div>
+          <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-300">
+            Free-text filter
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-adam-neutral-400" />
+            <Input
+              placeholder="Search model, provider, runtime or ID..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="h-9 pl-9 pr-9 text-adam-neutral-50 placeholder:text-adam-neutral-500"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                aria-label="Clear model search"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-adam-neutral-400 transition-colors hover:bg-adam-neutral-800 hover:text-adam-neutral-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div>
-          <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-500">
+          <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-300">
             Source
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -553,7 +569,7 @@ export function AiModelsSettings() {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-500">
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-300">
               Visibility
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -577,7 +593,7 @@ export function AiModelsSettings() {
           </div>
 
           <div>
-            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-500">
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-adam-neutral-300">
               Capabilities
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -595,9 +611,9 @@ export function AiModelsSettings() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-adam-neutral-800 pt-3">
-          <span className="text-xs text-adam-neutral-400">
+          <span className="text-xs text-adam-neutral-300">
             {filteredEntries.length} shown · {shownVisibleModels} enabled ·{' '}
-            {shownHiddenModels} hidden
+            {shownHiddenModels} hidden · {groups.length} groups
           </span>
           {hasResultFilter ? (
             <Button
@@ -660,38 +676,58 @@ export function AiModelsSettings() {
           <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-500" />
         </div>
       ) : groups.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-adam-neutral-800 py-8 text-center text-sm text-adam-neutral-400">
+        <div className="rounded-lg border border-dashed border-adam-neutral-800 py-8 text-center text-sm text-adam-neutral-300">
           No models match the current filters.
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           {groups.map((group) => {
             const groupVisible = group.models.filter(
               (entry) => !hiddenSet.has(entry.id),
             ).length;
             const groupHidden = group.models.length - groupVisible;
+            const isExpanded = expandedGroupKey === group.key;
 
             return (
               <div
                 key={group.key}
-                className="overflow-hidden rounded-xl border border-adam-neutral-800"
+                className="overflow-hidden rounded-xl border border-adam-neutral-800 bg-adam-background-2"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-adam-neutral-800 bg-adam-background-1/40 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="break-words text-xs font-medium text-adam-neutral-200">
-                        {group.label}
-                      </span>
-                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                        {groupVisible}/{group.models.length} enabled
-                      </Badge>
-                    </div>
-                    {group.detail ? (
-                      <div className="mt-0.5 text-[11px] text-adam-neutral-500">
-                        {group.detail}
+                <div
+                  className={`flex items-center gap-2 bg-adam-background-1/40 p-2 ${
+                    isExpanded ? 'border-b border-adam-neutral-800' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={`model-group-${group.key}`}
+                    onClick={() => toggleGroup(group.key)}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-adam-neutral-800/40"
+                  >
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-adam-neutral-300 transition-transform ${
+                        isExpanded ? 'rotate-180' : ''
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="break-words text-sm font-medium text-adam-neutral-50">
+                          {group.label}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="h-5 shrink-0 px-1.5 text-[10px] text-adam-neutral-200"
+                        >
+                          {groupVisible}/{group.models.length} enabled
+                        </Badge>
                       </div>
-                    ) : null}
-                  </div>
+                      <div className="mt-0.5 text-[11px] text-adam-neutral-300">
+                        {group.models.length} model{group.models.length === 1 ? '' : 's'}
+                        {group.detail ? ` · ${group.detail}` : ''}
+                      </div>
+                    </div>
+                  </button>
 
                   <div className="flex shrink-0 items-center gap-1">
                     <Button
@@ -700,7 +736,7 @@ export function AiModelsSettings() {
                       variant="dark"
                       onClick={() => setEntriesVisible(group.models, true)}
                       disabled={updateMutation.isPending || groupHidden === 0}
-                      className="h-6 rounded-full px-2 text-[10px]"
+                      className="h-7 rounded-full px-2 text-[10px]"
                     >
                       Enable
                     </Button>
@@ -710,24 +746,29 @@ export function AiModelsSettings() {
                       variant="dark"
                       onClick={() => setEntriesVisible(group.models, false)}
                       disabled={updateMutation.isPending || groupVisible === 0}
-                      className="h-6 rounded-full px-2 text-[10px]"
+                      className="h-7 rounded-full px-2 text-[10px]"
                     >
                       Hide
                     </Button>
                   </div>
                 </div>
 
-                <div className="flex flex-col divide-y divide-adam-neutral-800/60">
-                  {group.models.map((entry) => (
-                    <ModelRow
-                      key={entry.id}
-                      entry={entry}
-                      isHidden={hiddenSet.has(entry.id)}
-                      onToggle={() => handleToggle(entry.id)}
-                      isUpdating={updateMutation.isPending}
-                    />
-                  ))}
-                </div>
+                {isExpanded ? (
+                  <div
+                    id={`model-group-${group.key}`}
+                    className="flex flex-col divide-y divide-adam-neutral-800/60"
+                  >
+                    {group.models.map((entry) => (
+                      <ModelRow
+                        key={entry.id}
+                        entry={entry}
+                        isHidden={hiddenSet.has(entry.id)}
+                        onToggle={() => handleToggle(entry.id)}
+                        isUpdating={updateMutation.isPending}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             );
           })}
