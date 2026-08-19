@@ -26,7 +26,7 @@ describe('OpenCode pCAD session titles', () => {
 
     assert.equal(
       title,
-      '[pCAD] big-pickle · Create a wall-mounted parametric cable organizer with six c…',
+      '[pCAD] big-pickle · Create a wall-mounted parametric cable organizer with six…',
     );
     assert.equal(title.includes('INTERNAL CONTRACT'), false);
     assert.equal(title.includes('second user line'), false);
