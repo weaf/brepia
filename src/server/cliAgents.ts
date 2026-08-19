@@ -319,11 +319,16 @@ export function cliAgentChatModel(appModelId: string): LanguageModelV2 {
           }),
         });
       } else if (result.message) {
-        parts.push({
-          type: 'text-delta',
-          id: 'cli-agent-text',
-          delta: result.message,
-        });
+        const textId = 'cli-agent-text';
+        parts.push(
+          { type: 'text-start', id: textId },
+          {
+            type: 'text-delta',
+            id: textId,
+            delta: result.message,
+          },
+          { type: 'text-end', id: textId },
+        );
       }
       parts.push({
         type: 'finish',
