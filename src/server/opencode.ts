@@ -16,6 +16,7 @@ import {
 } from './opencodeAgentResult';
 import { validateOpenScad } from './openScadValidation';
 import { logError, logWarning } from './serverLog';
+import { isRequestAbort } from './requestAbort';
 
 const USAGE = (): LanguageModelV3Usage => ({
   inputTokens: {
@@ -926,6 +927,13 @@ async function* streamParts(
       yield part;
     }
   } catch (err) {
+    // A closed browser/SSE connection aborts the request signal. OpenCode has
+    // already been interrupted above, so end the provider stream normally
+    // instead of forwarding an error chunk that aiChat would report as 500.
+    if (options.abortSignal && isRequestAbort(err, options.abortSignal)) {
+      return;
+    }
+
     const msg = err instanceof Error ? err.message : String(err);
     const isCancellation =
       ac.signal.aborted && /abort|canceled|cancelling/i.test(msg);

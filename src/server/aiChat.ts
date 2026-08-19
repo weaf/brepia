@@ -38,6 +38,7 @@ import {
 } from './builtinProviderOverrides';
 import { env } from './env';
 import { logError } from './serverLog';
+import { isRequestAbort } from './requestAbort';
 import {
   decidePersistAction,
   hasPendingClientToolCall,
@@ -1300,6 +1301,8 @@ export async function handleAiChatRequest(req: Request) {
     abortSignal: req.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
     onError: ({ error }) => {
+      if (isRequestAbort(error, req.signal)) return;
+
       logError(error, {
         functionName: 'ai-chat',
         statusCode: 500,
@@ -1341,6 +1344,10 @@ export async function handleAiChatRequest(req: Request) {
 
   const stream = createUIMessageStream<AppUIMessage>({
     onError: (error) => {
+      if (isRequestAbort(error, req.signal)) {
+        return 'Generation stopped';
+      }
+
       logError(error, {
         functionName: 'ai-chat',
         statusCode: 500,
