@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import { finishWithParametricToolCall } from './opencodeAgentResult.ts';
 
 /**
@@ -7,16 +8,24 @@ import { finishWithParametricToolCall } from './opencodeAgentResult.ts';
  *
  * These test the REAL shared finish-transformer (`finishWithParametricToolCall`)
  * that the streaming transport calls exactly once, at the terminal `finish`
- * part, with the fully accumulated response text.  The false-positive path
+ * part, with the fully accumulated response text. The false-positive path
  * that caused Qwen's infinite revision loop (prose keywords -> accidental
  * `build_parametric_model` tool-call) must never produce a build call.
  */
 
-const FINISH_STOP = {
+const FINISH_STOP: Extract<LanguageModelV3StreamPart, { type: 'finish' }> = {
   type: 'finish',
-  finishReason: 'stop',
-  usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-} as const;
+  finishReason: { unified: 'stop', raw: 'stop' },
+  usage: {
+    inputTokens: {
+      total: 1,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: { total: 2, text: 2, reasoning: 0 },
+  },
+};
 
 function toolCalls(parts: Array<{ type: string }>): number {
   return parts.filter((p) => p.type === 'tool-call').length;
@@ -74,7 +83,6 @@ describe('R06 — streaming tool-call emission regression', () => {
 
   describe('terminal-event contract', () => {
     it('zero build calls for a partial fenced block during the stream', () => {
-      // Simulates the accumulated text mid-stream, before the fence closes.
       const parts = finishWithParametricToolCall(
         '```scad\ncube([10,10,10]);\ntranslate([0,0,20]) s',
         FINISH_STOP,
@@ -91,8 +99,6 @@ describe('R06 — streaming tool-call emission regression', () => {
     });
 
     it('exactly one build call when repeated/snapshot events carry the same final content', () => {
-      // Streaming snapshots can repeat the final content; the transformer
-      // must still emit exactly one tool-call.
       const parts = finishWithParametricToolCall(
         '```scad\ncube([10,10,10]);\n```\n\n```scad\ncube([10,10,10]);\n```',
         FINISH_STOP,
@@ -101,8 +107,6 @@ describe('R06 — streaming tool-call emission regression', () => {
     });
 
     it('exactly one build call when artifact and terminal event are in the same batch', () => {
-      // The streaming loop accumulates text deltas before reaching finish,
-      // so the full artifact is present when the transformer runs.
       const parts = finishWithParametricToolCall(
         '```scad\ncube([10,10,10]);\n```',
         FINISH_STOP,
@@ -127,10 +131,11 @@ describe('R06 — streaming tool-call emission regression', () => {
       );
       assert.equal(toolCalls(parts), 0);
       assert.equal(parts.length, 1);
-      assert.equal(
-        (parts[0] as { finishReason?: string }).finishReason,
-        'stop',
-      );
+      const finish = parts[0] as Extract<
+        LanguageModelV3StreamPart,
+        { type: 'finish' }
+      >;
+      assert.equal(finish.finishReason.unified, 'stop');
     });
   });
 
@@ -140,10 +145,14 @@ describe('R06 — streaming tool-call emission regression', () => {
         '```scad\ncube([10,10,10]);\n```',
         FINISH_STOP,
       );
-      const finish = parts[parts.length - 1] as {
-        finishReason?: string;
-      };
-      assert.equal(finish.finishReason, 'tool-calls');
+      const finish = parts[parts.length - 1] as Extract<
+        LanguageModelV3StreamPart,
+        { type: 'finish' }
+      >;
+      assert.deepEqual(finish.finishReason, {
+        unified: 'tool-calls',
+        raw: 'tool-calls',
+      });
     });
 
     it('preserves the original finish part when no build call is emitted', () => {
