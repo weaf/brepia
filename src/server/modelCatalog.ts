@@ -4,10 +4,11 @@
  * Merges model sources into a single effective catalog for the
  * parametric picker and settings UI:
  *
- *   1. Built-in parametric models (PARAMETRIC_MODELS from src/lib/utils.ts)
- *   2. Dynamic OpenCode agent models (fetched from opencode serve HTTP API/CLI)
- *   3. Configured Codex CLI agent models
- *   4. Custom provider models (from the ai_provider_models DB table)
+ *   1. Built-in hosted parametric models (PARAMETRIC_MODELS from src/lib/utils.ts)
+ *   2. Dynamic Local OpenAI / llama-swap models from GET /v1/models
+ *   3. Dynamic OpenCode agent models (fetched from opencode serve HTTP API/CLI)
+ *   4. Configured Codex CLI agent models
+ *   5. Custom provider models (from the ai_provider_models DB table)
  */
 
 import {
@@ -24,8 +25,10 @@ import {
   loadBuiltinProviderRuntimeOverrides,
   type BuiltinProviderDriver,
 } from './builtinProviderOverrides';
+import { discoverLocalModels } from './localModels';
+import { PARAMETRIC_MODELS } from '../../src/lib/utils';
 
-export type CatalogEntrySource = 'builtin' | 'opencode' | 'custom';
+export type CatalogEntrySource = 'builtin' | 'local' | 'opencode' | 'custom';
 
 export interface CatalogEntry extends ModelConfig {
   source: CatalogEntrySource;
@@ -37,8 +40,6 @@ export interface CatalogEntry extends ModelConfig {
 export function isCustomCatalogEntry(entry: CatalogEntry): boolean {
   return entry.source === 'custom';
 }
-
-import { PARAMETRIC_MODELS } from '../../src/lib/utils';
 
 function toBuiltinCatalogEntry(m: ModelConfig): CatalogEntry {
   return {
@@ -53,12 +54,9 @@ export function getBuiltInModels(): CatalogEntry[] {
   return PARAMETRIC_MODELS.map(toBuiltinCatalogEntry);
 }
 
-function builtinDriverForModelId(
-  modelId: string,
-): BuiltinProviderDriver {
+function builtinDriverForModelId(modelId: string): BuiltinProviderDriver {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
   if (modelId.startsWith('google/')) return 'google';
-  if (modelId.startsWith('local/')) return 'openai-compatible';
   return 'openrouter';
 }
 
@@ -85,6 +83,35 @@ async function applyBuiltinProviderAvailability(
     // temporarily unavailable. The actual inference path still fails closed
     // when it cannot load provider overrides.
     return models;
+  }
+}
+
+export async function getLocalModels(
+  user: User | null,
+): Promise<CatalogEntry[]> {
+  if (!user) return [];
+
+  try {
+    const models = await discoverLocalModels(user.id);
+    return models.map((model) => ({
+      id: model.id,
+      name: model.displayName,
+      description: model.metadataConfigured
+        ? 'Discovered from Local OpenAI / llama-swap with user capability metadata'
+        : 'Discovered dynamically from Local OpenAI / llama-swap',
+      provider: model.provider,
+      supportsTools: model.supportsTools,
+      supportsThinking: model.supportsThinking,
+      supportsVision: model.supportsVision,
+      source: 'local' as const,
+      enabled: model.isVisible,
+      available: true,
+      ...(!model.isVisible
+        ? { unavailableReason: 'Disabled in local model metadata' }
+        : {}),
+    }));
+  } catch {
+    return [];
   }
 }
 
@@ -254,27 +281,25 @@ export async function buildCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
   const builtin = await applyBuiltinProviderAvailability(getBuiltInModels(), user);
+  const local = await getLocalModels(user);
   const opencode = await getOpencodeModels();
   const custom = await getCustomProviderModels(user);
 
-  const builtinIds = new Set(builtin.map((m: CatalogEntry) => m.id));
-
-  const dedupedOpencode = opencode.filter(
-    (m: CatalogEntry) => !builtinIds.has(m.id),
-  );
-  const dedupedIds = new Set([
-    ...builtinIds,
-    ...dedupedOpencode.map((m: CatalogEntry) => m.id),
+  const occupiedIds = new Set([
+    ...builtin.map((m) => m.id),
+    ...local.map((m) => m.id),
   ]);
-  const dedupedCustom = custom.filter(
-    (m: CatalogEntry) => !dedupedIds.has(m.id),
-  );
+
+  const dedupedOpencode = opencode.filter((m) => !occupiedIds.has(m.id));
+  for (const entry of dedupedOpencode) occupiedIds.add(entry.id);
+  const dedupedCustom = custom.filter((m) => !occupiedIds.has(m.id));
 
   const mergedOpencode = mergeByProvider(dedupedOpencode, dedupedCustom);
   const mergedCustom = mergedOpencode.filter((e) => e.source === 'custom');
 
   return [
     ...builtin,
+    ...local,
     ...mergedOpencode.filter((e) => e.source === 'opencode'),
     ...mergedCustom,
   ];
