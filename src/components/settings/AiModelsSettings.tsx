@@ -26,7 +26,13 @@ import { apiJson } from '@/services/api';
 import type { CatalogEntry } from '@/server/modelCatalog';
 
 type VisibilityFilter = 'all' | 'visible' | 'hidden';
-type SourceFilter = 'all' | 'builtin' | 'opencode' | 'codex' | 'custom';
+type SourceFilter =
+  | 'all'
+  | 'builtin'
+  | 'local'
+  | 'opencode'
+  | 'codex'
+  | 'custom';
 type CapabilityFilter = 'tools' | 'thinking' | 'vision';
 
 type ModelGroup = {
@@ -39,6 +45,7 @@ type ModelGroup = {
 const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
   { value: 'all', label: 'All sources' },
   { value: 'builtin', label: 'Built-in' },
+  { value: 'local', label: 'Local' },
   { value: 'opencode', label: 'OpenCode' },
   { value: 'codex', label: 'Codex' },
   { value: 'custom', label: 'Custom' },
@@ -113,6 +120,14 @@ function groupForEntry(entry: CatalogEntry): Omit<ModelGroup, 'models'> {
       key: `opencode:${runtime.toLowerCase()}`,
       label: `OpenCode · ${runtime}`,
       detail: 'OpenCode agent runtime',
+    };
+  }
+
+  if (entry.source === 'local') {
+    return {
+      key: 'local:openai-compatible',
+      label: entry.provider || 'Local OpenAI / llama-swap',
+      detail: 'Runtime-discovered local models',
     };
   }
 
@@ -193,6 +208,7 @@ function displayModelName(entry: CatalogEntry): string {
 function sourceBadgeLabel(entry: CatalogEntry): string {
   if (isCodexEntry(entry)) return 'Codex';
   if (isOpenCodeEntry(entry)) return 'OpenCode';
+  if (entry.source === 'local') return 'Local';
   return entry.source === 'builtin' ? 'Built-in' : 'Custom';
 }
 
@@ -307,11 +323,13 @@ function ModelRow({
             className={
               source === 'builtin'
                 ? 'shrink-0 bg-adam-blue/15 text-adam-blue hover:bg-adam-blue/20'
-                : source === 'opencode'
-                  ? 'shrink-0 bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20'
-                  : source === 'codex'
-                    ? 'shrink-0 bg-adam-neutral-700 text-adam-neutral-200 hover:bg-adam-neutral-700'
-                    : 'shrink-0'
+                : source === 'local'
+                  ? 'shrink-0 bg-adam-emerald/15 text-adam-emerald hover:bg-adam-emerald/20'
+                  : source === 'opencode'
+                    ? 'shrink-0 bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20'
+                    : source === 'codex'
+                      ? 'shrink-0 bg-adam-neutral-700 text-adam-neutral-200 hover:bg-adam-neutral-700'
+                      : 'shrink-0'
             }
           >
             {sourceBadgeLabel(entry)}
@@ -425,6 +443,7 @@ export function AiModelsSettings() {
   const sourceCounts = useMemo(() => {
     const counts: Record<Exclude<SourceFilter, 'all'>, number> = {
       builtin: 0,
+      local: 0,
       opencode: 0,
       codex: 0,
       custom: 0,
