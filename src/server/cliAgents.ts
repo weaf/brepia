@@ -1,13 +1,17 @@
 /**
  * OpenCode and Codex are coding agents, not native AI SDK providers. This
- * adapter runs either CLI in a stable empty working directory and turns its
- * final OpenSCAD answer into pCAD's existing build_parametric_model tool call.
+ * adapter runs either CLI in a stable working directory and turns its final
+ * OpenSCAD answer into pCAD's existing build_parametric_model tool call.
  *
  * Both CLIs persist their own sessions. pCAD carries the discovered external
  * session ID forward inside the persisted tool-call ID, so the next turn can
  * resume the same agent session without adding database schema or server-local
  * state. This also survives a pCAD restart because tool-call IDs are stored in
  * the conversation branch.
+ *
+ * OpenCode runs from the pCAD project root so its project-local pcad-builder
+ * agent and pcad-validation plugin are loaded. Codex keeps using the isolated
+ * temporary working directory.
  *
  * The HTTP response is still an AI SDK stream, but the agent invocation itself
  * is deliberately non-streaming. pCAD needs the complete SCAD program before
@@ -37,6 +41,7 @@ import { logWarning } from './serverLog';
 
 const TIMEOUT_MS = 8 * 60_000;
 const CLI_AGENT_WORKDIR = join(tmpdir(), 'pcad-cli-agent');
+const OPEN_CODE_WORKDIR = process.cwd();
 const SESSION_MARKER_PREFIX = 'cli-agent-session';
 
 const USAGE = (): LanguageModelV3Usage => ({
@@ -529,9 +534,10 @@ export function cliAgentSessionIdFromPrompt(
 }
 
 /**
- * Build CLI arguments for a new or resumed agent session. OpenCode can resume
- * with --session. Codex uses `exec resume <thread-id>` and must not be
- * ephemeral because ephemeral Codex threads are intentionally not resumable.
+ * Build CLI arguments for a new or resumed agent session. OpenCode resumes
+ * with --session and always selects the project-local pcad-builder agent.
+ * Codex uses `exec resume <thread-id>` and must not be ephemeral because
+ * ephemeral Codex threads are intentionally not resumable.
  */
 export function buildCliAgentArgs(
   agent: AgentKind,
@@ -543,7 +549,8 @@ export function buildCliAgentArgs(
       'run',
       '--format',
       'json',
-      '--pure',
+      '--agent',
+      'pcad-builder',
       '-m',
       model,
       ...(sessionId ? ['--session', sessionId] : []),
@@ -598,7 +605,7 @@ async function invokeAgent(
   existingSessionId?: string,
   signal?: AbortSignal,
 ): Promise<AgentInvocation> {
-  const dir = await ensureCliAgentWorkdir();
+  const dir = agent === 'opencode' ? OPEN_CODE_WORKDIR : await ensureCliAgentWorkdir();
   const instruction = buildCliAgentInstruction(agent, prompt);
 
   const runOnce = async (sessionId?: string) => {
