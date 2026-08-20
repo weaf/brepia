@@ -3,22 +3,16 @@
  *
  * Reads status from existing pCAD runtime configuration without exposing
  * secrets, API keys, or raw configuration objects.
- *
- * Integrations:
- * - OpenCode — uses existing opencodeApiUrl() and opencodeModels()
- * - Codex CLI — checks executable availability, counts configured models
- * - Local OpenAI / llama-swap — checks LOCAL_LLM_BASE_URL config, probes health
- *
- * B6: SSRF defense-in-depth — all outbound fetch calls use the same
- * protocol/IP validation as testProvider to prevent any runtime integration
- * from being abused to reach internal services, even when the URL comes
- * from environment configuration rather than user input.
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { env } from './env';
 import { opencodeApiUrl, opencodeModels } from './opencode';
 import { configuredCodexModels } from './cliAgents';
+import {
+  discoverLocalModels,
+  getLocalRuntimeConfig,
+  normalizeLocalOpenAiUrls,
+} from './localModels';
 
 const execFileP = promisify(execFile);
 
@@ -132,36 +126,40 @@ async function discoverCodex(): Promise<RuntimeIntegrationStatus> {
 }
 
 export { configuredCodexModels } from './cliAgents';
+export { normalizeLocalOpenAiUrls } from './localModels';
 
-export function normalizeLocalOpenAiUrls(rawUrl: string): {
-  baseUrl: string;
-  modelsUrl: string;
-  rootUrl: string;
-} {
-  const baseUrl = rawUrl.trim().replace(/\/+$/, '');
-  const hasV1Suffix = /\/v1$/i.test(baseUrl);
-  return {
-    baseUrl,
-    modelsUrl: hasV1Suffix ? `${baseUrl}/models` : `${baseUrl}/v1/models`,
-    rootUrl: hasV1Suffix ? baseUrl.replace(/\/v1$/i, '') : baseUrl,
-  };
-}
+async function discoverLocalOpenAI(
+  userId: string,
+): Promise<RuntimeIntegrationStatus> {
+  let runtime;
+  try {
+    runtime = await getLocalRuntimeConfig(userId);
+  } catch {
+    runtime = null;
+  }
 
-async function discoverLocalOpenAI(): Promise<RuntimeIntegrationStatus> {
-  const rawUrl = env('LOCAL_LLM_BASE_URL').trim();
-
-  if (!rawUrl) {
+  if (!runtime) {
     return {
       integrationId: 'local-openai',
       label: 'Local OpenAI / llama-swap',
       status: 'not-configured',
       baseUrl: null,
       modelCount: 0,
-      explanation: 'LOCAL_LLM_BASE_URL not set — no local runtime configured',
+      explanation: 'No Local OpenAI / llama-swap endpoint is configured',
     };
   }
 
-  const { baseUrl, modelsUrl, rootUrl } = normalizeLocalOpenAiUrls(rawUrl);
+  const { baseUrl, rootUrl } = normalizeLocalOpenAiUrls(runtime.baseUrl);
+  if (!runtime.enabled) {
+    return {
+      integrationId: 'local-openai',
+      label: 'Local OpenAI / llama-swap',
+      status: 'not-configured',
+      baseUrl,
+      modelCount: 0,
+      explanation: 'Local OpenAI / llama-swap is disabled in AI Settings',
+    };
+  }
 
   try {
     const parsed = new URL(baseUrl);
@@ -172,7 +170,7 @@ async function discoverLocalOpenAI(): Promise<RuntimeIntegrationStatus> {
         status: 'unavailable',
         baseUrl,
         modelCount: 0,
-        explanation: 'LOCAL_LLM_BASE_URL rejected by SSRF protection',
+        explanation: 'Local provider URL rejected by protocol validation',
       };
     }
   } catch {
@@ -182,32 +180,27 @@ async function discoverLocalOpenAI(): Promise<RuntimeIntegrationStatus> {
       status: 'unavailable',
       baseUrl,
       modelCount: 0,
-      explanation: 'LOCAL_LLM_BASE_URL is not a valid URL',
+      explanation: 'Local provider Base URL is not a valid URL',
     };
   }
 
   try {
-    const res = await fetch(modelsUrl, {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const modelCount = Array.isArray(data?.data) ? data.data.length : 0;
-      return {
-        integrationId: 'local-openai',
-        label: 'Local OpenAI / llama-swap',
-        status: 'connected',
-        baseUrl,
-        modelCount,
-        explanation: `Local OpenAI-compatible server running with ${modelCount} model${modelCount === 1 ? '' : 's'}`,
-      };
-    }
+    const models = await discoverLocalModels(userId);
+    return {
+      integrationId: 'local-openai',
+      label: 'Local OpenAI / llama-swap',
+      status: 'connected',
+      baseUrl,
+      modelCount: models.length,
+      explanation: `Local OpenAI-compatible server running with ${models.length} model${models.length === 1 ? '' : 's'}`,
+    };
   } catch {
     // Models endpoint unavailable; fall back to a root reachability probe.
   }
 
   try {
     const res = await fetch(rootUrl, {
+      headers: { Authorization: `Bearer ${runtime.apiKey}` },
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
@@ -234,13 +227,13 @@ async function discoverLocalOpenAI(): Promise<RuntimeIntegrationStatus> {
   };
 }
 
-export async function discoverRuntimeIntegrations(): Promise<
-  RuntimeIntegrationStatus[]
-> {
+export async function discoverRuntimeIntegrations(
+  userId: string,
+): Promise<RuntimeIntegrationStatus[]> {
   const results = await Promise.allSettled([
     discoverOpenCode(),
     discoverCodex(),
-    discoverLocalOpenAI(),
+    discoverLocalOpenAI(userId),
   ]);
 
   return results.flatMap((result) =>
