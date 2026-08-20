@@ -380,21 +380,10 @@ export const CREATIVE_MODELS: ModelConfig[] = [
   },
 ];
 
-// Whether the selected parametric model can accept image / STL-render inputs.
-// Unknown ids (e.g. historical messages tagged with a removed model) fall back
-// to `true` so older saved rows still render normally.
-//
-// Dynamic OpenCode models (agent/opencode/*, opencode/*) always return `false`
-// because their HTTP/CLI adapters never handle image parts.
-export function parametricModelSupportsVision(modelId: string): boolean {
-  // Dynamic OpenCode model IDs never support vision — their adapters
-  // only send text prompts.
-  if (
-    modelId.startsWith('agent/opencode/') ||
-    modelId.startsWith('opencode/')
-  ) {
-    return false;
-  }
-  const cfg = PARAMETRIC_MODELS.find((m) => m.id === modelId);
-  return cfg?.supportsVision !== false;
+// Whether pCAD can accept image / STL-render inputs for the selected route.
+// Native multimodal models receive the original image data. Text-only,
+// OpenCode and Codex routes are handled by the server-side Qwen3-VL fallback,
+// so image input remains available regardless of the primary model capability.
+export function parametricModelSupportsVision(_modelId: string): boolean {
+  return true;
 }

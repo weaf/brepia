@@ -58,6 +58,7 @@ import {
   beginActiveGeneration,
   cancelActiveGeneration,
 } from './activeGeneration';
+import { modelSupportsDirectVision, withVisionFallback } from './vision';
 
 const MODEL_PRICES: Record<
   string,
@@ -1208,6 +1209,7 @@ export async function handleAiChatRequest(req: Request) {
 
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
+  let customSupportsVision: boolean | undefined;
   const builtinDriver = builtinDriverForModelId(actualModelId);
   let customBillingSource: 'custom' | undefined =
     builtinDriver && builtinProviderOverrides[builtinDriver]?.credential
@@ -1238,6 +1240,7 @@ export async function handleAiChatRequest(req: Request) {
 
         chatLanguageModel = built.model;
         chatProviderOptions = built.providerOptions;
+        customSupportsVision = built.capabilities.supportsVision;
         customBillingSource = 'custom';
       } catch (error) {
         logError(error, {
@@ -1276,6 +1279,28 @@ export async function handleAiChatRequest(req: Request) {
       500,
     );
   }
+
+  const directVision = modelSupportsDirectVision(
+    actualModelId,
+    transport.kind,
+    customSupportsVision,
+  );
+  if (conversation.type === 'parametric' && !directVision) {
+    chatLanguageModel = withVisionFallback(chatLanguageModel);
+  }
+  console.info('vision routing', {
+    modelId: actualModelId,
+    transportKind: transport.kind,
+    directVision,
+    ...(directVision
+      ? {}
+      : {
+          visionModel:
+            env('PCAD_VISION_FAST_MODEL').trim() || 'qwen-vision-8b',
+          visionDeepModel:
+            env('PCAD_VISION_DEEP_MODEL').trim() || 'qwen-vision-30b',
+        }),
+  });
 
   const logContext = {
     ...baseLogContext,
