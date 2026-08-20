@@ -316,9 +316,12 @@ function partTypes(parts: { type: string }[]) {
 function makeState() {
   return {
     cursor: 0,
-    finishReason: 'stop' as const,
+    finishReason: {
+      unified: 'stop',
+      raw: 'stop',
+    } as import('@ai-sdk/provider').LanguageModelV3FinishReason,
     usage: undefined as
-      | import('@ai-sdk/provider').LanguageModelV2Usage
+      | import('@ai-sdk/provider').LanguageModelV3Usage
       | undefined,
     totalText: '',
     yieldedText: '',

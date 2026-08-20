@@ -201,6 +201,7 @@ export function useCachedAiChat({
     if (chat.status === 'streaming' || chat.status === 'submitted') return;
 
     if (
+      messages &&
       canReplaceWithPersistedMessages(chat.messages, messages) &&
       messageSnapshot(chat.messages) !== messageSnapshot(messages)
     ) {

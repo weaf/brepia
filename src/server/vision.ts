@@ -5,6 +5,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type {
   LanguageModelV3,
+  LanguageModelV3CallOptions,
   LanguageModelV3FilePart,
   LanguageModelV3Message,
   LanguageModelV3Prompt,
@@ -517,14 +518,14 @@ export function withVisionFallback(
 
   return {
     ...v3,
-    async doGenerate(options) {
+    async doGenerate(options: LanguageModelV3CallOptions) {
       const prompt = await rewritePromptForVisionFallback(options.prompt, {
         analyzer,
         signal: options.abortSignal,
       });
       return v3.doGenerate({ ...options, prompt });
     },
-    async doStream(options) {
+    async doStream(options: LanguageModelV3CallOptions) {
       const prompt = await rewritePromptForVisionFallback(options.prompt, {
         analyzer,
         signal: options.abortSignal,
