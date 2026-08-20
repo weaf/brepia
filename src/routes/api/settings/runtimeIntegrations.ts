@@ -19,7 +19,7 @@ export const Route = createFileRoute('/api/settings/runtimeIntegrations')({
       GET: async ({ request }) => {
         try {
           const user = await requireUser(request);
-          const integrations = await discoverRuntimeIntegrations();
+          const integrations = await discoverRuntimeIntegrations(user.id);
           const includeModels =
             new URL(request.url).searchParams.get('includeModels') === '1';
           if (!includeModels) return json(integrations);
