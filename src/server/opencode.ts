@@ -47,6 +47,25 @@ export function opencodeApiUrl(): string {
   return 'http://127.0.0.1:4096';
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+export function buildOpenCodeAttachCommand(
+  apiUrl: string,
+  sessionId: string,
+  directory = process.cwd(),
+): string {
+  return [
+    'opencode attach',
+    shellQuote(apiUrl),
+    '--session',
+    shellQuote(sessionId),
+    '--dir',
+    shellQuote(directory),
+  ].join(' ');
+}
+
 /**
  * Build the HTTP headers required by an authenticated `opencode serve`.
  * OpenCode uses HTTP Basic Auth when OPENCODE_SERVER_PASSWORD is set; the
@@ -1269,6 +1288,7 @@ async function* streamParts(
         );
       }
 
+      const directory = process.cwd();
       console.info('opencode session', {
         sessionId,
         reused: !sessionCreated,
@@ -1276,6 +1296,9 @@ async function* streamParts(
         titleUpdated,
         agent: identity.agent,
         model: `${providerID}/${bareId}`,
+        server: apiUrl,
+        directory,
+        attachCommand: buildOpenCodeAttachCommand(apiUrl, sessionId, directory),
       });
     } catch (err) {
       throw new Error(
