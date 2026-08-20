@@ -17,6 +17,10 @@ import { PARAMETRIC_MODELS } from '../lib/utils';
 import { getPreferencesByUserId } from './aiSettings';
 import { loadBuiltinProviderRuntimeOverrides } from './builtinProviderOverrides';
 import { buildCustomChatModel } from './customProviders';
+import {
+  getLocalModelMetadataById,
+  getLocalRuntimeConfig,
+} from './localModels';
 import { env } from './env';
 import { logWarning } from './serverLog';
 
@@ -109,6 +113,24 @@ async function resolveBuiltInVisionModel(
   userId: string,
   modelId: string,
 ): Promise<ResolvedVisionModel> {
+  if (modelId.startsWith('local/')) {
+    const nativeModelId = modelId.slice('local/'.length);
+    const metadata = await getLocalModelMetadataById(userId, nativeModelId);
+    if (!metadata?.supportsVision || !metadata.isVisible) {
+      throw new Error(`Configured local vision model is not vision-capable: ${modelId}`);
+    }
+    const runtime = await getLocalRuntimeConfig(userId);
+    if (!runtime?.enabled) {
+      throw new Error('Local provider is disabled or not configured');
+    }
+    const provider = createOpenAICompatible({
+      name: 'local',
+      baseURL: runtime.baseUrl,
+      apiKey: runtime.apiKey,
+    });
+    return { modelId, model: provider(nativeModelId) };
+  }
+
   const catalogModel = PARAMETRIC_MODELS.find((entry) => entry.id === modelId);
   if (!catalogModel?.supportsVision) {
     throw new Error(`Configured vision model is not vision-capable: ${modelId}`);
@@ -137,22 +159,6 @@ async function resolveBuiltInVisionModel(
       ...(baseURL ? { baseURL } : {}),
     });
     return { modelId, model: provider(modelId.slice('google/'.length)) };
-  }
-
-  if (modelId.startsWith('local/')) {
-    const override = overrides['openai-compatible'];
-    if (override?.enabled === false) throw new Error('Local provider is disabled');
-    const baseURL = override?.baseUrl || env('LOCAL_LLM_BASE_URL').trim();
-    if (!baseURL) {
-      throw new Error('Local provider Base URL is not configured in AI Settings');
-    }
-    const provider = createOpenAICompatible({
-      name: 'local',
-      baseURL,
-      apiKey:
-        (override?.credential ?? env('LOCAL_LLM_API_KEY')) || 'ollama',
-    });
-    return { modelId, model: provider(modelId.slice('local/'.length)) };
   }
 
   const override = overrides.openrouter;
@@ -472,9 +478,9 @@ export async function rewritePromptForVisionFallback(
 
 /**
  * Decide whether pCAD should preserve image parts for the selected model.
- * Explicit catalog/custom-provider capabilities are authoritative. Unknown
- * normal provider models stay direct so a newly-added multimodal model is not
- * accidentally downgraded; known text-only agents are handled explicitly.
+ * Explicit static/custom-provider capabilities are authoritative. Dynamic local
+ * models are conservatively routed through the configured vision analyzer so a
+ * text-only llama-swap model is never accidentally sent raw image parts.
  */
 export function modelSupportsDirectVision(
   modelId: string,
@@ -486,7 +492,8 @@ export function modelSupportsDirectVision(
   if (
     modelId.startsWith('agent/codex/') ||
     modelId.startsWith('agent/opencode/') ||
-    modelId.startsWith('opencode/')
+    modelId.startsWith('opencode/') ||
+    modelId.startsWith('local/')
   ) {
     return false;
   }
