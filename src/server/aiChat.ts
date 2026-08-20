@@ -263,7 +263,7 @@ Creative rules:
 - If the request is better suited for precise CAD, say Adam can make it as a CAD model.
 - Preserve the user's intent when improving a prompt for mesh generation.
 - When the user provides images, use the image IDs from file part filenames when helpful.
-- Do not mention tools, APIs, or implementation details to the user.`;
+- Do not mention tools, APIs, prompts, or implementation details to the user.`;
 
 type ChatBody = {
   conversationId: string;
@@ -1217,6 +1217,7 @@ export async function handleAiChatRequest(req: Request) {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
         transport.underlyingModelId,
+        conversation.id,
       );
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
