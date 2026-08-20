@@ -222,11 +222,31 @@ function runOpenCode(
   });
 }
 
+function promptTextParts(
+  message: LanguageModelV3Prompt[number],
+  includeReasoning = true,
+): string[] {
+  const parts = Array.isArray(message.content)
+    ? message.content
+    : [message.content];
+  const textParts: string[] = [];
+  for (const part of parts) {
+    if (typeof part === 'string') {
+      textParts.push(part);
+    } else if (part.type === 'text') {
+      textParts.push(part.text);
+    } else if (includeReasoning && part.type === 'reasoning') {
+      textParts.push(`(thinking: ${part.text})`);
+    }
+  }
+  return textParts;
+}
+
 /**
- * Build a plain-text prompt from the AI SDK v3 prompt array. Tool calls and
- * tool results carry no meaning for OpenCode because pCAD owns artifact
- * conversion, so they are dropped. System/modeling context and conversation
- * history are retained, followed by the shared final-result contract.
+ * Build a plain-text prompt from the AI SDK v3 prompt array. This remains the
+ * fallback for legacy one-shot OpenCode model IDs. Persistent pCAD/OpenCode
+ * sessions use `buildPersistentOpenCodePrompt` below so history is not sent
+ * again on every turn.
  */
 export function formatPrompt(prompt: LanguageModelV3Prompt): string {
   const lines: string[] = [
@@ -239,19 +259,7 @@ export function formatPrompt(prompt: LanguageModelV3Prompt): string {
     '</environment instructions>',
   ];
   for (const message of prompt) {
-    const parts = Array.isArray(message.content)
-      ? message.content
-      : [message.content];
-    const textParts: string[] = [];
-    for (const part of parts) {
-      if (typeof part === 'string') {
-        textParts.push(part);
-      } else if (part.type === 'text') {
-        textParts.push(part.text);
-      } else if (part.type === 'reasoning') {
-        textParts.push(`(thinking: ${part.text})`);
-      }
-    }
+    const textParts = promptTextParts(message);
     if (!textParts.length) continue;
     const label =
       message.role === 'user'
@@ -314,15 +322,225 @@ export function buildOpenCodeSessionIdentity(
   };
 }
 
-export function buildOpenCodePromptBody(
-  identity: OpenCodeSessionIdentity,
-  text: string,
-) {
+/**
+ * One OpenCode session belongs to one pCAD conversation, independent of which
+ * underlying model is currently selected. OpenCode only requires session IDs
+ * to start with `ses`, so the pCAD UUID can safely provide a stable identity
+ * across browser/server restarts without another persistence table.
+ */
+export function buildOpenCodeSessionId(conversationId: string): string {
+  const compact = conversationId.replace(/[^A-Za-z0-9]/g, '');
+  if (!compact) throw new Error('Cannot build OpenCode session ID without conversation ID');
+  return `ses_pcad_${compact}`;
+}
+
+export function buildOpenCodePromptBody(text: string) {
   return {
-    agent: identity.agent,
-    model: identity.model,
-    prompt: { role: 'user' as const, text },
+    prompt: { text },
+    resume: true,
   };
+}
+
+type ParametricArtifactSnapshot = {
+  title: string;
+  version: string;
+  code: string;
+};
+
+function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefined {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return undefined;
+  }
+  const record = candidate as Record<string, unknown>;
+  if (typeof record['code'] !== 'string' || !record['code'].trim()) return undefined;
+  return {
+    title:
+      typeof record['title'] === 'string' && record['title'].trim()
+        ? record['title'].trim()
+        : 'Current pCAD model',
+    version:
+      typeof record['version'] === 'string' && record['version'].trim()
+        ? record['version'].trim()
+        : 'v1',
+    code: record['code'],
+  };
+}
+
+/** Find the authoritative current OpenSCAD artifact in the AI SDK branch. */
+export function currentParametricArtifactFromPrompt(
+  prompt: LanguageModelV3Prompt,
+): ParametricArtifactSnapshot | undefined {
+  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = prompt[messageIndex];
+    const parts = Array.isArray(message.content)
+      ? message.content
+      : [message.content];
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = parts[partIndex];
+      if (!part || typeof part !== 'object') continue;
+      const record = part as unknown as Record<string, unknown>;
+      if (
+        record['type'] !== 'tool-call' ||
+        record['toolName'] !== 'build_parametric_model'
+      ) {
+        continue;
+      }
+      const artifact = parseArtifactInput(record['input']);
+      if (artifact) return artifact;
+    }
+  }
+  return undefined;
+}
+
+function toolOutputText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const record = value as Record<string, unknown>;
+
+  if (record['type'] === 'text') {
+    if (typeof record['value'] === 'string') return record['value'];
+    if (typeof record['text'] === 'string') return record['text'];
+  }
+
+  if (record['type'] === 'content' && Array.isArray(record['value'])) {
+    return record['value']
+      .map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return '';
+        const content = item as Record<string, unknown>;
+        return content['type'] === 'text' && typeof content['text'] === 'string'
+          ? content['text']
+          : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (typeof record['value'] === 'string') return record['value'];
+  if (typeof record['text'] === 'string') return record['text'];
+  return '';
+}
+
+function latestBuildResultFromPrompt(prompt: LanguageModelV3Prompt): string {
+  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = prompt[messageIndex];
+    const parts = Array.isArray(message.content)
+      ? message.content
+      : [message.content];
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = parts[partIndex];
+      if (!part || typeof part !== 'object') continue;
+      const record = part as unknown as Record<string, unknown>;
+      if (
+        record['type'] !== 'tool-result' ||
+        record['toolName'] !== 'build_parametric_model'
+      ) {
+        continue;
+      }
+      const text = toolOutputText(record['output']).trim();
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+function latestUserPromptText(prompt: LanguageModelV3Prompt): string {
+  for (let index = prompt.length - 1; index >= 0; index -= 1) {
+    if (prompt[index].role !== 'user') continue;
+    return promptTextParts(prompt[index], false).join('\n').trim();
+  }
+  return '';
+}
+
+function systemPromptText(prompt: LanguageModelV3Prompt): string {
+  return prompt
+    .filter((message) => message.role === 'system')
+    .flatMap((message) => promptTextParts(message, false))
+    .join('\n\n')
+    .trim();
+}
+
+/**
+ * Build only the NEW turn for a persistent OpenCode session. OpenCode owns its
+ * conversation history; pCAD owns the authoritative CAD state. Therefore each
+ * turn carries the current complete OpenSCAD artifact plus the new instruction
+ * or compile feedback, instead of replaying the entire pCAD chat history.
+ *
+ * If the OpenCode session had to be recreated during a client-tool continuation
+ * (for example after an OpenCode restart), the latest user request is included
+ * once so the reconstructed session still knows the original intent.
+ */
+export function buildPersistentOpenCodePrompt(
+  prompt: LanguageModelV3Prompt,
+  sessionCreated: boolean,
+): string {
+  const lines: string[] = [
+    '<environment instructions>',
+    'You are the persistent OpenCode worker for one pCAD conversation.',
+    'Treat <current_pcad_artifact> as the authoritative model currently shown by pCAD.',
+    'Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
+    'The pCAD agent may use only pcad_validate to check an OpenSCAD candidate.',
+    'pCAD, not you, converts a completed CAD artifact into its build_parametric_model tool call.',
+    '</environment instructions>',
+  ];
+
+  const system = systemPromptText(prompt);
+  if (system) {
+    lines.push(`<pcad_system_context>\n${system}\n</pcad_system_context>`);
+  }
+
+  const artifact = currentParametricArtifactFromPrompt(prompt);
+  if (artifact) {
+    lines.push(
+      [
+        '<current_pcad_artifact>',
+        `title: ${artifact.title}`,
+        `version: ${artifact.version}`,
+        '<openscad>',
+        artifact.code,
+        '</openscad>',
+        '</current_pcad_artifact>',
+      ].join('\n'),
+    );
+  }
+
+  const latestUser = latestUserPromptText(prompt);
+  const buildResult = latestBuildResultFromPrompt(prompt);
+  const lastRole = prompt[prompt.length - 1]?.role;
+  const isBuildContinuation = lastRole === 'tool' && Boolean(buildResult);
+
+  if ((!isBuildContinuation || sessionCreated) && latestUser) {
+    lines.push(`<user_request>\n${latestUser}\n</user_request>`);
+  }
+
+  if (isBuildContinuation) {
+    lines.push(
+      [
+        '<pcad_build_result>',
+        buildResult,
+        '</pcad_build_result>',
+        '<continuation_instruction>',
+        'Continue the same CAD task using the authoritative current artifact above.',
+        'If another geometry revision is needed, return a corrected complete artifact.',
+        'If the current artifact already satisfies the task, return the concise final message.',
+        '</continuation_instruction>',
+      ].join('\n'),
+    );
+  } else if (!latestUser) {
+    lines.push(
+      '<continuation_instruction>Continue the current pCAD task from the authoritative artifact above.</continuation_instruction>',
+    );
+  }
+
+  lines.push(buildAgentOutputContract());
+  return lines.join('\n\n');
 }
 
 /**
@@ -362,6 +580,206 @@ export async function updateOpenCodeSessionTitle(
     );
     return false;
   }
+}
+
+type OpenCodeSessionData = {
+  id: string;
+  agent?: string;
+  model?: { providerID?: string; id?: string };
+};
+
+function sessionDataFromJson(value: unknown): OpenCodeSessionData | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const data = (value as Record<string, unknown>)['data'];
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  const record = data as Record<string, unknown>;
+  if (typeof record['id'] !== 'string') return undefined;
+  const model =
+    record['model'] &&
+    typeof record['model'] === 'object' &&
+    !Array.isArray(record['model'])
+      ? (record['model'] as Record<string, unknown>)
+      : undefined;
+  return {
+    id: record['id'],
+    agent: typeof record['agent'] === 'string' ? record['agent'] : undefined,
+    model: model
+      ? {
+          providerID:
+            typeof model['providerID'] === 'string'
+              ? model['providerID']
+              : undefined,
+          id: typeof model['id'] === 'string' ? model['id'] : undefined,
+        }
+      : undefined,
+  };
+}
+
+async function createOpenCodeSession(
+  apiUrl: string,
+  identity: OpenCodeSessionIdentity,
+  signal: AbortSignal,
+  requestedId?: string,
+): Promise<OpenCodeSessionData> {
+  const response = await opencodeFetch(`${apiUrl}/api/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...(requestedId ? { id: requestedId } : {}),
+      agent: identity.agent,
+      model: identity.model,
+    }),
+    signal,
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `session creation failed HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+  const session = sessionDataFromJson(await response.json());
+  if (!session) throw new Error('session creation returned no session id');
+  return session;
+}
+
+async function switchOpenCodeSessionAgent(
+  apiUrl: string,
+  sessionId: string,
+  agent: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await opencodeFetch(
+    `${apiUrl}/api/session/${sessionId}/agent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent }),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `session agent switch failed HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+}
+
+async function switchOpenCodeSessionModel(
+  apiUrl: string,
+  sessionId: string,
+  model: OpenCodeSessionIdentity['model'],
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await opencodeFetch(
+    `${apiUrl}/api/session/${sessionId}/model`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `session model switch failed HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+}
+
+export async function ensureOpenCodeSession(
+  apiUrl: string,
+  identity: OpenCodeSessionIdentity,
+  conversationId: string,
+  signal: AbortSignal,
+): Promise<{ sessionId: string; created: boolean; titleUpdated: boolean }> {
+  const sessionId = buildOpenCodeSessionId(conversationId);
+  const existingResponse = await opencodeFetch(
+    `${apiUrl}/api/session/${sessionId}`,
+    { signal },
+  );
+
+  if (existingResponse.status === 404) {
+    const created = await createOpenCodeSession(
+      apiUrl,
+      identity,
+      signal,
+      sessionId,
+    );
+    const titleUpdated = await updateOpenCodeSessionTitle(
+      apiUrl,
+      created.id,
+      identity.title,
+      signal,
+    );
+    return { sessionId: created.id, created: true, titleUpdated };
+  }
+
+  if (!existingResponse.ok) {
+    const body = await existingResponse.text();
+    throw new Error(
+      `session lookup failed HTTP ${existingResponse.status}: ${body.slice(0, 300)}`,
+    );
+  }
+
+  const existing = sessionDataFromJson(await existingResponse.json());
+  if (!existing) throw new Error('session lookup returned no session id');
+
+  if (existing.agent !== identity.agent) {
+    await switchOpenCodeSessionAgent(
+      apiUrl,
+      existing.id,
+      identity.agent,
+      signal,
+    );
+  }
+
+  if (
+    existing.model?.providerID !== identity.model.providerID ||
+    existing.model?.id !== identity.model.id
+  ) {
+    await switchOpenCodeSessionModel(
+      apiUrl,
+      existing.id,
+      identity.model,
+      signal,
+    );
+  }
+
+  return { sessionId: existing.id, created: false, titleUpdated: true };
+}
+
+async function submitOpenCodePrompt(
+  apiUrl: string,
+  sessionId: string,
+  text: string,
+  signal: AbortSignal,
+): Promise<number | undefined> {
+  const response = await opencodeFetch(
+    `${apiUrl}/api/session/${sessionId}/prompt`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildOpenCodePromptBody(text)),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `prompt submission failed HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+
+  const json = (await response.json()) as Record<string, unknown>;
+  const data =
+    json['data'] && typeof json['data'] === 'object' && !Array.isArray(json['data'])
+      ? (json['data'] as Record<string, unknown>)
+      : undefined;
+  return typeof data?.['admittedSeq'] === 'number'
+    ? (data['admittedSeq'] as number)
+    : undefined;
 }
 
 function toFinishReason(reason: string | undefined): LanguageModelV3FinishReason {
@@ -460,6 +878,7 @@ function usageFromOpenCodeTokens(
 export interface SSEEvent {
   type: string;
   data: Record<string, unknown>;
+  durable?: { seq: number };
 }
 
 export function parseSSE(text: string): SSEEvent[] {
@@ -471,9 +890,16 @@ export function parseSSE(text: string): SSEEvent[] {
         const payload = JSON.parse(trimmed.slice(6)) as {
           type?: string;
           data?: Record<string, unknown>;
+          durable?: { seq?: unknown };
         };
         if (payload.type && payload.data) {
-          events.push({ type: payload.type, data: payload.data });
+          events.push({
+            type: payload.type,
+            data: payload.data,
+            ...(typeof payload.durable?.seq === 'number'
+              ? { durable: { seq: payload.durable.seq } }
+              : {}),
+          });
         }
       } catch {
         // ignore malformed JSON
@@ -622,9 +1048,14 @@ export function processBatch(
   const newParts: LanguageModelV3StreamPart[] = [];
 
   for (const evt of events) {
-    const dur = evt.data['durable'] as Record<string, unknown> | undefined;
-    if (dur && typeof dur['seq'] === 'number') {
-      state.cursor = Math.max(state.cursor, dur['seq'] as number);
+    const legacyDurable = evt.data['durable'] as Record<string, unknown> | undefined;
+    const durableSeq =
+      evt.durable?.seq ??
+      (legacyDurable && typeof legacyDurable['seq'] === 'number'
+        ? (legacyDurable['seq'] as number)
+        : undefined);
+    if (durableSeq !== undefined) {
+      state.cursor = Math.max(state.cursor, durableSeq);
     }
 
     if (evt.type?.includes('permission.v2.asked')) {
@@ -777,19 +1208,23 @@ async function interruptSession(
 
 /**
  * Execute one request through the OpenCode HTTP API and expose it as a native
- * LanguageModelV3 stream.
+ * LanguageModelV3 stream. When `conversationId` is supplied, the same OpenCode
+ * session is reused for every pCAD turn and the selected model is switched in
+ * place rather than creating a new session.
  */
 async function* streamParts(
   modelId: string,
-  prompt: string,
+  prompt: LanguageModelV3Prompt,
   options: LanguageModelV3CallOptions,
+  conversationId?: string,
 ): AsyncGenerator<LanguageModelV3StreamPart> {
   yield { type: 'stream-start', warnings: [] };
   const ac = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const apiUrl = opencodeApiUrl();
-    const identity = buildOpenCodeSessionIdentity(modelId, prompt);
+    const formattedPrompt = formatPrompt(prompt);
+    const identity = buildOpenCodeSessionIdentity(modelId, formattedPrompt);
     const { providerID, id: bareId } = identity.model;
 
     let sessionId = '';
@@ -806,34 +1241,37 @@ async function* streamParts(
       { once: true },
     );
 
+    let sessionCreated = true;
+    let titleUpdated = false;
     try {
-      const sessionRes = await opencodeFetch(`${apiUrl}/api/session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(identity),
-        signal: ac.signal,
-      });
-      if (!sessionRes.ok) {
-        const body = await sessionRes.text();
-        throw new Error(
-          `session creation failed HTTP ${sessionRes.status}: ${body.slice(0, 300)}`,
+      if (conversationId) {
+        const ensured = await ensureOpenCodeSession(
+          apiUrl,
+          identity,
+          conversationId,
+          ac.signal,
+        );
+        sessionId = ensured.sessionId;
+        sessionCreated = ensured.created;
+        titleUpdated = ensured.titleUpdated;
+      } else {
+        const session = await createOpenCodeSession(
+          apiUrl,
+          identity,
+          ac.signal,
+        );
+        sessionId = session.id;
+        titleUpdated = await updateOpenCodeSessionTitle(
+          apiUrl,
+          sessionId,
+          identity.title,
+          ac.signal,
         );
       }
-      const sessionData = (await sessionRes.json())['data'] as
-        | Record<string, unknown>
-        | undefined;
-      if (typeof sessionData?.['id'] !== 'string') {
-        throw new Error('session creation returned no session id');
-      }
-      sessionId = sessionData['id'];
-      const titleUpdated = await updateOpenCodeSessionTitle(
-        apiUrl,
-        sessionId,
-        identity.title,
-        ac.signal,
-      );
+
       console.info('opencode session', {
         sessionId,
+        reused: !sessionCreated,
         title: identity.title,
         titleUpdated,
         agent: identity.agent,
@@ -841,28 +1279,27 @@ async function* streamParts(
       });
     } catch (err) {
       throw new Error(
-        `opencode session creation failed: ${err instanceof Error ? err.message : String(err)}`,
+        `opencode session setup failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
-    const promptRes = await opencodeFetch(
-      `${apiUrl}/api/session/${sessionId}/prompt`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildOpenCodePromptBody(identity, prompt)),
-        signal: ac.signal,
-      },
+    const turnPrompt = conversationId
+      ? buildPersistentOpenCodePrompt(prompt, sessionCreated)
+      : formattedPrompt;
+    const admittedSeq = await submitOpenCodePrompt(
+      apiUrl,
+      sessionId,
+      turnPrompt,
+      ac.signal,
     );
-    if (!promptRes.ok) {
-      const body = await promptRes.text();
+    if (conversationId && admittedSeq === undefined) {
       throw new Error(
-        `prompt submission failed HTTP ${promptRes.status}: ${body.slice(0, 300)}`,
+        'persistent OpenCode prompt returned no admittedSeq; refusing to replay older session events',
       );
     }
 
-    const makeState = () => ({
-      cursor: 0,
+    const makeState = (cursor = 0) => ({
+      cursor,
       finishReason: toFinishReason(undefined),
       usage: undefined as LanguageModelV3Usage | undefined,
       totalText: '',
@@ -883,7 +1320,7 @@ async function* streamParts(
         id: string;
       }[],
     });
-    let state = makeState();
+    let state = makeState(admittedSeq ?? 0);
     let validationAttempts = 0;
 
     while (!state.isErrored) {
@@ -959,33 +1396,18 @@ async function* streamParts(
         break;
       }
 
-      const previousCursor = state.cursor;
-      state = makeState();
-      state.cursor = previousCursor;
-      const repairRes = await opencodeFetch(
-        `${apiUrl}/api/session/${sessionId}/prompt`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(
-            buildOpenCodePromptBody(
-              identity,
-              [
-                `Your OpenSCAD candidate did not compile (attempt ${validationAttempts} of 3).`,
-                'Return a corrected complete JSON artifact. Do not explain the failed draft.',
-                `Compiler diagnostics: ${validation.diagnostics ?? 'none supplied'}`,
-              ].join('\n'),
-            ),
-          ),
-          signal: ac.signal,
-        },
+      const repairPrompt = [
+        `Your OpenSCAD candidate did not compile (attempt ${validationAttempts} of 3).`,
+        'Return a corrected complete JSON artifact. Do not explain the failed draft.',
+        `Compiler diagnostics: ${validation.diagnostics ?? 'none supplied'}`,
+      ].join('\n');
+      const repairSeq = await submitOpenCodePrompt(
+        apiUrl,
+        sessionId,
+        repairPrompt,
+        ac.signal,
       );
-      if (!repairRes.ok) {
-        const body = await repairRes.text();
-        throw new Error(
-          `repair prompt failed HTTP ${repairRes.status}: ${body.slice(0, 300)}`,
-        );
-      }
+      state = makeState(repairSeq ?? state.cursor);
     }
 
     const accepted = resolveAgentResultChannels(
@@ -1096,7 +1518,10 @@ async function generateFromStream(
   };
 }
 
-function createOpencodeLanguageModel(appModelId: string): LanguageModelV3 {
+function createOpencodeLanguageModel(
+  appModelId: string,
+  conversationId?: string,
+): LanguageModelV3 {
   return {
     specificationVersion: 'v3',
     provider: 'opencode',
@@ -1105,8 +1530,9 @@ function createOpencodeLanguageModel(appModelId: string): LanguageModelV3 {
     async doStream(options: LanguageModelV3CallOptions) {
       const gen = streamParts(
         appModelId,
-        formatPrompt(options.prompt),
+        options.prompt,
         options,
+        conversationId,
       );
       const stream = new ReadableStream<LanguageModelV3StreamPart>({
         async start(controller) {
@@ -1140,6 +1566,7 @@ export function opencodeChatModel(appModelId: string): LanguageModelV3 {
 /** OpenCode HTTP/SSE transport used by the explicit Streaming execution mode. */
 export function streamingOpencodeChatModel(
   appModelId: string,
+  conversationId?: string,
 ): LanguageModelV3 {
-  return createOpencodeLanguageModel(appModelId);
+  return createOpencodeLanguageModel(appModelId, conversationId);
 }
