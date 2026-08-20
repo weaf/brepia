@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiModelsSettings } from './AiModelsSettings';
+import { LocalModelsSettings } from './LocalModelsSettings';
 import { PromptProfilesSettings } from './PromptProfilesSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { VisionSettings } from './VisionSettings';
@@ -13,12 +14,16 @@ export function AiSettingsSection() {
       <Tabs defaultValue="models">
         <TabsList className="mb-4">
           <TabsTrigger value="models">Models</TabsTrigger>
+          <TabsTrigger value="local-models">Local Models</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="providers">Providers</TabsTrigger>
           <TabsTrigger value="vision">Vision</TabsTrigger>
         </TabsList>
         <TabsContent value="models">
           <AiModelsSettings />
+        </TabsContent>
+        <TabsContent value="local-models">
+          <LocalModelsSettings />
         </TabsContent>
         <TabsContent value="prompts">
           <PromptProfilesSettings />
