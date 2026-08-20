@@ -318,45 +318,6 @@ export const PARAMETRIC_MODELS: ModelConfig[] = [
     supportsThinking: true,
     supportsVision: false,
   },
-  {
-    id: 'local/qwen3.6-35b-mtp-96k',
-    name: 'Qwen 3.6 35B MTP 96k (Local)',
-    description:
-      'Qwen3.6-35B-A3B MTP via llama-swap/llama.cpp — 96k context, flash-attn, full GPU',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/qwen3.6-35b-mtp-128k',
-    name: 'Qwen 3.6 35B MTP 128k (Local)',
-    description:
-      'Qwen3.6-35B-A3B MTP via llama-swap/llama.cpp — 128k context, flash-attn',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/qwen3.6-35b-mtp-262k',
-    name: 'Qwen 3.6 35B MTP 262k (Local)',
-    description:
-      'Qwen3.6-35B-A3B MTP via llama-swap/llama.cpp — 262k context, fewer GPU layers',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/ollama-devstral',
-    name: 'Devstral Small 2 24B (Ollama)',
-    description: 'Devstral-Small-2-24B from Ollama — 32k context, full GPU',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
 ];
 
 export const CREATIVE_MODELS: ModelConfig[] = [
@@ -380,10 +341,9 @@ export const CREATIVE_MODELS: ModelConfig[] = [
   },
 ];
 
-// Whether pCAD can accept image / STL-render inputs for the selected route.
-// Native multimodal models receive the original image data. Text-only,
-// OpenCode and Codex routes are handled by the server-side Qwen3-VL fallback,
-// so image input remains available regardless of the primary model capability.
+// pCAD accepts image / STL-render inputs for every parametric route. Native
+// multimodal models receive the original image data; text-only, OpenCode and
+// Codex routes use the configured server-side vision fallback.
 export function parametricModelSupportsVision(_modelId: string): boolean {
   return true;
 }
