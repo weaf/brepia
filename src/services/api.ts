@@ -1,9 +1,16 @@
 import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 
+const API_PATH_ALIASES: Record<string, string> = {
+  // ProvidersSettings historically used kebab-case while the TanStack route
+  // is generated from runtimeIntegrations.ts and therefore uses camelCase.
+  'settings/runtime-integrations': 'settings/runtimeIntegrations',
+};
+
 export function apiUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  return `${basePath}/api/${path}`;
+  const resolvedPath = API_PATH_ALIASES[path] ?? path;
+  return `${basePath}/api/${resolvedPath}`;
 }
 
 export async function apiJson(

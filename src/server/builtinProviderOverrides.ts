@@ -27,7 +27,7 @@ export const BUILTIN_PROVIDER_LABELS: Record<BuiltinProviderDriver, string> = {
   anthropic: 'Anthropic',
   google: 'Google',
   openrouter: 'OpenRouter',
-  'openai-compatible': 'OpenAI compatible / local',
+  'openai-compatible': 'Local OpenAI / llama-swap',
 };
 
 export const BUILTIN_PROVIDER_OVERRIDE_SLUGS: Record<
