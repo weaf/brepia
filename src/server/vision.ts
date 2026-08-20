@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type {
   LanguageModelV3,
   LanguageModelV3FilePart,
@@ -6,14 +10,16 @@ import type {
   LanguageModelV3Prompt,
   LanguageModelV3ToolResultPart,
 } from '@ai-sdk/provider';
-import type { LanguageModel } from 'ai';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
+import { generateText, type LanguageModel } from 'ai';
+import { isCustomProviderModel } from '@shared/customModelIds';
 import { PARAMETRIC_MODELS } from '../lib/utils';
+import { getPreferencesByUserId } from './aiSettings';
+import { loadBuiltinProviderRuntimeOverrides } from './builtinProviderOverrides';
+import { buildCustomChatModel } from './customProviders';
 import { env } from './env';
 import { logWarning } from './serverLog';
 
-const DEFAULT_VISION_URL = 'http://127.0.0.1:9292/v1/chat/completions';
-const DEFAULT_FAST_VISION_MODEL = 'qwen-vision-8b';
-const DEFAULT_DEEP_VISION_MODEL = 'qwen-vision-30b';
 const VISION_TIMEOUT_MS = 5 * 60_000;
 const MAX_CACHE_ENTRIES = 128;
 
@@ -31,21 +37,31 @@ export type VisionAnalyzer = (
   request: VisionAnalysisRequest,
 ) => Promise<string | undefined>;
 
+type VisionModelPreferences = {
+  visionFastModelId: string | null;
+  visionDeepModelId: string | null;
+};
+
+type ResolvedVisionModel = {
+  modelId: string;
+  model: LanguageModel;
+  providerOptions?: ProviderOptions;
+};
+
 const visionCache = new Map<string, Promise<string | undefined>>();
 
-function visionUrl(): string {
-  return env('PCAD_VISION_BASE_URL').trim() || DEFAULT_VISION_URL;
-}
-
-function visionModel(kind: VisionAnalysisKind): string {
-  const configured =
-    kind === 'inspection'
-      ? env('PCAD_VISION_DEEP_MODEL').trim()
-      : env('PCAD_VISION_FAST_MODEL').trim();
-  if (configured) return configured;
-  return kind === 'inspection'
-    ? DEFAULT_DEEP_VISION_MODEL
-    : DEFAULT_FAST_VISION_MODEL;
+export function selectVisionModelId(
+  kind: VisionAnalysisKind,
+  preferences: VisionModelPreferences,
+): string | undefined {
+  if (kind === 'inspection') {
+    return (
+      preferences.visionDeepModelId ??
+      preferences.visionFastModelId ??
+      undefined
+    );
+  }
+  return preferences.visionFastModelId ?? undefined;
 }
 
 function visionPrompt(kind: VisionAnalysisKind, userRequest?: string): string {
@@ -82,32 +98,108 @@ function combinedSignal(signal?: AbortSignal): AbortSignal {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-function assistantText(content: unknown): string {
-  if (typeof content === 'string') return content.trim();
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((item) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return '';
-      const record = item as Record<string, unknown>;
-      return record['type'] === 'text' && typeof record['text'] === 'string'
-        ? record['text']
-        : '';
-    })
-    .filter(Boolean)
-    .join('\n')
-    .trim();
+function normalizedAnthropicBaseURL(rawOverride?: string): string | undefined {
+  const raw = (rawOverride ?? env('ANTHROPIC_BASE_URL')).trim();
+  if (!raw) return undefined;
+  const base = raw.replace(/\/+$/, '');
+  return base.endsWith('/v1') ? base : `${base}/v1`;
+}
+
+async function resolveBuiltInVisionModel(
+  userId: string,
+  modelId: string,
+): Promise<ResolvedVisionModel> {
+  const catalogModel = PARAMETRIC_MODELS.find((entry) => entry.id === modelId);
+  if (!catalogModel?.supportsVision) {
+    throw new Error(`Configured vision model is not vision-capable: ${modelId}`);
+  }
+
+  const overrides = await loadBuiltinProviderRuntimeOverrides(userId);
+
+  if (modelId.startsWith('anthropic/')) {
+    const override = overrides.anthropic;
+    if (override?.enabled === false) throw new Error('Anthropic provider is disabled');
+    const id = modelId.slice('anthropic/'.length).replace(/\./g, '-');
+    const provider = createAnthropic({
+      apiKey: override?.credential ?? env('ANTHROPIC_API_KEY'),
+      ...(normalizedAnthropicBaseURL(override?.baseUrl)
+        ? { baseURL: normalizedAnthropicBaseURL(override?.baseUrl) }
+        : {}),
+    });
+    return { modelId, model: provider(id) };
+  }
+
+  if (modelId.startsWith('google/')) {
+    const override = overrides.google;
+    if (override?.enabled === false) throw new Error('Google provider is disabled');
+    const baseURL = override?.baseUrl || env('GOOGLE_BASE_URL').trim();
+    const provider = createGoogleGenerativeAI({
+      apiKey: override?.credential ?? env('GOOGLE_API_KEY'),
+      ...(baseURL ? { baseURL } : {}),
+    });
+    return { modelId, model: provider(modelId.slice('google/'.length)) };
+  }
+
+  if (modelId.startsWith('local/')) {
+    const override = overrides['openai-compatible'];
+    if (override?.enabled === false) throw new Error('Local provider is disabled');
+    const provider = createOpenAICompatible({
+      name: 'local',
+      baseURL:
+        override?.baseUrl ||
+        env('LOCAL_LLM_BASE_URL') ||
+        'http://localhost:11434/v1',
+      apiKey:
+        (override?.credential ?? env('LOCAL_LLM_API_KEY')) || 'ollama',
+    });
+    return { modelId, model: provider(modelId.slice('local/'.length)) };
+  }
+
+  const override = overrides.openrouter;
+  if (override?.enabled === false) throw new Error('OpenRouter provider is disabled');
+  const baseURL = override?.baseUrl || env('OPENROUTER_BASE_URL').trim();
+  const provider = createOpenRouter({
+    apiKey: override?.credential ?? env('OPENROUTER_API_KEY'),
+    ...(baseURL ? { baseURL } : {}),
+  });
+  return {
+    modelId,
+    model: provider.chat(modelId, { usage: { include: true } }),
+  };
+}
+
+async function resolveVisionModel(
+  userId: string,
+  modelId: string,
+): Promise<ResolvedVisionModel> {
+  if (isCustomProviderModel(modelId)) {
+    const built = await buildCustomChatModel(modelId, userId, false);
+    if (!built.capabilities.supportsVision) {
+      throw new Error(`Configured custom model is not vision-capable: ${modelId}`);
+    }
+    return {
+      modelId,
+      model: built.model,
+      providerOptions: built.providerOptions,
+    };
+  }
+
+  return resolveBuiltInVisionModel(userId, modelId);
 }
 
 function cacheKey(
+  userId: string,
   kind: VisionAnalysisKind,
-  model: string,
+  modelId: string,
   images: string[],
   userRequest?: string,
 ): string {
   const hash = createHash('sha256');
+  hash.update(userId);
+  hash.update('\0');
   hash.update(kind);
   hash.update('\0');
-  hash.update(model);
+  hash.update(modelId);
   hash.update('\0');
   hash.update(userRequest ?? '');
   for (const image of images) {
@@ -129,68 +221,53 @@ function rememberVisionResult(
   return value;
 }
 
-export const analyzeImagesWithVision: VisionAnalyzer = async ({
-  kind,
-  images,
-  userRequest,
-  signal,
-}) => {
+async function analyzeImagesWithConfiguredVision(
+  userId: string,
+  { kind, images, userRequest, signal }: VisionAnalysisRequest,
+): Promise<string | undefined> {
   if (images.length === 0) return undefined;
 
-  const model = visionModel(kind);
-  const key = cacheKey(kind, model, images, userRequest);
+  const preferences = await getPreferencesByUserId(userId);
+  const selectedModelId = selectVisionModelId(kind, preferences);
+  if (!selectedModelId) {
+    logWarning(
+      `pCAD vision fallback is not configured for ${kind} analysis`,
+      { functionName: 'pcad-vision-fallback' },
+    );
+    return undefined;
+  }
+
+  const key = cacheKey(userId, kind, selectedModelId, images, userRequest);
   const cached = visionCache.get(key);
   if (cached) return cached;
 
   const pending = (async () => {
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      const apiKey = env('PCAD_VISION_API_KEY').trim();
-      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-      const response = await fetch(visionUrl(), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: visionPrompt(kind, userRequest) },
-                ...images.map((url) => ({
-                  type: 'image_url',
-                  image_url: { url },
-                })),
-              ],
-            },
-          ],
-          temperature: 0.1,
-          max_tokens: kind === 'inspection' ? 2400 : 1800,
-        }),
-        signal: combinedSignal(signal),
+      const runtime = await resolveVisionModel(userId, selectedModelId);
+      const result = await generateText({
+        model: runtime.model,
+        providerOptions: runtime.providerOptions,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: visionPrompt(kind, userRequest) },
+              ...images.map((image) => ({ type: 'image' as const, image })),
+            ],
+          },
+        ],
+        temperature: 0.1,
+        maxOutputTokens: kind === 'inspection' ? 2400 : 1800,
+        abortSignal: combinedSignal(signal),
       });
-
-      const raw = await response.text();
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status} ${response.statusText}: ${raw.slice(0, 300)}`,
-        );
-      }
-
-      const data = JSON.parse(raw) as {
-        choices?: Array<{ message?: { content?: unknown } }>;
-      };
-      const text = assistantText(data.choices?.[0]?.message?.content);
+      const text = result.text.trim();
       if (!text) throw new Error('vision model returned no usable text');
       return text;
     } catch (error) {
       visionCache.delete(key);
       if (signal?.aborted) throw error;
       logWarning(
-        `pCAD vision fallback failed (${model}): ${error instanceof Error ? error.message : String(error)}`,
+        `pCAD vision fallback failed (${selectedModelId}): ${error instanceof Error ? error.message : String(error)}`,
         { functionName: 'pcad-vision-fallback' },
       );
       return undefined;
@@ -198,7 +275,11 @@ export const analyzeImagesWithVision: VisionAnalyzer = async ({
   })();
 
   return rememberVisionResult(key, pending);
-};
+}
+
+export function createConfiguredVisionAnalyzer(userId: string): VisionAnalyzer {
+  return (request) => analyzeImagesWithConfiguredVision(userId, request);
+}
 
 function dataUrlFromImageFile(part: LanguageModelV3FilePart): string | undefined {
   if (!part.mediaType.startsWith('image/')) return undefined;
@@ -360,9 +441,8 @@ async function rewriteToolMessage(
 
 export async function rewritePromptForVisionFallback(
   prompt: LanguageModelV3Prompt,
-  options: { analyzer?: VisionAnalyzer; signal?: AbortSignal } = {},
+  options: { analyzer: VisionAnalyzer; signal?: AbortSignal },
 ): Promise<LanguageModelV3Prompt> {
-  const analyzer = options.analyzer ?? analyzeImagesWithVision;
   const userRequest = latestUserRequest(prompt);
 
   return Promise.all(
@@ -372,14 +452,14 @@ export async function rewritePromptForVisionFallback(
         case 'assistant':
           return rewriteMultimodalMessage(
             message,
-            analyzer,
+            options.analyzer,
             userRequest,
             options.signal,
           );
         case 'tool':
           return rewriteToolMessage(
             message,
-            analyzer,
+            options.analyzer,
             userRequest,
             options.signal,
           );
@@ -416,25 +496,30 @@ export function modelSupportsDirectVision(
 }
 
 /**
- * Wrap a LanguageModelV3 so image inputs are converted to Qwen3-VL textual
- * observations immediately before a text-only provider/agent is invoked.
- * Native multimodal models are never wrapped and therefore keep the original
- * image parts end-to-end.
+ * Wrap a text-only LanguageModelV3 so image inputs are converted to textual
+ * observations by the user's configured Fast/Deep vision models. Native
+ * multimodal models are never wrapped and keep the original image parts.
  */
-export function withVisionFallback(model: LanguageModel): LanguageModel {
+export function withVisionFallback(
+  model: LanguageModel,
+  userId: string,
+): LanguageModel {
   const v3 = model as LanguageModelV3;
   if (v3.specificationVersion !== 'v3') return model;
+  const analyzer = createConfiguredVisionAnalyzer(userId);
 
   return {
     ...v3,
     async doGenerate(options) {
       const prompt = await rewritePromptForVisionFallback(options.prompt, {
+        analyzer,
         signal: options.abortSignal,
       });
       return v3.doGenerate({ ...options, prompt });
     },
     async doStream(options) {
       const prompt = await rewritePromptForVisionFallback(options.prompt, {
+        analyzer,
         signal: options.abortSignal,
       });
       return v3.doStream({ ...options, prompt });

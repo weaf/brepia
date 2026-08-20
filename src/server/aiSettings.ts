@@ -10,88 +10,89 @@ import type { AiPreferencesDto } from '@shared/aiSettings';
 const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   hiddenModelIds: [],
   defaultPromptProfileId: null,
+  visionFastModelId: null,
+  visionDeepModelId: null,
 };
 
-/**
- * Get (or lazily create) the preferences row for `user`.
- *
- * Returns a complete `AiPreferencesDto`. If the user had no row, one is
- * inserted on the first call with default values so that subsequent reads
- * are fast.
- */
-export async function getPreferences(user: User): Promise<AiPreferencesDto> {
+type PreferenceRow = {
+  user_id: string;
+  hidden_model_ids: string[];
+  default_prompt_profile_id: string | null;
+  vision_fast_model_id?: string | null;
+  vision_deep_model_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function toDto(row: PreferenceRow): AiPreferencesDto {
+  return {
+    userId: row.user_id,
+    hiddenModelIds: row.hidden_model_ids,
+    defaultPromptProfileId: row.default_prompt_profile_id,
+    visionFastModelId: row.vision_fast_model_id ?? null,
+    visionDeepModelId: row.vision_deep_model_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function loadPreferences(userId: string): Promise<AiPreferencesDto> {
   const supabase = getServiceRoleSupabaseClient();
 
   const { data, error } = await supabase
     .from('user_ai_preferences')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (error) {
     throw new Error(`Failed to load preferences: ${error.message}`);
   }
 
-  if (data) {
-    return {
-      userId: data.user_id,
-      hiddenModelIds: data.hidden_model_ids,
-      defaultPromptProfileId: data.default_prompt_profile_id,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
-  }
+  if (data) return toDto(data as PreferenceRow);
 
-  // Lazily create a default row
   const { data: inserted, error: insertErr } = await supabase
     .from('user_ai_preferences')
-    .insert({ user_id: user.id })
+    .insert({ user_id: userId })
     .select()
     .single();
 
   if (insertErr) {
     // Race-safe: another request may have inserted between our select and
-    // insert.  Try a second select before giving up.
+    // insert. Try a second select before giving up.
     const { data: retry } = await supabase
       .from('user_ai_preferences')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
-    if (retry && !insertErr.code?.includes('23505')) {
-      // Unique violation is acceptable; return what exists now.
-      return {
-        userId: retry.user_id,
-        hiddenModelIds: retry.hidden_model_ids,
-        defaultPromptProfileId: retry.default_prompt_profile_id,
-        createdAt: retry.created_at,
-        updatedAt: retry.updated_at,
-      };
-    }
+    if (retry) return toDto(retry as PreferenceRow);
 
-    // Fallback to defaults with no persisted row
-    return { userId: user.id, ...DEFAULT_PREFERENCES };
+    // Keep the settings UI usable if persistence is temporarily unavailable.
+    return { userId, ...DEFAULT_PREFERENCES };
   }
 
-  return {
-    userId: inserted.user_id,
-    hiddenModelIds: inserted.hidden_model_ids,
-    defaultPromptProfileId: inserted.default_prompt_profile_id,
-    createdAt: inserted.created_at,
-    updatedAt: inserted.updated_at,
-  };
+  return toDto(inserted as PreferenceRow);
 }
 
-/**
- * Update hidden_model_ids for the given user.
- */
+/** Get (or lazily create) preferences for an authenticated Supabase user. */
+export async function getPreferences(user: User): Promise<AiPreferencesDto> {
+  return loadPreferences(user.id);
+}
+
+/** Server-internal variant for request paths that already have a user id. */
+export async function getPreferencesByUserId(
+  userId: string,
+): Promise<AiPreferencesDto> {
+  return loadPreferences(userId);
+}
+
+/** Update hidden_model_ids for the given user. */
 export async function updateHiddenModelIds(
   user: User,
   hiddenModelIds: string[],
 ): Promise<AiPreferencesDto> {
   const supabase = getServiceRoleSupabaseClient();
-
-  // Ensure the row exists before upserting
   await ensureRowExists(supabase, user.id);
 
   const { data, error } = await supabase
@@ -108,25 +109,15 @@ export async function updateHiddenModelIds(
     throw new Error(`Failed to update hidden model IDs: ${error.message}`);
   }
 
-  return {
-    userId: data.user_id,
-    hiddenModelIds: data.hidden_model_ids,
-    defaultPromptProfileId: data.default_prompt_profile_id,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
+  return toDto(data as PreferenceRow);
 }
 
-/**
- * Set the default prompt profile reference.
- * Pass `null` to reset to built-in original.
- */
+/** Set the default prompt profile reference. Pass null to reset. */
 export async function setDefaultPromptProfileId(
   user: User,
   defaultPromptProfileId: string | null,
 ): Promise<AiPreferencesDto> {
   const supabase = getServiceRoleSupabaseClient();
-
   await ensureRowExists(supabase, user.id);
 
   const { data, error } = await supabase
@@ -143,20 +134,9 @@ export async function setDefaultPromptProfileId(
     throw new Error(`Failed to set default prompt profile: ${error.message}`);
   }
 
-  return {
-    userId: data.user_id,
-    hiddenModelIds: data.hidden_model_ids,
-    defaultPromptProfileId: data.default_prompt_profile_id,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
+  return toDto(data as PreferenceRow);
 }
 
-/**
- * Upsert a preferences row if it doesn't already exist.
- * This is cheaper than a full select-then-insert and avoids the double-read
- * pattern.
- */
 async function ensureRowExists(
   supabase: ReturnType<typeof getServiceRoleSupabaseClient>,
   userId: string,

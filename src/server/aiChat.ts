@@ -1197,7 +1197,6 @@ export async function handleAiChatRequest(req: Request) {
       usesAdaptiveAnthropicThinking(actualModelId));
 
   const transport = selectChatTransport(actualModelId, executionMode);
-
   console.info(`transport`, {
     modelId: actualModelId,
     executionMode,
@@ -1286,20 +1285,13 @@ export async function handleAiChatRequest(req: Request) {
     customSupportsVision,
   );
   if (conversation.type === 'parametric' && !directVision) {
-    chatLanguageModel = withVisionFallback(chatLanguageModel);
+    chatLanguageModel = withVisionFallback(chatLanguageModel, user.id);
   }
   console.info('vision routing', {
     modelId: actualModelId,
     transportKind: transport.kind,
     directVision,
-    ...(directVision
-      ? {}
-      : {
-          visionModel:
-            env('PCAD_VISION_FAST_MODEL').trim() || 'qwen-vision-8b',
-          visionDeepModel:
-            env('PCAD_VISION_DEEP_MODEL').trim() || 'qwen-vision-30b',
-        }),
+    fallbackConfiguredByAiSettings: !directVision,
   });
 
   const logContext = {

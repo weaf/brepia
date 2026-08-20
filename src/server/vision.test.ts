@@ -4,11 +4,41 @@ import type { LanguageModelV3Prompt } from '@ai-sdk/provider';
 import {
   modelSupportsDirectVision,
   rewritePromptForVisionFallback,
+  selectVisionModelId,
   type VisionAnalysisRequest,
   type VisionAnalyzer,
 } from './vision.ts';
 
 describe('pCAD vision routing', () => {
+  it('selects Fast for references and Deep for inspection with Fast fallback', () => {
+    const preferences = {
+      visionFastModelId: 'custom/provider/fast-vl',
+      visionDeepModelId: 'custom/provider/deep-vl',
+    };
+    assert.equal(
+      selectVisionModelId('reference', preferences),
+      'custom/provider/fast-vl',
+    );
+    assert.equal(
+      selectVisionModelId('inspection', preferences),
+      'custom/provider/deep-vl',
+    );
+    assert.equal(
+      selectVisionModelId('inspection', {
+        ...preferences,
+        visionDeepModelId: null,
+      }),
+      'custom/provider/fast-vl',
+    );
+    assert.equal(
+      selectVisionModelId('reference', {
+        visionFastModelId: null,
+        visionDeepModelId: null,
+      }),
+      undefined,
+    );
+  });
+
   it('preserves direct images for native multimodal models', () => {
     assert.equal(
       modelSupportsDirectVision('google/gemini-3.6-flash', 'normal'),
@@ -27,10 +57,7 @@ describe('pCAD vision routing', () => {
       false,
     );
     assert.equal(
-      modelSupportsDirectVision(
-        'agent/codex/default',
-        'cli-agent',
-      ),
+      modelSupportsDirectVision('agent/codex/default', 'cli-agent'),
       false,
     );
     assert.equal(

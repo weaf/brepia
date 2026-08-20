@@ -27,6 +27,8 @@ const modelIdSchema = z
     message: 'model_id may only contain safe characters',
   });
 
+const nullableModelIdSchema = z.union([modelIdSchema, z.null()]);
+
 const nonReservedSlugSchema = z
   .string()
   .min(1, 'slug is required')
@@ -53,6 +55,8 @@ export const AiPreferencesSchema = z.object({
   userId: z.string().uuid(),
   hiddenModelIds: z.array(z.string().min(1).max(256)).default([]),
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]).default(null),
+  visionFastModelId: nullableModelIdSchema.default(null),
+  visionDeepModelId: nullableModelIdSchema.default(null),
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
 });
@@ -266,6 +270,11 @@ export const SetDefaultPromptSchema = z.object({
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]),
 });
 
+export const UpdateVisionModelsSchema = z.object({
+  visionFastModelId: nullableModelIdSchema,
+  visionDeepModelId: nullableModelIdSchema,
+});
+
 export const TestProviderRequestSchema = z.object({
   id: z.string().uuid().optional(),
   draftConfig: CreateProviderSchema.partial().optional(),
@@ -291,3 +300,4 @@ export type UpdateProviderModelInput = z.infer<
 >;
 export type UpdateHiddenModelsInput = z.infer<typeof UpdateHiddenModelsSchema>;
 export type SetDefaultPromptInput = z.infer<typeof SetDefaultPromptSchema>;
+export type UpdateVisionModelsInput = z.infer<typeof UpdateVisionModelsSchema>;

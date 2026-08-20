@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiModelsSettings } from './AiModelsSettings';
 import { PromptProfilesSettings } from './PromptProfilesSettings';
 import { ProvidersSettings } from './ProvidersSettings';
+import { VisionSettings } from './VisionSettings';
 
 export function AiSettingsSection() {
   return (
@@ -14,6 +15,7 @@ export function AiSettingsSection() {
           <TabsTrigger value="models">Models</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="providers">Providers</TabsTrigger>
+          <TabsTrigger value="vision">Vision</TabsTrigger>
         </TabsList>
         <TabsContent value="models">
           <AiModelsSettings />
@@ -23,6 +25,9 @@ export function AiSettingsSection() {
         </TabsContent>
         <TabsContent value="providers">
           <ProvidersSettings />
+        </TabsContent>
+        <TabsContent value="vision">
+          <VisionSettings />
         </TabsContent>
       </Tabs>
     </section>
