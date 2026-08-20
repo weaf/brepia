@@ -31,13 +31,9 @@ describe('OpenCode pCAD session identity', () => {
         id: 'qwen3.6-35b-mtp-128k',
       },
     });
-    assert.deepEqual(buildOpenCodePromptBody(identity, 'Build it'), {
-      agent: 'pcad-builder',
-      model: {
-        providerID: 'llama-swap',
-        id: 'qwen3.6-35b-mtp-128k',
-      },
-      prompt: { role: 'user', text: 'Build it' },
+    assert.deepEqual(buildOpenCodePromptBody('Build it'), {
+      prompt: { text: 'Build it' },
+      resume: true,
     });
   });
 
