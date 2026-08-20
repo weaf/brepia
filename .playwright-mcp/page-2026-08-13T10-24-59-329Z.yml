@@ -1,0 +1,412 @@
+- generic:
+  - list
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - link:
+            - /url: https://accounts.adam.new/billing
+            - generic: 3.0M
+        - generic:
+          - generic:
+            - generic:
+              - main:
+                - generic:
+                  - generic:
+                    - heading [level=1]: Good afternoon, test-pcad!
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - paragraph: Drop images and 3D models here
+                      - generic:
+                        - generic:
+                          - generic:
+                            - textbox:
+                              - /placeholder: Start building with Adam...
+                          - button
+                        - generic:
+                          - generic:
+                            - button [ref=f1e35] [cursor=pointer]
+                            - button
+                          - generic:
+                            - button [expanded]:
+                              - generic: GPT-5.6 Sol
+                            - button [disabled]
+  - menu "GPT-5.6 Sol" [active] [ref=f1e53]:
+    - menuitem [ref=f1e54] [cursor=pointer]:
+      - generic [ref=f1e58]:
+        - text: Gemini 3.1 Pro
+        - paragraph [ref=f1e59]: Latest Google model with excellent multi-modal capabilities
+    - menuitem [ref=f1e60] [cursor=pointer]:
+      - generic [ref=f1e64]:
+        - text: Gemini 3.6 Flash
+        - paragraph [ref=f1e65]: Fast, token-efficient Google model for everyday tasks
+    - menuitem [ref=f1e66] [cursor=pointer]:
+      - generic [ref=f1e70]:
+        - text: Claude Fable 5
+        - paragraph [ref=f1e71]: Most capable Anthropic model; best reasoning at highest cost
+    - menuitem [ref=f1e72] [cursor=pointer]:
+      - generic [ref=f1e76]:
+        - text: Claude Opus 4.8
+        - paragraph [ref=f1e77]: Powerful Anthropic model for complex reasoning
+    - menuitem [ref=f1e78] [cursor=pointer]:
+      - generic [ref=f1e82]:
+        - text: Claude Sonnet 5
+        - paragraph [ref=f1e83]: Frontier Anthropic model balancing speed and reasoning
+    - menuitem [ref=f1e84] [cursor=pointer]:
+      - generic [ref=f1e88]:
+        - text: GPT-5.6 Sol
+        - paragraph [ref=f1e89]: Latest OpenAI model for reliable CAD generation
+    - menuitem [ref=f1e92] [cursor=pointer]:
+      - generic [ref=f1e96]:
+        - text: Grok 4.5
+        - paragraph [ref=f1e97]: Latest xAI model with frontier coding and STEM performance
+    - menuitem [ref=f1e98] [cursor=pointer]:
+      - generic [ref=f1e102]:
+        - text: Kimi K3
+        - paragraph [ref=f1e103]: Moonshot AI reasoning model for complex coding and agentic work
+    - menuitem [ref=f1e104] [cursor=pointer]:
+      - generic [ref=f1e108]:
+        - text: GLM 5.2
+        - paragraph [ref=f1e109]: Z.AI model with strong agentic coding and reasoning
+    - menuitem [ref=f1e110] [cursor=pointer]:
+      - generic [ref=f1e112]:
+        - text: Qwen 3.6 35B MTP 96k (Local)
+        - paragraph [ref=f1e113]: Qwen3.6-35B-A3B MTP via llama-swap/llama.cpp — 96k context, flash-attn, full GPU
+    - menuitem [ref=f1e114] [cursor=pointer]:
+      - generic [ref=f1e116]:
+        - text: Qwen 3.6 35B MTP 128k (Local)
+        - paragraph [ref=f1e117]: Qwen3.6-35B-A3B MTP via llama-swap/llama.cpp — 128k context, flash-attn
+    - menuitem [ref=f1e118] [cursor=pointer]:
+      - generic [ref=f1e120]:
+        - text: Qwen 3.6 35B MTP 262k (Local)
+        - paragraph [ref=f1e121]: Qwen3.6-35B-A3B MTP via llama-swap/llama.cpp — 262k context, fewer GPU layers
+    - menuitem [ref=f1e122] [cursor=pointer]:
+      - generic [ref=f1e124]:
+        - text: Devstral Small 2 24B (Ollama)
+        - paragraph [ref=f1e125]: Devstral-Small-2-24B from Ollama — 32k context, full GPU
+    - menuitem [ref=f1e126] [cursor=pointer]:
+      - generic [ref=f1e130]:
+        - text: Big Pickle
+        - paragraph [ref=f1e131]: OpenCode · opencode
+    - menuitem [ref=f1e132] [cursor=pointer]:
+      - generic [ref=f1e136]:
+        - text: Deepseek V4 Flash Free
+        - paragraph [ref=f1e137]: OpenCode · opencode
+    - menuitem [ref=f1e138] [cursor=pointer]:
+      - generic [ref=f1e142]:
+        - text: Hy3 Free
+        - paragraph [ref=f1e143]: OpenCode · opencode
+    - menuitem [ref=f1e144] [cursor=pointer]:
+      - generic [ref=f1e148]:
+        - text: Laguna S 2 1 Free
+        - paragraph [ref=f1e149]: OpenCode · opencode
+    - menuitem [ref=f1e150] [cursor=pointer]:
+      - generic [ref=f1e154]:
+        - text: Ling 3 0 Tiny Free
+        - paragraph [ref=f1e155]: OpenCode · opencode
+    - menuitem [ref=f1e156] [cursor=pointer]:
+      - generic [ref=f1e160]:
+        - text: Mimo V2 5 Free
+        - paragraph [ref=f1e161]: OpenCode · opencode
+    - menuitem [ref=f1e162] [cursor=pointer]:
+      - generic [ref=f1e166]:
+        - text: Nemotron 3 Ultra Free
+        - paragraph [ref=f1e167]: OpenCode · opencode
+    - menuitem [ref=f1e168] [cursor=pointer]:
+      - generic [ref=f1e172]:
+        - text: Nemotron 3 5 Lightning Free
+        - paragraph [ref=f1e173]: OpenCode · opencode
+    - menuitem [ref=f1e174] [cursor=pointer]:
+      - generic [ref=f1e178]:
+        - text: Deep Research Max Preview 04 2026
+        - paragraph [ref=f1e179]: OpenCode · google
+    - menuitem [ref=f1e180] [cursor=pointer]:
+      - generic [ref=f1e184]:
+        - text: Deep Research Preview 04 2026
+        - paragraph [ref=f1e185]: OpenCode · google
+    - menuitem [ref=f1e186] [cursor=pointer]:
+      - generic [ref=f1e190]:
+        - text: Gemini 2 5 Computer Use Preview 10 2025
+        - paragraph [ref=f1e191]: OpenCode · google
+    - menuitem [ref=f1e192] [cursor=pointer]:
+      - generic [ref=f1e196]:
+        - text: Gemini 2 5 Flash
+        - paragraph [ref=f1e197]: OpenCode · google
+    - menuitem [ref=f1e198] [cursor=pointer]:
+      - generic [ref=f1e202]:
+        - text: Gemini 2 5 Flash Image
+        - paragraph [ref=f1e203]: OpenCode · google
+    - menuitem [ref=f1e204] [cursor=pointer]:
+      - generic [ref=f1e208]:
+        - text: Gemini 2 5 Flash Lite
+        - paragraph [ref=f1e209]: OpenCode · google
+    - menuitem [ref=f1e210] [cursor=pointer]:
+      - generic [ref=f1e214]:
+        - text: Gemini 2 5 Flash Preview Tts
+        - paragraph [ref=f1e215]: OpenCode · google
+    - menuitem [ref=f1e216] [cursor=pointer]:
+      - generic [ref=f1e220]:
+        - text: Gemini 2 5 Pro
+        - paragraph [ref=f1e221]: OpenCode · google
+    - menuitem [ref=f1e222] [cursor=pointer]:
+      - generic [ref=f1e226]:
+        - text: Gemini 2 5 Pro Preview Tts
+        - paragraph [ref=f1e227]: OpenCode · google
+    - menuitem [ref=f1e228] [cursor=pointer]:
+      - generic [ref=f1e232]:
+        - text: Gemini 3 Flash Preview
+        - paragraph [ref=f1e233]: OpenCode · google
+    - menuitem [ref=f1e234] [cursor=pointer]:
+      - generic [ref=f1e238]:
+        - text: Gemini 3 Pro Image
+        - paragraph [ref=f1e239]: OpenCode · google
+    - menuitem [ref=f1e240] [cursor=pointer]:
+      - generic [ref=f1e244]:
+        - text: Gemini 3 Pro Image Preview
+        - paragraph [ref=f1e245]: OpenCode · google
+    - menuitem [ref=f1e246] [cursor=pointer]:
+      - generic [ref=f1e250]:
+        - text: Gemini 3 1 Flash Image
+        - paragraph [ref=f1e251]: OpenCode · google
+    - menuitem [ref=f1e252] [cursor=pointer]:
+      - generic [ref=f1e256]:
+        - text: Gemini 3 1 Flash Image Preview
+        - paragraph [ref=f1e257]: OpenCode · google
+    - menuitem [ref=f1e258] [cursor=pointer]:
+      - generic [ref=f1e262]:
+        - text: Gemini 3 1 Flash Lite
+        - paragraph [ref=f1e263]: OpenCode · google
+    - menuitem [ref=f1e264] [cursor=pointer]:
+      - generic [ref=f1e268]:
+        - text: Gemini 3 1 Flash Lite Image
+        - paragraph [ref=f1e269]: OpenCode · google
+    - menuitem [ref=f1e270] [cursor=pointer]:
+      - generic [ref=f1e274]:
+        - text: Gemini 3 1 Flash Live Preview
+        - paragraph [ref=f1e275]: OpenCode · google
+    - menuitem [ref=f1e276] [cursor=pointer]:
+      - generic [ref=f1e280]:
+        - text: Gemini 3 1 Flash Tts Preview
+        - paragraph [ref=f1e281]: OpenCode · google
+    - menuitem [ref=f1e282] [cursor=pointer]:
+      - generic [ref=f1e286]:
+        - text: Gemini 3 1 Pro Preview
+        - paragraph [ref=f1e287]: OpenCode · google
+    - menuitem [ref=f1e288] [cursor=pointer]:
+      - generic [ref=f1e292]:
+        - text: Gemini 3 1 Pro Preview Customtools
+        - paragraph [ref=f1e293]: OpenCode · google
+    - menuitem [ref=f1e294] [cursor=pointer]:
+      - generic [ref=f1e298]:
+        - text: Gemini 3 5 Flash
+        - paragraph [ref=f1e299]: OpenCode · google
+    - menuitem [ref=f1e300] [cursor=pointer]:
+      - generic [ref=f1e304]:
+        - text: Gemini 3 5 Flash Lite
+        - paragraph [ref=f1e305]: OpenCode · google
+    - menuitem [ref=f1e306] [cursor=pointer]:
+      - generic [ref=f1e310]:
+        - text: Gemini 3 5 Live Translate Preview
+        - paragraph [ref=f1e311]: OpenCode · google
+    - menuitem [ref=f1e312] [cursor=pointer]:
+      - generic [ref=f1e316]:
+        - text: Gemini 3 6 Flash
+        - paragraph [ref=f1e317]: OpenCode · google
+    - menuitem [ref=f1e318] [cursor=pointer]:
+      - generic [ref=f1e322]:
+        - text: Gemini Embedding 001
+        - paragraph [ref=f1e323]: OpenCode · google
+    - menuitem [ref=f1e324] [cursor=pointer]:
+      - generic [ref=f1e328]:
+        - text: Gemini Embedding 2
+        - paragraph [ref=f1e329]: OpenCode · google
+    - menuitem [ref=f1e330] [cursor=pointer]:
+      - generic [ref=f1e334]:
+        - text: Gemini Flash Latest
+        - paragraph [ref=f1e335]: OpenCode · google
+    - menuitem [ref=f1e336] [cursor=pointer]:
+      - generic [ref=f1e340]:
+        - text: Gemini Flash Lite Latest
+        - paragraph [ref=f1e341]: OpenCode · google
+    - menuitem [ref=f1e342] [cursor=pointer]:
+      - generic [ref=f1e346]:
+        - text: Gemini Omni Flash Preview
+        - paragraph [ref=f1e347]: OpenCode · google
+    - menuitem [ref=f1e348] [cursor=pointer]:
+      - generic [ref=f1e352]:
+        - text: Gemini Robotics Er 1 6 Preview
+        - paragraph [ref=f1e353]: OpenCode · google
+    - menuitem [ref=f1e354] [cursor=pointer]:
+      - generic [ref=f1e358]:
+        - text: Gemma 4 26b A4b It
+        - paragraph [ref=f1e359]: OpenCode · google
+    - menuitem [ref=f1e360] [cursor=pointer]:
+      - generic [ref=f1e364]:
+        - text: Gemma 4 31b It
+        - paragraph [ref=f1e365]: OpenCode · google
+    - menuitem [ref=f1e366] [cursor=pointer]:
+      - generic [ref=f1e370]:
+        - text: Lyria 3 Clip Preview
+        - paragraph [ref=f1e371]: OpenCode · google
+    - menuitem [ref=f1e372] [cursor=pointer]:
+      - generic [ref=f1e376]:
+        - text: Lyria 3 Pro Preview
+        - paragraph [ref=f1e377]: OpenCode · google
+    - menuitem [ref=f1e378] [cursor=pointer]:
+      - generic [ref=f1e382]:
+        - text: Veo 3 1 Fast Generate Preview
+        - paragraph [ref=f1e383]: OpenCode · google
+    - menuitem [ref=f1e384] [cursor=pointer]:
+      - generic [ref=f1e388]:
+        - text: Veo 3 1 Generate Preview
+        - paragraph [ref=f1e389]: OpenCode · google
+    - menuitem [ref=f1e390] [cursor=pointer]:
+      - generic [ref=f1e394]:
+        - text: Veo 3 1 Lite Generate Preview
+        - paragraph [ref=f1e395]: OpenCode · google
+    - menuitem [ref=f1e396] [cursor=pointer]:
+      - generic [ref=f1e400]:
+        - text: Ollama Qwen3 Coder
+        - paragraph [ref=f1e401]: OpenCode · llama-swap
+    - menuitem [ref=f1e402] [cursor=pointer]:
+      - generic [ref=f1e406]:
+        - text: Qwen Coder 128k
+        - paragraph [ref=f1e407]: OpenCode · llama-swap
+    - menuitem [ref=f1e408] [cursor=pointer]:
+      - generic [ref=f1e412]:
+        - text: Qwen Coder 262k
+        - paragraph [ref=f1e413]: OpenCode · llama-swap
+    - menuitem [ref=f1e414] [cursor=pointer]:
+      - generic [ref=f1e418]:
+        - text: Qwen Coder 64k
+        - paragraph [ref=f1e419]: OpenCode · llama-swap
+    - menuitem [ref=f1e420] [cursor=pointer]:
+      - generic [ref=f1e424]:
+        - text: Qwen Coder 96k
+        - paragraph [ref=f1e425]: OpenCode · llama-swap
+    - menuitem [ref=f1e426] [cursor=pointer]:
+      - generic [ref=f1e430]:
+        - text: Qwen Default
+        - paragraph [ref=f1e431]: OpenCode · llama-swap
+    - menuitem [ref=f1e432] [cursor=pointer]:
+      - generic [ref=f1e436]:
+        - text: Qwen Research
+        - paragraph [ref=f1e437]: OpenCode · llama-swap
+    - menuitem [ref=f1e438] [cursor=pointer]:
+      - generic [ref=f1e442]:
+        - text: Qwen Research Mtp
+        - paragraph [ref=f1e443]: OpenCode · llama-swap
+    - menuitem [ref=f1e444] [cursor=pointer]:
+      - generic [ref=f1e448]:
+        - text: Qwen3 6 35b 128k
+        - paragraph [ref=f1e449]: OpenCode · llama-swap
+    - menuitem [ref=f1e450] [cursor=pointer]:
+      - generic [ref=f1e454]:
+        - text: Qwen3 6 35b 262k
+        - paragraph [ref=f1e455]: OpenCode · llama-swap
+    - menuitem [ref=f1e456] [cursor=pointer]:
+      - generic [ref=f1e460]:
+        - text: Qwen3 6 35b 64k
+        - paragraph [ref=f1e461]: OpenCode · llama-swap
+    - menuitem [ref=f1e462] [cursor=pointer]:
+      - generic [ref=f1e466]:
+        - text: Qwen3 6 35b 96k
+        - paragraph [ref=f1e467]: OpenCode · llama-swap
+    - menuitem [ref=f1e468] [cursor=pointer]:
+      - generic [ref=f1e472]:
+        - text: Qwen3 6 35b Mtp 64k
+        - paragraph [ref=f1e473]: OpenCode · llama-swap
+    - menuitem [ref=f1e474] [cursor=pointer]:
+      - generic [ref=f1e478]:
+        - text: Auto
+        - paragraph [ref=f1e479]: OpenCode · morph
+    - menuitem [ref=f1e480] [cursor=pointer]:
+      - generic [ref=f1e484]:
+        - text: Morph V3 Fast
+        - paragraph [ref=f1e485]: OpenCode · morph
+    - menuitem [ref=f1e486] [cursor=pointer]:
+      - generic [ref=f1e490]:
+        - text: Morph V3 Large
+        - paragraph [ref=f1e491]: OpenCode · morph
+    - menuitem [ref=f1e492] [cursor=pointer]:
+      - generic [ref=f1e496]:
+        - text: Deepseek V4 Flash
+        - paragraph [ref=f1e497]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e498] [cursor=pointer]:
+      - generic [ref=f1e502]:
+        - text: Deepseek V4 Flash:0731
+        - paragraph [ref=f1e503]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e504] [cursor=pointer]:
+      - generic [ref=f1e508]:
+        - text: Deepseek V4 Pro
+        - paragraph [ref=f1e509]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e510] [cursor=pointer]:
+      - generic [ref=f1e514]:
+        - text: Gemma4:31b
+        - paragraph [ref=f1e515]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e516] [cursor=pointer]:
+      - generic [ref=f1e520]:
+        - text: Glm 5 1
+        - paragraph [ref=f1e521]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e522] [cursor=pointer]:
+      - generic [ref=f1e526]:
+        - text: Glm 5 2
+        - paragraph [ref=f1e527]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e528] [cursor=pointer]:
+      - generic [ref=f1e532]:
+        - text: Gpt Oss:120b
+        - paragraph [ref=f1e533]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e534] [cursor=pointer]:
+      - generic [ref=f1e538]:
+        - text: Gpt Oss:20b
+        - paragraph [ref=f1e539]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e540] [cursor=pointer]:
+      - generic [ref=f1e544]:
+        - text: Kimi K2 5
+        - paragraph [ref=f1e545]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e546] [cursor=pointer]:
+      - generic [ref=f1e550]:
+        - text: Kimi K2 6
+        - paragraph [ref=f1e551]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e552] [cursor=pointer]:
+      - generic [ref=f1e556]:
+        - text: Kimi K2 7 Code
+        - paragraph [ref=f1e557]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e558] [cursor=pointer]:
+      - generic [ref=f1e562]:
+        - text: Kimi K3
+        - paragraph [ref=f1e563]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e564] [cursor=pointer]:
+      - generic [ref=f1e568]:
+        - text: Minimax M2 5
+        - paragraph [ref=f1e569]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e570] [cursor=pointer]:
+      - generic [ref=f1e574]:
+        - text: Minimax M2 7
+        - paragraph [ref=f1e575]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e576] [cursor=pointer]:
+      - generic [ref=f1e580]:
+        - text: Minimax M3
+        - paragraph [ref=f1e581]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e582] [cursor=pointer]:
+      - generic [ref=f1e586]:
+        - text: Mistral Large 3:675b
+        - paragraph [ref=f1e587]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e588] [cursor=pointer]:
+      - generic [ref=f1e592]:
+        - text: Nemotron 3 Nano:30b
+        - paragraph [ref=f1e593]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e594] [cursor=pointer]:
+      - generic [ref=f1e598]:
+        - text: Nemotron 3 Super
+        - paragraph [ref=f1e599]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e600] [cursor=pointer]:
+      - generic [ref=f1e604]:
+        - text: Nemotron 3 Ultra
+        - paragraph [ref=f1e605]: OpenCode · ollama-cloud
+    - menuitem [ref=f1e606] [cursor=pointer]:
+      - generic [ref=f1e610]:
+        - text: Qwen3 5:397b
+        - paragraph [ref=f1e611]: OpenCode · ollama-cloud

@@ -1,0 +1,28 @@
+- generic [active] [ref=e1]:
+  - region "Notifications (F8)":
+    - list
+  - generic [ref=e4]:
+    - link "View credits" [ref=e6] [cursor=pointer]:
+      - /url: https://accounts.adam.new/billing
+      - generic [ref=e9]: 3.0M
+    - main [ref=e13]:
+      - heading "Good morning, test-pcad!" [level=1] [ref=e16]
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - generic:
+            - paragraph: Drop images and 3D models here
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - img "Adam Logo" [ref=e25]
+            - textbox "Start building with Adam..." [ref=e27]
+            - button [ref=e28] [cursor=pointer]
+          - generic [ref=e32]:
+            - generic [ref=e33]:
+              - button [ref=e35] [cursor=pointer]
+              - button [ref=e40] [cursor=pointer]
+            - generic [ref=e44]:
+              - button "GPT-5.6 Sol Big Pickle" [ref=e612] [cursor=pointer]:
+                - generic [ref=e46]:
+                  - generic [ref=e613]: GPT-5.6 Sol
+                  - generic [ref=e47]: Big Pickle
+              - button [disabled] [ref=e50]

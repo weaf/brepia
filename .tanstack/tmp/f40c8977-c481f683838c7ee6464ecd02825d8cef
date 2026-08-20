@@ -46,7 +46,6 @@ import { Route as LayoutAuthHistoryRouteImport } from './routes/_layout/_auth/hi
 import { Route as ApiModelsCatalogAllRouteImport } from './routes/api/models/catalog/all'
 import { Route as ApiInternalAccountDeleteRouteImport } from './routes/api/internal/account/delete'
 import { Route as ApiAiSettingsProvidersTestRouteImport } from './routes/api/ai-settings/providers/test'
-import { Route as ApiAiSettingsProvidersBuiltinsRouteImport } from './routes/api/ai-settings/providers/builtins'
 import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId'
 import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api/ai-settings/profiles/$profileId'
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id'
@@ -240,12 +239,6 @@ const ApiAiSettingsProvidersTestRoute =
     path: '/test',
     getParentRoute: () => ApiAiSettingsProvidersRoute,
   } as any)
-const ApiAiSettingsProvidersBuiltinsRoute =
-  ApiAiSettingsProvidersBuiltinsRouteImport.update({
-    id: '/builtins',
-    path: '/builtins',
-    getParentRoute: () => ApiAiSettingsProvidersRoute,
-  } as any)
 const ApiAiSettingsProvidersProviderIdRoute =
   ApiAiSettingsProvidersProviderIdRouteImport.update({
     id: '/$providerId',
@@ -312,7 +305,6 @@ export interface FileRoutesByFullPath {
   '/editor/$id': typeof LayoutAuthEditorIdRoute
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren
-  '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute
@@ -355,7 +347,6 @@ export interface FileRoutesByTo {
   '/editor/$id': typeof LayoutAuthEditorIdRoute
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren
-  '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute
@@ -401,7 +392,6 @@ export interface FileRoutesById {
   '/_layout/_auth/editor/$id': typeof LayoutAuthEditorIdRoute
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren
-  '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute
@@ -446,7 +436,6 @@ export interface FileRouteTypes {
     | '/editor/$id'
     | '/api/ai-settings/profiles/$profileId'
     | '/api/ai-settings/providers/$providerId'
-    | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
@@ -489,7 +478,6 @@ export interface FileRouteTypes {
     | '/editor/$id'
     | '/api/ai-settings/profiles/$profileId'
     | '/api/ai-settings/providers/$providerId'
-    | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
@@ -534,7 +522,6 @@ export interface FileRouteTypes {
     | '/_layout/_auth/editor/$id'
     | '/api/ai-settings/profiles/$profileId'
     | '/api/ai-settings/providers/$providerId'
-    | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
@@ -834,13 +821,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiSettingsProvidersTestRouteImport
       parentRoute: typeof ApiAiSettingsProvidersRoute
     }
-    '/api/ai-settings/providers/builtins': {
-      id: '/api/ai-settings/providers/builtins'
-      path: '/builtins'
-      fullPath: '/api/ai-settings/providers/builtins'
-      preLoaderRoute: typeof ApiAiSettingsProvidersBuiltinsRouteImport
-      parentRoute: typeof ApiAiSettingsProvidersRoute
-    }
     '/api/ai-settings/providers/$providerId': {
       id: '/api/ai-settings/providers/$providerId'
       path: '/$providerId'
@@ -959,7 +939,6 @@ const ApiAiSettingsProvidersProviderIdRouteWithChildren =
 
 interface ApiAiSettingsProvidersRouteChildren {
   ApiAiSettingsProvidersProviderIdRoute: typeof ApiAiSettingsProvidersProviderIdRouteWithChildren
-  ApiAiSettingsProvidersBuiltinsRoute: typeof ApiAiSettingsProvidersBuiltinsRoute
   ApiAiSettingsProvidersTestRoute: typeof ApiAiSettingsProvidersTestRoute
 }
 
@@ -967,7 +946,6 @@ const ApiAiSettingsProvidersRouteChildren: ApiAiSettingsProvidersRouteChildren =
   {
     ApiAiSettingsProvidersProviderIdRoute:
       ApiAiSettingsProvidersProviderIdRouteWithChildren,
-    ApiAiSettingsProvidersBuiltinsRoute: ApiAiSettingsProvidersBuiltinsRoute,
     ApiAiSettingsProvidersTestRoute: ApiAiSettingsProvidersTestRoute,
   }
 
