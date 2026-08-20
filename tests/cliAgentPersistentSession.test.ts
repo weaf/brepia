@@ -44,20 +44,24 @@ describe('persistent CLI agent sessions', () => {
     assert.equal(cliAgentSessionIdFromPrompt('codex', prompt), codexId);
   });
 
-  it('uses native resume syntax and keeps Codex sessions non-ephemeral', () => {
-    assert.deepEqual(
-      buildCliAgentArgs('opencode', 'llama-swap/qwen3.6-35b-mtp-128k', 'ses_123'),
-      [
-        'run',
-        '--format',
-        'json',
-        '--pure',
-        '-m',
-        'llama-swap/qwen3.6-35b-mtp-128k',
-        '--session',
-        'ses_123',
-      ],
+  it('uses native resume syntax, the pCAD OpenCode agent, and non-ephemeral Codex sessions', () => {
+    const openCodeArgs = buildCliAgentArgs(
+      'opencode',
+      'llama-swap/qwen3.6-35b-mtp-128k',
+      'ses_123',
     );
+    assert.deepEqual(openCodeArgs, [
+      'run',
+      '--format',
+      'json',
+      '--agent',
+      'pcad-builder',
+      '-m',
+      'llama-swap/qwen3.6-35b-mtp-128k',
+      '--session',
+      'ses_123',
+    ]);
+    assert.equal(openCodeArgs.includes('--pure'), false);
 
     const codexArgs = buildCliAgentArgs(
       'codex',
