@@ -120,11 +120,10 @@ async function resolveBuiltInVisionModel(
     const override = overrides.anthropic;
     if (override?.enabled === false) throw new Error('Anthropic provider is disabled');
     const id = modelId.slice('anthropic/'.length).replace(/\./g, '-');
+    const baseURL = normalizedAnthropicBaseURL(override?.baseUrl);
     const provider = createAnthropic({
       apiKey: override?.credential ?? env('ANTHROPIC_API_KEY'),
-      ...(normalizedAnthropicBaseURL(override?.baseUrl)
-        ? { baseURL: normalizedAnthropicBaseURL(override?.baseUrl) }
-        : {}),
+      ...(baseURL ? { baseURL } : {}),
     });
     return { modelId, model: provider(id) };
   }
@@ -143,12 +142,13 @@ async function resolveBuiltInVisionModel(
   if (modelId.startsWith('local/')) {
     const override = overrides['openai-compatible'];
     if (override?.enabled === false) throw new Error('Local provider is disabled');
+    const baseURL = override?.baseUrl || env('LOCAL_LLM_BASE_URL').trim();
+    if (!baseURL) {
+      throw new Error('Local provider Base URL is not configured in AI Settings');
+    }
     const provider = createOpenAICompatible({
       name: 'local',
-      baseURL:
-        override?.baseUrl ||
-        env('LOCAL_LLM_BASE_URL') ||
-        'http://localhost:11434/v1',
+      baseURL,
       apiKey:
         (override?.credential ?? env('LOCAL_LLM_API_KEY')) || 'ollama',
     });
