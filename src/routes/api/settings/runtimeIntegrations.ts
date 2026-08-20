@@ -19,10 +19,12 @@ export const Route = createFileRoute('/api/settings/runtimeIntegrations')({
       GET: async ({ request }) => {
         try {
           const user = await requireUser(request);
-          const [integrations, localModels] = await Promise.all([
-            discoverRuntimeIntegrations(),
-            discoverLocalModels(user.id).catch(() => []),
-          ]);
+          const integrations = await discoverRuntimeIntegrations();
+          const includeModels =
+            new URL(request.url).searchParams.get('includeModels') === '1';
+          if (!includeModels) return json(integrations);
+
+          const localModels = await discoverLocalModels(user.id).catch(() => []);
           return json({ integrations, localModels });
         } catch (err) {
           return json(
