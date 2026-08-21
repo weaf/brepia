@@ -115,7 +115,12 @@ describe('conversation workspace input mirroring', { concurrency: false }, () =>
         CONVERSATION_ID,
         dependencies,
       );
-      assert.deepEqual(first, { discovered: 2, copied: 2, existing: 0 });
+      assert.deepEqual(first, {
+        discovered: 2,
+        copied: 2,
+        existing: 0,
+        failed: 0,
+      });
       assert.equal(downloadCalls, 2);
       assert.equal(
         await readFile(
@@ -147,8 +152,84 @@ describe('conversation workspace input mirroring', { concurrency: false }, () =>
         CONVERSATION_ID,
         dependencies,
       );
-      assert.deepEqual(second, { discovered: 2, copied: 0, existing: 2 });
+      assert.deepEqual(second, {
+        discovered: 2,
+        copied: 0,
+        existing: 2,
+        failed: 0,
+      });
       assert.equal(downloadCalls, 2);
+    });
+  });
+
+  it('logs and skips one broken artifact while continuing with the others', async () => {
+    await withWorkspaceRoot(async () => {
+      await initializeConversationWorkspace({
+        conversationId: CONVERSATION_ID,
+        title: 'Partial input mirror test',
+      });
+
+      const artifacts: ConversationInputArtifact[] = [
+        {
+          kind: 'image',
+          id: IMAGE_ID,
+          bucket: 'images',
+          storagePath: `user/${CONVERSATION_ID}/${IMAGE_ID}`,
+          extension: null,
+        },
+        {
+          kind: 'mesh',
+          id: MESH_ID,
+          bucket: 'meshes',
+          storagePath: `user/${CONVERSATION_ID}/${MESH_ID}.stl`,
+          extension: 'stl',
+        },
+      ];
+
+      const originalConsoleError = console.error;
+      console.error = () => undefined;
+      try {
+        const result = await syncConversationInputArtifacts(
+          request(),
+          CONVERSATION_ID,
+          {
+            listArtifacts: async () => artifacts,
+            downloadArtifact: async (
+              _request: Request,
+              artifact: ConversationInputArtifact,
+            ) => {
+              if (artifact.kind === 'image') {
+                throw new Error('missing image object');
+              }
+              return {
+                bytes: new TextEncoder().encode('mesh-still-copied'),
+                mediaType: 'application/sla',
+              };
+            },
+          },
+        );
+
+        assert.deepEqual(result, {
+          discovered: 2,
+          copied: 1,
+          existing: 0,
+          failed: 1,
+        });
+        assert.equal(
+          await readFile(
+            conversationInputArtifactPath(
+              CONVERSATION_ID,
+              'mesh',
+              MESH_ID,
+              'stl',
+            ),
+            'utf8',
+          ),
+          'mesh-still-copied',
+        );
+      } finally {
+        console.error = originalConsoleError;
+      }
     });
   });
 });
