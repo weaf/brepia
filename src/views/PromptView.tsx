@@ -9,6 +9,7 @@ import TextAreaChat from '@/components/TextAreaChat';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
 import { Model } from '@shared/types';
+import { conversationTitleFromText } from '@shared/conversationTitle';
 import { MessageItem } from '../types/misc.ts';
 import { LimitReachedMessage } from '@/components/LimitReachedMessage';
 import { LowPromptsWarningMessage } from '@/components/LowPromptsWarningMessage';
@@ -142,6 +143,10 @@ export function PromptView() {
       const meshCount = parts.filter(
         (p) => p.type === 'data-mesh-context',
       ).length;
+      const initialTitle = conversationTitleFromText(text, {
+        imageCount,
+        meshCount,
+      });
 
       posthog.capture('new_conversation', {
         type: type,
@@ -164,14 +169,16 @@ export function PromptView() {
       if (preferencesError) throw preferencesError;
       const promptProfileId = aiPreferences?.default_prompt_profile_id ?? null;
 
-      // Create conversation immediately with 'New Conversation'
+      // Create the conversation with a useful local title immediately. The
+      // title may be refined asynchronously below, but conversation identity
+      // is always the UUID and never depends on this human-readable metadata.
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
         .insert([
           {
             id: conversationId,
             user_id: user.id,
-            title: 'New Conversation',
+            title: initialTitle,
             type: type,
             settings: {
               model: model,
@@ -240,6 +247,55 @@ export function PromptView() {
             },
           });
         });
+
+      // Title refinement is deliberately best-effort and non-blocking. Local
+      // installs get the deterministic initial title even when no hosted
+      // provider credential exists; if the title endpoint can improve it, the
+      // sidebar/history cache is refreshed after the DB update.
+      void (async () => {
+        try {
+          const accessToken = (await supabase.auth.getSession()).data.session
+            ?.access_token;
+          const response = await fetch(apiUrl('title-generator'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(accessToken
+                ? { Authorization: `Bearer ${accessToken}` }
+                : {}),
+            },
+            body: JSON.stringify({ text, imageCount, meshCount }),
+          });
+          if (!response.ok) return;
+
+          const result: unknown = await response.json();
+          if (
+            typeof result !== 'object' ||
+            result === null ||
+            !('title' in result) ||
+            typeof result.title !== 'string' ||
+            !result.title.trim() ||
+            result.title === initialTitle
+          ) {
+            return;
+          }
+
+          const { error: titleUpdateError } = await supabase
+            .from('conversations')
+            .update({ title: result.title })
+            .eq('id', conversation.id)
+            .eq('user_id', user.id);
+          if (titleUpdateError) throw titleUpdateError;
+          await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        } catch (error) {
+          Sentry.captureException(error, {
+            extra: {
+              hook: 'PromptView conversation title',
+              conversationId: conversation.id,
+            },
+          });
+        }
+      })();
 
       return {
         conversationId: conversation.id,
