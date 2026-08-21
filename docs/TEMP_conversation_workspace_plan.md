@@ -18,7 +18,11 @@ conversations/
     │   └── files/
     ├── models/
     │   ├── current.scad
+    │   ├── current.json
     │   ├── revisions/
+    │   │   ├── 001.scad
+    │   │   ├── 001.json
+    │   │   └── ...
     │   └── generated/
     ├── renders/
     ├── exports/
@@ -31,58 +35,34 @@ conversations/
     └── logs/
 ```
 
-Temporary scratch files used only during isolated compilation/validation should stay in the system temp directory and be removed after use. The conversation workspace is for persistent or diagnostically useful artifacts.
+Temporary compile/validation scratch files stay in the system temp directory. The conversation workspace is for persistent or diagnostically useful artifacts.
 
 ## Step 1 — Conversation titles
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-New conversations receive a useful title from the first user request instead of remaining `New Conversation`.
-
-Implemented on `local-dev-next`:
-
-- deterministic title generation from the first user text
-- image/mesh-aware fallback titles when there is no text
-- existing `/api/title-generator` returns the local deterministic title when Anthropic is not configured
-- optional Anthropic refinement remains best-effort and non-blocking
-- title generation is kept off the critical prompt path; legacy `New Conversation` is retained as an insert fallback
-- optional refined titles update Supabase asynchronously and refresh conversation queries
-- focused title-generation tests added
-- Supabase-style non-`Error` failures now surface their actual message in the UI
-
-Validation result:
-
-- user confirmed new conversation creation and naming work in the running app on 2026-08-21
+- deterministic local titles from first prompt
+- image/mesh-aware fallback titles
+- optional hosted title refinement remains best-effort
+- naming never blocks prompt creation
+- UUID remains technical conversation identity
 
 ## Step 2 — Conversation workspace abstraction
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-The canonical server-side path abstraction lives in `src/server/conversationWorkspace.ts`.
+`src/server/conversationWorkspace.ts` owns all persistent workspace paths.
 
-Implemented on `local-dev-next`:
+- configurable root via `PCAD_CONVERSATIONS_DIR`, default `./conversations`
+- default root is gitignored
+- strict UUID/path-containment validation
+- canonical helpers for inputs, models, renders, exports, agents, and logs
+- idempotent workspace initialization
+- versioned `conversation.json`
+- atomic manifest writes
+- ownership mismatch rejection
 
-- configurable workspace root via `PCAD_CONVERSATIONS_DIR`
-- default root is `./conversations`
-- default `conversations/` directory is gitignored
-- strict UUID validation for conversation ownership boundaries
-- path-containment checks prevent escaping the configured root
-- safe agent workspace names prevent traversal through agent subdirectories
-- canonical path helpers for conversation metadata, inputs, models, renders, exports, agents, and logs
-- idempotent `initializeConversationWorkspace()` creates the complete directory tree
-- `conversation.json` uses a versioned manifest and preserves existing extra metadata on reinitialization
-- manifest ownership mismatch is rejected rather than silently reusing another conversation's directory
-- manifest writes use a temporary file + rename so readers do not observe partially written JSON
-- focused server tests cover path safety, initialization, idempotence, metadata preservation, ownership mismatch, and isolation between two conversations
-
-Validation result:
-
-- full server suite passed: 167 tests, 57 suites, 0 failures
-
-Important scope boundary:
-
-- Step 2 defines and validates the workspace layer only.
-- Temporary OpenSCAD validation data remains in the system temp directory.
+Validation: full server suite passed with 167 tests / 57 suites / 0 failures at the Step 2 gate.
 
 ## Step 3 — Route persistent artifacts into the conversation workspace
 
@@ -90,82 +70,73 @@ Important scope boundary:
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-Initialize/update a UUID-owned local workspace when a real conversation is used for generation.
-
-Implemented on `local-dev-next`:
-
-- new `src/server/conversationWorkspaceLifecycle.ts`
-- both `/api/parametric-chat` and `/api/creative-chat` run the lifecycle hook before the existing AI handler
-- lifecycle hook clones the request so the downstream AI handler receives the untouched original body
-- only normal POST generation requests participate; GET/OPTIONS/cancel/malformed requests do not create workspaces
-- authenticated Supabase conversation row remains authoritative for `id`, title, type, and timestamps
-- only conversations owned by the authenticated user can initialize a workspace
-- existing conversations without a workspace are handled lazily the next time they generate
-- lifecycle failures are logged but are deliberately non-fatal to the stable chat path
-- focused tests cover request parsing, metadata synchronization, request-body preservation, inaccessible conversations, and non-fatal filesystem failure behavior
-
-Validation result:
-
-- user created two normal conversations and confirmed two isolated UUID workspaces
-- both `conversation.json` manifests contained the matching ID, generated title, `parametric` type, and Supabase timestamps
+- both parametric and creative chat routes run the workspace lifecycle
+- request body is cloned; the existing chat handler receives the untouched request
+- authenticated Supabase conversation row is authoritative
+- old conversations get workspaces lazily
+- workspace failures are non-fatal to the stable chat path
+- user confirmed two conversations produced two isolated UUID workspaces with correct manifests
 
 ### Step 3B — Conversation inputs
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER ACCEPTED 2026-08-21**
 
-Mirror persistent user inputs from the existing private Supabase storage into the UUID-owned local workspace. Supabase remains authoritative; local files are idempotent conversation-scoped copies.
-
-Implemented on `local-dev-next`:
-
-- new `src/server/conversationWorkspaceInputs.ts`
-- workspace lifecycle runs input synchronization after workspace initialization and before the existing AI handler
-- only successful records explicitly marked by the existing input persistence contract are mirrored:
-  - image prompt `{ text: "User uploaded image" }`
-  - mesh prompt `{ text: "User uploaded mesh" }`
-- generated image/mesh records with other prompts are not treated as user inputs
-- image source remains private storage `images/<user>/<conversation>/<image-id>`
-- mesh source remains private storage `meshes/<user>/<conversation>/<mesh-id>.<file_type>`
-- mirrored destinations are canonical workspace paths only:
-  - `input/images/<image-id>.<detected-extension>`
-  - `input/meshes/<mesh-id>.<file_type>`
-- image extension is derived from downloaded MIME type (`png`, `jpg`, `webp`, `gif`, otherwise `bin`) rather than trusting the UI's historical `.png` filename placeholder
-- a new safe `conversationInputArtifactPath()` prevents artifact IDs/extensions from escaping their conversation directory
-- local writes use temporary files + rename
-- synchronization is idempotent: already mirrored artifacts are not downloaded again
-- one missing/broken storage object is logged and skipped without preventing later artifacts from being mirrored
-- database/listing or filesystem failures remain covered by the Step 3A non-fatal lifecycle guard, so they cannot make the stable chat path unavailable
-- focused tests cover prompt classification, MIME mapping, safe artifact paths, image/mesh copying, repeat-run idempotence, partial storage failure, request preservation, and non-fatal input-sync failure behavior
-
-Current input scope:
-
-- image uploads: implemented
-- mesh uploads: implemented
-- parametric STL multi-angle reference images are submitted to the model as normal image inputs and therefore intentionally mirror into `input/images/`
-- the separate mesh preview storage object (`preview-<mesh-id>`) is not mirrored as an input artifact; organization of render/preview derivatives belongs to Step 3D
-- generic `input/files/`: directory and safe path contract are reserved, but pCAD currently has no generic-file attachment pipeline to mirror; add that routing when such an upload source exists rather than inventing a second file store now
-
-Validation gate before Step 3C:
-
-- `npm run typecheck`
-- `npx tsx --test src/server/conversationWorkspaceInputs.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
-- `npx tsx --test src/server/*.test.ts`
-- manual image test: start a new conversation with an uploaded PNG/JPEG/WebP and verify a matching file appears under that conversation's `input/images/`
-- manual mesh test: start a parametric conversation with an STL and verify the matching `<mesh-id>.stl` appears under `input/meshes/`
-- verify the same input does not create duplicate files after another turn in the same conversation
-- confirm normal pCAD generation and vision handling still work
-
-Do not begin Step 3C until the user confirms Step 3B works in the running app.
+- `src/server/conversationWorkspaceInputs.ts`
+- successful user-uploaded images mirror to `input/images/`
+- successful user-uploaded meshes mirror to `input/meshes/`
+- Supabase storage remains authoritative
+- MIME type determines image extension
+- input mirroring is idempotent
+- missing/broken individual storage objects are skipped without stopping later artifacts
+- generated mesh preview derivatives remain reserved for Step 3D
+- `input/files/` remains reserved until pCAD has a generic-file upload pipeline
 
 ### Step 3C — Generated OpenSCAD source
 
-**Status: BLOCKED ON STEP 3B USER VALIDATION**
+**Status: READY FOR USER VALIDATION**
 
-Persist `models/current.scad` plus immutable/revisioned source snapshots.
+Persist successful `build_parametric_model` sources from the active conversation branch.
+
+Implemented on `local-dev-next`:
+
+- new `src/server/conversationWorkspaceModels.ts`
+- lifecycle loads `current_message_leaf_id` and runs model-source sync for parametric conversations only
+- the active message branch is reconstructed through `parent_message_id`; abandoned sibling branches cannot become `current.scad`
+- only `tool-build_parametric_model` parts with `state=output-available` and `output.status=success` are revisioned
+- each unique tool call receives an immutable numbered source revision:
+  - `models/revisions/001.scad`
+  - `models/revisions/001.json`
+  - `models/revisions/002.scad`
+  - etc.
+- revision metadata records revision number, tool call ID, message ID/timestamp, model title/version, SHA-256, and save time
+- revision replay is idempotent by `toolCallId`; reconnect recovery cannot create duplicate revisions
+- immutable revision checksum/replay mismatches are rejected instead of silently rewriting history
+- `models/current.scad` always follows the newest successful build on the currently selected active branch
+- `models/current.json` records which immutable revision `current.scad` represents
+- switching to an older branch updates `current.scad` without rewriting or deleting newer immutable revisions
+- legacy conversations lazily backfill successful builds on their active branch when next used
+- per-conversation serialization prevents same-process concurrent revision races
+- orphaned `.scad` revision numbers are included when selecting the next revision number
+- model-sync failures remain inside the existing non-fatal workspace lifecycle guard and cannot block the normal chat response
+- focused tests cover active-branch selection, failed-build exclusion, numbered revisions, metadata, repeat-run idempotence, branch switching, immutable replay protection, revision path validation, creative-conversation exclusion, and non-fatal lifecycle failure
+
+Validation gate before Step 3D:
+
+- `npm run typecheck`
+- `npx tsx --test src/server/conversationWorkspaceModels.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
+- `npx tsx --test src/server/*.test.ts`
+- manual UI: create a parametric conversation and let at least one build complete; verify `models/current.scad` and `models/revisions/001.scad`
+- make a second CAD change in the same conversation; verify `002.scad` appears and `current.scad` matches it
+- send another normal turn without a new successful build and verify no duplicate revision appears
+- if convenient, switch/retry to an older branch and verify `current.scad` follows that branch while immutable revisions remain intact
+- confirm normal pCAD generation still works
+
+Do not begin Step 3D until the user confirms Step 3C works in the running app.
 
 ### Step 3D — Renders and exports
 
-**Status: NOT STARTED**
+**Status: BLOCKED ON STEP 3C USER VALIDATION**
 
 Persist render/inspection assets by revision/build and exports under the corresponding format directory.
 
@@ -175,34 +146,25 @@ Persist render/inspection assets by revision/build and exports under the corresp
 
 Route OpenCode/Codex conversation-scoped artifacts and useful diagnostics under `agents/` and `logs/`.
 
-Step 3 requirements:
-
-- every artifact operation carries a `conversationId`
-- no production code constructs persistent conversation artifact paths ad hoc; all paths come from `conversationWorkspace.ts`
-- Supabase remains the authoritative application data store where it already owns records; the local workspace complements it rather than silently replacing database ownership
-- temporary validation scratch data remains outside the persistent conversation workspace
-- existing conversations without a workspace continue to load; create workspace lazily where appropriate
-
 ## Step 4 — Repository-root cleanup and guardrails
 
 **Status: NOT STARTED**
 
-After production paths are fixed, classify and clean the current root artifacts instead of merely moving the mess into generic top-level folders.
+After production paths are fixed, classify and clean current root artifacts instead of merely moving the mess into generic top-level folders. Add `.gitignore`/test-output guardrails where appropriate.
 
-Likely categories:
+## Global requirements
 
-- manual/debug screenshots (`b9-*.png`, `debug-settings*.png`, etc.)
-- generated model/render/export artifacts (`parametric_box*`, ad-hoc `.scad`, `.stl`)
-- test fixtures/results that belong under `tests/`, `test-results/`, or another explicit test-artifact directory
-- obsolete one-off files that can be deleted after review
-
-Add further `.gitignore`/test-output rules where appropriate so the root stays clean going forward.
+- every artifact operation carries a `conversationId`
+- no production code constructs persistent conversation artifact paths outside `conversationWorkspace.ts`
+- Supabase remains authoritative where it already owns records; the local workspace complements it
+- temporary validation scratch data stays outside the persistent conversation workspace
+- old conversations remain usable through lazy workspace creation/backfill
 
 ## Completion criteria
 
 - no normal conversation runtime writes persistent artifacts into the repository root
 - each conversation has a stable UUID-owned workspace
-- human-readable titles work independently of filesystem identity
+- human-readable titles are independent of filesystem identity
 - old conversations remain usable
 - root contains only project/source/config/documentation files and explicitly owned test/development directories
-- temporary plan is removed after final documentation is updated
+- this temporary plan is removed after final documentation is updated
