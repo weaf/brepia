@@ -246,8 +246,8 @@ export const PARAMETRIC_MODELS: ModelConfig[] = [
     supportsVision: true,
   },
   {
-    id: 'google/gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash',
+    id: 'google/gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
     description: 'Fast, token-efficient Google model for everyday tasks',
     provider: 'Google',
     supportsTools: true,
@@ -291,8 +291,8 @@ export const PARAMETRIC_MODELS: ModelConfig[] = [
     supportsVision: true,
   },
   {
-    id: 'x-ai/grok-4.5',
-    name: 'Grok 4.5',
+    id: 'x-ai/grok-4.6',
+    name: 'Grok 4.6',
     description: 'Latest xAI model with frontier coding and STEM performance',
     provider: 'xAI',
     supportsTools: true,
