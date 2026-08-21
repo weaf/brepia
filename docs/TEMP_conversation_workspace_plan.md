@@ -35,80 +35,86 @@ Temporary scratch files used only during isolated compilation/validation should 
 
 ## Step 1 — Conversation titles
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-Make new conversations receive a useful title from the first user request instead of remaining `New Conversation`.
+New conversations receive a useful title from the first user request instead of remaining `New Conversation`.
 
 Implemented on `local-dev-next`:
 
 - deterministic title generation from the first user text
 - image/mesh-aware fallback titles when there is no text
-- existing `/api/title-generator` now returns the local deterministic title immediately when Anthropic is not configured
+- existing `/api/title-generator` returns the local deterministic title when Anthropic is not configured
 - optional Anthropic refinement remains best-effort and non-blocking
-- new conversations are inserted with the deterministic title instead of `New Conversation`
+- title generation is kept off the critical prompt path; legacy `New Conversation` is retained as an insert fallback
 - optional refined titles update Supabase asynchronously and refresh conversation queries
 - focused title-generation tests added
+- Supabase-style non-`Error` failures now surface their actual message in the UI
 
-Requirements:
+Validation result:
 
-- The first saved conversation already has a useful deterministic title, so naming never depends on an external AI provider.
-- The existing title-generator endpoint may improve the title when Anthropic is configured, but must fall back immediately and safely when it is not.
-- Empty-text conversations with image/mesh input get a useful generic title.
-- Generated titles are normalized, bounded to the existing <80-character contract, and never contain multiline/model chatter.
-- Conversation UUID remains the technical identity; title changes must not affect future workspace paths.
-- Add focused tests for deterministic title creation and normalization.
-
-Validation gate before Step 2:
-
-- `npm run typecheck`
-- `npm test -- tests/conversationTitle.test.ts`
-- existing server/unit tests as appropriate
-- manual UI test: create several conversations (text-only, image reference, mesh if convenient) and confirm the sidebar/history shows distinct useful titles after reload
-
-Do not begin Step 2 until the user confirms Step 1 works in the running app.
+- user confirmed new conversation creation and naming work in the running app on 2026-08-21
 
 ## Step 2 — Conversation workspace abstraction
 
-**Status: BLOCKED ON STEP 1 USER VALIDATION**
+**Status: READY FOR USER VALIDATION**
 
-Create a single server-side path abstraction, e.g. `src/server/conversationWorkspace.ts`.
+Create a single server-side path abstraction in `src/server/conversationWorkspace.ts`.
 
-Planned contract:
+Implemented on `local-dev-next`:
 
-- configurable root, preferably `PCAD_CONVERSATIONS_DIR`, with a sensible local default
-- `conversationRoot(conversationId)`
-- `conversationInputDir(conversationId)`
-- `conversationModelDir(conversationId)`
-- `conversationRenderDir(conversationId)`
-- `conversationExportDir(conversationId)`
-- `conversationAgentDir(conversationId, agent)`
-- path traversal protection and UUID-safe ownership boundaries
-- workspace initialization creates `conversation.json` and required directories idempotently
+- configurable workspace root via `PCAD_CONVERSATIONS_DIR`
+- default root is `./conversations`
+- default `conversations/` directory is gitignored
+- strict UUID validation for conversation ownership boundaries
+- path-containment checks prevent escaping the configured root
+- safe agent workspace names prevent traversal through agent subdirectories
+- canonical path helpers for:
+  - conversation root and `conversation.json`
+  - input images / meshes / generic files
+  - models / revisions / generated model files
+  - renders
+  - exports (`stl`, `3mf`, `dxf`)
+  - agent directories
+  - logs
+- idempotent `initializeConversationWorkspace()` creates the complete directory tree
+- `conversation.json` uses a versioned manifest and preserves existing extra metadata on reinitialization
+- manifest ownership mismatch is rejected rather than silently reusing another conversation's directory
+- manifest writes use a temporary file + rename so readers do not observe partially written JSON
+- focused server tests cover path safety, initialization, idempotence, metadata preservation, ownership mismatch, and isolation between two conversations
 
-No other production code should construct persistent conversation artifact paths ad hoc after this step.
+Important scope boundary:
+
+- Step 2 defines and validates the workspace layer only.
+- Normal runtime artifacts are **not routed into these directories yet**; that is Step 3.
+- Temporary OpenSCAD validation data remains in the system temp directory.
 
 Validation gate before Step 3:
 
-- focused path/security tests
-- typecheck/server tests
-- create/reopen two conversations and verify their workspaces are isolated
+- `npm run typecheck`
+- `npx tsx --test src/server/conversationWorkspace.test.ts`
+- `npx tsx --test src/server/*.test.ts`
+- optionally set `PCAD_CONVERSATIONS_DIR` to a test path and inspect the resulting layout through the focused test
+
+Do not begin Step 3 until the user confirms Step 2 passes validation.
 
 ## Step 3 — Route persistent artifacts into the conversation workspace
 
-**Status: NOT STARTED**
+**Status: BLOCKED ON STEP 2 USER VALIDATION**
 
 Move persistent/runtime artifacts behind the workspace abstraction incrementally:
 
-1. user input images/files/meshes where local copies are required
-2. generated OpenSCAD source (`current.scad` + revisions)
-3. render/inspection images grouped by model revision/build
-4. exports (STL/3MF/DXF as applicable)
-5. agent-specific artifacts for OpenCode/Codex
-6. useful conversation-scoped logs/diagnostics
+1. initialize/lazily ensure the UUID-owned workspace from normal conversation runtime
+2. user input images/files/meshes where local copies are required
+3. generated OpenSCAD source (`current.scad` + revisions)
+4. render/inspection images grouped by model revision/build
+5. exports (STL/3MF/DXF as applicable)
+6. agent-specific artifacts for OpenCode/Codex
+7. useful conversation-scoped logs/diagnostics
 
 Requirements:
 
 - every artifact operation carries a `conversationId`
+- no production code constructs persistent conversation artifact paths ad hoc; all paths come from `conversationWorkspace.ts`
 - Supabase remains the authoritative application data store where it already owns records; the local workspace complements it rather than silently replacing database ownership
 - temporary validation scratch data remains outside the persistent conversation workspace
 - existing conversations without a workspace continue to load; create workspace lazily where appropriate
@@ -126,7 +132,7 @@ Likely categories:
 - test fixtures/results that belong under `tests/`, `test-results/`, or another explicit test-artifact directory
 - obsolete one-off files that can be deleted after review
 
-Add `.gitignore`/test-output rules where appropriate so the root stays clean going forward.
+Add further `.gitignore`/test-output rules where appropriate so the root stays clean going forward.
 
 ## Completion criteria
 
