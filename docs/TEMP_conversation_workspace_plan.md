@@ -56,9 +56,9 @@ Validation result:
 
 ## Step 2 — Conversation workspace abstraction
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-Create a single server-side path abstraction in `src/server/conversationWorkspace.ts`.
+The canonical server-side path abstraction lives in `src/server/conversationWorkspace.ts`.
 
 Implemented on `local-dev-next`:
 
@@ -82,36 +82,96 @@ Implemented on `local-dev-next`:
 - manifest writes use a temporary file + rename so readers do not observe partially written JSON
 - focused server tests cover path safety, initialization, idempotence, metadata preservation, ownership mismatch, and isolation between two conversations
 
+Validation result:
+
+- full server suite passed: 167 tests, 57 suites, 0 failures
+
 Important scope boundary:
 
 - Step 2 defines and validates the workspace layer only.
-- Normal runtime artifacts are **not routed into these directories yet**; that is Step 3.
 - Temporary OpenSCAD validation data remains in the system temp directory.
-
-Validation gate before Step 3:
-
-- `npm run typecheck`
-- `npx tsx --test src/server/conversationWorkspace.test.ts`
-- `npx tsx --test src/server/*.test.ts`
-- optionally set `PCAD_CONVERSATIONS_DIR` to a test path and inspect the resulting layout through the focused test
-
-Do not begin Step 3 until the user confirms Step 2 passes validation.
 
 ## Step 3 — Route persistent artifacts into the conversation workspace
 
-**Status: BLOCKED ON STEP 2 USER VALIDATION**
+### Step 3A — Conversation lifecycle
 
-Move persistent/runtime artifacts behind the workspace abstraction incrementally:
+**Status: READY FOR USER VALIDATION**
 
-1. initialize/lazily ensure the UUID-owned workspace from normal conversation runtime
-2. user input images/files/meshes where local copies are required
-3. generated OpenSCAD source (`current.scad` + revisions)
-4. render/inspection images grouped by model revision/build
-5. exports (STL/3MF/DXF as applicable)
-6. agent-specific artifacts for OpenCode/Codex
-7. useful conversation-scoped logs/diagnostics
+Initialize/update a UUID-owned local workspace when a real conversation is used for generation.
 
-Requirements:
+Implemented on `local-dev-next`:
+
+- new `src/server/conversationWorkspaceLifecycle.ts`
+- both `/api/parametric-chat` and `/api/creative-chat` run the lifecycle hook before the existing AI handler
+- the lifecycle hook clones the request, so the downstream AI handler receives the untouched original body
+- only normal POST generation requests participate; GET/OPTIONS/cancel/malformed requests do not create workspaces
+- the authenticated Supabase conversation row remains authoritative for `id`, title, type, and timestamps
+- only conversations owned by the authenticated user can initialize a workspace
+- existing conversations without a workspace are handled lazily the next time they generate
+- `initializeConversationWorkspace()` remains the only directory/manifest writer
+- lifecycle failures are logged but are deliberately non-fatal to the stable chat path
+- focused tests cover request parsing, metadata synchronization, request-body preservation, inaccessible conversations, and non-fatal filesystem failure behavior
+
+Expected manual result for a normal new conversation:
+
+```text
+conversations/
+└── <conversation-uuid>/
+    ├── conversation.json
+    ├── input/
+    │   ├── images/
+    │   ├── meshes/
+    │   └── files/
+    ├── models/
+    │   ├── revisions/
+    │   └── generated/
+    ├── renders/
+    ├── exports/
+    │   ├── stl/
+    │   ├── 3mf/
+    │   └── dxf/
+    ├── agents/
+    │   ├── opencode/
+    │   └── codex/
+    └── logs/
+```
+
+Validation gate before Step 3B:
+
+- `npm run typecheck`
+- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
+- `npx tsx --test src/server/*.test.ts`
+- manual UI test: create two conversations and confirm two isolated UUID directories appear under `conversations/`
+- inspect each `conversation.json` and confirm its `id`, title, type, `createdAt`, and `updatedAt` match the corresponding conversation
+- confirm normal pCAD generation still works
+
+Do not begin Step 3B until the user confirms Step 3A works in the running app.
+
+### Step 3B — Conversation inputs
+
+**Status: BLOCKED ON STEP 3A USER VALIDATION**
+
+Route user input images/files/meshes, where local persistent copies are required, through the workspace abstraction.
+
+### Step 3C — Generated OpenSCAD source
+
+**Status: NOT STARTED**
+
+Persist `models/current.scad` plus immutable/revisioned source snapshots.
+
+### Step 3D — Renders and exports
+
+**Status: NOT STARTED**
+
+Persist render/inspection assets by revision/build and exports under the corresponding format directory.
+
+### Step 3E — Agents and diagnostics
+
+**Status: NOT STARTED**
+
+Route OpenCode/Codex conversation-scoped artifacts and useful diagnostics under `agents/` and `logs/`.
+
+Step 3 requirements:
 
 - every artifact operation carries a `conversationId`
 - no production code constructs persistent conversation artifact paths ad hoc; all paths come from `conversationWorkspace.ts`
