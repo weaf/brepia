@@ -57,7 +57,9 @@ async function defaultDownloadRender(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user?.id) throw new Error('Render mirroring requires an authenticated user');
+  if (!user?.id) {
+    throw new Error('Render mirroring requires an authenticated user');
+  }
 
   const storagePath = `${user.id}/${conversationId}/${renderStorageFilename(
     artifact.kind,
@@ -98,6 +100,24 @@ async function atomicWrite(path: string, bytes: Uint8Array): Promise<void> {
   }
 }
 
+function renderOwningRevisions(
+  revisions: ConversationModelRevisionMetadata[],
+): ConversationModelRevisionMetadata[] {
+  const firstBuildByToolCall = new Map<
+    string,
+    ConversationModelRevisionMetadata
+  >();
+  for (const metadata of [...revisions].sort(
+    (a, b) => a.revision - b.revision,
+  )) {
+    if (metadata.source !== 'build') continue;
+    if (!firstBuildByToolCall.has(metadata.toolCallId)) {
+      firstBuildByToolCall.set(metadata.toolCallId, metadata);
+    }
+  }
+  return [...firstBuildByToolCall.values()];
+}
+
 /**
  * Mirror the two render derivatives already produced by a successful
  * `build_parametric_model` call from private Supabase storage into the local
@@ -106,9 +126,9 @@ async function atomicWrite(path: string, bytes: Uint8Array): Promise<void> {
  *   renders/<revision>/preview.png
  *   renders/<revision>/inspection.png
  *
- * Only source revisions marked `build` participate. Parameter edits reuse the
- * original toolCallId but do not upload a new build-time inspection sheet, so
- * attaching that old render to an edited source revision would be misleading.
+ * A render storage object is keyed by toolCallId, so exactly the first `build`
+ * revision for each tool call owns it. Parameter edits and legacy repeated
+ * source variants must never receive a stale copy of that build-time render.
  */
 export async function syncConversationRenderArtifacts(
   request: Request,
@@ -118,9 +138,7 @@ export async function syncConversationRenderArtifacts(
   const listRevisions =
     dependencies.listRevisions ?? listConversationModelRevisions;
   const downloadRender = dependencies.downloadRender ?? defaultDownloadRender;
-  const revisions = (await listRevisions(conversationId)).filter(
-    (metadata) => metadata.source === 'build',
-  );
+  const revisions = renderOwningRevisions(await listRevisions(conversationId));
   const artifacts: RenderArtifact[] = revisions.flatMap((metadata) => [
     {
       revision: metadata.revision,
