@@ -33,6 +33,20 @@ import { ensureInputRecords } from '@/lib/aiMessages';
 import { persistUserMessage } from '@/services/messageService';
 import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
 
+function mutationErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message
+  ) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export function PromptView() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -121,8 +135,7 @@ export function PromptView() {
     onError: (error) => {
       toast({
         title: 'Whoopsies',
-        description:
-          error instanceof Error ? error.message : 'Something went wrong',
+        description: mutationErrorMessage(error, 'Something went wrong'),
         variant: 'destructive',
       });
     },
@@ -166,31 +179,48 @@ export function PromptView() {
         .select('default_prompt_profile_id')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (preferencesError) throw preferencesError;
+      if (preferencesError) {
+        throw new Error(`Failed to load AI preferences: ${preferencesError.message}`);
+      }
       const promptProfileId = aiPreferences?.default_prompt_profile_id ?? null;
 
-      // Create the conversation with a useful local title immediately. The
-      // title may be refined asynchronously below, but conversation identity
-      // is always the UUID and never depends on this human-readable metadata.
-      const { data: conversation, error: conversationError } = await supabase
-        .from('conversations')
-        .insert([
-          {
-            id: conversationId,
-            user_id: user.id,
-            title: initialTitle,
-            type: type,
-            settings: {
-              model: model,
-              openCodeExecutionMode: executionMode,
-              promptProfileId,
+      const createConversation = (title: string) =>
+        supabase
+          .from('conversations')
+          .insert([
+            {
+              id: conversationId,
+              user_id: user.id,
+              title,
+              type: type,
+              settings: {
+                model: model,
+                openCodeExecutionMode: executionMode,
+                promptProfileId,
+              },
             },
-          },
-        ])
-        .select()
-        .single();
+          ])
+          .select()
+          .single();
 
-      if (conversationError) throw conversationError;
+      // Prefer the deterministic local title, but naming is metadata and must
+      // never be able to block the primary prompt flow. If a live database has
+      // an unexpected title-side constraint, retry the known-good legacy
+      // insert once with "New Conversation" and refine the title afterwards.
+      let conversationResult = await createConversation(initialTitle);
+      if (conversationResult.error && initialTitle !== 'New Conversation') {
+        console.warn(
+          '[conversation-title] initial titled insert failed; retrying with legacy title',
+          conversationResult.error,
+        );
+        conversationResult = await createConversation('New Conversation');
+      }
+
+      const { data: conversation, error: conversationError } = conversationResult;
+      if (conversationError) {
+        throw new Error(`Failed to create conversation: ${conversationError.message}`);
+      }
+      if (!conversation) throw new Error('Failed to create conversation');
 
       await ensureInputRecords({
         parts,
@@ -249,11 +279,21 @@ export function PromptView() {
         });
 
       // Title refinement is deliberately best-effort and non-blocking. Local
-      // installs get the deterministic initial title even when no hosted
-      // provider credential exists; if the title endpoint can improve it, the
-      // sidebar/history cache is refreshed after the DB update.
+      // installs keep the deterministic title when no hosted provider
+      // credential exists; if the insert had to use the legacy title, first
+      // restore the deterministic title here, then let the endpoint improve it.
       void (async () => {
         try {
+          if (conversation.title !== initialTitle) {
+            const { error: localTitleError } = await supabase
+              .from('conversations')
+              .update({ title: initialTitle })
+              .eq('id', conversation.id)
+              .eq('user_id', user.id);
+            if (localTitleError) throw localTitleError;
+            await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          }
+
           const accessToken = (await supabase.auth.getSession()).data.session
             ?.access_token;
           const response = await fetch(apiUrl('title-generator'), {
@@ -310,8 +350,7 @@ export function PromptView() {
       Sentry.captureException(error);
       toast({
         title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to process prompt',
+        description: mutationErrorMessage(error, 'Failed to process prompt'),
         variant: 'destructive',
       });
     },
