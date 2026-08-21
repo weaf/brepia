@@ -1,4 +1,5 @@
 import { initializeConversationWorkspace } from './conversationWorkspace';
+import { syncConversationAgentHistory } from './conversationWorkspaceAgentHistory';
 import { syncConversationInputArtifacts } from './conversationWorkspaceInputs';
 import { syncConversationModelSources } from './conversationWorkspaceModels';
 import { syncConversationRenderArtifacts } from './conversationWorkspaceRenders';
@@ -18,6 +19,7 @@ type WorkspaceInitializer = typeof initializeConversationWorkspace;
 type ConversationInputSync = typeof syncConversationInputArtifacts;
 type ConversationModelSync = typeof syncConversationModelSources;
 type ConversationRenderSync = typeof syncConversationRenderArtifacts;
+type ConversationAgentHistorySync = typeof syncConversationAgentHistory;
 
 type ConversationLoader = (
   request: Request,
@@ -30,6 +32,7 @@ type WorkspaceLifecycleDependencies = {
   syncInputs?: ConversationInputSync;
   syncModels?: ConversationModelSync;
   syncRenders?: ConversationRenderSync;
+  syncAgents?: ConversationAgentHistorySync;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -94,7 +97,9 @@ async function loadOwnedConversation(
  * After initialization, user-uploaded inputs are mirrored. Parametric
  * conversations then revision successful OpenSCAD sources from the active
  * branch and mirror the build-time preview/inspection images already stored in
- * Supabase. All operations are idempotent.
+ * Supabase. Finally, persisted OpenCode/Codex tool calls from the active branch
+ * are backfilled into conversation-scoped agent session/turn diagnostics.
+ * All operations are idempotent.
  */
 export async function syncConversationWorkspaceForChatRequest(
   request: Request,
@@ -117,6 +122,7 @@ export async function syncConversationWorkspaceForChatRequest(
   const syncModels = dependencies.syncModels ?? syncConversationModelSources;
   const syncRenders =
     dependencies.syncRenders ?? syncConversationRenderArtifacts;
+  const syncAgents = dependencies.syncAgents ?? syncConversationAgentHistory;
 
   const conversation = await loadConversation(request, conversationId);
   if (!conversation) return false;
@@ -137,6 +143,11 @@ export async function syncConversationWorkspaceForChatRequest(
     );
     await syncRenders(request, conversation.id);
   }
+  await syncAgents(
+    request,
+    conversation.id,
+    conversation.current_message_leaf_id,
+  );
   return true;
 }
 
