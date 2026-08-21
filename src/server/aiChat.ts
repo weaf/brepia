@@ -77,11 +77,13 @@ const MODEL_PRICES: Record<
     cacheRead: 0.31,
     cacheWrite: 1.25,
   },
-  'google/gemini-3.6-flash': {
-    input: 1.5,
-    output: 7.5,
-    cacheRead: 0.15,
-    cacheWrite: 1.5,
+  // 3.7 Flash rates are Google's introductory pricing through Dec 31,
+  // 2026; they double on Jan 1, 2027 (to 1.5 / 7.5 / 0.15).
+  'google/gemini-3.7-flash': {
+    input: 0.75,
+    output: 3.75,
+    cacheRead: 0.075,
+    cacheWrite: 0.75,
   },
   'openai/gpt-5.6-sol': {
     input: 5,
@@ -89,7 +91,7 @@ const MODEL_PRICES: Record<
     cacheRead: 0.5,
     cacheWrite: 6.25,
   },
-  'x-ai/grok-4.5': { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 2 },
+  'x-ai/grok-4.6': { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 2 },
   'moonshotai/kimi-k2.6': { input: 0.6, output: 2.5 },
   'moonshotai/kimi-k3': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3 },
   'z-ai/glm-5.2': { input: 1.2, output: 4.1 },
@@ -155,9 +157,10 @@ Geometry:
 - Use modules for repeated or meaningful model parts.
 
 BOSL2 library guidance:
-- BOSL2 is available to OpenSCAD code when the generated source includes the
-  literal token \`BOSL2\`. Include \`<BOSL2/std.scad>\` plus the specific module
-  file whenever the request needs a higher-level CAD primitive.
+- BOSL2 is available to OpenSCAD code when the generated source contains an
+  \`include <BOSL2/...>\` or \`use <BOSL2/...>\` statement. Include
+  \`<BOSL2/std.scad>\` plus the specific module file whenever the request needs
+  a higher-level CAD primitive.
 - For screws, bolts, nuts, threaded rods, or tapped/threaded holes, use BOSL2
   instead of trying to build threads from \`cylinder()\`, \`linear_extrude()\`,
   or hand-rolled helices. Include \`<BOSL2/screws.scad>\` for \`screw()\`,

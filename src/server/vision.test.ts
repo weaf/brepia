@@ -5,6 +5,7 @@ import {
   modelSupportsDirectVision,
   rewritePromptForVisionFallback,
   selectVisionModelId,
+  withVisionFallback,
   type VisionAnalysisRequest,
   type VisionAnalyzer,
 } from './vision.ts';
@@ -67,6 +68,37 @@ describe('pCAD vision routing', () => {
       ),
       false,
     );
+  });
+
+  it('preserves supportedUrls when the provider exposes it through a getter', () => {
+    const supportedUrls = { 'image/*': [/^data:/] };
+    const prototype = {
+      get supportedUrls() {
+        return supportedUrls;
+      },
+    };
+    const baseModel = Object.assign(Object.create(prototype), {
+      specificationVersion: 'v3',
+      provider: 'test-provider',
+      modelId: 'text-only-test-model',
+      async doGenerate() {
+        throw new Error('not called');
+      },
+      async doStream() {
+        throw new Error('not called');
+      },
+    }) as unknown as Parameters<typeof withVisionFallback>[0];
+
+    const wrapped = withVisionFallback(baseModel, 'test-user');
+    const wrappedModel = wrapped as unknown as {
+      provider: string;
+      modelId: string;
+      supportedUrls?: unknown;
+    };
+
+    assert.equal(wrappedModel.provider, 'test-provider');
+    assert.equal(wrappedModel.modelId, 'text-only-test-model');
+    assert.equal(wrappedModel.supportedUrls, supportedUrls);
   });
 
   it('replaces user images with one fast vision observation for text-only models', async () => {
