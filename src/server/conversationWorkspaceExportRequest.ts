@@ -13,6 +13,7 @@ import {
   findConversationModelRevisionByCodeSha,
   syncConversationModelSources,
 } from './conversationWorkspaceModels';
+import { syncConversationRenderArtifacts } from './conversationWorkspaceRenders';
 import { getAnonSupabaseClient } from './supabaseClient';
 
 export const CONVERSATION_WORKSPACE_ACTION_HEADER =
@@ -126,6 +127,7 @@ export async function handleConversationWorkspaceExportRequest(
     conversation.id,
     conversation.current_message_leaf_id,
   );
+  await syncConversationRenderArtifacts(request, conversation.id);
 
   const codeSha256 = conversationModelCodeSha256(sourceCode);
   const revision = await findConversationModelRevisionByCodeSha(
