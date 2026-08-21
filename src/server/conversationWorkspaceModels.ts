@@ -24,7 +24,10 @@ export type ConversationMessageRow = {
   created_at: string | null;
   role: string;
   parts: unknown;
+  metadata?: unknown;
 };
+
+export type ConversationModelRevisionSource = 'build' | 'parameter-edit';
 
 export type SuccessfulParametricBuild = {
   toolCallId: string;
@@ -33,6 +36,7 @@ export type SuccessfulParametricBuild = {
   title: string;
   version: string;
   code: string;
+  source: ConversationModelRevisionSource;
 };
 
 export type ConversationModelSyncResult = {
@@ -41,19 +45,20 @@ export type ConversationModelSyncResult = {
   currentRevision: number | null;
 };
 
-type RevisionMetadata = {
+export type ConversationModelRevisionMetadata = {
   revision: number;
   toolCallId: string;
   messageId: string;
   messageCreatedAt: string | null;
   title: string;
   version: string;
+  source: ConversationModelRevisionSource;
   codeSha256: string;
   savedAt: string;
 };
 
 type RevisionState = {
-  metadata: RevisionMetadata[];
+  metadata: ConversationModelRevisionMetadata[];
   maxRevision: number;
 };
 
@@ -70,20 +75,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function codeSha256(code: string): string {
+export function conversationModelCodeSha256(code: string): string {
   return createHash('sha256').update(code, 'utf8').digest('hex');
+}
+
+function originalCodeFromMessage(message: ConversationMessageRow): string | null {
+  if (!isRecord(message.metadata)) return null;
+  const originalCode = message.metadata.originalCode;
+  return typeof originalCode === 'string' && originalCode.trim()
+    ? originalCode
+    : null;
 }
 
 function parseSuccessfulBuildPart(
   part: unknown,
   message: ConversationMessageRow,
-): SuccessfulParametricBuild | null {
-  if (!isRecord(part)) return null;
-  if (part.type !== 'tool-build_parametric_model') return null;
-  if (part.state !== 'output-available') return null;
-  if (typeof part.toolCallId !== 'string' || !part.toolCallId) return null;
-  if (!isRecord(part.input) || !isRecord(part.output)) return null;
-  if (part.output.status !== 'success') return null;
+): SuccessfulParametricBuild[] {
+  if (!isRecord(part)) return [];
+  if (part.type !== 'tool-build_parametric_model') return [];
+  if (part.state !== 'output-available') return [];
+  if (typeof part.toolCallId !== 'string' || !part.toolCallId) return [];
+  if (!isRecord(part.input) || !isRecord(part.output)) return [];
+  if (part.output.status !== 'success') return [];
 
   const title = part.input.title;
   const version = part.input.version;
@@ -96,22 +109,35 @@ function parseSuccessfulBuildPart(
     typeof code !== 'string' ||
     !code.trim()
   ) {
-    return null;
+    return [];
   }
 
-  return {
+  const shared = {
     toolCallId: part.toolCallId,
     messageId: message.id,
     messageCreatedAt: message.created_at,
     title,
     version,
-    code,
   };
+  const originalCode = originalCodeFromMessage(message);
+  if (originalCode && originalCode !== code) {
+    return [
+      { ...shared, code: originalCode, source: 'build' },
+      { ...shared, code, source: 'parameter-edit' },
+    ];
+  }
+
+  return [{ ...shared, code, source: 'build' }];
 }
 
 /**
  * Walk only the active parent chain. Successful builds that exist solely on an
  * abandoned sibling branch never become `current.scad` for the active branch.
+ *
+ * Parameter edits are persisted in-place on the original tool part. When the
+ * UI has captured `metadata.originalCode`, emit both the original build and the
+ * currently edited source. This keeps immutable history without pretending a
+ * changed source is the same revision merely because its toolCallId is stable.
  */
 export function collectSuccessfulParametricBuilds(
   rows: ConversationMessageRow[],
@@ -143,8 +169,7 @@ export function collectSuccessfulParametricBuilds(
   for (const row of branch) {
     if (row.role !== 'assistant' || !Array.isArray(row.parts)) continue;
     for (const part of row.parts) {
-      const build = parseSuccessfulBuildPart(part, row);
-      if (build) builds.push(build);
+      builds.push(...parseSuccessfulBuildPart(part, row));
     }
   }
   return builds;
@@ -169,7 +194,7 @@ async function defaultLoadMessages(
   // provides the second boundary here.
   const { data, error } = await supabase
     .from('messages')
-    .select('id, parent_message_id, created_at, role, parts')
+    .select('id, parent_message_id, created_at, role, parts, metadata')
     .eq('conversation_id', conversationId);
   if (error) throw error;
 
@@ -179,6 +204,7 @@ async function defaultLoadMessages(
     created_at: row.created_at,
     role: row.role,
     parts: row.parts,
+    metadata: row.metadata,
   }));
 }
 
@@ -216,6 +242,40 @@ function revisionNumberFromFilename(filename: string): number | null {
   return Number.isSafeInteger(revision) && revision >= 1 ? revision : null;
 }
 
+function parseRevisionMetadata(
+  raw: unknown,
+): ConversationModelRevisionMetadata | null {
+  if (!isRecord(raw)) return null;
+  if (
+    typeof raw.revision !== 'number' ||
+    typeof raw.toolCallId !== 'string' ||
+    typeof raw.messageId !== 'string' ||
+    !(raw.messageCreatedAt === null || typeof raw.messageCreatedAt === 'string') ||
+    typeof raw.title !== 'string' ||
+    typeof raw.version !== 'string' ||
+    typeof raw.codeSha256 !== 'string' ||
+    typeof raw.savedAt !== 'string'
+  ) {
+    return null;
+  }
+
+  // Sidecars created by the first Step 3C implementation predate `source`.
+  // They represent normal model builds, so read them compatibly as `build`.
+  const source: ConversationModelRevisionSource =
+    raw.source === 'parameter-edit' ? 'parameter-edit' : 'build';
+  return {
+    revision: raw.revision,
+    toolCallId: raw.toolCallId,
+    messageId: raw.messageId,
+    messageCreatedAt: raw.messageCreatedAt,
+    title: raw.title,
+    version: raw.version,
+    source,
+    codeSha256: raw.codeSha256,
+    savedAt: raw.savedAt,
+  };
+}
+
 async function readRevisionState(
   conversationId: string,
 ): Promise<RevisionState> {
@@ -233,45 +293,49 @@ async function readRevisionState(
   });
 
   let maxRevision = 0;
-  const metadata: RevisionMetadata[] = [];
+  const metadata: ConversationModelRevisionMetadata[] = [];
   for (const entry of entries) {
     const entryRevision = revisionNumberFromFilename(entry);
     if (entryRevision) maxRevision = Math.max(maxRevision, entryRevision);
     if (!/^\d{3,}\.json$/.test(entry)) continue;
 
-    const raw: unknown = JSON.parse(await readFile(join(directory, entry), 'utf8'));
-    if (!isRecord(raw)) continue;
-    if (
-      typeof raw.revision !== 'number' ||
-      typeof raw.toolCallId !== 'string' ||
-      typeof raw.messageId !== 'string' ||
-      !(
-        raw.messageCreatedAt === null ||
-        typeof raw.messageCreatedAt === 'string'
-      ) ||
-      typeof raw.title !== 'string' ||
-      typeof raw.version !== 'string' ||
-      typeof raw.codeSha256 !== 'string' ||
-      typeof raw.savedAt !== 'string'
-    ) {
-      continue;
-    }
-    metadata.push(raw as RevisionMetadata);
+    const parsed = parseRevisionMetadata(
+      JSON.parse(await readFile(join(directory, entry), 'utf8')),
+    );
+    if (parsed) metadata.push(parsed);
   }
   metadata.sort((a, b) => a.revision - b.revision);
   return { metadata, maxRevision };
 }
 
+export async function listConversationModelRevisions(
+  conversationId: string,
+): Promise<ConversationModelRevisionMetadata[]> {
+  return (await readRevisionState(conversationId)).metadata;
+}
+
+export async function findConversationModelRevisionByCodeSha(
+  conversationId: string,
+  codeSha256: string,
+): Promise<ConversationModelRevisionMetadata | null> {
+  const revisions = await listConversationModelRevisions(conversationId);
+  return (
+    revisions
+      .filter((metadata) => metadata.codeSha256 === codeSha256)
+      .sort((a, b) => b.revision - a.revision)[0] ?? null
+  );
+}
+
 async function ensureExistingRevisionMatches(
   conversationId: string,
-  metadata: RevisionMetadata,
+  metadata: ConversationModelRevisionMetadata,
   build: SuccessfulParametricBuild,
 ): Promise<void> {
   const path = conversationModelRevisionPath(conversationId, metadata.revision);
-  const expectedHash = codeSha256(build.code);
+  const expectedHash = conversationModelCodeSha256(build.code);
   if (expectedHash !== metadata.codeSha256) {
     throw new Error(
-      `Immutable model revision ${metadata.revision} replay changed source`,
+      `Immutable model revision ${metadata.revision} identity mismatch`,
     );
   }
 
@@ -281,7 +345,7 @@ async function ensureExistingRevisionMatches(
   }
 
   const existingCode = await readFile(path, 'utf8');
-  if (codeSha256(existingCode) !== metadata.codeSha256) {
+  if (conversationModelCodeSha256(existingCode) !== metadata.codeSha256) {
     throw new Error(
       `Immutable model revision ${metadata.revision} checksum mismatch`,
     );
@@ -292,15 +356,16 @@ async function createRevision(
   conversationId: string,
   revision: number,
   build: SuccessfulParametricBuild,
-): Promise<RevisionMetadata> {
-  const metadata: RevisionMetadata = {
+): Promise<ConversationModelRevisionMetadata> {
+  const metadata: ConversationModelRevisionMetadata = {
     revision,
     toolCallId: build.toolCallId,
     messageId: build.messageId,
     messageCreatedAt: build.messageCreatedAt,
     title: build.title,
     version: build.version,
-    codeSha256: codeSha256(build.code),
+    source: build.source,
+    codeSha256: conversationModelCodeSha256(build.code),
     savedAt: new Date().toISOString(),
   };
 
@@ -322,25 +387,34 @@ async function createRevision(
   return metadata;
 }
 
+function revisionIdentity(toolCallId: string, codeSha256: string): string {
+  return `${toolCallId}:${codeSha256}`;
+}
+
 async function persistBuildsLocked(
   conversationId: string,
   builds: SuccessfulParametricBuild[],
 ): Promise<ConversationModelSyncResult> {
   const state = await readRevisionState(conversationId);
-  const byToolCall = new Map(
-    state.metadata.map((metadata) => [metadata.toolCallId, metadata]),
+  const byIdentity = new Map(
+    state.metadata.map((metadata) => [
+      revisionIdentity(metadata.toolCallId, metadata.codeSha256),
+      metadata,
+    ]),
   );
   let nextRevision = state.maxRevision + 1;
   let revisionsCreated = 0;
-  let currentMetadata: RevisionMetadata | null = null;
+  let currentMetadata: ConversationModelRevisionMetadata | null = null;
 
   for (const build of builds) {
-    let metadata = byToolCall.get(build.toolCallId);
+    const codeHash = conversationModelCodeSha256(build.code);
+    const identity = revisionIdentity(build.toolCallId, codeHash);
+    let metadata = byIdentity.get(identity);
     if (metadata) {
       await ensureExistingRevisionMatches(conversationId, metadata, build);
     } else {
       metadata = await createRevision(conversationId, nextRevision, build);
-      byToolCall.set(build.toolCallId, metadata);
+      byIdentity.set(identity, metadata);
       nextRevision += 1;
       revisionsCreated += 1;
     }
@@ -390,9 +464,10 @@ async function withConversationLock<T>(
 }
 
 /**
- * Persist successful OpenSCAD builds from the active conversation branch.
- * Revisions are immutable and idempotent by toolCallId. `current.scad` always
- * follows the newest successful build on the currently selected branch.
+ * Persist successful OpenSCAD sources from the active conversation branch.
+ * Revisions are immutable and idempotent by toolCallId + source hash.
+ * `current.scad` always follows the newest active source, including persisted
+ * parameter edits.
  */
 export async function syncConversationModelSources(
   request: Request,
