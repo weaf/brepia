@@ -20,27 +20,24 @@ conversations/
     │   ├── current.scad
     │   ├── current.json
     │   ├── revisions/
-    │   │   ├── 001.scad
-    │   │   ├── 001.json
-    │   │   └── ...
     │   └── generated/
     ├── renders/
-    │   ├── 001/
-    │   │   ├── preview.png
-    │   │   └── inspection.png
-    │   └── ...
+    │   └── <revision>/
+    │       ├── preview.png
+    │       └── inspection.png
     ├── exports/
     │   ├── stl/
-    │   │   ├── 001.stl
-    │   │   └── 001.json
     │   ├── 3mf/
     │   └── dxf/
-    │       ├── 001.dxf
-    │       └── 001.json
     ├── agents/
     │   ├── opencode/
+    │   │   ├── session.json
+    │   │   └── turns/
     │   └── codex/
+    │       ├── session.json
+    │       └── turns/
     └── logs/
+        └── agent-events.jsonl
 ```
 
 Temporary compile/validation scratch files stay in the system temp directory. The conversation workspace is for persistent or diagnostically useful artifacts.
@@ -84,7 +81,6 @@ Validation: full server suite passed with 167 tests / 57 suites / 0 failures at 
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-- `src/server/conversationWorkspaceInputs.ts`
 - user-uploaded images mirror to `input/images/`
 - user-uploaded meshes mirror to `input/meshes/`
 - Supabase remains authoritative
@@ -95,76 +91,76 @@ Validation: full server suite passed with 167 tests / 57 suites / 0 failures at 
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-- `src/server/conversationWorkspaceModels.ts`
-- successful `build_parametric_model` sources on the active branch become immutable numbered revisions
-- `models/current.scad` / `current.json` follow the current active source
+- successful active-branch `build_parametric_model` sources become immutable numbered revisions
+- `models/current.scad` / `current.json` follow the active source
+- source identity uses tool-call identity plus source SHA-256
+- parameter edits become new immutable `source: "parameter-edit"` revisions
 - sibling branches cannot accidentally become current
-- revision metadata records tool/message identity, title/version, source kind, SHA-256, and timestamp
-- per-conversation serialization and atomic current writes protect concurrent/reconnect flows
 - user confirmed revision/current behavior in the running app
-
-Step 3D hardening added to the same model layer:
-
-- revision identity is now `toolCallId + code SHA-256`, not only `toolCallId`
-- parameter edits persisted into the same tool call therefore become a new immutable source revision instead of mutating old history
-- when `message.metadata.originalCode` exists, the original model build is retained with `source: "build"` and the edited source becomes `source: "parameter-edit"`
-- existing Step 3C sidecars without `source` remain readable as normal build revisions
 
 ### Step 3D — Renders and exports
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-22**
 
-Render routing:
-
-- new `src/server/conversationWorkspaceRenders.ts`
-- lifecycle mirrors the already-generated private Supabase build artifacts after model revision sync
-- build thumbnail → `renders/<revision>/preview.png`
-- multi-view inspection sheet → `renders/<revision>/inspection.png`
-- only revisions with `source: "build"` receive build-time render artifacts; parameter-edit revisions deliberately do not reuse stale screenshots
-- mirroring is atomic, idempotent, and isolates missing/broken storage objects
-- creative conversations do not run OpenSCAD render sync
-
-Export routing:
-
-- new `src/server/conversationWorkspaceExports.ts`
-- STL/DXF downloads remain browser-first; local persistence is best-effort and cannot make a successful user download fail
-- exact export revision is resolved from the OpenSCAD source SHA-256; exports are never attached to a guessed revision
-- canonical files:
-  - `exports/stl/<revision>.stl` + sidecar JSON
-  - `exports/dxf/<revision>.dxf` + sidecar JSON
-- sidecars record revision, format, source SHA-256, artifact SHA-256, byte length, and timestamp
-- repeated identical export is a no-op; regenerated different bytes atomically replace the canonical export for that revision/format
-- `.scad` downloads are not duplicated under `exports/` because the canonical source already lives in `models/`
-- `exports/3mf/` and the server format contract are reserved; the current parametric UI does not expose 3MF export
-- export persistence reuses the already-registered `/api/parametric-chat` route through the internal `X-PCAD-Workspace-Action: persist-export` action; no generated TanStack route-tree edit is required
-- a parameter-edit persistence race retries once and otherwise fails only the workspace copy, never the browser download
-
-Validation gate before Step 3E:
-
-- `npm run typecheck`
-- `npx tsx --test src/server/conversationWorkspaceModels.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceRenders.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceExports.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
-- `npx tsx --test src/server/*.test.ts`
-- manual build test: verify `renders/<build-revision>/preview.png` and, when uploaded successfully, `inspection.png`
-- manual STL download: verify matching numbered `.stl` + `.json` under `exports/stl/`
-- manual DXF download: verify matching numbered `.dxf` + `.json` under `exports/dxf/`
-- parameter-edit test: change a parameter, allow persistence to settle, export STL, and verify a new `source: "parameter-edit"` model revision owns that export while the old build render remains attached only to the original build revision
-- repeat the same export and verify no duplicate numbered export is created
-- confirm normal pCAD generation, vision inspection, browser downloads, and branch behavior still work
-
-Do not begin Step 3E until the user confirms Step 3D works in the running app.
+- build preview → `renders/<revision>/preview.png`
+- multi-view inspection → `renders/<revision>/inspection.png`
+- parameter-edit revisions do not reuse stale build screenshots
+- STL/DXF browser downloads remain primary and working
+- workspace export copies are revision-bound by source SHA-256
+- repeated identical exports are idempotent
+- `.scad` is not duplicated under `exports/`
+- export persistence reuses the existing parametric route via an internal action header; generated route tree remains untouched
+- user confirmed render/export layout and parameter-edit behavior in the running app
+- production build completed successfully; the Shiki/Oniguruma `unwasm` fallback warning was reviewed separately and is non-blocking
 
 ### Step 3E — Agents and diagnostics
 
-**Status: BLOCKED ON STEP 3D USER VALIDATION**
+**Status: READY FOR USER VALIDATION**
 
-Route OpenCode/Codex conversation-scoped artifacts and useful diagnostics under `agents/` and `logs/`.
+Conversation-scoped agent metadata is indexed from the authoritative persisted active conversation branch without moving or replacing OpenCode/Codex native session stores.
+
+Implemented on `local-dev-next`:
+
+- canonical workspace paths:
+  - `agents/opencode/session.json`
+  - `agents/opencode/turns/<stable-turn-id>.json`
+  - `agents/codex/session.json`
+  - `agents/codex/turns/<stable-turn-id>.json`
+  - `logs/agent-events.jsonl`
+- OpenCode Streaming recognizes existing `stream-*` tool calls and derives the same deterministic `ses_pcad_<conversation>` session ID already used by pCAD
+- OpenCode/Codex CLI recognizes the existing persisted `cli-agent-session.<agent>.<encoded-session>...` marker and recovers the external session/thread ID
+- active `parent_message_id` branch only; abandoned sibling branches are not indexed as current agent history
+- current `session.json` stores agent, transport, model, external session ID, reuse state, and safe connection metadata
+- Streaming OpenCode `session.json` includes the exact attach command built by the existing OpenCode transport
+- immutable per-turn JSON stores only identifiers/status/timestamps/result category and bounded safe error metadata
+- no raw prompt, raw stdout, or raw stderr is written to the conversation workspace
+- turn IDs are deterministic from persisted message/tool-call identity; repeated lifecycle runs are idempotent
+- conflicting rewrites of an existing immutable agent turn are rejected instead of silently changing history
+- `agent-events.jsonl` records only actual session/turn additions or changes and is serialized for concurrent append safety
+- old agent conversations can be backfilled lazily on the next generation request without a DB migration
+- agent-history sync runs after existing input/model/render sync and remains inside the non-fatal workspace lifecycle guard
+- OpenCode CLI continues running from the pCAD repository root so `.opencode/agents/pcad-builder.md` and plugins keep loading
+- Codex retains its existing isolated runtime working directory; native external session ownership is unchanged
+
+Validation gate before Step 4/completeness audit:
+
+- `npm run typecheck`
+- `npx tsx --test src/server/conversationWorkspaceAgents.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceAgentHistory.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
+- `npx tsx --test src/server/conversationWorkspace.test.ts`
+- `npx tsx --test src/server/*.test.ts`
+- `npm run lint`
+- `npm run build`
+- manual OpenCode Streaming test: use at least two agent turns, then trigger one additional lifecycle pass and verify `agents/opencode/session.json`, immutable turn files, and `logs/agent-events.jsonl`
+- if convenient, repeat with OpenCode CLI or Codex and verify its recovered external session ID under the corresponding agent directory
+- verify diagnostics contain no raw prompt/stdout/stderr and normal agent/CAD generation remains unchanged
+
+Do not start repository cleanup until Step 3E is user validated and the final completeness audit has checked remaining creative/generated model artifacts.
 
 ## Step 4 — Repository-root cleanup and guardrails
 
-**Status: NOT STARTED**
+**Status: BLOCKED ON STEP 3E + COMPLETENESS AUDIT**
 
 After production paths are fixed, classify and clean current root artifacts instead of merely moving the mess into generic top-level folders. Add `.gitignore`/test-output guardrails where appropriate.
 
