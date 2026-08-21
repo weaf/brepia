@@ -1,4 +1,5 @@
 import { initializeConversationWorkspace } from './conversationWorkspace';
+import { syncConversationInputArtifacts } from './conversationWorkspaceInputs';
 import { getAnonSupabaseClient } from './supabaseClient';
 import { logError } from './serverLog';
 
@@ -11,6 +12,7 @@ type ConversationWorkspaceRow = {
 };
 
 type WorkspaceInitializer = typeof initializeConversationWorkspace;
+type ConversationInputSync = typeof syncConversationInputArtifacts;
 
 type ConversationLoader = (
   request: Request,
@@ -20,6 +22,7 @@ type ConversationLoader = (
 type WorkspaceLifecycleDependencies = {
   loadConversation?: ConversationLoader;
   initializeWorkspace?: WorkspaceInitializer;
+  syncInputs?: ConversationInputSync;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -78,8 +81,9 @@ async function loadOwnedConversation(
  * conversation row before a chat generation starts. The request is cloned so
  * the downstream AI handler can still consume its original body.
  *
- * Returns true when a workspace was initialized/updated, false when the
- * request is not a generation request or no owned conversation was found.
+ * After initialization, user-uploaded input artifacts are mirrored from
+ * private Supabase storage into the UUID-owned workspace. Both operations are
+ * idempotent. Returns true when an owned conversation was synchronized.
  */
 export async function syncConversationWorkspaceForChatRequest(
   request: Request,
@@ -98,6 +102,7 @@ export async function syncConversationWorkspaceForChatRequest(
     dependencies.loadConversation ?? loadOwnedConversation;
   const initializeWorkspace =
     dependencies.initializeWorkspace ?? initializeConversationWorkspace;
+  const syncInputs = dependencies.syncInputs ?? syncConversationInputArtifacts;
 
   const conversation = await loadConversation(request, conversationId);
   if (!conversation) return false;
@@ -109,13 +114,14 @@ export async function syncConversationWorkspaceForChatRequest(
     createdAt: conversation.created_at,
     updatedAt: conversation.updated_at,
   });
+  await syncInputs(request, conversation.id);
   return true;
 }
 
 /**
  * Route-level guard: workspace persistence is valuable but must never make the
- * stable chat path unavailable. Filesystem/configuration failures are logged
- * and the original request continues unchanged.
+ * stable chat path unavailable. Filesystem/configuration/storage failures are
+ * logged and the original request continues unchanged.
  */
 export async function withConversationWorkspaceLifecycle(
   request: Request,
