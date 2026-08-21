@@ -8,6 +8,9 @@ export type PersistConversationExportOptions = {
   file: Blob;
 };
 
+const WORKSPACE_ACTION_HEADER = 'X-PCAD-Workspace-Action';
+const PERSIST_EXPORT_ACTION = 'persist-export';
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -20,15 +23,14 @@ async function postExport(
   form.set('conversationId', options.conversationId);
   form.set('format', options.format);
   form.set('sourceCode', options.sourceCode);
-  form.set(
-    'file',
-    options.file,
-    `model.${options.format}`,
-  );
+  form.set('file', options.file, `model.${options.format}`);
 
-  return fetch(apiUrl('conversation-export'), {
+  return fetch(apiUrl('parametric-chat'), {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      [WORKSPACE_ACTION_HEADER]: PERSIST_EXPORT_ACTION,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: form,
   });
 }
