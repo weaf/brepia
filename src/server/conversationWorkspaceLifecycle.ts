@@ -1,5 +1,6 @@
 import { initializeConversationWorkspace } from './conversationWorkspace';
 import { syncConversationInputArtifacts } from './conversationWorkspaceInputs';
+import { syncConversationModelSources } from './conversationWorkspaceModels';
 import { getAnonSupabaseClient } from './supabaseClient';
 import { logError } from './serverLog';
 
@@ -9,10 +10,12 @@ type ConversationWorkspaceRow = {
   type: string | null;
   created_at: string | null;
   updated_at: string | null;
+  current_message_leaf_id: string | null;
 };
 
 type WorkspaceInitializer = typeof initializeConversationWorkspace;
 type ConversationInputSync = typeof syncConversationInputArtifacts;
+type ConversationModelSync = typeof syncConversationModelSources;
 
 type ConversationLoader = (
   request: Request,
@@ -23,6 +26,7 @@ type WorkspaceLifecycleDependencies = {
   loadConversation?: ConversationLoader;
   initializeWorkspace?: WorkspaceInitializer;
   syncInputs?: ConversationInputSync;
+  syncModels?: ConversationModelSync;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,7 +63,9 @@ async function loadOwnedConversation(
 
   const { data, error } = await supabase
     .from('conversations')
-    .select('id, title, type, created_at, updated_at')
+    .select(
+      'id, title, type, created_at, updated_at, current_message_leaf_id',
+    )
     .eq('id', conversationId)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -73,6 +79,7 @@ async function loadOwnedConversation(
     type: data.type,
     created_at: data.created_at,
     updated_at: data.updated_at,
+    current_message_leaf_id: data.current_message_leaf_id,
   };
 }
 
@@ -81,9 +88,10 @@ async function loadOwnedConversation(
  * conversation row before a chat generation starts. The request is cloned so
  * the downstream AI handler can still consume its original body.
  *
- * After initialization, user-uploaded input artifacts are mirrored from
- * private Supabase storage into the UUID-owned workspace. Both operations are
- * idempotent. Returns true when an owned conversation was synchronized.
+ * After initialization, user-uploaded inputs are mirrored and successful
+ * OpenSCAD builds from the active parametric branch are revisioned. All
+ * operations are idempotent. Returns true when an owned conversation was
+ * synchronized.
  */
 export async function syncConversationWorkspaceForChatRequest(
   request: Request,
@@ -103,6 +111,7 @@ export async function syncConversationWorkspaceForChatRequest(
   const initializeWorkspace =
     dependencies.initializeWorkspace ?? initializeConversationWorkspace;
   const syncInputs = dependencies.syncInputs ?? syncConversationInputArtifacts;
+  const syncModels = dependencies.syncModels ?? syncConversationModelSources;
 
   const conversation = await loadConversation(request, conversationId);
   if (!conversation) return false;
@@ -115,6 +124,13 @@ export async function syncConversationWorkspaceForChatRequest(
     updatedAt: conversation.updated_at,
   });
   await syncInputs(request, conversation.id);
+  if (conversation.type === 'parametric') {
+    await syncModels(
+      request,
+      conversation.id,
+      conversation.current_message_leaf_id,
+    );
+  }
   return true;
 }
 
