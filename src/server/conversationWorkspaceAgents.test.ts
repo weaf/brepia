@@ -31,7 +31,7 @@ async function withWorkspaceRoot(fn: () => Promise<void>): Promise<void> {
 }
 
 describe('conversation workspace agent diagnostics', { concurrency: false }, () => {
-  it('stores current session metadata and appends a structured event', async () => {
+  it('stores current session metadata and only logs actual changes', async () => {
     await withWorkspaceRoot(async () => {
       await initializeConversationWorkspace({
         conversationId: CONVERSATION_ID,
@@ -50,19 +50,22 @@ describe('conversation workspace agent diagnostics', { concurrency: false }, () 
         attachCommand:
           "opencode attach 'http://127.0.0.1:4096' --session 'ses_pcad_test' --dir '/repo/pcad'",
       });
-      const second = await recordConversationAgentSession({
+      const input = {
         conversationId: CONVERSATION_ID,
-        agent: 'opencode',
-        transport: 'streaming',
+        agent: 'opencode' as const,
+        transport: 'streaming' as const,
         model: 'llama-swap/qwen-test',
         sessionId: 'ses_pcad_test',
         reused: true,
         server: 'http://127.0.0.1:4096',
         directory: '/repo/pcad',
-      });
+      };
+      const second = await recordConversationAgentSession(input);
+      const third = await recordConversationAgentSession(input);
 
       assert.equal(second.firstSeenAt, first.firstSeenAt);
       assert.equal(second.reused, true);
+      assert.equal(third.updatedAt, second.updatedAt);
       const stored = JSON.parse(
         await readFile(
           conversationAgentSessionPath(CONVERSATION_ID, 'opencode'),
@@ -86,27 +89,29 @@ describe('conversation workspace agent diagnostics', { concurrency: false }, () 
     });
   });
 
-  it('stores immutable per-turn summaries without raw prompts or stdout', async () => {
+  it('stores immutable idempotent per-turn summaries without raw prompts or stdout', async () => {
     await withWorkspaceRoot(async () => {
       await initializeConversationWorkspace({
         conversationId: CONVERSATION_ID,
         type: 'parametric',
       });
 
-      await recordConversationAgentTurn({
+      const input = {
         id: TURN_ID,
         conversationId: CONVERSATION_ID,
-        agent: 'codex',
-        transport: 'cli',
+        agent: 'codex' as const,
+        transport: 'cli' as const,
         model: 'default',
         sessionId: '12345678-1234-1234-1234-123456789abc',
         reused: false,
-        status: 'success',
+        status: 'success' as const,
         startedAt: '2026-08-21T20:00:00.000Z',
         finishedAt: '2026-08-21T20:00:01.250Z',
         durationMs: 1250,
-        resultKind: 'code',
-      });
+        resultKind: 'code' as const,
+      };
+      await recordConversationAgentTurn(input);
+      await recordConversationAgentTurn(input);
 
       const path = conversationAgentTurnPath(
         CONVERSATION_ID,
@@ -126,23 +131,21 @@ describe('conversation workspace agent diagnostics', { concurrency: false }, () 
       assert.equal(raw.includes('stdout'), false);
       assert.equal(raw.includes('stderr'), false);
 
+      const eventsBeforeMismatch = (
+        await readFile(conversationAgentEventsLogPath(CONVERSATION_ID), 'utf8')
+      )
+        .trim()
+        .split('\n');
+      assert.equal(eventsBeforeMismatch.length, 1);
+
       await assert.rejects(
         () =>
           recordConversationAgentTurn({
-            id: TURN_ID,
-            conversationId: CONVERSATION_ID,
-            agent: 'codex',
-            transport: 'cli',
-            model: 'default',
-            sessionId: null,
-            reused: false,
+            ...input,
             status: 'error',
-            startedAt: '2026-08-21T20:00:02.000Z',
-            finishedAt: '2026-08-21T20:00:03.000Z',
-            durationMs: 1000,
             error: new Error('should not overwrite'),
           }),
-        /EEXIST|file already exists/i,
+        /Immutable agent turn mismatch/,
       );
     });
   });
