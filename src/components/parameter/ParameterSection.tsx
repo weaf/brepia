@@ -38,6 +38,8 @@ import {
 } from '@/utils/downloadUtils';
 import type { DxfExporter } from '@/utils/downloadUtils';
 import { useToast } from '@/hooks/use-toast';
+import { useConversation } from '@/contexts/ConversationContext';
+import { persistConversationExport } from '@/services/conversationExports';
 
 interface ParameterSectionProps {
   parameters: Parameter[];
@@ -57,6 +59,7 @@ export function ParameterSection({
   code,
 }: ParameterSectionProps) {
   const { toast } = useToast();
+  const { conversation } = useConversation();
   const [selectedFormat, setSelectedFormat] = useState<DownloadFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -134,13 +137,37 @@ export function ParameterSection({
     debouncedSubmit(updatedParameters);
   };
 
+  const persistExportBestEffort = useCallback(
+    (format: 'stl' | 'dxf', file: Blob) => {
+      if (!conversation.id || !code) return;
+      void persistConversationExport({
+        conversationId: conversation.id,
+        format,
+        sourceCode: code,
+        file,
+      }).catch((error) => {
+        // Workspace persistence must never turn a successful browser download
+        // into a failed export. Surface it only as a diagnostic warning.
+        console.warn(
+          `[conversation-workspace] Failed to persist ${format.toUpperCase()} export:`,
+          error,
+        );
+      });
+    },
+    [code, conversation.id],
+  );
+
   const handleDownloadSTL = () => {
     if (!currentOutput) return;
     downloadSTLFile(currentOutput);
+    persistExportBestEffort('stl', currentOutput);
   };
 
   const handleDownloadOpenSCAD = () => {
     if (!code) return;
+    // The source itself is already persisted as models/current.scad plus an
+    // immutable revision, so a .scad browser download needs no second copy in
+    // exports/.
     downloadOpenSCADFile(code);
   };
 
@@ -152,6 +179,7 @@ export function ParameterSection({
       setIsExporting(true);
       const dxfOutput = await dxfExporter();
       downloadDXFFile(dxfOutput);
+      persistExportBestEffort('dxf', dxfOutput);
     } catch (error) {
       console.error('[OpenSCAD] Failed to export DXF:', error);
       // Optional user-facing feedback to surface the failure
