@@ -9,6 +9,8 @@ const SAFE_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const WORKSPACE_SCHEMA_VERSION = 1 as const;
 
 export type ConversationInputArtifactKind = 'image' | 'mesh' | 'file';
+export type ConversationRenderArtifactKind = 'preview' | 'inspection';
+export type ConversationExportFormat = 'stl' | '3mf' | 'dxf';
 
 export type ConversationWorkspaceMetadata = {
   conversationId: string;
@@ -41,6 +43,17 @@ function assertSafeSegment(value: string, label: string): void {
   ) {
     throw new Error(`Invalid ${label}: ${value}`);
   }
+}
+
+function assertRevision(revision: number): void {
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    throw new Error(`Invalid model revision: ${revision}`);
+  }
+}
+
+function revisionStem(revision: number): string {
+  assertRevision(revision);
+  return String(revision).padStart(3, '0');
 }
 
 function resolveInside(root: string, ...segments: string[]): string {
@@ -130,10 +143,7 @@ export function conversationModelRevisionsDir(conversationId: string): string {
 }
 
 function revisionFilename(revision: number, extension: 'scad' | 'json'): string {
-  if (!Number.isSafeInteger(revision) || revision < 1) {
-    throw new Error(`Invalid model revision: ${revision}`);
-  }
-  return `${String(revision).padStart(3, '0')}.${extension}`;
+  return `${revisionStem(revision)}.${extension}`;
 }
 
 export function conversationModelRevisionPath(
@@ -164,15 +174,55 @@ export function conversationRenderDir(conversationId: string): string {
   return join(conversationRoot(conversationId), 'renders');
 }
 
+export function conversationRenderRevisionDir(
+  conversationId: string,
+  revision: number,
+): string {
+  return join(conversationRenderDir(conversationId), revisionStem(revision));
+}
+
+export function conversationRenderArtifactPath(
+  conversationId: string,
+  revision: number,
+  kind: ConversationRenderArtifactKind,
+): string {
+  return join(
+    conversationRenderRevisionDir(conversationId, revision),
+    `${kind}.png`,
+  );
+}
+
 export function conversationExportDir(conversationId: string): string {
   return join(conversationRoot(conversationId), 'exports');
 }
 
 export function conversationExportFormatDir(
   conversationId: string,
-  format: 'stl' | '3mf' | 'dxf',
+  format: ConversationExportFormat,
 ): string {
   return join(conversationExportDir(conversationId), format);
+}
+
+export function conversationExportRevisionPath(
+  conversationId: string,
+  format: ConversationExportFormat,
+  revision: number,
+): string {
+  return join(
+    conversationExportFormatDir(conversationId, format),
+    `${revisionStem(revision)}.${format}`,
+  );
+}
+
+export function conversationExportRevisionMetadataPath(
+  conversationId: string,
+  format: ConversationExportFormat,
+  revision: number,
+): string {
+  return join(
+    conversationExportFormatDir(conversationId, format),
+    `${revisionStem(revision)}.json`,
+  );
 }
 
 export function conversationAgentDir(
