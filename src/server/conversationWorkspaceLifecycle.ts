@@ -1,6 +1,7 @@
 import { initializeConversationWorkspace } from './conversationWorkspace';
 import { syncConversationInputArtifacts } from './conversationWorkspaceInputs';
 import { syncConversationModelSources } from './conversationWorkspaceModels';
+import { syncConversationRenderArtifacts } from './conversationWorkspaceRenders';
 import { getAnonSupabaseClient } from './supabaseClient';
 import { logError } from './serverLog';
 
@@ -16,6 +17,7 @@ type ConversationWorkspaceRow = {
 type WorkspaceInitializer = typeof initializeConversationWorkspace;
 type ConversationInputSync = typeof syncConversationInputArtifacts;
 type ConversationModelSync = typeof syncConversationModelSources;
+type ConversationRenderSync = typeof syncConversationRenderArtifacts;
 
 type ConversationLoader = (
   request: Request,
@@ -27,6 +29,7 @@ type WorkspaceLifecycleDependencies = {
   initializeWorkspace?: WorkspaceInitializer;
   syncInputs?: ConversationInputSync;
   syncModels?: ConversationModelSync;
+  syncRenders?: ConversationRenderSync;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,10 +91,10 @@ async function loadOwnedConversation(
  * conversation row before a chat generation starts. The request is cloned so
  * the downstream AI handler can still consume its original body.
  *
- * After initialization, user-uploaded inputs are mirrored and successful
- * OpenSCAD builds from the active parametric branch are revisioned. All
- * operations are idempotent. Returns true when an owned conversation was
- * synchronized.
+ * After initialization, user-uploaded inputs are mirrored. Parametric
+ * conversations then revision successful OpenSCAD sources from the active
+ * branch and mirror the build-time preview/inspection images already stored in
+ * Supabase. All operations are idempotent.
  */
 export async function syncConversationWorkspaceForChatRequest(
   request: Request,
@@ -112,6 +115,8 @@ export async function syncConversationWorkspaceForChatRequest(
     dependencies.initializeWorkspace ?? initializeConversationWorkspace;
   const syncInputs = dependencies.syncInputs ?? syncConversationInputArtifacts;
   const syncModels = dependencies.syncModels ?? syncConversationModelSources;
+  const syncRenders =
+    dependencies.syncRenders ?? syncConversationRenderArtifacts;
 
   const conversation = await loadConversation(request, conversationId);
   if (!conversation) return false;
@@ -130,6 +135,7 @@ export async function syncConversationWorkspaceForChatRequest(
       conversation.id,
       conversation.current_message_leaf_id,
     );
+    await syncRenders(request, conversation.id);
   }
   return true;
 }
