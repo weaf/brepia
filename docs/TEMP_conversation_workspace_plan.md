@@ -68,14 +68,7 @@ Implemented on `local-dev-next`:
 - strict UUID validation for conversation ownership boundaries
 - path-containment checks prevent escaping the configured root
 - safe agent workspace names prevent traversal through agent subdirectories
-- canonical path helpers for:
-  - conversation root and `conversation.json`
-  - input images / meshes / generic files
-  - models / revisions / generated model files
-  - renders
-  - exports (`stl`, `3mf`, `dxf`)
-  - agent directories
-  - logs
+- canonical path helpers for conversation metadata, inputs, models, renders, exports, agents, and logs
 - idempotent `initializeConversationWorkspace()` creates the complete directory tree
 - `conversation.json` uses a versioned manifest and preserves existing extra metadata on reinitialization
 - manifest ownership mismatch is rejected rather than silently reusing another conversation's directory
@@ -95,7 +88,7 @@ Important scope boundary:
 
 ### Step 3A — Conversation lifecycle
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-21**
 
 Initialize/update a UUID-owned local workspace when a real conversation is used for generation.
 
@@ -103,59 +96,68 @@ Implemented on `local-dev-next`:
 
 - new `src/server/conversationWorkspaceLifecycle.ts`
 - both `/api/parametric-chat` and `/api/creative-chat` run the lifecycle hook before the existing AI handler
-- the lifecycle hook clones the request, so the downstream AI handler receives the untouched original body
+- lifecycle hook clones the request so the downstream AI handler receives the untouched original body
 - only normal POST generation requests participate; GET/OPTIONS/cancel/malformed requests do not create workspaces
-- the authenticated Supabase conversation row remains authoritative for `id`, title, type, and timestamps
+- authenticated Supabase conversation row remains authoritative for `id`, title, type, and timestamps
 - only conversations owned by the authenticated user can initialize a workspace
 - existing conversations without a workspace are handled lazily the next time they generate
-- `initializeConversationWorkspace()` remains the only directory/manifest writer
 - lifecycle failures are logged but are deliberately non-fatal to the stable chat path
 - focused tests cover request parsing, metadata synchronization, request-body preservation, inaccessible conversations, and non-fatal filesystem failure behavior
 
-Expected manual result for a normal new conversation:
+Validation result:
 
-```text
-conversations/
-└── <conversation-uuid>/
-    ├── conversation.json
-    ├── input/
-    │   ├── images/
-    │   ├── meshes/
-    │   └── files/
-    ├── models/
-    │   ├── revisions/
-    │   └── generated/
-    ├── renders/
-    ├── exports/
-    │   ├── stl/
-    │   ├── 3mf/
-    │   └── dxf/
-    ├── agents/
-    │   ├── opencode/
-    │   └── codex/
-    └── logs/
-```
-
-Validation gate before Step 3B:
-
-- `npm run typecheck`
-- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
-- `npx tsx --test src/server/*.test.ts`
-- manual UI test: create two conversations and confirm two isolated UUID directories appear under `conversations/`
-- inspect each `conversation.json` and confirm its `id`, title, type, `createdAt`, and `updatedAt` match the corresponding conversation
-- confirm normal pCAD generation still works
-
-Do not begin Step 3B until the user confirms Step 3A works in the running app.
+- user created two normal conversations and confirmed two isolated UUID workspaces
+- both `conversation.json` manifests contained the matching ID, generated title, `parametric` type, and Supabase timestamps
 
 ### Step 3B — Conversation inputs
 
-**Status: BLOCKED ON STEP 3A USER VALIDATION**
+**Status: READY FOR USER VALIDATION**
 
-Route user input images/files/meshes, where local persistent copies are required, through the workspace abstraction.
+Mirror persistent user inputs from the existing private Supabase storage into the UUID-owned local workspace. Supabase remains authoritative; local files are idempotent conversation-scoped copies.
+
+Implemented on `local-dev-next`:
+
+- new `src/server/conversationWorkspaceInputs.ts`
+- workspace lifecycle runs input synchronization after workspace initialization and before the existing AI handler
+- only successful records explicitly marked by the existing input persistence contract are mirrored:
+  - image prompt `{ text: "User uploaded image" }`
+  - mesh prompt `{ text: "User uploaded mesh" }`
+- generated image/mesh records with other prompts are not treated as user inputs
+- image source remains private storage `images/<user>/<conversation>/<image-id>`
+- mesh source remains private storage `meshes/<user>/<conversation>/<mesh-id>.<file_type>`
+- mirrored destinations are canonical workspace paths only:
+  - `input/images/<image-id>.<detected-extension>`
+  - `input/meshes/<mesh-id>.<file_type>`
+- image extension is derived from downloaded MIME type (`png`, `jpg`, `webp`, `gif`, otherwise `bin`) rather than trusting the UI's historical `.png` filename placeholder
+- a new safe `conversationInputArtifactPath()` prevents artifact IDs/extensions from escaping their conversation directory
+- local writes use temporary files + rename
+- synchronization is idempotent: already mirrored artifacts are not downloaded again
+- input synchronization/storage failures remain covered by the Step 3A non-fatal lifecycle guard, so they cannot make the stable chat path unavailable
+- focused tests cover prompt classification, MIME mapping, safe artifact paths, image/mesh copying, repeat-run idempotence, request preservation, and non-fatal input-sync failure behavior
+
+Current input scope:
+
+- image uploads: implemented
+- mesh uploads: implemented
+- generic `input/files/`: directory and safe path contract are reserved, but pCAD currently has no generic-file attachment pipeline to mirror; add that routing when such an upload source exists rather than inventing a second file store now
+- mesh preview/render derivatives are not routed here as separate input artifacts; render organization belongs to Step 3D
+
+Validation gate before Step 3C:
+
+- `npm run typecheck`
+- `npx tsx --test src/server/conversationWorkspaceInputs.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
+- `npx tsx --test src/server/*.test.ts`
+- manual image test: start a new conversation with an uploaded PNG/JPEG/WebP and verify a matching file appears under that conversation's `input/images/`
+- manual mesh test: start a parametric conversation with an STL and verify the matching `<mesh-id>.stl` appears under `input/meshes/`
+- verify the same input does not create duplicate files after another turn in the same conversation
+- confirm normal pCAD generation and vision handling still work
+
+Do not begin Step 3C until the user confirms Step 3B works in the running app.
 
 ### Step 3C — Generated OpenSCAD source
 
-**Status: NOT STARTED**
+**Status: BLOCKED ON STEP 3B USER VALIDATION**
 
 Persist `models/current.scad` plus immutable/revisioned source snapshots.
 
