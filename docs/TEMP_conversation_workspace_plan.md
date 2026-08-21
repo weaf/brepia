@@ -132,15 +132,17 @@ Implemented on `local-dev-next`:
 - a new safe `conversationInputArtifactPath()` prevents artifact IDs/extensions from escaping their conversation directory
 - local writes use temporary files + rename
 - synchronization is idempotent: already mirrored artifacts are not downloaded again
-- input synchronization/storage failures remain covered by the Step 3A non-fatal lifecycle guard, so they cannot make the stable chat path unavailable
-- focused tests cover prompt classification, MIME mapping, safe artifact paths, image/mesh copying, repeat-run idempotence, request preservation, and non-fatal input-sync failure behavior
+- one missing/broken storage object is logged and skipped without preventing later artifacts from being mirrored
+- database/listing or filesystem failures remain covered by the Step 3A non-fatal lifecycle guard, so they cannot make the stable chat path unavailable
+- focused tests cover prompt classification, MIME mapping, safe artifact paths, image/mesh copying, repeat-run idempotence, partial storage failure, request preservation, and non-fatal input-sync failure behavior
 
 Current input scope:
 
 - image uploads: implemented
 - mesh uploads: implemented
+- parametric STL multi-angle reference images are submitted to the model as normal image inputs and therefore intentionally mirror into `input/images/`
+- the separate mesh preview storage object (`preview-<mesh-id>`) is not mirrored as an input artifact; organization of render/preview derivatives belongs to Step 3D
 - generic `input/files/`: directory and safe path contract are reserved, but pCAD currently has no generic-file attachment pipeline to mirror; add that routing when such an upload source exists rather than inventing a second file store now
-- mesh preview/render derivatives are not routed here as separate input artifacts; render organization belongs to Step 3D
 
 Validation gate before Step 3C:
 
