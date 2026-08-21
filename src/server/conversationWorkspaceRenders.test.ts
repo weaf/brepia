@@ -51,7 +51,7 @@ function request() {
 }
 
 describe('conversation workspace render mirroring', { concurrency: false }, () => {
-  it('mirrors preview and inspection images by build revision idempotently', async () => {
+  it('mirrors each tool call render only onto its first build revision', async () => {
     await withWorkspaceRoot(async () => {
       await initializeConversationWorkspace({
         conversationId: CONVERSATION_ID,
@@ -62,6 +62,9 @@ describe('conversation workspace render mirroring', { concurrency: false }, () =
         revision(1, 'tool-call-1'),
         revision(2, 'tool-call-1', 'parameter-edit'),
         revision(3, 'tool-call-3'),
+        // Legacy histories can contain more than one build-labelled source for
+        // the same tool call. The storage object still belongs only to rev 1.
+        revision(4, 'tool-call-1'),
       ];
       let downloadCalls = 0;
       const dependencies = {
