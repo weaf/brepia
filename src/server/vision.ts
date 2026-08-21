@@ -5,14 +5,13 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type {
   LanguageModelV3,
-  LanguageModelV3CallOptions,
   LanguageModelV3FilePart,
   LanguageModelV3Message,
   LanguageModelV3Prompt,
   LanguageModelV3ToolResultPart,
 } from '@ai-sdk/provider';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
-import { generateText, type LanguageModel } from 'ai';
+import { generateText, wrapLanguageModel, type LanguageModel } from 'ai';
 import { isCustomProviderModel } from '@shared/customModelIds';
 import { PARAMETRIC_MODELS } from '../lib/utils';
 import { getPreferencesByUserId } from './aiSettings';
@@ -118,7 +117,9 @@ async function resolveBuiltInVisionModel(
     const nativeModelId = modelId.slice('local/'.length);
     const metadata = await getLocalModelMetadataById(userId, nativeModelId);
     if (!metadata?.supportsVision || !metadata.isVisible) {
-      throw new Error(`Configured local vision model is not vision-capable: ${modelId}`);
+      throw new Error(
+        `Configured local vision model is not vision-capable: ${modelId}`,
+      );
     }
     const runtime = await getLocalRuntimeConfig(userId);
     if (!runtime?.enabled) {
@@ -141,7 +142,9 @@ async function resolveBuiltInVisionModel(
 
   if (modelId.startsWith('anthropic/')) {
     const override = overrides.anthropic;
-    if (override?.enabled === false) throw new Error('Anthropic provider is disabled');
+    if (override?.enabled === false) {
+      throw new Error('Anthropic provider is disabled');
+    }
     const id = modelId.slice('anthropic/'.length).replace(/\./g, '-');
     const baseURL = normalizedAnthropicBaseURL(override?.baseUrl);
     const provider = createAnthropic({
@@ -153,7 +156,9 @@ async function resolveBuiltInVisionModel(
 
   if (modelId.startsWith('google/')) {
     const override = overrides.google;
-    if (override?.enabled === false) throw new Error('Google provider is disabled');
+    if (override?.enabled === false) {
+      throw new Error('Google provider is disabled');
+    }
     const baseURL = override?.baseUrl || env('GOOGLE_BASE_URL').trim();
     const provider = createGoogleGenerativeAI({
       apiKey: override?.credential ?? env('GOOGLE_API_KEY'),
@@ -163,7 +168,9 @@ async function resolveBuiltInVisionModel(
   }
 
   const override = overrides.openrouter;
-  if (override?.enabled === false) throw new Error('OpenRouter provider is disabled');
+  if (override?.enabled === false) {
+    throw new Error('OpenRouter provider is disabled');
+  }
   const baseURL = override?.baseUrl || env('OPENROUTER_BASE_URL').trim();
   const provider = createOpenRouter({
     apiKey: override?.credential ?? env('OPENROUTER_API_KEY'),
@@ -182,7 +189,9 @@ async function resolveVisionModel(
   if (isCustomProviderModel(modelId)) {
     const built = await buildCustomChatModel(modelId, userId, false);
     if (!built.capabilities.supportsVision) {
-      throw new Error(`Configured custom model is not vision-capable: ${modelId}`);
+      throw new Error(
+        `Configured custom model is not vision-capable: ${modelId}`,
+      );
     }
     return {
       modelId,
@@ -288,7 +297,9 @@ export function createConfiguredVisionAnalyzer(userId: string): VisionAnalyzer {
   return (request) => analyzeImagesWithConfiguredVision(userId, request);
 }
 
-function dataUrlFromImageFile(part: LanguageModelV3FilePart): string | undefined {
+function dataUrlFromImageFile(
+  part: LanguageModelV3FilePart,
+): string | undefined {
   if (!part.mediaType.startsWith('image/')) return undefined;
 
   const { data } = part;
@@ -306,7 +317,10 @@ function dataUrlFromImageFile(part: LanguageModelV3FilePart): string | undefined
 
 function toolImageDataUrl(
   item: Extract<
-    Extract<LanguageModelV3ToolResultPart['output'], { type: 'content' }>['value'][number],
+    Extract<
+      LanguageModelV3ToolResultPart['output'],
+      { type: 'content' }
+    >['value'][number],
     { type: 'image-data' | 'image-url' | 'file-data' }
   >,
 ): string | undefined {
@@ -343,7 +357,9 @@ type UserMessage = Extract<LanguageModelV3Message, { role: 'user' }>;
 type AssistantMessage = Extract<LanguageModelV3Message, { role: 'assistant' }>;
 type ToolMessage = Extract<LanguageModelV3Message, { role: 'tool' }>;
 
-async function rewriteMultimodalMessage<T extends UserMessage | AssistantMessage>(
+async function rewriteMultimodalMessage<
+  T extends UserMessage | AssistantMessage,
+>(
   message: T,
   analyzer: VisionAnalyzer,
   userRequest: string,
@@ -507,6 +523,10 @@ export function modelSupportsDirectVision(
  * Wrap a text-only LanguageModelV3 so image inputs are converted to textual
  * observations by the user's configured Fast/Deep vision models. Native
  * multimodal models are never wrapped and keep the original image parts.
+ *
+ * Use the AI SDK middleware wrapper rather than object-spreading the provider
+ * model. Provider capabilities such as supportedUrls may be exposed through
+ * prototype getters and are therefore lost by a plain object spread.
  */
 export function withVisionFallback(
   model: LanguageModel,
@@ -516,21 +536,16 @@ export function withVisionFallback(
   if (v3.specificationVersion !== 'v3') return model;
   const analyzer = createConfiguredVisionAnalyzer(userId);
 
-  return {
-    ...v3,
-    async doGenerate(options: LanguageModelV3CallOptions) {
-      const prompt = await rewritePromptForVisionFallback(options.prompt, {
-        analyzer,
-        signal: options.abortSignal,
-      });
-      return v3.doGenerate({ ...options, prompt });
+  return wrapLanguageModel({
+    model: v3,
+    middleware: {
+      transformParams: async ({ params }) => ({
+        ...params,
+        prompt: await rewritePromptForVisionFallback(params.prompt, {
+          analyzer,
+          signal: params.abortSignal,
+        }),
+      }),
     },
-    async doStream(options: LanguageModelV3CallOptions) {
-      const prompt = await rewritePromptForVisionFallback(options.prompt, {
-        analyzer,
-        signal: options.abortSignal,
-      });
-      return v3.doStream({ ...options, prompt });
-    },
-  } as LanguageModel;
+  });
 }
