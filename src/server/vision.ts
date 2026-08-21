@@ -539,6 +539,7 @@ export function withVisionFallback(
   return wrapLanguageModel({
     model: v3,
     middleware: {
+      specificationVersion: 'v3',
       transformParams: async ({ params }) => ({
         ...params,
         prompt: await rewritePromptForVisionFallback(params.prompt, {
