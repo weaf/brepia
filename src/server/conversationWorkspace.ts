@@ -8,6 +8,8 @@ const UUID_PATTERN =
 const SAFE_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const WORKSPACE_SCHEMA_VERSION = 1 as const;
 
+export type ConversationInputArtifactKind = 'image' | 'mesh' | 'file';
+
 export type ConversationWorkspaceMetadata = {
   conversationId: string;
   title?: string | null;
@@ -83,6 +85,30 @@ export function conversationInputMeshesDir(conversationId: string): string {
 
 export function conversationInputFilesDir(conversationId: string): string {
   return join(conversationInputDir(conversationId), 'files');
+}
+
+export function conversationInputArtifactPath(
+  conversationId: string,
+  kind: ConversationInputArtifactKind,
+  artifactId: string,
+  extension?: string | null,
+): string {
+  assertSafeSegment(artifactId, 'input artifact id');
+  const normalizedExtension = extension?.replace(/^\./, '') || '';
+  if (normalizedExtension) {
+    assertSafeSegment(normalizedExtension, 'input artifact extension');
+  }
+
+  const directory =
+    kind === 'image'
+      ? conversationInputImagesDir(conversationId)
+      : kind === 'mesh'
+        ? conversationInputMeshesDir(conversationId)
+        : conversationInputFilesDir(conversationId);
+  const filename = normalizedExtension
+    ? `${artifactId}.${normalizedExtension}`
+    : artifactId;
+  return join(directory, filename);
 }
 
 export function conversationModelDir(conversationId: string): string {
