@@ -11,6 +11,7 @@ const WORKSPACE_SCHEMA_VERSION = 1 as const;
 export type ConversationInputArtifactKind = 'image' | 'mesh' | 'file';
 export type ConversationRenderArtifactKind = 'preview' | 'inspection';
 export type ConversationExportFormat = 'stl' | '3mf' | 'dxf';
+export type ConversationAgentKind = 'opencode' | 'codex';
 
 export type ConversationWorkspaceMetadata = {
   conversationId: string;
@@ -233,8 +234,35 @@ export function conversationAgentDir(
   return join(conversationRoot(conversationId), 'agents', agent);
 }
 
+export function conversationAgentSessionPath(
+  conversationId: string,
+  agent: ConversationAgentKind,
+): string {
+  return join(conversationAgentDir(conversationId, agent), 'session.json');
+}
+
+export function conversationAgentTurnsDir(
+  conversationId: string,
+  agent: ConversationAgentKind,
+): string {
+  return join(conversationAgentDir(conversationId, agent), 'turns');
+}
+
+export function conversationAgentTurnPath(
+  conversationId: string,
+  agent: ConversationAgentKind,
+  turnId: string,
+): string {
+  assertSafeSegment(turnId, 'agent turn id');
+  return join(conversationAgentTurnsDir(conversationId, agent), `${turnId}.json`);
+}
+
 export function conversationLogDir(conversationId: string): string {
   return join(conversationRoot(conversationId), 'logs');
+}
+
+export function conversationAgentEventsLogPath(conversationId: string): string {
+  return join(conversationLogDir(conversationId), 'agent-events.jsonl');
 }
 
 function requiredDirectories(conversationId: string): string[] {
@@ -253,7 +281,9 @@ function requiredDirectories(conversationId: string): string[] {
     conversationExportFormatDir(conversationId, '3mf'),
     conversationExportFormatDir(conversationId, 'dxf'),
     conversationAgentDir(conversationId, 'opencode'),
+    conversationAgentTurnsDir(conversationId, 'opencode'),
     conversationAgentDir(conversationId, 'codex'),
+    conversationAgentTurnsDir(conversationId, 'codex'),
     conversationLogDir(conversationId),
   ];
 }
