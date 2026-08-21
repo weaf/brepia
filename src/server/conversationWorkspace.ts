@@ -115,8 +115,45 @@ export function conversationModelDir(conversationId: string): string {
   return join(conversationRoot(conversationId), 'models');
 }
 
+export function conversationCurrentModelPath(conversationId: string): string {
+  return join(conversationModelDir(conversationId), 'current.scad');
+}
+
+export function conversationCurrentModelMetadataPath(
+  conversationId: string,
+): string {
+  return join(conversationModelDir(conversationId), 'current.json');
+}
+
 export function conversationModelRevisionsDir(conversationId: string): string {
   return join(conversationModelDir(conversationId), 'revisions');
+}
+
+function revisionFilename(revision: number, extension: 'scad' | 'json'): string {
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    throw new Error(`Invalid model revision: ${revision}`);
+  }
+  return `${String(revision).padStart(3, '0')}.${extension}`;
+}
+
+export function conversationModelRevisionPath(
+  conversationId: string,
+  revision: number,
+): string {
+  return join(
+    conversationModelRevisionsDir(conversationId),
+    revisionFilename(revision, 'scad'),
+  );
+}
+
+export function conversationModelRevisionMetadataPath(
+  conversationId: string,
+  revision: number,
+): string {
+  return join(
+    conversationModelRevisionsDir(conversationId),
+    revisionFilename(revision, 'json'),
+  );
 }
 
 export function conversationGeneratedModelDir(conversationId: string): string {
