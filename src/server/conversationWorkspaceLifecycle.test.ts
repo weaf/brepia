@@ -34,7 +34,12 @@ function conversationRow() {
   };
 }
 
-const noInputSync = async () => ({ discovered: 0, copied: 0, existing: 0 });
+const noInputSync = async () => ({
+  discovered: 0,
+  copied: 0,
+  existing: 0,
+  failed: 0,
+});
 
 describe('conversation workspace chat lifecycle', () => {
   it('extracts generation conversation IDs but ignores cancellation', () => {
@@ -88,7 +93,7 @@ describe('conversation workspace chat lifecycle', () => {
           inputRequest.headers.get('Authorization'),
           'Bearer test-token',
         );
-        return { discovered: 2, copied: 2, existing: 0 };
+        return { discovered: 2, copied: 2, existing: 0, failed: 0 };
       },
     });
 
@@ -165,7 +170,7 @@ describe('conversation workspace chat lifecycle', () => {
         },
         syncInputs: async () => {
           inputSyncCalls += 1;
-          return { discovered: 0, copied: 0, existing: 0 };
+          return { discovered: 0, copied: 0, existing: 0, failed: 0 };
         },
       },
     );
@@ -218,7 +223,10 @@ describe('conversation workspace chat lifecycle', () => {
         request,
         async (downstreamRequest) => {
           nextCalls += 1;
-          assert.equal((await downstreamRequest.json()).conversationId, CONVERSATION_ID);
+          assert.equal(
+            (await downstreamRequest.json()).conversationId,
+            CONVERSATION_ID,
+          );
           return new Response('chat-ok', { status: 200 });
         },
         {
