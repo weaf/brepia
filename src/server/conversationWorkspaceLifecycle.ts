@@ -120,9 +120,10 @@ export async function syncConversationWorkspaceForChatRequest(
 export async function withConversationWorkspaceLifecycle(
   request: Request,
   next: (request: Request) => Promise<Response>,
+  dependencies: WorkspaceLifecycleDependencies = {},
 ): Promise<Response> {
   try {
-    await syncConversationWorkspaceForChatRequest(request);
+    await syncConversationWorkspaceForChatRequest(request, dependencies);
   } catch (error) {
     logError(error, {
       functionName: 'conversation-workspace',
