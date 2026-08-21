@@ -1,0 +1,128 @@
+# Temporary plan: conversation naming and workspace layout
+
+> Temporary implementation plan for the local pCAD development branch. Remove this file when the work is complete and the resulting architecture is documented permanently.
+
+## Goal
+
+Keep the repository root clean and make each pCAD conversation the owner of its persistent local artifacts. Conversation identity is the immutable conversation UUID; the human-readable title is metadata and may change without renaming the workspace directory.
+
+Target layout:
+
+```text
+conversations/
+└── <conversation-uuid>/
+    ├── conversation.json
+    ├── input/
+    │   ├── images/
+    │   ├── meshes/
+    │   └── files/
+    ├── models/
+    │   ├── current.scad
+    │   ├── revisions/
+    │   └── generated/
+    ├── renders/
+    ├── exports/
+    │   ├── stl/
+    │   ├── 3mf/
+    │   └── dxf/
+    ├── agents/
+    │   ├── opencode/
+    │   └── codex/
+    └── logs/
+```
+
+Temporary scratch files used only during isolated compilation/validation should stay in the system temp directory and be removed after use. The conversation workspace is for persistent or diagnostically useful artifacts.
+
+## Step 1 — Conversation titles
+
+**Status: IN PROGRESS**
+
+Make new conversations receive a useful title from the first user request instead of remaining `New Conversation`.
+
+Requirements:
+
+- The first saved conversation already has a useful deterministic title, so naming never depends on an external AI provider.
+- The existing title-generator endpoint may improve the title when Anthropic is configured, but must fall back immediately and safely when it is not.
+- Empty-text conversations with image/mesh input get a useful generic title.
+- Generated titles are normalized, bounded to the existing <80-character contract, and never contain multiline/model chatter.
+- Conversation UUID remains the technical identity; title changes must not affect future workspace paths.
+- Add focused tests for deterministic title creation and normalization.
+
+Validation gate before Step 2:
+
+- `npm run typecheck`
+- focused title tests
+- existing server/unit tests as appropriate
+- manual UI test: create several conversations (text-only, image reference, mesh if convenient) and confirm the sidebar/history shows distinct useful titles after reload
+
+Do not begin Step 2 until the user confirms Step 1 works in the running app.
+
+## Step 2 — Conversation workspace abstraction
+
+**Status: BLOCKED ON STEP 1 USER VALIDATION**
+
+Create a single server-side path abstraction, e.g. `src/server/conversationWorkspace.ts`.
+
+Planned contract:
+
+- configurable root, preferably `PCAD_CONVERSATIONS_DIR`, with a sensible local default
+- `conversationRoot(conversationId)`
+- `conversationInputDir(conversationId)`
+- `conversationModelDir(conversationId)`
+- `conversationRenderDir(conversationId)`
+- `conversationExportDir(conversationId)`
+- `conversationAgentDir(conversationId, agent)`
+- path traversal protection and UUID-safe ownership boundaries
+- workspace initialization creates `conversation.json` and required directories idempotently
+
+No other production code should construct persistent conversation artifact paths ad hoc after this step.
+
+Validation gate before Step 3:
+
+- focused path/security tests
+- typecheck/server tests
+- create/reopen two conversations and verify their workspaces are isolated
+
+## Step 3 — Route persistent artifacts into the conversation workspace
+
+**Status: NOT STARTED**
+
+Move persistent/runtime artifacts behind the workspace abstraction incrementally:
+
+1. user input images/files/meshes where local copies are required
+2. generated OpenSCAD source (`current.scad` + revisions)
+3. render/inspection images grouped by model revision/build
+4. exports (STL/3MF/DXF as applicable)
+5. agent-specific artifacts for OpenCode/Codex
+6. useful conversation-scoped logs/diagnostics
+
+Requirements:
+
+- every artifact operation carries a `conversationId`
+- Supabase remains the authoritative application data store where it already owns records; the local workspace complements it rather than silently replacing database ownership
+- temporary validation scratch data remains outside the persistent conversation workspace
+- existing conversations without a workspace continue to load; create workspace lazily where appropriate
+
+## Step 4 — Repository-root cleanup and guardrails
+
+**Status: NOT STARTED**
+
+After production paths are fixed, classify and clean the current root artifacts instead of merely moving the mess into generic top-level folders.
+
+Likely categories:
+
+- manual/debug screenshots (`b9-*.png`, `debug-settings*.png`, etc.)
+- generated model/render/export artifacts (`parametric_box*`, ad-hoc `.scad`, `.stl`)
+- test fixtures/results that belong under `tests/`, `test-results/`, or another explicit test-artifact directory
+- obsolete one-off files that can be deleted after review
+
+Add `.gitignore`/test-output rules where appropriate so the root stays clean going forward.
+
+## Completion criteria
+
+- no normal conversation runtime writes persistent artifacts into the repository root
+- each conversation has a stable UUID-owned workspace
+- human-readable titles work independently of filesystem identity
+- old conversations remain usable
+- root contains only project/source/config/documentation files and explicitly owned test/development directories
+- temporary plan is removed after final documentation is updated
