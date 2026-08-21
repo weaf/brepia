@@ -49,6 +49,13 @@ const noModelSync = async () => ({
   currentRevision: null,
 });
 
+const noRenderSync = async () => ({
+  discovered: 0,
+  copied: 0,
+  existing: 0,
+  failed: 0,
+});
+
 describe('conversation workspace chat lifecycle', () => {
   it('extracts generation conversation IDs but ignores cancellation', () => {
     assert.equal(
@@ -69,13 +76,14 @@ describe('conversation workspace chat lifecycle', () => {
     assert.equal(conversationIdFromChatWorkspaceRequest({}), null);
   });
 
-  it('syncs metadata, inputs, and active model source without consuming the request body', async () => {
+  it('syncs metadata, inputs, active model source, and build renders without consuming the request body', async () => {
     const request = generationRequest();
     let loadedId: string | null = null;
     let initializedMetadata: Record<string, unknown> | null = null;
     let syncedInputId: string | null = null;
     let syncedModelId: string | null = null;
     let syncedLeafId: string | null = null;
+    let syncedRenderId: string | null = null;
 
     const synced = await syncConversationWorkspaceForChatRequest(request, {
       loadConversation: async (loadedRequest, conversationId) => {
@@ -114,6 +122,14 @@ describe('conversation workspace chat lifecycle', () => {
         );
         return { discovered: 1, revisionsCreated: 1, currentRevision: 1 };
       },
+      syncRenders: async (renderRequest, conversationId) => {
+        syncedRenderId = conversationId;
+        assert.equal(
+          renderRequest.headers.get('Authorization'),
+          'Bearer test-token',
+        );
+        return { discovered: 2, copied: 2, existing: 0, failed: 0 };
+      },
     });
 
     assert.equal(synced, true);
@@ -121,6 +137,7 @@ describe('conversation workspace chat lifecycle', () => {
     assert.equal(syncedInputId, CONVERSATION_ID);
     assert.equal(syncedModelId, CONVERSATION_ID);
     assert.equal(syncedLeafId, LEAF_ID);
+    assert.equal(syncedRenderId, CONVERSATION_ID);
     assert.deepEqual(initializedMetadata, {
       conversationId: CONVERSATION_ID,
       title: 'Cable wall bracket',
@@ -135,8 +152,9 @@ describe('conversation workspace chat lifecycle', () => {
     });
   });
 
-  it('does not run OpenSCAD model sync for creative conversations', async () => {
+  it('does not run OpenSCAD model or render sync for creative conversations', async () => {
     let modelSyncCalls = 0;
+    let renderSyncCalls = 0;
     const synced = await syncConversationWorkspaceForChatRequest(
       generationRequest(),
       {
@@ -154,10 +172,15 @@ describe('conversation workspace chat lifecycle', () => {
           modelSyncCalls += 1;
           return { discovered: 0, revisionsCreated: 0, currentRevision: null };
         },
+        syncRenders: async () => {
+          renderSyncCalls += 1;
+          return { discovered: 0, copied: 0, existing: 0, failed: 0 };
+        },
       },
     );
     assert.equal(synced, true);
     assert.equal(modelSyncCalls, 0);
+    assert.equal(renderSyncCalls, 0);
   });
 
   it('skips non-generation requests without touching storage', async () => {
@@ -169,6 +192,7 @@ describe('conversation workspace chat lifecycle', () => {
       },
       syncInputs: noInputSync,
       syncModels: noModelSync,
+      syncRenders: noRenderSync,
     };
 
     assert.equal(
@@ -201,6 +225,7 @@ describe('conversation workspace chat lifecycle', () => {
     let initializeCalls = 0;
     let inputSyncCalls = 0;
     let modelSyncCalls = 0;
+    let renderSyncCalls = 0;
     const synced = await syncConversationWorkspaceForChatRequest(
       generationRequest(),
       {
@@ -224,6 +249,10 @@ describe('conversation workspace chat lifecycle', () => {
           modelSyncCalls += 1;
           return { discovered: 0, revisionsCreated: 0, currentRevision: null };
         },
+        syncRenders: async () => {
+          renderSyncCalls += 1;
+          return { discovered: 0, copied: 0, existing: 0, failed: 0 };
+        },
       },
     );
 
@@ -231,6 +260,7 @@ describe('conversation workspace chat lifecycle', () => {
     assert.equal(initializeCalls, 0);
     assert.equal(inputSyncCalls, 0);
     assert.equal(modelSyncCalls, 0);
+    assert.equal(renderSyncCalls, 0);
   });
 
   it('continues to the chat handler when workspace persistence fails', async () => {
@@ -255,6 +285,7 @@ describe('conversation workspace chat lifecycle', () => {
           },
           syncInputs: noInputSync,
           syncModels: noModelSync,
+          syncRenders: noRenderSync,
         },
       );
 
@@ -297,6 +328,7 @@ describe('conversation workspace chat lifecycle', () => {
             throw new Error('simulated storage download failure');
           },
           syncModels: noModelSync,
+          syncRenders: noRenderSync,
         },
       );
 
@@ -338,6 +370,50 @@ describe('conversation workspace chat lifecycle', () => {
           syncInputs: noInputSync,
           syncModels: async () => {
             throw new Error('simulated model persistence failure');
+          },
+          syncRenders: noRenderSync,
+        },
+      );
+
+      assert.equal(nextCalls, 1);
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), 'chat-ok');
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  it('continues to the chat handler when render mirroring fails', async () => {
+    const request = generationRequest();
+    let nextCalls = 0;
+    const originalConsoleError = console.error;
+    console.error = () => undefined;
+
+    try {
+      const response = await withConversationWorkspaceLifecycle(
+        request,
+        async (downstreamRequest) => {
+          nextCalls += 1;
+          assert.equal(
+            (await downstreamRequest.json()).conversationId,
+            CONVERSATION_ID,
+          );
+          return new Response('chat-ok', { status: 200 });
+        },
+        {
+          loadConversation: async () => conversationRow(),
+          initializeWorkspace: async (metadata) => ({
+            schemaVersion: 1,
+            id: metadata.conversationId,
+            title: metadata.title ?? null,
+            type: metadata.type ?? null,
+            createdAt: metadata.createdAt ?? CREATED_AT,
+            updatedAt: metadata.updatedAt ?? UPDATED_AT,
+          }),
+          syncInputs: noInputSync,
+          syncModels: noModelSync,
+          syncRenders: async () => {
+            throw new Error('simulated render persistence failure');
           },
         },
       );
