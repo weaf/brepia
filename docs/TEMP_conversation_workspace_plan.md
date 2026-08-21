@@ -35,9 +35,19 @@ Temporary scratch files used only during isolated compilation/validation should 
 
 ## Step 1 — Conversation titles
 
-**Status: IN PROGRESS**
+**Status: READY FOR USER VALIDATION**
 
 Make new conversations receive a useful title from the first user request instead of remaining `New Conversation`.
+
+Implemented on `local-dev-next`:
+
+- deterministic title generation from the first user text
+- image/mesh-aware fallback titles when there is no text
+- existing `/api/title-generator` now returns the local deterministic title immediately when Anthropic is not configured
+- optional Anthropic refinement remains best-effort and non-blocking
+- new conversations are inserted with the deterministic title instead of `New Conversation`
+- optional refined titles update Supabase asynchronously and refresh conversation queries
+- focused title-generation tests added
 
 Requirements:
 
@@ -51,7 +61,7 @@ Requirements:
 Validation gate before Step 2:
 
 - `npm run typecheck`
-- focused title tests
+- `npm test -- tests/conversationTitle.test.ts`
 - existing server/unit tests as appropriate
 - manual UI test: create several conversations (text-only, image reference, mesh if convenient) and confirm the sidebar/history shows distinct useful titles after reload
 
