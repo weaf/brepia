@@ -28,7 +28,7 @@ function exportFormat(
   return value === 'stl' || value === '3mf' || value === 'dxf' ? value : null;
 }
 
-function isBlobLike(value: FormDataEntryValue | null): value is Blob {
+function isBlobLike(value: FormDataEntryValue | null): value is File {
   return (
     typeof value === 'object' &&
     value !== null &&
