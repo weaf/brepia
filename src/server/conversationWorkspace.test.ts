@@ -5,6 +5,10 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   conversationAgentDir,
+  conversationAgentEventsLogPath,
+  conversationAgentSessionPath,
+  conversationAgentTurnPath,
+  conversationAgentTurnsDir,
   conversationExportFormatDir,
   conversationExportRevisionMetadataPath,
   conversationExportRevisionPath,
@@ -26,6 +30,7 @@ import {
 
 const ID_A = '11111111-1111-4111-8111-111111111111';
 const ID_B = '22222222-2222-4222-8222-222222222222';
+const TURN_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
 async function withWorkspaceRoot(
   fn: (root: string) => Promise<void>,
@@ -111,14 +116,41 @@ describe('conversation workspace', { concurrency: false }, () => {
         join(configuredRoot, ID_A, 'agents', 'opencode'),
       );
       assert.equal(
+        conversationAgentSessionPath(ID_A, 'opencode'),
+        join(configuredRoot, ID_A, 'agents', 'opencode', 'session.json'),
+      );
+      assert.equal(
+        conversationAgentTurnsDir(ID_A, 'codex'),
+        join(configuredRoot, ID_A, 'agents', 'codex', 'turns'),
+      );
+      assert.equal(
+        conversationAgentTurnPath(ID_A, 'opencode', TURN_ID),
+        join(
+          configuredRoot,
+          ID_A,
+          'agents',
+          'opencode',
+          'turns',
+          `${TURN_ID}.json`,
+        ),
+      );
+      assert.equal(
         conversationLogDir(ID_A),
         join(configuredRoot, ID_A, 'logs'),
+      );
+      assert.equal(
+        conversationAgentEventsLogPath(ID_A),
+        join(configuredRoot, ID_A, 'logs', 'agent-events.jsonl'),
       );
 
       assert.throws(() => conversationRoot('../escape'), /Invalid conversation UUID/);
       assert.throws(
         () => conversationAgentDir(ID_A, '../escape'),
         /Invalid agent workspace name/,
+      );
+      assert.throws(
+        () => conversationAgentTurnPath(ID_A, 'opencode', '../escape'),
+        /Invalid agent turn id/,
       );
       assert.throws(
         () => conversationInputArtifactPath(ID_A, 'image', '../escape', 'png'),
@@ -167,7 +199,9 @@ describe('conversation workspace', { concurrency: false }, () => {
         conversationExportFormatDir(ID_A, '3mf'),
         conversationExportFormatDir(ID_A, 'dxf'),
         conversationAgentDir(ID_A, 'opencode'),
+        conversationAgentTurnsDir(ID_A, 'opencode'),
         conversationAgentDir(ID_A, 'codex'),
+        conversationAgentTurnsDir(ID_A, 'codex'),
         conversationLogDir(ID_A),
       ];
       for (const dir of directories) {
