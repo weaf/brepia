@@ -15,6 +15,7 @@ import {
   type ConversationInputArtifactKind,
 } from './conversationWorkspace';
 import { getAnonSupabaseClient } from './supabaseClient';
+import { logError } from './serverLog';
 
 const USER_UPLOADED_IMAGE_PROMPT = 'User uploaded image';
 const USER_UPLOADED_MESH_PROMPT = 'User uploaded mesh';
@@ -31,6 +32,7 @@ export type ConversationInputMirrorResult = {
   discovered: number;
   copied: number;
   existing: number;
+  failed: number;
 };
 
 type DownloadedArtifact = {
@@ -234,6 +236,8 @@ async function artifactAlreadyMirrored(
  * Mirror user-uploaded inputs from private Supabase storage into the local
  * UUID-owned conversation workspace. Supabase remains authoritative; this is
  * an idempotent local copy for conversation-scoped tooling and diagnostics.
+ * Individual broken/missing objects are logged and skipped so one stale input
+ * cannot prevent the remaining conversation inputs from being mirrored.
  */
 export async function syncConversationInputArtifacts(
   request: Request,
@@ -246,25 +250,40 @@ export async function syncConversationInputArtifacts(
 
   let copied = 0;
   let existing = 0;
+  let failed = 0;
 
   for (const artifact of artifacts) {
-    if (await artifactAlreadyMirrored(conversationId, artifact)) {
-      existing += 1;
-      continue;
-    }
+    try {
+      if (await artifactAlreadyMirrored(conversationId, artifact)) {
+        existing += 1;
+        continue;
+      }
 
-    const downloaded = await downloadArtifact(request, artifact);
-    const extension =
-      artifact.extension ?? imageExtensionFromMediaType(downloaded.mediaType);
-    const destination = conversationInputArtifactPath(
-      conversationId,
-      artifact.kind,
-      artifact.id,
-      extension,
-    );
-    await atomicWrite(destination, downloaded.bytes);
-    copied += 1;
+      const downloaded = await downloadArtifact(request, artifact);
+      const extension =
+        artifact.extension ?? imageExtensionFromMediaType(downloaded.mediaType);
+      const destination = conversationInputArtifactPath(
+        conversationId,
+        artifact.kind,
+        artifact.id,
+        extension,
+      );
+      await atomicWrite(destination, downloaded.bytes);
+      copied += 1;
+    } catch (error) {
+      failed += 1;
+      logError(error, {
+        functionName: 'conversation-workspace-inputs',
+        statusCode: 500,
+        conversationId,
+        additionalContext: {
+          operation: 'mirror_input_artifact',
+          artifactKind: artifact.kind,
+          artifactId: artifact.id,
+        },
+      });
+    }
   }
 
-  return { discovered: artifacts.length, copied, existing };
+  return { discovered: artifacts.length, copied, existing, failed };
 }
