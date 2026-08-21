@@ -34,6 +34,8 @@ function conversationRow() {
   };
 }
 
+const noInputSync = async () => ({ discovered: 0, copied: 0, existing: 0 });
+
 describe('conversation workspace chat lifecycle', () => {
   it('extracts generation conversation IDs but ignores cancellation', () => {
     assert.equal(
@@ -54,10 +56,11 @@ describe('conversation workspace chat lifecycle', () => {
     assert.equal(conversationIdFromChatWorkspaceRequest({}), null);
   });
 
-  it('syncs authoritative conversation metadata without consuming the request body', async () => {
+  it('syncs metadata and inputs without consuming the request body', async () => {
     const request = generationRequest();
     let loadedId: string | null = null;
     let initializedMetadata: Record<string, unknown> | null = null;
+    let syncedInputId: string | null = null;
 
     const synced = await syncConversationWorkspaceForChatRequest(request, {
       loadConversation: async (loadedRequest, conversationId) => {
@@ -79,10 +82,19 @@ describe('conversation workspace chat lifecycle', () => {
           updatedAt: metadata.updatedAt ?? UPDATED_AT,
         };
       },
+      syncInputs: async (inputRequest, conversationId) => {
+        syncedInputId = conversationId;
+        assert.equal(
+          inputRequest.headers.get('Authorization'),
+          'Bearer test-token',
+        );
+        return { discovered: 2, copied: 2, existing: 0 };
+      },
     });
 
     assert.equal(synced, true);
     assert.equal(loadedId, CONVERSATION_ID);
+    assert.equal(syncedInputId, CONVERSATION_ID);
     assert.deepEqual(initializedMetadata, {
       conversationId: CONVERSATION_ID,
       title: 'Cable wall bracket',
@@ -104,6 +116,7 @@ describe('conversation workspace chat lifecycle', () => {
         loadCalls += 1;
         return conversationRow();
       },
+      syncInputs: noInputSync,
     };
 
     assert.equal(
@@ -132,8 +145,9 @@ describe('conversation workspace chat lifecycle', () => {
     assert.equal(loadCalls, 0);
   });
 
-  it('does not create a workspace for an inaccessible conversation', async () => {
+  it('does not create or sync a workspace for an inaccessible conversation', async () => {
     let initializeCalls = 0;
+    let inputSyncCalls = 0;
     const synced = await syncConversationWorkspaceForChatRequest(
       generationRequest(),
       {
@@ -149,11 +163,16 @@ describe('conversation workspace chat lifecycle', () => {
             updatedAt: UPDATED_AT,
           };
         },
+        syncInputs: async () => {
+          inputSyncCalls += 1;
+          return { discovered: 0, copied: 0, existing: 0 };
+        },
       },
     );
 
     assert.equal(synced, false);
     assert.equal(initializeCalls, 0);
+    assert.equal(inputSyncCalls, 0);
   });
 
   it('continues to the chat handler when workspace persistence fails', async () => {
@@ -175,6 +194,45 @@ describe('conversation workspace chat lifecycle', () => {
           loadConversation: async () => conversationRow(),
           initializeWorkspace: async () => {
             throw new Error('simulated disk failure');
+          },
+          syncInputs: noInputSync,
+        },
+      );
+
+      assert.equal(nextCalls, 1);
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), 'chat-ok');
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  it('continues to the chat handler when input mirroring fails', async () => {
+    const request = generationRequest();
+    let nextCalls = 0;
+    const originalConsoleError = console.error;
+    console.error = () => undefined;
+
+    try {
+      const response = await withConversationWorkspaceLifecycle(
+        request,
+        async (downstreamRequest) => {
+          nextCalls += 1;
+          assert.equal((await downstreamRequest.json()).conversationId, CONVERSATION_ID);
+          return new Response('chat-ok', { status: 200 });
+        },
+        {
+          loadConversation: async () => conversationRow(),
+          initializeWorkspace: async (metadata) => ({
+            schemaVersion: 1,
+            id: metadata.conversationId,
+            title: metadata.title ?? null,
+            type: metadata.type ?? null,
+            createdAt: metadata.createdAt ?? CREATED_AT,
+            updatedAt: metadata.updatedAt ?? UPDATED_AT,
+          }),
+          syncInputs: async () => {
+            throw new Error('simulated storage download failure');
           },
         },
       );
