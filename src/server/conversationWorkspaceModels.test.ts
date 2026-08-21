@@ -12,7 +12,9 @@ import {
 } from './conversationWorkspace.ts';
 import {
   collectSuccessfulParametricBuilds,
+  findConversationModelRevisionByCodeSha,
   syncConversationModelSources,
+  conversationModelCodeSha256,
   type ConversationMessageRow,
 } from './conversationWorkspaceModels.ts';
 
@@ -24,7 +26,10 @@ const ASSISTANT_2 = 'dddddddd-4444-4444-8444-444444444444';
 const SIBLING = 'eeeeeeee-5555-4555-8555-555555555555';
 
 const CODE_1 = 'cube_size = 20;\ncube([cube_size, cube_size, cube_size]);\n';
-const CODE_2 = 'width = 40; depth = 30; height = 15;\ncube([width, depth, height]);\n';
+const CODE_1_EDITED =
+  'cube_size = 35;\ncube([cube_size, cube_size, cube_size]);\n';
+const CODE_2 =
+  'width = 40; depth = 30; height = 15;\ncube([width, depth, height]);\n';
 const SIBLING_CODE = 'sphere_radius = 12;\nsphere(r=sphere_radius);\n';
 
 function buildPart(toolCallId: string, title: string, code: string) {
@@ -83,9 +88,7 @@ function rows(): ConversationMessageRow[] {
   ];
 }
 
-async function withWorkspaceRoot(
-  fn: () => Promise<void>,
-): Promise<void> {
+async function withWorkspaceRoot(fn: () => Promise<void>): Promise<void> {
   const previous = process.env.PCAD_CONVERSATIONS_DIR;
   const temp = await mkdtemp(join(tmpdir(), 'pcad-model-revisions-'));
   process.env.PCAD_CONVERSATIONS_DIR = join(temp, 'conversations');
@@ -111,6 +114,10 @@ describe('conversation workspace OpenSCAD revisions', { concurrency: false }, ()
     assert.deepEqual(
       builds.map((build) => build.toolCallId),
       ['tool-call-1', 'tool-call-2'],
+    );
+    assert.deepEqual(
+      builds.map((build) => build.source),
+      ['build', 'build'],
     );
     assert.equal(builds[0]?.code, CODE_1);
     assert.equal(builds[1]?.code, CODE_2);
@@ -138,11 +145,17 @@ describe('conversation workspace OpenSCAD revisions', { concurrency: false }, ()
         currentRevision: 2,
       });
       assert.equal(
-        await readFile(conversationModelRevisionPath(CONVERSATION_ID, 1), 'utf8'),
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 1),
+          'utf8',
+        ),
         CODE_1,
       );
       assert.equal(
-        await readFile(conversationModelRevisionPath(CONVERSATION_ID, 2), 'utf8'),
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 2),
+          'utf8',
+        ),
         CODE_2,
       );
       assert.equal(
@@ -155,9 +168,10 @@ describe('conversation workspace OpenSCAD revisions', { concurrency: false }, ()
           conversationModelRevisionMetadataPath(CONVERSATION_ID, 2),
           'utf8',
         ),
-      ) as { revision: number; toolCallId: string };
+      ) as { revision: number; toolCallId: string; source: string };
       assert.equal(metadata.revision, 2);
       assert.equal(metadata.toolCallId, 'tool-call-2');
+      assert.equal(metadata.source, 'build');
 
       const currentMetadata = JSON.parse(
         await readFile(
@@ -181,7 +195,14 @@ describe('conversation workspace OpenSCAD revisions', { concurrency: false }, ()
       });
 
       const revisionFiles = (
-        await readdir(join(process.env.PCAD_CONVERSATIONS_DIR!, CONVERSATION_ID, 'models', 'revisions'))
+        await readdir(
+          join(
+            process.env.PCAD_CONVERSATIONS_DIR!,
+            CONVERSATION_ID,
+            'models',
+            'revisions',
+          ),
+        )
       ).sort();
       assert.deepEqual(revisionFiles, [
         '001.json',
@@ -224,50 +245,143 @@ describe('conversation workspace OpenSCAD revisions', { concurrency: false }, ()
         CODE_1,
       );
       assert.equal(
-        await readFile(conversationModelRevisionPath(CONVERSATION_ID, 2), 'utf8'),
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 2),
+          'utf8',
+        ),
         CODE_2,
       );
     });
   });
 
-  it('rejects a replay that tries to mutate an immutable revision', async () => {
+  it('preserves the original build and creates a new revision for a persisted parameter edit', async () => {
     await withWorkspaceRoot(async () => {
       await initializeConversationWorkspace({
         conversationId: CONVERSATION_ID,
         type: 'parametric',
       });
-      const originalRows = rows();
+
+      const editedRows = rows().map((row) =>
+        row.id === ASSISTANT_1
+          ? {
+              ...row,
+              metadata: { originalCode: CODE_1 },
+              parts: [buildPart('tool-call-1', 'Cube', CODE_1_EDITED)],
+            }
+          : row,
+      );
+
+      const first = await syncConversationModelSources(
+        request(),
+        CONVERSATION_ID,
+        ASSISTANT_1,
+        { loadMessages: async () => editedRows },
+      );
+      assert.deepEqual(first, {
+        discovered: 2,
+        revisionsCreated: 2,
+        currentRevision: 2,
+      });
+      assert.equal(
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 1),
+          'utf8',
+        ),
+        CODE_1,
+      );
+      assert.equal(
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 2),
+          'utf8',
+        ),
+        CODE_1_EDITED,
+      );
+      assert.equal(
+        await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
+        CODE_1_EDITED,
+      );
+
+      const originalMetadata = JSON.parse(
+        await readFile(
+          conversationModelRevisionMetadataPath(CONVERSATION_ID, 1),
+          'utf8',
+        ),
+      ) as { source: string };
+      const editedMetadata = JSON.parse(
+        await readFile(
+          conversationModelRevisionMetadataPath(CONVERSATION_ID, 2),
+          'utf8',
+        ),
+      ) as { source: string };
+      assert.equal(originalMetadata.source, 'build');
+      assert.equal(editedMetadata.source, 'parameter-edit');
+
+      const repeated = await syncConversationModelSources(
+        request(),
+        CONVERSATION_ID,
+        ASSISTANT_1,
+        { loadMessages: async () => editedRows },
+      );
+      assert.deepEqual(repeated, {
+        discovered: 2,
+        revisionsCreated: 0,
+        currentRevision: 2,
+      });
+
+      const found = await findConversationModelRevisionByCodeSha(
+        CONVERSATION_ID,
+        conversationModelCodeSha256(CODE_1_EDITED),
+      );
+      assert.equal(found?.revision, 2);
+      assert.equal(found?.source, 'parameter-edit');
+    });
+  });
+
+  it('creates a new immutable revision if the same tool call changes source without legacy metadata', async () => {
+    await withWorkspaceRoot(async () => {
+      await initializeConversationWorkspace({
+        conversationId: CONVERSATION_ID,
+        type: 'parametric',
+      });
       await syncConversationModelSources(
         request(),
         CONVERSATION_ID,
         ASSISTANT_1,
-        { loadMessages: async () => originalRows },
+        { loadMessages: async () => rows() },
       );
 
       const changedRows = rows().map((row) =>
         row.id === ASSISTANT_1
           ? {
               ...row,
-              parts: [
-                buildPart(
-                  'tool-call-1',
-                  'Cube',
-                  'cube_size = 99;\ncube([cube_size, cube_size, cube_size]);\n',
-                ),
-              ],
+              parts: [buildPart('tool-call-1', 'Cube', CODE_1_EDITED)],
             }
           : row,
       );
-
-      await assert.rejects(
-        () =>
-          syncConversationModelSources(
-            request(),
-            CONVERSATION_ID,
-            ASSISTANT_1,
-            { loadMessages: async () => changedRows },
-          ),
-        /replay changed source/,
+      const changed = await syncConversationModelSources(
+        request(),
+        CONVERSATION_ID,
+        ASSISTANT_1,
+        { loadMessages: async () => changedRows },
+      );
+      assert.deepEqual(changed, {
+        discovered: 1,
+        revisionsCreated: 1,
+        currentRevision: 2,
+      });
+      assert.equal(
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 1),
+          'utf8',
+        ),
+        CODE_1,
+      );
+      assert.equal(
+        await readFile(
+          conversationModelRevisionPath(CONVERSATION_ID, 2),
+          'utf8',
+        ),
+        CODE_1_EDITED,
       );
     });
   });
