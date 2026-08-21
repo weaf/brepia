@@ -1,0 +1,27 @@
+- generic [active] [ref=f5e1]:
+  - region "Notifications (F8)":
+    - list
+  - generic [ref=f5e4]:
+    - img "CADAM Logo" [ref=f5e7]
+    - button "Continue with Google" [ref=f5e9] [cursor=pointer]:
+      - img [ref=f5e10]:
+        - img "Google" [ref=f5e11]
+    - generic [ref=f5e14]:
+      - generic [ref=f5e27]: An error occurred while signing in
+      - generic [ref=f5e15]:
+        - text: Email
+        - textbox "Email" [ref=f5e16]:
+          - /placeholder: Enter your email
+      - generic [ref=f5e17]:
+        - generic [ref=f5e18]:
+          - generic [ref=f5e19]: Password
+          - link "Forgot password?" [ref=f5e20] [cursor=pointer]:
+            - /url: /cadam/reset-password
+        - textbox "Password" [ref=f5e21]:
+          - /placeholder: Enter your password
+      - button "Sign in with magic link instead" [ref=f5e23] [cursor=pointer]
+      - button "Sign In" [ref=f5e24] [cursor=pointer]
+      - generic [ref=f5e25]:
+        - text: Don't have an account?
+        - link "Sign up" [ref=f5e26] [cursor=pointer]:
+          - /url: /cadam/signup

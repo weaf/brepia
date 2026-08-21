@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pastell-låda — Portugisiska Bakverk</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Georgia', serif;
+      background: #faf7f0;
+      color: #3a2e1f;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .hero h1 {
+      font-size: 2.8rem;
+      color: #b8860b;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+
+    .hero .subtitle {
+      font-size: 1.1rem;
+      color: #8b7355;
+      font-style: italic;
+    }
+
+    .hero .divider {
+      width: 80px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #b8860b, transparent);
+      margin: 16px auto 0;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 32px;
+      max-width: 900px;
+      width: 100%;
+      margin-bottom: 48px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(180, 130, 11, 0.08);
+      overflow: hidden;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px rgba(180, 130, 11, 0.15);
+    }
+
+    .card-visual {
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4rem;
+    }
+
+    .card-visual.nata { background: linear-gradient(135deg, #ffe4a0, #f5c957); }
+    .card-visual.maintas { background: linear-gradient(135deg, #ffd6e8, #f8a0c0); }
+    .card-visual.pao { background: linear-gradient(135deg, #e8d5b7, #c9a96e); }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    .card-body h3 {
+      font-size: 1.3rem;
+      color: #5a3e1b;
+      margin-bottom: 6px;
+    }
+
+    .card-body .price {
+      font-size: 1.1rem;
+      color: #b8860b;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .card-body p {
+      font-size: 0.9rem;
+      color: #7a6a52;
+      line-height: 1.5;
+    }
+
+    .box-section {
+      max-width: 900px;
+      width: 100%;
+      margin-top: 32px;
+    }
+
+    .box-section h2 {
+      text-align: center;
+      font-size: 1.6rem;
+      color: #5a3e1b;
+      margin-bottom: 24px;
+    }
+
+    .box-visual {
+      background: linear-gradient(145deg, #8B4513, #A0522D);
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(80, 40, 10, 0.2);
+      position: relative;
+    }
+
+    .box-visual::before {
+      content: '';
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      border: 2px dashed rgba(255,215,0,0.3);
+      border-radius: 14px;
+      pointer-events: none;
+    }
+
+    .box-visual .box-label {
+      color: #ffd700;
+      font-size: 1.4rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .box-visual .box-sublabel {
+      color: #e8c97a;
+      font-size: 0.9rem;
+      font-style: italic;
+    }
+
+    .box-visual .box-emoji {
+      font-size: 3rem;
+      margin-top: 20px;
+    }
+
+    .order-btn {
+      display: inline-block;
+      margin-top: 32px;
+      padding: 14px 48px;
+      background: linear-gradient(135deg, #b8860b, #daa520);
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      font-size: 1.1rem;
+      font-family: 'Georgia', serif;
+      cursor: pointer;
+      letter-spacing: 1px;
+      box-shadow: 0 4px 16px rgba(180, 130, 11, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .order-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 24px rgba(180, 130, 11, 0.45);
+    }
+
+    .footer {
+      margin-top: 64px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #a09080;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hero">
+    <h1>🇵🇹 Pastel-låda</h1>
+    <p class="subtitle">Autentiska portugisiska bakverk, handgjorda med kärlek</p>
+    <div class="divider"></div>
+  </div>
+
+  <div class="product-grid">
+    <div class="card">
+      <div class="card-visual nata">🧁</div>
+      <div class="card-body">
+        <h3>Pastéis de Nata</h3>
+        <div class="price">45 kr / st</div>
+        <p>Krämig äggkräm i sprökt filodegsblad, kanelströdd och karamelliserad. Klassikern från Belém!</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-visual maintas">🍪</div>
+      <div class="card-body">
+        <h3>Manteigas</h3>
+        <div class="price">35 kr / st</div>
+        <p>Smörkex — mjuka, smältande smörkakor med ett streck choklad ovanpå. Portugals nationalgodis.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-visual pao">🍞</div>
+      <div class="card-body">
+        <h3>Pão de Lácteus</h3>
+        <div class="price">55 kr / st</div>
+        <p>Mjölkbröd med russin, mandel och apelsinskal. Perfekt till eftermiddagskaffe.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="box-section">
+    <h2>🎁 Presentlåda — Mix av 6 st</h2>
+    <div class="box-visual">
+      <div class="box-label">✦ Pastel-låda ✦</div>
+      <div class="box-sublabel">Lisboa · Est. 2024 · Handgjord dagligen</div>
+      <div class="box-emoji">🧁 🍪 🧁 🍪 🧁 🍪</div>
+    </div>
+    <div style="text-align:center">
+      <p class="price" style="margin-top:16px; font-size:1.3rem;">249 kr</p>
+      <button class="order-btn">Beställ Nu ✨</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Handgjord med kärlek i Stockholm · Leverans inom 24h · Fria frakten över 500 kr</p>
+  </div>
+
+</body>
+</html>

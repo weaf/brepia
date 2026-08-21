@@ -1,0 +1,33 @@
+// Box with lid parameters
+outer_length = 100;        // [50:10:200]
+outer_width = 80;          // [40:10:200]
+outer_height = 60;         // [30:10:200]
+wall_thickness = 3;         // [1:0.5:10]
+lid_overlap = 2;            // [0:0.5:10]
+base_height = 40;           // [20:5:100]
+lid_color = "LightBlue";
+box_color = "SaddleBrown";
+
+module box() {
+    difference() {
+        square([outer_length, outer_width], center=true);
+        square([outer_length - 2*wall_thickness, outer_width - 2*wall_thickness], center=true);
+    }
+}
+
+module lid() {
+    difference() {
+        square([outer_length + 2*lid_overlap, outer_width + 2*lid_overlap], center=true);
+        square([outer_length + 2*lid_overlap - 2*wall_thickness, outer_width + 2*lid_overlap - 2*wall_thickness], center=true);
+    }
+}
+
+color(box_color)
+translate([0, 0, 0])
+linear_extrude(height = base_height)
+box();
+
+color(lid_color)
+translate([0, 0, base_height])
+linear_extrude(height = wall_thickness)
+lid();

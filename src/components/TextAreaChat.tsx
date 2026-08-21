@@ -20,12 +20,17 @@ import {
 import {
   cn,
   CREATIVE_MODELS,
-  PARAMETRIC_MODELS,
   parametricModelSupportsVision,
 } from '@/lib/utils';
-import { CreativeModel, MeshFileType, Model } from '@shared/types';
+import {
+  ConversationSettings,
+  CreativeModel,
+  MeshFileType,
+  Model,
+} from '@shared/types';
 import type { AppUIMessage } from '@shared/chatAi';
 import { imageFilePartUrl } from '@shared/imageRefs';
+import { isOpenCodeTransportModel } from '@shared/models';
 import {
   shouldShowPolygonControls,
   getModelDefaultPolygonCount,
@@ -34,6 +39,7 @@ import {
 } from '@/constants/meshConstants';
 import { MessageItem } from '../types/misc.ts';
 import { useToast } from '@/hooks/use-toast';
+import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import {
   Tooltip,
   TooltipContent,
@@ -64,6 +70,11 @@ import { useMeshFiles } from '@/contexts/MeshFilesContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { apiJson } from '@/services/api';
 import { z } from 'zod';
+import {
+  getPromptDraftStorage,
+  readPromptDraft,
+  writePromptDraft,
+} from '@/lib/promptDraft';
 
 const promptResponseSchema = z.object({ prompt: z.string().optional() });
 
@@ -83,7 +94,14 @@ interface TextAreaChatProps {
   conversation: {
     id: string;
     user_id: string;
+    settings?: ConversationSettings;
   };
+  /** Current execution mode for this conversation ('cli' | 'streaming'). */
+  executionMode?: 'cli' | 'streaming';
+  /** Called when the execution mode is toggled. Persists to conversation settings. */
+  onExecutionModeChange?: (mode: 'cli' | 'streaming') => void;
+  /** Persist an unfinished prompt across remounts/reloads when provided. */
+  draftStorageKey?: string;
 }
 
 // SVG Icon component for the quads/polys toggle
@@ -473,10 +491,14 @@ function TextAreaChat({
   showFullLabels = false,
   onTypeChange,
   conversation,
+  executionMode = 'cli',
+  onExecutionModeChange,
+  draftStorageKey,
 }: TextAreaChatProps) {
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState('');
+  const restoredDraftKeyRef = useRef<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isDragHover, setIsDragHover] = useState(false);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
@@ -501,6 +523,21 @@ function TextAreaChat({
     null,
   );
   const [meshFilename, setMeshFilename] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!draftStorageKey) return;
+
+    const storage = getPromptDraftStorage();
+
+    if (restoredDraftKeyRef.current !== draftStorageKey) {
+      restoredDraftKeyRef.current = draftStorageKey;
+      const draft = readPromptDraft(storage, draftStorageKey);
+      if (draft) setInput(draft);
+      return;
+    }
+
+    writePromptDraft(storage, draftStorageKey, input);
+  }, [draftStorageKey, input]);
 
   // Quads vs Polys toggle state (only for ultra model)
   const [meshTopology, setMeshTopology] = useState<'quads' | 'polys'>(() => {
@@ -652,12 +689,19 @@ function TextAreaChat({
     },
   };
 
+  // ------------------------------------------------------------------
+  // Model picker: fetch the effective catalog from the server.
+  // ------------------------------------------------------------------
+  const { models: catalogModels, isLoading: _catalogLoading } =
+    useParametricModelCatalog();
+
   const memoizedModels = useMemo(() => {
     if (type === 'creative') {
       return CREATIVE_MODELS;
     }
-    return PARAMETRIC_MODELS;
-  }, [type]);
+    // Use the unified catalog (builtin + opencode + custom providers).
+    return catalogModels;
+  }, [type, catalogModels]);
 
   // ------------------------------------------------------------
   // Placeholder – Typed-out Animation
@@ -1684,7 +1728,7 @@ function TextAreaChat({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ModelSelector
               disabled={isLoading || disabled}
               models={memoizedModels}
@@ -1692,7 +1736,60 @@ function TextAreaChat({
               onModelChange={setModel}
               type={type}
               focused={isFocused}
+              className="min-w-0 max-w-[240px]"
             />
+            {/* F01/R03: Transport selector — shown for any OpenCode model
+                (canonical agent/opencode/... or legacy opencode/...) that can
+                switch CLI vs Streaming transport. Rendered as a compact
+                two-button segmented control.
+                On mobile ( < md) it takes the full row below the model
+                selector so it never gets pushed offscreen by long model
+                names. On desktop it stays inline. */}
+            <div className="w-full md:w-auto">
+              {isOpenCodeTransportModel(model) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex h-8 shrink-0 overflow-hidden rounded-lg border border-[#2a2a2a]">
+                      <button
+                        type="button"
+                        onClick={() => onExecutionModeChange?.('cli')}
+                        disabled={!!(isLoading || disabled)}
+                        aria-pressed={executionMode === 'cli'}
+                        className={cn(
+                          'flex items-center px-3 text-xs font-medium transition-colors duration-200',
+                          'disabled:cursor-not-allowed disabled:opacity-50',
+                          executionMode === 'cli'
+                            ? 'bg-adam-blue/15 text-adam-blue'
+                            : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
+                        )}
+                      >
+                        CLI
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onExecutionModeChange?.('streaming')}
+                        disabled={!!(isLoading || disabled)}
+                        aria-pressed={executionMode === 'streaming'}
+                        className={cn(
+                          'flex items-center border-l border-[#2a2a2a] px-3 text-xs font-medium transition-colors duration-200',
+                          'disabled:cursor-not-allowed disabled:opacity-50',
+                          executionMode === 'streaming'
+                            ? 'bg-adam-blue/15 text-adam-blue'
+                            : 'bg-transparent text-adam-neutral-400 hover:text-adam-text-primary',
+                        )}
+                      >
+                        Streaming
+                      </button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {executionMode === 'streaming'
+                      ? 'Streaming mode: real-time incremental text'
+                      : 'CLI mode: batch response after completion'}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             {/* Enhanced submit button */}
             {isLoading && stopGenerating ? (
               <Tooltip>

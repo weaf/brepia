@@ -318,54 +318,6 @@ export const PARAMETRIC_MODELS: ModelConfig[] = [
     supportsThinking: true,
     supportsVision: false,
   },
-  {
-    id: 'local/qwen-coder-96k',
-    name: 'Qwen 3 Coder 30B 96k (Local)',
-    description:
-      'Qwen3-Coder-30B via llama-swap/llama.cpp — 96k context, flash-attn, full GPU',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/qwen-coder-128k',
-    name: 'Qwen 3 Coder 30B 128k (Local)',
-    description:
-      'Qwen3-Coder-30B via llama-swap/llama.cpp — 128k context, flash-attn',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/qwen-coder-262k',
-    name: 'Qwen 3 Coder 30B 262k (Local)',
-    description:
-      'Qwen3-Coder-30B via llama-swap/llama.cpp — 262k context, fewer GPU layers',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/ollama-qwen3-coder',
-    name: 'Qwen 3 Coder 30B (Ollama)',
-    description: 'Qwen3-Coder-30B from Ollama — 32k context, full GPU',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
-  {
-    id: 'local/ollama-devstral',
-    name: 'Devstral Small 2 24B (Ollama)',
-    description: 'Devstral-Small-2-24B from Ollama — 32k context, full GPU',
-    provider: 'Local',
-    supportsTools: true,
-    supportsThinking: true,
-    supportsVision: false,
-  },
 ];
 
 export const CREATIVE_MODELS: ModelConfig[] = [
@@ -389,10 +341,9 @@ export const CREATIVE_MODELS: ModelConfig[] = [
   },
 ];
 
-// Whether the selected parametric model can accept image / STL-render inputs.
-// Unknown ids (e.g. historical messages tagged with a removed model) fall back
-// to `true` so older saved rows still render normally.
-export function parametricModelSupportsVision(modelId: string): boolean {
-  const cfg = PARAMETRIC_MODELS.find((m) => m.id === modelId);
-  return cfg?.supportsVision !== false;
+// pCAD accepts image / STL-render inputs for every parametric route. Native
+// multimodal models receive the original image data; text-only, OpenCode and
+// Codex routes use the configured server-side vision fallback.
+export function parametricModelSupportsVision(_modelId: string): boolean {
+  return true;
 }

@@ -1,0 +1,180 @@
+- generic [active] [ref=e1]:
+  - region "Notifications (F8)":
+    - list
+  - generic [ref=e28]:
+    - generic [ref=e29]:
+      - button [ref=e31] [cursor=pointer]:
+        - img "Logo" [ref=e33]
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - button "New Creation" [ref=e37] [cursor=pointer]
+          - navigation [ref=e40]:
+            - generic [ref=e41]:
+              - button "Creations" [ref=e42] [cursor=pointer]
+              - list [ref=e48]:
+                - link "New Conversation" [ref=e3004] [cursor=pointer]:
+                  - /url: /cadam/editor/c93153e3-a9ea-4da0-afde-c8f3ae110250
+                  - listitem [ref=e3005]:
+                    - generic [ref=e3006]: New Conversation
+                - link "New Conversation" [ref=e49] [cursor=pointer]:
+                  - /url: /cadam/editor/7862e1a9-8902-45f0-8c5a-6a71903033a5
+                  - listitem [ref=e50]:
+                    - generic [ref=e51]: New Conversation
+                - link "New Conversation" [ref=e52] [cursor=pointer]:
+                  - /url: /cadam/editor/6bdc7ee0-4202-4dad-9360-ee20e240248f
+                  - listitem [ref=e53]:
+                    - generic [ref=e54]: New Conversation
+                - link "New Conversation" [ref=e55] [cursor=pointer]:
+                  - /url: /cadam/editor/97a81c1c-8b4a-44a7-aba1-581b9a090ec9
+                  - listitem [ref=e56]:
+                    - generic [ref=e57]: New Conversation
+                - link "New Conversation" [ref=e58] [cursor=pointer]:
+                  - /url: /cadam/editor/64b196ee-5d84-4075-b37f-4c7927f7803d
+                  - listitem [ref=e59]:
+                    - generic [ref=e60]: New Conversation
+                - link "New Conversation" [ref=e61] [cursor=pointer]:
+                  - /url: /cadam/editor/4b055db2-a614-489f-81ba-1515bcc6510c
+                  - listitem [ref=e62]:
+                    - generic [ref=e63]: New Conversation
+                - link "New Conversation" [ref=e64] [cursor=pointer]:
+                  - /url: /cadam/editor/99eba47c-67c4-474e-bb21-b6304d939fb7
+                  - listitem [ref=e65]:
+                    - generic [ref=e66]: New Conversation
+                - link "New Conversation" [ref=e67] [cursor=pointer]:
+                  - /url: /cadam/editor/43f27956-0ac6-4a51-841c-b71eba5816aa
+                  - listitem [ref=e68]:
+                    - generic [ref=e69]: New Conversation
+                - link "New Conversation" [ref=e70] [cursor=pointer]:
+                  - /url: /cadam/editor/cacfee9c-687f-4623-9ccf-3bbe137c6445
+                  - listitem [ref=e71]:
+                    - generic [ref=e72]: New Conversation
+                - link "New Conversation" [ref=e73] [cursor=pointer]:
+                  - /url: /cadam/editor/bd61bc78-f6ca-4a55-b589-38c7a6e867a8
+                  - listitem [ref=e74]:
+                    - generic [ref=e75]: New Conversation
+        - generic [ref=e80]:
+          - link [ref=e81] [cursor=pointer]:
+            - /url: https://github.com/Adam-CAD/CADAM
+            - button "GitHub" [ref=e82]:
+              - img [ref=e83]:
+                - img "GitHub" [ref=e84]
+              - text: GitHub
+          - link [ref=e86] [cursor=pointer]:
+            - /url: https://discord.com/invite/HKdXDqAHCs
+            - button "Discord" [ref=e87]:
+              - img [ref=e88]:
+                - img "Discord" [ref=e89]
+              - text: Discord
+          - generic [ref=e91] [cursor=pointer]:
+            - generic [ref=e92]: T
+            - generic [ref=e94]:
+              - generic [ref=e95]: thn
+              - generic [ref=e96]: thn@test.local
+    - generic [ref=e97]:
+      - button [ref=e104] [cursor=pointer]
+      - generic [ref=e3008]:
+        - generic [ref=e3010]:
+          - generic [ref=e3011]:
+            - generic [ref=e3012]: New Conversation
+            - button "Share" [ref=e3018] [cursor=pointer]
+          - generic [ref=e3026]:
+            - generic [ref=e3027]:
+              - generic [ref=e3028]: T
+              - generic [ref=e3031]: Skapa en enkel 20 mm kub med ett centrerat 6 mm genomgående hål. Returnera bara den färdiga modellen.
+            - generic [ref=e3092]:
+              - img "Adam" [ref=e3096]
+              - generic [ref=e3097]:
+                - button [ref=e3137] [cursor=pointer]:
+                  - paragraph [ref=e3138]: Thought for 3 seconds
+                - button [ref=e3142] [cursor=pointer]:
+                  - paragraph [ref=e3143]: Thought for 2 seconds
+                - button [ref=e3147] [cursor=pointer]:
+                  - paragraph [ref=e3148]: Thought for 3 seconds
+                - button [ref=e3260] [cursor=pointer]:
+                  - paragraph [ref=e3261]: Thought for 4 seconds
+                - button [ref=e3265] [cursor=pointer]:
+                  - paragraph [ref=e3266]: Thought for 1 seconds
+                - button [ref=e3324] [cursor=pointer]:
+                  - paragraph [ref=e3325]: Thought for 2 seconds
+                - button [ref=e3383] [cursor=pointer]:
+                  - paragraph [ref=e3384]: Thought for 2 seconds
+                - button [ref=e3388] [cursor=pointer]:
+                  - paragraph [ref=e3389]: Thought for 2 seconds
+                - button [ref=e3393] [cursor=pointer]:
+                  - paragraph [ref=e3394]: Thought for 2 seconds
+                - button [ref=e3398] [cursor=pointer]:
+                  - paragraph [ref=e3399]: Thought for 2 seconds
+                - button [ref=e3495] [cursor=pointer]:
+                  - paragraph [ref=e3496]: Thought for 2 seconds
+                - button [ref=e3500] [cursor=pointer]:
+                  - paragraph [ref=e3501]: Thought for 4 seconds
+                - button [ref=e3505] [cursor=pointer]:
+                  - paragraph [ref=e3506]: Thought for 1 seconds
+                - button [ref=e3510] [cursor=pointer]:
+                  - paragraph [ref=e3511]: Thought for 1 seconds
+                - button [ref=e3529] [cursor=pointer]:
+                  - paragraph [ref=e3530]: Thought for 1 seconds
+                - button [ref=e3572] [cursor=pointer]:
+                  - paragraph [ref=e3573]: Thought for 2 seconds
+                - button [ref=e3577] [cursor=pointer]:
+                  - paragraph [ref=e3578]: Thought for 4 seconds
+                - button [ref=e3582] [cursor=pointer]:
+                  - paragraph [ref=e3583]: Thought for 2 seconds
+                - button [ref=e3587] [cursor=pointer]:
+                  - paragraph [ref=e3588]: Thought for 2 seconds
+                - button [ref=e3592] [cursor=pointer]:
+                  - paragraph [ref=e3593]: Thought for 4 seconds
+                - button [ref=e3649] [cursor=pointer]:
+                  - paragraph [ref=e3650]: Thought for 1 seconds
+                - generic [ref=e3653]:
+                  - button [ref=e3655] [cursor=pointer]
+                  - generic [ref=e3657]:
+                    - button "Generated model" [ref=e3658] [cursor=pointer]
+                    - button "Show code" [ref=e3664] [cursor=pointer]
+          - generic [ref=e3060]:
+            - generic [ref=e3061]:
+              - generic:
+                - paragraph: Drop images and 3D models here
+            - generic [ref=e3062]:
+              - generic [ref=e3063]:
+                - img "Adam Logo" [ref=e3066]
+                - textbox "Keep iterating with Adam..." [disabled] [ref=e3068]
+              - generic [ref=e3070]:
+                - button "OpenCode · Qwen3.6-35B-A3B-MTP (128k)" [disabled]
+                - generic [ref=e3077]:
+                  - button "CLI" [disabled] [ref=e3078]
+                  - button "Streaming" [disabled] [pressed] [ref=e3079]
+                - button [ref=e3667] [cursor=pointer]
+        - separator [ref=e3083]:
+          - button [ref=e3085] [cursor=pointer]
+        - paragraph [ref=e3704]: Sketching...
+        - separator [ref=e3205]:
+          - button [ref=e3207] [cursor=pointer]
+        - generic [ref=e3213]:
+          - generic [ref=e3214]:
+            - generic [ref=e3215]: Parameters
+            - button [ref=e3217] [cursor=pointer]
+          - generic [ref=e3223]:
+            - generic [ref=e3228]:
+              - button "Collapse dimension parameters" [expanded] [ref=e3229] [cursor=pointer]:
+                - generic [ref=e3230]:
+                  - text: Dimensions
+                  - generic [ref=e3231]: "2"
+              - generic [ref=e3235]:
+                - generic [ref=e3236]:
+                  - generic [ref=e3237]: Cube Size
+                  - generic [ref=e3238]:
+                    - generic [ref=e3240] [cursor=pointer]
+                    - generic [ref=e3242]:
+                      - textbox "Cube Size" [ref=e3243]: "20"
+                      - generic [ref=e3244]: mm
+                - generic [ref=e3245]:
+                  - generic [ref=e3246]: Hole Diameter
+                  - generic [ref=e3247]:
+                    - generic [ref=e3249] [cursor=pointer]
+                    - generic [ref=e3251]:
+                      - textbox "Hole Diameter" [ref=e3252]: "6"
+                      - generic [ref=e3253]: mm
+            - generic [ref=e3255]:
+              - button "download STL file" [disabled]: STL
+              - button "select download format" [ref=e3256] [cursor=pointer]

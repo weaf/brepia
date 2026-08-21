@@ -18,6 +18,7 @@ import { PLAN_DISPLAY_NAMES } from '@/config/plan-features';
 import { BILLING_URL, BILLING_UPGRADE_URL } from '@/config/billing';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { UserAvatar } from '@/components/chat/UserAvatar';
+import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 
 function formatPeriodEnd(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -491,6 +492,9 @@ export default function SettingsView() {
               </div>
             </section>
           )}
+
+          {/* P07A: AI settings wrapper — models, prompts, providers in tabs */}
+          <AiSettingsSection />
 
           <div className="mt-2 flex items-center justify-center gap-3 text-xs text-adam-neutral-300">
             <Link

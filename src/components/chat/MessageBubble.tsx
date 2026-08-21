@@ -9,7 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { CREATIVE_MODELS, PARAMETRIC_MODELS } from '@/lib/utils';
+import { CREATIVE_MODELS } from '@/lib/utils';
+import { useSelectableParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -431,8 +432,9 @@ function AssistantBubble({
   onRestore,
 }: MessageBubbleProps) {
   const { conversation } = useConversation();
+  const { models: parametricOptions } = useSelectableParametricModelCatalog();
   const modelOptions =
-    conversation.type === 'creative' ? CREATIVE_MODELS : PARAMETRIC_MODELS;
+    conversation.type === 'creative' ? CREATIVE_MODELS : parametricOptions;
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const lastParametricBuildIndex = useMemo(() => {
     if (conversation.type !== 'parametric') return -1;
@@ -810,7 +812,11 @@ function RetryModelDropdown({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedModel =
-    modelOptions.find((option) => option.id === selectedModelId) ??
+    modelOptions.find(
+      (option) =>
+        option.id === (selectedModelId as ModelConfig | undefined)?.id,
+    ) ??
+    (selectedModelId as ModelConfig | undefined) ??
     modelOptions[0];
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>

@@ -1,0 +1,91 @@
+- generic [ref=f12e1]:
+  - region "Notifications (F8)":
+    - list
+  - generic [ref=f12e3]:
+    - button [ref=f12e4722] [cursor=pointer]
+    - generic [ref=f12e7]:
+      - banner [ref=f12e8]:
+        - heading "Settings" [level=1] [ref=f12e9]
+        - paragraph [ref=f12e10]: Manage your account, billing, and preferences.
+      - generic [ref=f12e11]:
+        - generic [ref=f12e12]:
+          - heading "Account" [level=2] [ref=f12e13]
+          - generic [ref=f12e14]:
+            - generic [ref=f12e15]:
+              - generic [ref=f12e16]:
+                - generic [ref=f12e17]: T
+                - generic [ref=f12e25]: thn
+              - button "Edit" [ref=f12e26] [cursor=pointer]
+            - generic [ref=f12e27]:
+              - generic [ref=f12e28]: Email
+              - generic [ref=f12e29]: thn@test.local
+            - generic [ref=f12e30]:
+              - generic [ref=f12e31]:
+                - generic [ref=f12e32]: Password
+                - generic [ref=f12e33]: Send a reset link to your email
+              - button "Reset Password" [ref=f12e34] [cursor=pointer]
+        - generic [ref=f12e35]:
+          - heading "Notifications" [level=2] [ref=f12e36]
+          - generic [ref=f12e37]:
+            - generic [ref=f12e38]:
+              - generic [ref=f12e39]: Responses
+              - generic [ref=f12e40]: Get notified when Adam finishes a long-running request.
+            - switch [ref=f12e41] [cursor=pointer]
+        - generic [ref=f12e42]:
+          - heading "Billing" [level=2] [ref=f12e43]
+          - generic [ref=f12e44]:
+            - generic [ref=f12e45]:
+              - generic [ref=f12e46]:
+                - generic [ref=f12e47]: Adam Pro
+                - generic [ref=f12e50]: Renews 18 aug. 2027
+              - link "Manage" [ref=f12e52] [cursor=pointer]:
+                - /url: https://accounts.adam.new/billing
+            - generic [ref=f12e53]:
+              - generic [ref=f12e54]:
+                - generic [ref=f12e55]: Subscription tokens
+                - generic [ref=f12e56]: 1 000 000
+              - generic [ref=f12e57]:
+                - generic [ref=f12e58]: Daily free tokens
+                - generic [ref=f12e59]: 1 000 000
+              - generic [ref=f12e60]:
+                - generic [ref=f12e61]: Purchased tokens
+                - generic [ref=f12e62]: 1 000 000
+              - generic [ref=f12e63]:
+                - generic [ref=f12e64]: Total available
+                - generic [ref=f12e65]: 3 000 000
+            - generic [ref=f12e66]:
+              - generic [ref=f12e67]:
+                - generic [ref=f12e68]: Buy more tokens
+                - generic [ref=f12e69]: Never expire
+              - button "100 000 $10.00" [ref=f12e71] [cursor=pointer]:
+                - generic [ref=f12e72]: 100 000
+                - generic [ref=f12e73]: $10.00
+        - generic [ref=f12e74]:
+          - heading "Data and privacy" [level=2] [ref=f12e75]
+          - generic [ref=f12e76]:
+            - generic [ref=f12e77]:
+              - generic [ref=f12e78]: Delete account
+              - generic [ref=f12e79]: Permanently delete your account and all associated data.
+            - button "Delete" [ref=f12e80] [cursor=pointer]
+        - generic [ref=f12e81]:
+          - heading "AI Settings" [level=2] [ref=f12e82]
+          - generic [ref=f12e83]:
+            - tablist [ref=f12e84]:
+              - tab "Models" [ref=f12e85] [cursor=pointer]
+              - tab "Prompts" [active] [selected] [ref=f12e86] [cursor=pointer]
+              - tab "Providers" [ref=f12e87] [cursor=pointer]
+            - tabpanel "Prompts" [ref=f12e4638]:
+              - generic [ref=f12e9270]:
+                - generic [ref=f12e9271]:
+                  - heading "Prompt Profiles" [level=2] [ref=f12e9272]
+                  - button "New Profile" [ref=f12e9273] [cursor=pointer]
+                - button "CADAM Original CADAM Original" [ref=f12e9279] [cursor=pointer]:
+                  - generic [ref=f12e9281]:
+                    - generic [ref=f12e9282]: CADAM Original
+                    - generic [ref=f12e9283]: CADAM Original
+        - generic [ref=f12e4634]:
+          - link "Terms of Service" [ref=f12e4635] [cursor=pointer]:
+            - /url: /cadam/terms-of-service
+          - generic [ref=f12e4636]: •
+          - link "Privacy Policy" [ref=f12e4637] [cursor=pointer]:
+            - /url: /cadam/privacy-policy

@@ -4,6 +4,18 @@ import type { AppUIMessage } from '@shared/chatAi';
 import type { Conversation, Message } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+const PENDING_ASSISTANT_POLL_MS = 2_500;
+const PENDING_ASSISTANT_MAX_AGE_MS = 10 * 60_000;
+
+function shouldPollForPendingAssistant(messages: Message[] | undefined): boolean {
+  const last = messages?.at(-1);
+  if (!last || last.role !== 'user') return false;
+
+  const createdAt = Date.parse(last.created_at);
+  if (!Number.isFinite(createdAt)) return false;
+  return Date.now() - createdAt < PENDING_ASSISTANT_MAX_AGE_MS;
+}
+
 /**
  * Insert a new user message into the conversation. The `update_leaf_trigger`
  * on `public.messages` automatically advances
@@ -110,11 +122,24 @@ export async function persistAssistantParts({
 
 export const useMessagesQuery = () => {
   const { conversation } = useConversation();
+  const queryClient = useQueryClient();
 
   return useQuery<Message[]>({
     enabled: !!conversation.id,
     queryKey: ['messages', conversation.id],
     initialData: [],
+    refetchOnWindowFocus: 'always',
+    refetchIntervalInBackground: true,
+    // Mobile browsers may suspend the foreground fetch/SSE connection when
+    // Chrome is backgrounded. The server independently consumes the AI stream
+    // and persists its response, so while the DB branch still ends in a recent
+    // user message we briefly poll for the assistant row. Keep polling while
+    // hidden whenever the browser still allows background work; focus always
+    // triggers an immediate refetch after a full mobile suspension.
+    refetchInterval: (query) =>
+      shouldPollForPendingAssistant(query.state.data)
+        ? PENDING_ASSISTANT_POLL_MS
+        : false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('messages')
@@ -124,7 +149,28 @@ export const useMessagesQuery = () => {
         .overrideTypes<Message[]>();
 
       if (error) throw error;
-      return data ?? [];
+      const rows = data ?? [];
+
+      // The messages INSERT trigger advances the conversation leaf in the DB,
+      // but the separate conversation query can still be stale after a mobile
+      // background/resume. If the newly persisted assistant is a direct child
+      // of our cached leaf, mirror that trigger result locally immediately.
+      const latest = rows.at(-1);
+      if (
+        latest?.role === 'assistant' &&
+        latest.parent_message_id === conversation.current_message_leaf_id &&
+        latest.id !== conversation.current_message_leaf_id
+      ) {
+        queryClient.setQueryData<Conversation>(
+          ['conversation', conversation.id],
+          (current) =>
+            current
+              ? { ...current, current_message_leaf_id: latest.id }
+              : current,
+        );
+      }
+
+      return rows;
     },
   });
 };

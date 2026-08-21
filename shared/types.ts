@@ -88,6 +88,18 @@ export type ConversationSettings = {
    * `src/server/aiChat.ts`.
    */
   suggestions?: string[];
+  /**
+   * Execution mode for OpenCode agents: 'cli' for traditional CLI transport,
+   * 'streaming' for HTTP/SSE streaming transport. Defaults to 'cli' if not set.
+   */
+  openCodeExecutionMode?: 'cli' | 'streaming';
+  /**
+   * Prompt profile ID pinned to this conversation. When set, the resolver
+   * fetches the profile at runtime and uses its template (or the built-in
+   * when NULL). Pinned profiles make new-conversation behavior reproducible
+   * — changing Settings later does not silently alter old conversations.
+   */
+  promptProfileId?: string | null;
 } | null;
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];

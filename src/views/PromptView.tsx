@@ -30,6 +30,7 @@ import { createAndCacheAiChat } from '@/hooks/useCachedAiChat';
 import type { AppUIMessage } from '@shared/chatAi';
 import { ensureInputRecords } from '@/lib/aiMessages';
 import { persistUserMessage } from '@/services/messageService';
+import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
 
 export function PromptView() {
   const navigate = useNavigate();
@@ -52,6 +53,13 @@ export function PromptView() {
   const [type, setType] = useState<'parametric' | 'creative'>('parametric');
 
   const [model, setModel] = useState<Model>('openai/gpt-5.6-sol');
+
+  // I09B — draft execution mode: owned locally so the transport selector
+  // is interactive.  Persisted into new conversation settings (I09C done).
+  // Does NOT alter the chat request body (I09D).
+  const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
+    'cli',
+  );
 
   const handleTypeChange = (newType: 'parametric' | 'creative') => {
     setType(newType);
@@ -144,6 +152,18 @@ export function PromptView() {
         conversation_id: conversationId,
       });
 
+      // P04F: pin the user's current default prompt profile on creation.
+      // This is a normal user-owned preference read, so use the already
+      // authenticated browser Supabase client and let RLS enforce ownership.
+      // A missing preferences row is the documented default: CADAM Original.
+      const { data: aiPreferences, error: preferencesError } = await supabase
+        .from('user_ai_preferences')
+        .select('default_prompt_profile_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (preferencesError) throw preferencesError;
+      const promptProfileId = aiPreferences?.default_prompt_profile_id ?? null;
+
       // Create conversation immediately with 'New Conversation'
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
@@ -155,6 +175,8 @@ export function PromptView() {
             type: type,
             settings: {
               model: model,
+              openCodeExecutionMode: executionMode,
+              promptProfileId,
             },
           },
         ])
@@ -201,6 +223,7 @@ export function PromptView() {
             body: {
               conversationId: conversation.id,
               model,
+              openCodeExecutionMode: executionMode,
               ...(body ?? {}),
             },
           }),
@@ -327,6 +350,9 @@ export function PromptView() {
                   showPromptGenerator={true}
                   showFullLabels={true}
                   onTypeChange={handleTypeChange}
+                  executionMode={executionMode}
+                  onExecutionModeChange={setExecutionMode}
+                  draftStorageKey={HOME_PROMPT_DRAFT_KEY}
                 />
               </SelectedItemsContext.Provider>
               <div className="relative">

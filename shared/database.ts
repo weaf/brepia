@@ -289,12 +289,208 @@ export type Database = {
         };
         Relationships: [];
       };
+      user_ai_preferences: {
+        Row: {
+          user_id: string;
+          hidden_model_ids: string[];
+          default_prompt_profile_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id?: string;
+          hidden_model_ids?: string[];
+          default_prompt_profile_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          hidden_model_ids?: string[];
+          default_prompt_profile_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'user_ai_preferences_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      prompt_profiles: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          prompt_template: string;
+          mode: 'overlay' | 'fork';
+          base_revision: string | null;
+          archived: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          prompt_template: string;
+          mode?: 'overlay' | 'fork';
+          base_revision?: string | null;
+          archived?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          description?: string | null;
+          prompt_template?: string;
+          mode?: 'overlay' | 'fork';
+          base_revision?: string | null;
+          archived?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'prompt_profiles_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ai_providers: {
+        Row: {
+          id: string;
+          user_id: string;
+          slug: string;
+          name: string;
+          driver: string;
+          base_url: string;
+          credential_ciphertext: string | null;
+          credential_iv: string | null;
+          credential_tag: string | null;
+          enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          slug: string;
+          name: string;
+          driver: string;
+          base_url: string;
+          credential_ciphertext?: string | null;
+          credential_iv?: string | null;
+          credential_tag?: string | null;
+          enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          slug?: string;
+          name?: string;
+          driver?: string;
+          base_url?: string;
+          credential_ciphertext?: string | null;
+          credential_iv?: string | null;
+          credential_tag?: string | null;
+          enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_providers_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ai_provider_models: {
+        Row: {
+          id: string;
+          provider_id: string;
+          user_id: string;
+          model_id: string;
+          display_name: string;
+          description: string | null;
+          supports_tools: boolean;
+          supports_thinking: boolean;
+          supports_vision: boolean;
+          context_limit: number | null;
+          output_limit: number | null;
+          is_visible: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider_id: string;
+          user_id: string;
+          model_id: string;
+          display_name: string;
+          description?: string | null;
+          supports_tools?: boolean;
+          supports_thinking?: boolean;
+          supports_vision?: boolean;
+          context_limit?: number | null;
+          output_limit?: number | null;
+          is_visible?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          provider_id?: string;
+          user_id?: string;
+          model_id?: string;
+          display_name?: string;
+          description?: string | null;
+          supports_tools?: boolean;
+          supports_thinking?: boolean;
+          supports_vision?: boolean;
+          context_limit?: number | null;
+          output_limit?: number | null;
+          is_visible?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_provider_models_provider_id_fkey';
+            columns: ['provider_id'];
+            referencedRelation: 'ai_providers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'ai_provider_models_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      trigger_update_updated_at: {
+        Args: Record<string, never>;
+        Returns: unknown;
+      };
     };
     Enums: {
       'conversation-type': 'parametric' | 'creative';
