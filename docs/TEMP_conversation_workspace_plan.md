@@ -25,10 +25,18 @@ conversations/
     │   │   └── ...
     │   └── generated/
     ├── renders/
+    │   ├── 001/
+    │   │   ├── preview.png
+    │   │   └── inspection.png
+    │   └── ...
     ├── exports/
     │   ├── stl/
+    │   │   ├── 001.stl
+    │   │   └── 001.json
     │   ├── 3mf/
     │   └── dxf/
+    │       ├── 001.dxf
+    │       └── 001.json
     ├── agents/
     │   ├── opencode/
     │   └── codex/
@@ -51,16 +59,11 @@ Temporary compile/validation scratch files stay in the system temp directory. Th
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-`src/server/conversationWorkspace.ts` owns all persistent workspace paths.
-
+- canonical server-side path ownership in `src/server/conversationWorkspace.ts`
 - configurable root via `PCAD_CONVERSATIONS_DIR`, default `./conversations`
-- default root is gitignored
 - strict UUID/path-containment validation
-- canonical helpers for inputs, models, renders, exports, agents, and logs
-- idempotent workspace initialization
-- versioned `conversation.json`
-- atomic manifest writes
-- ownership mismatch rejection
+- idempotent full directory initialization and atomic `conversation.json`
+- root is gitignored
 
 Validation: full server suite passed with 167 tests / 57 suites / 0 failures at the Step 2 gate.
 
@@ -70,79 +73,92 @@ Validation: full server suite passed with 167 tests / 57 suites / 0 failures at 
 
 **Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-- both parametric and creative chat routes run the workspace lifecycle
-- request body is cloned; the existing chat handler receives the untouched request
-- authenticated Supabase conversation row is authoritative
+- parametric and creative chat routes initialize/update the owned workspace
+- authenticated Supabase conversation row remains authoritative
+- request cloning preserves the stable AI request path
 - old conversations get workspaces lazily
-- workspace failures are non-fatal to the stable chat path
-- user confirmed two conversations produced two isolated UUID workspaces with correct manifests
+- persistence failures remain non-fatal
+- user confirmed isolated UUID workspaces and correct manifests
 
 ### Step 3B — Conversation inputs
 
-**Status: COMPLETE — USER ACCEPTED 2026-08-21**
+**Status: COMPLETE — USER VALIDATED 2026-08-21**
 
 - `src/server/conversationWorkspaceInputs.ts`
-- successful user-uploaded images mirror to `input/images/`
-- successful user-uploaded meshes mirror to `input/meshes/`
-- Supabase storage remains authoritative
-- MIME type determines image extension
-- input mirroring is idempotent
-- missing/broken individual storage objects are skipped without stopping later artifacts
-- generated mesh preview derivatives remain reserved for Step 3D
-- `input/files/` remains reserved until pCAD has a generic-file upload pipeline
+- user-uploaded images mirror to `input/images/`
+- user-uploaded meshes mirror to `input/meshes/`
+- Supabase remains authoritative
+- MIME-aware image extensions, atomic writes, idempotence, per-artifact failure isolation
+- `input/files/` remains reserved until pCAD has a generic-file pipeline
 
 ### Step 3C — Generated OpenSCAD source
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-21**
 
-Persist successful `build_parametric_model` sources from the active conversation branch.
+- `src/server/conversationWorkspaceModels.ts`
+- successful `build_parametric_model` sources on the active branch become immutable numbered revisions
+- `models/current.scad` / `current.json` follow the current active source
+- sibling branches cannot accidentally become current
+- revision metadata records tool/message identity, title/version, source kind, SHA-256, and timestamp
+- per-conversation serialization and atomic current writes protect concurrent/reconnect flows
+- user confirmed revision/current behavior in the running app
 
-Implemented on `local-dev-next`:
+Step 3D hardening added to the same model layer:
 
-- new `src/server/conversationWorkspaceModels.ts`
-- lifecycle loads `current_message_leaf_id` and runs model-source sync for parametric conversations only
-- the active message branch is reconstructed through `parent_message_id`; abandoned sibling branches cannot become `current.scad`
-- only `tool-build_parametric_model` parts with `state=output-available` and `output.status=success` are revisioned
-- each unique tool call receives an immutable numbered source revision:
-  - `models/revisions/001.scad`
-  - `models/revisions/001.json`
-  - `models/revisions/002.scad`
-  - etc.
-- revision metadata records revision number, tool call ID, message ID/timestamp, model title/version, SHA-256, and save time
-- revision replay is idempotent by `toolCallId`; reconnect recovery cannot create duplicate revisions
-- immutable revision checksum/replay mismatches are rejected instead of silently rewriting history
-- `models/current.scad` always follows the newest successful build on the currently selected active branch
-- `models/current.json` records which immutable revision `current.scad` represents
-- switching to an older branch updates `current.scad` without rewriting or deleting newer immutable revisions
-- legacy conversations lazily backfill successful builds on their active branch when next used
-- per-conversation serialization prevents same-process concurrent revision races
-- orphaned `.scad` revision numbers are included when selecting the next revision number
-- model-sync failures remain inside the existing non-fatal workspace lifecycle guard and cannot block the normal chat response
-- focused tests cover active-branch selection, failed-build exclusion, numbered revisions, metadata, repeat-run idempotence, branch switching, immutable replay protection, revision path validation, creative-conversation exclusion, and non-fatal lifecycle failure
-
-Validation gate before Step 3D:
-
-- `npm run typecheck`
-- `npx tsx --test src/server/conversationWorkspaceModels.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
-- `npx tsx --test src/server/*.test.ts`
-- manual UI: create a parametric conversation and let at least one build complete; verify `models/current.scad` and `models/revisions/001.scad`
-- make a second CAD change in the same conversation; verify `002.scad` appears and `current.scad` matches it
-- send another normal turn without a new successful build and verify no duplicate revision appears
-- if convenient, switch/retry to an older branch and verify `current.scad` follows that branch while immutable revisions remain intact
-- confirm normal pCAD generation still works
-
-Do not begin Step 3D until the user confirms Step 3C works in the running app.
+- revision identity is now `toolCallId + code SHA-256`, not only `toolCallId`
+- parameter edits persisted into the same tool call therefore become a new immutable source revision instead of mutating old history
+- when `message.metadata.originalCode` exists, the original model build is retained with `source: "build"` and the edited source becomes `source: "parameter-edit"`
+- existing Step 3C sidecars without `source` remain readable as normal build revisions
 
 ### Step 3D — Renders and exports
 
-**Status: BLOCKED ON STEP 3C USER VALIDATION**
+**Status: READY FOR USER VALIDATION**
 
-Persist render/inspection assets by revision/build and exports under the corresponding format directory.
+Render routing:
+
+- new `src/server/conversationWorkspaceRenders.ts`
+- lifecycle mirrors the already-generated private Supabase build artifacts after model revision sync
+- build thumbnail → `renders/<revision>/preview.png`
+- multi-view inspection sheet → `renders/<revision>/inspection.png`
+- only revisions with `source: "build"` receive build-time render artifacts; parameter-edit revisions deliberately do not reuse stale screenshots
+- mirroring is atomic, idempotent, and isolates missing/broken storage objects
+- creative conversations do not run OpenSCAD render sync
+
+Export routing:
+
+- new `src/server/conversationWorkspaceExports.ts`
+- STL/DXF downloads remain browser-first; local persistence is best-effort and cannot make a successful user download fail
+- exact export revision is resolved from the OpenSCAD source SHA-256; exports are never attached to a guessed revision
+- canonical files:
+  - `exports/stl/<revision>.stl` + sidecar JSON
+  - `exports/dxf/<revision>.dxf` + sidecar JSON
+- sidecars record revision, format, source SHA-256, artifact SHA-256, byte length, and timestamp
+- repeated identical export is a no-op; regenerated different bytes atomically replace the canonical export for that revision/format
+- `.scad` downloads are not duplicated under `exports/` because the canonical source already lives in `models/`
+- `exports/3mf/` and the server format contract are reserved; the current parametric UI does not expose 3MF export
+- export persistence reuses the already-registered `/api/parametric-chat` route through the internal `X-PCAD-Workspace-Action: persist-export` action; no generated TanStack route-tree edit is required
+- a parameter-edit persistence race retries once and otherwise fails only the workspace copy, never the browser download
+
+Validation gate before Step 3E:
+
+- `npm run typecheck`
+- `npx tsx --test src/server/conversationWorkspaceModels.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceRenders.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceExports.test.ts`
+- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
+- `npx tsx --test src/server/*.test.ts`
+- manual build test: verify `renders/<build-revision>/preview.png` and, when uploaded successfully, `inspection.png`
+- manual STL download: verify matching numbered `.stl` + `.json` under `exports/stl/`
+- manual DXF download: verify matching numbered `.dxf` + `.json` under `exports/dxf/`
+- parameter-edit test: change a parameter, allow persistence to settle, export STL, and verify a new `source: "parameter-edit"` model revision owns that export while the old build render remains attached only to the original build revision
+- repeat the same export and verify no duplicate numbered export is created
+- confirm normal pCAD generation, vision inspection, browser downloads, and branch behavior still work
+
+Do not begin Step 3E until the user confirms Step 3D works in the running app.
 
 ### Step 3E — Agents and diagnostics
 
-**Status: NOT STARTED**
+**Status: BLOCKED ON STEP 3D USER VALIDATION**
 
 Route OpenCode/Codex conversation-scoped artifacts and useful diagnostics under `agents/` and `logs/`.
 
@@ -154,11 +170,12 @@ After production paths are fixed, classify and clean current root artifacts inst
 
 ## Global requirements
 
-- every artifact operation carries a `conversationId`
-- no production code constructs persistent conversation artifact paths outside `conversationWorkspace.ts`
-- Supabase remains authoritative where it already owns records; the local workspace complements it
+- every persistent artifact operation carries a `conversationId`
+- persistent conversation paths come from `conversationWorkspace.ts`
+- Supabase remains authoritative where it already owns records; local workspace copies complement it
 - temporary validation scratch data stays outside the persistent conversation workspace
 - old conversations remain usable through lazy workspace creation/backfill
+- workspace persistence failures must not break normal CAD generation or successful browser downloads
 
 ## Completion criteria
 
