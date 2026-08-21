@@ -6,6 +6,8 @@ import { describe, it } from 'node:test';
 import {
   conversationAgentDir,
   conversationExportFormatDir,
+  conversationExportRevisionMetadataPath,
+  conversationExportRevisionPath,
   conversationInputArtifactPath,
   conversationInputFilesDir,
   conversationInputImagesDir,
@@ -14,7 +16,9 @@ import {
   conversationManifestPath,
   conversationModelDir,
   conversationModelRevisionsDir,
+  conversationRenderArtifactPath,
   conversationRenderDir,
+  conversationRenderRevisionDir,
   conversationRoot,
   conversationWorkspaceRoot,
   initializeConversationWorkspace,
@@ -83,8 +87,24 @@ describe('conversation workspace', { concurrency: false }, () => {
         join(configuredRoot, ID_A, 'renders'),
       );
       assert.equal(
+        conversationRenderRevisionDir(ID_A, 7),
+        join(configuredRoot, ID_A, 'renders', '007'),
+      );
+      assert.equal(
+        conversationRenderArtifactPath(ID_A, 7, 'inspection'),
+        join(configuredRoot, ID_A, 'renders', '007', 'inspection.png'),
+      );
+      assert.equal(
         conversationExportFormatDir(ID_A, 'stl'),
         join(configuredRoot, ID_A, 'exports', 'stl'),
+      );
+      assert.equal(
+        conversationExportRevisionPath(ID_A, 'stl', 7),
+        join(configuredRoot, ID_A, 'exports', 'stl', '007.stl'),
+      );
+      assert.equal(
+        conversationExportRevisionMetadataPath(ID_A, 'stl', 7),
+        join(configuredRoot, ID_A, 'exports', 'stl', '007.json'),
       );
       assert.equal(
         conversationAgentDir(ID_A, 'opencode'),
@@ -113,6 +133,14 @@ describe('conversation workspace', { concurrency: false }, () => {
             '../stl',
           ),
         /Invalid input artifact extension/,
+      );
+      assert.throws(
+        () => conversationRenderRevisionDir(ID_A, 0),
+        /Invalid model revision/,
+      );
+      assert.throws(
+        () => conversationExportRevisionPath(ID_A, 'dxf', -1),
+        /Invalid model revision/,
       );
     });
   });
