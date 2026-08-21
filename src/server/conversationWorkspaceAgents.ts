@@ -51,7 +51,7 @@ export type ConversationAgentTurnInput = {
   status: ConversationAgentTurnStatus;
   startedAt: string;
   finishedAt: string;
-  durationMs: number;
+  durationMs?: number;
   resultKind?: ConversationAgentResultKind;
   admittedSeq?: number;
   validationAttempts?: number;
@@ -105,6 +105,15 @@ function serializedError(error: unknown): { name: string; message: string } {
   };
 }
 
+function isFsErrorWithCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === code
+  );
+}
+
 async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
@@ -130,36 +139,43 @@ async function appendJsonLine(path: string, value: unknown): Promise<void> {
   }
 }
 
-async function readExistingSession(
-  path: string,
-): Promise<ConversationAgentSessionRecord | null> {
+async function readJsonRecord<T>(path: string): Promise<T | null> {
   try {
     const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return null;
     }
-    const record = parsed as Partial<ConversationAgentSessionRecord>;
-    return typeof record.sessionId === 'string' || record.sessionId === null
-      ? (record as ConversationAgentSessionRecord)
-      : null;
+    return parsed as T;
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return null;
-    }
+    if (isFsErrorWithCode(error, 'ENOENT')) return null;
     throw error;
   }
+}
+
+function sessionInputMatches(
+  existing: ConversationAgentSessionRecord,
+  input: ConversationAgentSessionInput,
+): boolean {
+  return (
+    existing.conversationId === input.conversationId &&
+    existing.agent === input.agent &&
+    existing.transport === input.transport &&
+    existing.model === input.model &&
+    existing.sessionId === input.sessionId &&
+    existing.reused === input.reused &&
+    existing.server === input.server &&
+    existing.directory === input.directory &&
+    existing.attachCommand === input.attachCommand
+  );
 }
 
 export async function recordConversationAgentSession(
   input: ConversationAgentSessionInput,
 ): Promise<ConversationAgentSessionRecord> {
   const path = conversationAgentSessionPath(input.conversationId, input.agent);
-  const existing = await readExistingSession(path);
+  const existing = await readJsonRecord<ConversationAgentSessionRecord>(path);
+  if (existing && sessionInputMatches(existing, input)) return existing;
+
   const now = new Date().toISOString();
   const sameSession =
     existing?.sessionId === input.sessionId &&
@@ -178,10 +194,10 @@ export async function recordConversationAgentSession(
   return record;
 }
 
-export async function recordConversationAgentTurn(
+function buildTurnRecord(
   input: ConversationAgentTurnInput,
-): Promise<ConversationAgentTurnRecord> {
-  const record: ConversationAgentTurnRecord = {
+): ConversationAgentTurnRecord {
+  return {
     schemaVersion: AGENT_RECORD_SCHEMA_VERSION,
     id: input.id,
     conversationId: input.conversationId,
@@ -193,7 +209,7 @@ export async function recordConversationAgentTurn(
     status: input.status,
     startedAt: input.startedAt,
     finishedAt: input.finishedAt,
-    durationMs: input.durationMs,
+    ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
     ...(input.resultKind ? { resultKind: input.resultKind } : {}),
     ...(input.admittedSeq !== undefined ? { admittedSeq: input.admittedSeq } : {}),
     ...(input.validationAttempts !== undefined
@@ -205,17 +221,32 @@ export async function recordConversationAgentTurn(
     ...(input.finishReason ? { finishReason: input.finishReason } : {}),
     ...(input.error ? { error: serializedError(input.error) } : {}),
   };
+}
 
+export async function recordConversationAgentTurn(
+  input: ConversationAgentTurnInput,
+): Promise<ConversationAgentTurnRecord> {
+  const record = buildTurnRecord(input);
   const path = conversationAgentTurnPath(
     input.conversationId,
     input.agent,
     input.id,
   );
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(record, null, 2)}\n`, {
-    encoding: 'utf8',
-    flag: 'wx',
-  });
+  try {
+    await writeFile(path, `${JSON.stringify(record, null, 2)}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+    });
+  } catch (error) {
+    if (!isFsErrorWithCode(error, 'EEXIST')) throw error;
+    const existing = await readJsonRecord<ConversationAgentTurnRecord>(path);
+    if (existing && JSON.stringify(existing) === JSON.stringify(record)) {
+      return existing;
+    }
+    throw new Error(`Immutable agent turn mismatch: ${input.agent}/${input.id}`);
+  }
+
   const event: AgentEvent = {
     type: 'agent-turn',
     at: input.finishedAt,
