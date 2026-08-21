@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import {
   conversationAgentDir,
   conversationExportFormatDir,
+  conversationInputArtifactPath,
   conversationInputFilesDir,
   conversationInputImagesDir,
   conversationInputMeshesDir,
@@ -55,6 +56,21 @@ describe('conversation workspace', { concurrency: false }, () => {
         join(configuredRoot, ID_A, 'input', 'files'),
       );
       assert.equal(
+        conversationInputArtifactPath(
+          ID_A,
+          'image',
+          'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          '.png',
+        ),
+        join(
+          configuredRoot,
+          ID_A,
+          'input',
+          'images',
+          'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png',
+        ),
+      );
+      assert.equal(
         conversationModelDir(ID_A),
         join(configuredRoot, ID_A, 'models'),
       );
@@ -83,6 +99,20 @@ describe('conversation workspace', { concurrency: false }, () => {
       assert.throws(
         () => conversationAgentDir(ID_A, '../escape'),
         /Invalid agent workspace name/,
+      );
+      assert.throws(
+        () => conversationInputArtifactPath(ID_A, 'image', '../escape', 'png'),
+        /Invalid input artifact id/,
+      );
+      assert.throws(
+        () =>
+          conversationInputArtifactPath(
+            ID_A,
+            'mesh',
+            'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+            '../stl',
+          ),
+        /Invalid input artifact extension/,
       );
     });
   });
