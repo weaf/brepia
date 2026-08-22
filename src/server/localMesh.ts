@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import {
   getCreativeMeshModelDefinition,
   isLocalCreativeMeshModel,
@@ -28,11 +29,17 @@ type LocalMeshRequestBody = {
 
 type LocalGatewayHealth = {
   status?: string;
-  models?: Record<string, { installed?: boolean; available?: boolean }>;
+  models?: Record<
+    string,
+    { installed?: boolean; available?: boolean; reason?: string }
+  >;
 };
 
 function gatewayUrl(): string {
-  return (env('PCAD_MESH_GATEWAY_URL') || DEFAULT_GATEWAY_URL).replace(/\/+$/, '');
+  return (env('PCAD_MESH_GATEWAY_URL') || DEFAULT_GATEWAY_URL).replace(
+    /\/+$/,
+    '',
+  );
 }
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -81,14 +88,19 @@ async function gatewayHealth(model: CreativeMeshModelId): Promise<void> {
     );
   }
   if (!response.ok) {
-    throw new Error(`Local mesh gateway health check failed: HTTP ${response.status}`);
+    throw new Error(
+      `Local mesh gateway health check failed: HTTP ${response.status}`,
+    );
   }
 
-  const health = (await response.json().catch(() => ({}))) as LocalGatewayHealth;
+  const health = (await response
+    .json()
+    .catch(() => ({}))) as LocalGatewayHealth;
   const modelHealth = health.models?.[model];
-  if (modelHealth && modelHealth.installed === false) {
+  if (modelHealth?.installed === false || modelHealth?.available === false) {
     throw new Error(
-      `${getCreativeMeshModelDefinition(model)?.name ?? model} is not installed. Re-run ./scripts/install-local-mesh-backends.sh.`,
+      modelHealth.reason ||
+        `${getCreativeMeshModelDefinition(model)?.name ?? model} is not ready. Re-run ./scripts/install-local-mesh-backends.sh.`,
     );
   }
 }
@@ -109,7 +121,9 @@ async function ownedMeshImageIds(
     .maybeSingle();
   if (error) throw new Error(`Failed to load source mesh: ${error.message}`);
   if (!data || !Array.isArray(data.images)) return [];
-  return data.images.filter((value): value is string => typeof value === 'string');
+  return data.images.filter(
+    (value): value is string => typeof value === 'string',
+  );
 }
 
 async function imageDataUrl(
@@ -148,7 +162,9 @@ async function persistLocalMeshResult({
       contentType: 'model/gltf-binary',
       upsert: true,
     });
-  if (uploadError) throw new Error(`Failed to store local mesh: ${uploadError.message}`);
+  if (uploadError) {
+    throw new Error(`Failed to store local mesh: ${uploadError.message}`);
+  }
 
   const { error: updateError } = await supabase
     .from('meshes')
@@ -156,7 +172,9 @@ async function persistLocalMeshResult({
     .eq('id', meshId)
     .eq('user_id', userId)
     .eq('conversation_id', conversationId);
-  if (updateError) throw new Error(`Failed to finalize local mesh: ${updateError.message}`);
+  if (updateError) {
+    throw new Error(`Failed to finalize local mesh: ${updateError.message}`);
+  }
 }
 
 async function markLocalMeshFailure(
@@ -235,8 +253,13 @@ async function generateLocalMesh({
     }
 
     const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.includes('model/gltf-binary') && !contentType.includes('application/octet-stream')) {
-      throw new Error(`Local mesh gateway returned unexpected content type: ${contentType || 'missing'}`);
+    if (
+      !contentType.includes('model/gltf-binary') &&
+      !contentType.includes('application/octet-stream')
+    ) {
+      throw new Error(
+        `Local mesh gateway returned unexpected content type: ${contentType || 'missing'}`,
+      );
     }
 
     await persistLocalMeshResult({
@@ -247,7 +270,13 @@ async function generateLocalMesh({
       bytes: await response.arrayBuffer(),
     });
   } catch (error) {
-    await markLocalMeshFailure(supabase, meshId, userId, conversationId, error);
+    await markLocalMeshFailure(
+      supabase,
+      meshId,
+      userId,
+      conversationId,
+      error,
+    );
   }
 }
 
@@ -260,9 +289,9 @@ export async function handleLocalMeshRequest(
   request: Request,
   parsedBody?: unknown,
 ): Promise<Response> {
-  const body = (isRecord(parsedBody) ? parsedBody : await request.json().catch(() => null)) as
-    | LocalMeshRequestBody
-    | null;
+  const body = (isRecord(parsedBody)
+    ? parsedBody
+    : await request.json().catch(() => null)) as LocalMeshRequestBody | null;
   if (!body) return localError('Invalid local mesh request body');
 
   const model = body.model;
@@ -277,7 +306,8 @@ export async function handleLocalMeshRequest(
   if (!token) return localError('Unauthorized', 401);
 
   const supabase = getServiceRoleSupabaseClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  const { data: userData, error: userError } =
+    await supabase.auth.getUser(token);
   if (userError || !userData.user?.id) return localError('Unauthorized', 401);
 
   const conversationId = body.conversationId;
@@ -289,7 +319,9 @@ export async function handleLocalMeshRequest(
     .eq('id', conversationId)
     .eq('user_id', userData.user.id)
     .maybeSingle();
-  if (conversationError || !conversation) return localError('Conversation not found', 404);
+  if (conversationError || !conversation) {
+    return localError('Conversation not found', 404);
+  }
 
   const sourceMeshImages = await ownedMeshImageIds(
     supabase,
@@ -298,18 +330,27 @@ export async function handleLocalMeshRequest(
     body.mesh,
   );
   const imageIds = Array.from(
-    new Set([...(Array.isArray(body.images) ? body.images : []), ...sourceMeshImages]),
+    new Set([
+      ...(Array.isArray(body.images) ? body.images : []),
+      ...sourceMeshImages,
+    ]),
   );
   const text = body.text?.trim() || undefined;
 
   if (definition.requiresReferenceImage && imageIds.length === 0) {
-    return localError(`${definition.name} requires a reference image. Add an image or choose TRELLIS v1 for text-to-3D.`);
+    return localError(
+      `${definition.name} requires a reference image. Add an image or choose TRELLIS v1 for text-to-3D.`,
+    );
   }
   if (!text && imageIds.length === 0) {
-    return localError('Text or a reference image is required for local mesh generation');
+    return localError(
+      'Text or a reference image is required for local mesh generation',
+    );
   }
   if (text && imageIds.length === 0 && !definition.supportsText) {
-    return localError(`${definition.name} does not support text-only generation. Add a reference image or choose TRELLIS v1.`);
+    return localError(
+      `${definition.name} does not support text-only generation. Add a reference image or choose TRELLIS v1.`,
+    );
   }
 
   try {
@@ -326,7 +367,7 @@ export async function handleLocalMeshRequest(
       user_id: userData.user.id,
       images: imageIds.length > 0 ? imageIds : null,
       conversation_id: conversationId,
-      file_type: 'glb' satisfies MeshFileType,
+      file_type: 'glb' as MeshFileType,
       prompt: {
         ...(text ? { text } : {}),
         ...(imageIds.length > 0 ? { images: imageIds } : {}),
@@ -338,7 +379,10 @@ export async function handleLocalMeshRequest(
     .single();
 
   if (meshError || !meshData) {
-    return localError(meshError?.message ?? 'Failed to create local mesh job', 500);
+    return localError(
+      meshError?.message ?? 'Failed to create local mesh job',
+      500,
+    );
   }
 
   runBackgroundTask(
