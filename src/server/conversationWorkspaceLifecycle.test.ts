@@ -43,6 +43,13 @@ const noInputSync = async () => ({
   failed: 0,
 });
 
+const noGeneratedMeshSync = async () => ({
+  discovered: 0,
+  copied: 0,
+  existing: 0,
+  failed: 0,
+});
+
 const noModelSync = async () => ({
   discovered: 0,
   revisionsCreated: 0,
@@ -172,6 +179,7 @@ describe('conversation workspace chat lifecycle', () => {
   });
 
   it('skips OpenSCAD model/render sync for creative conversations but still allows agent history sync', async () => {
+    let generatedMeshSyncCalls = 0;
     let modelSyncCalls = 0;
     let renderSyncCalls = 0;
     let agentSyncCalls = 0;
@@ -188,6 +196,10 @@ describe('conversation workspace chat lifecycle', () => {
           updatedAt: metadata.updatedAt ?? UPDATED_AT,
         }),
         syncInputs: noInputSync,
+        syncGeneratedMeshes: async () => {
+          generatedMeshSyncCalls += 1;
+          return noGeneratedMeshSync();
+        },
         syncModels: async () => {
           modelSyncCalls += 1;
           return { discovered: 0, revisionsCreated: 0, currentRevision: null };
@@ -203,6 +215,7 @@ describe('conversation workspace chat lifecycle', () => {
       },
     );
     assert.equal(synced, true);
+    assert.equal(generatedMeshSyncCalls, 1);
     assert.equal(modelSyncCalls, 0);
     assert.equal(renderSyncCalls, 0);
     assert.equal(agentSyncCalls, 1);
