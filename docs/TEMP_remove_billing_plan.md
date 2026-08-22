@@ -17,22 +17,29 @@ Provider/API costs are deployment concerns, not an in-product pCAD billing syste
 
 ## Step 1 — Remove billing from generation runtime
 
-**Status: IN PROGRESS**
+**Status: IMPLEMENTED — AWAITING VALIDATION**
 
-- remove billing-service preflight from AI chat
-- remove `402 insufficient_tokens` and billing-service availability gating from normal generation
-- remove post-generation token consumption/refund calls from AI chat and legacy fal mesh generation
-- remove billing-derived message metadata/pricing helpers that exist only to charge pCAD credits
-- ensure local/custom/hosted AI calls depend only on provider availability/configuration
-- update stale persistence comments that assume `billing.consume` delays message insertion
-- keep billing API/UI files temporarily so runtime decoupling can be validated independently
+Implemented on `remove-billing`:
+
+- AI chat no longer calls the billing service before generation
+- `402 insufficient_tokens` and billing-service availability gating were removed from AI chat
+- AI chat no longer calculates pCAD billing credits from model token usage
+- `billingTokens` was removed from persisted chat metadata and the shared message type
+- AI chat no longer calls `billing.consume` after generation
+- AI chat authentication no longer requires a user email solely for billing
+- legacy fal mesh generation no longer consumes a fixed mesh credit charge
+- legacy fal mesh generation no longer returns billing/credit failures before starting a mesh job
+- stale persistence comments that depended on `billing.consume` timing were corrected
+- billing API/auth/UI files remain temporarily in place so runtime decoupling can be validated independently
 
 Validation gate:
 
-- `BILLING_SERVICE_URL` and `BILLING_SERVICE_KEY` are not required for Parametric or Creative generation
+- Parametric and Creative generation handlers do not require `BILLING_SERVICE_URL` or `BILLING_SERVICE_KEY`
 - focused server tests pass
 - full server suite passes
 - typecheck passes
+
+Note: the application-level auth provider still polls billing state until Step 2. Step 1 therefore establishes generation-runtime independence; full application independence from billing configuration is a Step 2/4 completion criterion.
 
 ## Step 2 — Remove billing from auth/session state
 
@@ -74,6 +81,7 @@ Validation gate:
 - distinguish historical migration content from active runtime dependencies
 - update README/integration/docs where current behavior still describes payment functionality
 - confirm no user-facing generation limit depends on credits/payment
+- remove any dead billing-era helper code left behind by earlier decoupling steps
 
 ## Step 6 — Final regression and cleanup
 
