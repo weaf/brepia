@@ -4,6 +4,7 @@ import {
   isLocalCreativeMeshModel,
   type CreativeMeshModelId,
 } from '@shared/creativeMeshModels';
+import { imageIdFromFilename } from '@shared/imageRefs';
 import type { MeshFileType } from '@shared/types';
 import { corsHeaders, isRecord } from './api';
 import { env } from './env';
@@ -16,6 +17,9 @@ import { logError } from './serverLog';
 const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8180';
 const GENERATION_TIMEOUT_MS = 30 * 60_000;
 const HEALTH_TIMEOUT_MS = 3_000;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const IMAGE_ALIAS_RE = /^image-(\d+)(?:\.[^.]+)?$/i;
 
 type LocalMeshStage =
   | 'gateway-health'
@@ -142,8 +146,89 @@ async function ownedMeshImageIds(
   if (error) throw new Error(`Failed to load source mesh: ${error.message}`);
   if (!data || !Array.isArray(data.images)) return [];
   return data.images.filter(
-    (value): value is string => typeof value === 'string',
+    (value): value is string => typeof value === 'string' && UUID_RE.test(value),
   );
+}
+
+function imageIdsFromMessageParts(parts: unknown): string[] {
+  if (!Array.isArray(parts)) return [];
+  const ids: string[] = [];
+  for (const part of parts) {
+    if (!isRecord(part) || part.type !== 'file') continue;
+    if (
+      typeof part.mediaType === 'string' &&
+      !part.mediaType.startsWith('image/')
+    ) {
+      continue;
+    }
+    const filename = typeof part.filename === 'string' ? part.filename : null;
+    const imageId = imageIdFromFilename(filename);
+    if (imageId && UUID_RE.test(imageId)) ids.push(imageId);
+  }
+  return Array.from(new Set(ids));
+}
+
+async function currentLeafImageIds(
+  supabase: SupabaseClient,
+  userId: string,
+  conversationId: string,
+  leafMessageId: string | null | undefined,
+): Promise<string[]> {
+  if (!leafMessageId) return [];
+  const { data, error } = await supabase
+    .from('messages')
+    .select('parts, role')
+    .eq('id', leafMessageId)
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to resolve Creative reference images: ${error.message}`);
+  }
+  if (!data || data.role !== 'user') return [];
+  return imageIdsFromMessageParts(data.parts);
+}
+
+function resolveRequestedImageIds(
+  requested: string[],
+  attachedImageIds: string[],
+): string[] {
+  // The model can see hydrated images under generic aliases such as
+  // `image-1.png`. Those aliases are presentation identifiers, never database
+  // IDs. Resolve them by position against the authoritative current user
+  // message. If the tool omits imageIds entirely, use all images from the turn.
+  if (requested.length === 0) return attachedImageIds;
+
+  const resolved: string[] = [];
+  for (const raw of requested) {
+    if (UUID_RE.test(raw)) {
+      resolved.push(raw);
+      continue;
+    }
+
+    const filenameId = imageIdFromFilename(raw);
+    if (filenameId && UUID_RE.test(filenameId)) {
+      resolved.push(filenameId);
+      continue;
+    }
+
+    const alias = raw.match(IMAGE_ALIAS_RE);
+    if (alias) {
+      const index = Number(alias[1]) - 1;
+      if (Number.isInteger(index) && attachedImageIds[index]) {
+        resolved.push(attachedImageIds[index]);
+      }
+    }
+  }
+
+  // A tool may hallucinate/omit aliases while the current turn has exactly one
+  // unambiguous uploaded image. Prefer that authoritative attachment rather
+  // than persisting an invalid pseudo-ID.
+  if (resolved.length === 0 && attachedImageIds.length === 1) {
+    resolved.push(attachedImageIds[0]);
+  }
+
+  return Array.from(new Set(resolved));
 }
 
 async function imageDataUrl(
@@ -368,7 +453,7 @@ export async function handleLocalMeshRequest(
 
   const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
-    .select('id')
+    .select('id, current_message_leaf_id')
     .eq('id', conversationId)
     .eq('user_id', userData.user.id)
     .maybeSingle();
@@ -376,6 +461,23 @@ export async function handleLocalMeshRequest(
     return localError('Conversation not found', 404);
   }
 
+  let attachedImageIds: string[];
+  try {
+    attachedImageIds = await currentLeafImageIds(
+      supabase,
+      userData.user.id,
+      conversationId,
+      conversation.current_message_leaf_id,
+    );
+  } catch (error) {
+    return localError(errorMessage(error), 500);
+  }
+
+  const requestedImageIds = Array.isArray(body.images) ? body.images : [];
+  const resolvedTurnImages = resolveRequestedImageIds(
+    requestedImageIds,
+    attachedImageIds,
+  );
   const sourceMeshImages = await ownedMeshImageIds(
     supabase,
     userData.user.id,
@@ -383,12 +485,19 @@ export async function handleLocalMeshRequest(
     body.mesh,
   );
   const imageIds = Array.from(
-    new Set([
-      ...(Array.isArray(body.images) ? body.images : []),
-      ...sourceMeshImages,
-    ]),
+    new Set([...resolvedTurnImages, ...sourceMeshImages]),
   );
   const text = body.text?.trim() || undefined;
+
+  if (requestedImageIds.length > 0) {
+    localMeshLog('job-create', 'resolved Creative image references', {
+      model,
+      conversationId,
+      requestedImages: requestedImageIds,
+      attachedImageCount: attachedImageIds.length,
+      resolvedImageCount: resolvedTurnImages.length,
+    });
+  }
 
   if (definition.requiresReferenceImage && imageIds.length === 0) {
     return localError(
