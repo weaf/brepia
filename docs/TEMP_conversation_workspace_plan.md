@@ -138,22 +138,68 @@ Implemented on `local-dev-next`:
 - OpenCode/Codex native runtime/session ownership is unchanged
 - user confirmed the resulting agent workspace behavior in the running app
 
-## Step 4 — Repository-root cleanup and clean-baseline verification
+## Step 4 — Repository-root cleanup and final completeness audit
 
-**Status: IN PROGRESS — CLEAN BASELINE FIRST**
+### Step 4A — Clean root baseline and parametric runtime regression
 
-The verification order is intentionally:
+**Status: COMPLETE — USER VALIDATED 2026-08-22**
 
-1. remove known historical local debug/generated artifacts from the repository root
-2. remove tracked local agent state such as `.omo/` from Git while allowing the external tool to recreate it locally if needed
-3. add narrow `.gitignore` guardrails for known local-only artifacts
-4. capture a human-readable clean root baseline
-5. run one controlled pCAD workflow
-6. diff the repository root against the baseline
-7. classify any newly created root artifact as either legitimate project/runtime state or a remaining routing bug
-8. perform the final completeness audit, including creative/generated mesh output, using the clean before/after evidence
+- removed known generated root artifacts (`b9-report`, `.output`, `test-results`)
+- removed tracked local runtime state/directories that do not belong in Git (`.omo/`, `.playwright-cli/`, `.playwright-mcp/`, `.tanstack/`)
+- added narrow `.gitignore` guardrails without broad `*.png`, `*.scad`, or `*.stl` rules
+- captured clean root file/directory baseline
+- ran controlled parametric workflow including generation, modification, parameter edit and export
+- root before/after diffs produced no output
+- `git status --short --untracked-files=all` produced no runtime artifact drift at the validation gate
 
-Do not use broad ignore rules such as `*.png`, `*.scad`, or `*.stl`; unexpected root artifacts should remain visible during verification.
+### Step 4B — Creative/generated-mesh completeness audit
+
+**Status: IN PROGRESS — NEXT GATE**
+
+The Creative runtime detour established a working local image-to-3D path before this audit continues:
+
+- local Creative model selection is available in pCAD alongside legacy fal.ai backends
+- local mesh gateway is installed and healthy
+- `local/hunyuan3d-2` image → GLB → pCAD viewer has been manually validated
+- Creative image aliases such as `image-1.png` are resolved to authoritative stored image UUIDs before mesh generation
+- local runtime installation/toolchain work is separate from the conversation-workspace ownership goal
+- follow-up mesh editing (`make it wider`, semantic/localized edits) is explicitly **DEFERRED**; it is not a Step 4B completion requirement
+- TRELLIS runtime repair, Hunyuan3D-2.1 validation, Stable Fast 3D gated weights and full GPU arbitration validation are also separate runtime follow-ups and do not block the workspace audit
+
+Step 4B now verifies the original workspace objective for Creative mode:
+
+1. run one successful Creative image-to-3D generation
+2. identify the corresponding conversation UUID/workspace
+3. enumerate the workspace files after the successful generation
+4. verify the original uploaded image is present under `input/images/`
+5. determine whether the generated GLB is persisted under the intended `models/generated/` ownership path
+6. verify no Creative runtime artifact appears in the repository root
+7. if generated mesh persistence is missing, implement the smallest authoritative-storage → workspace mirror needed for successful Creative meshes
+8. repeat the Creative run / lifecycle sync and confirm idempotence
+
+Expected durable ownership is:
+
+```text
+conversations/<uuid>/
+├── input/images/<source-image-id>.<ext>
+└── models/generated/<generated-mesh-id>.glb
+```
+
+Supabase remains authoritative; the local generated mesh is a conversation-owned mirror, not a replacement for storage/database ownership.
+
+### Step 4C — Final validation and documentation cleanup
+
+**Status: PENDING**
+
+After Step 4B is complete:
+
+- repeat root baseline diff after the Creative workflow
+- run focused workspace tests and full server test suite
+- run `npm run typecheck`
+- run production build if the Step 4B implementation touches runtime/build paths
+- reconcile any intentionally deferred Creative runtime work into permanent docs/issues rather than this temporary workspace plan
+- update permanent architecture documentation
+- remove this temporary plan only after all workspace completion criteria are satisfied
 
 ## Global requirements
 
@@ -170,6 +216,7 @@ Do not use broad ignore rules such as `*.png`, `*.scad`, or `*.stl`; unexpected 
 - each conversation has a stable UUID-owned workspace
 - human-readable titles are independent of filesystem identity
 - old conversations remain usable
+- generated Creative meshes are mirrored into their owning conversation workspace
 - root contains only project/source/config/documentation files and explicitly owned test/development directories
 - clean-baseline → controlled-run diff produces no unexplained persistent root artifacts
 - this temporary plan is removed after final documentation is updated
