@@ -87,9 +87,9 @@ export type PersistAction = 'insert' | 'update' | 'skip';
  *   tools). Safe to write; the client isn't persisting this turn.
  * - `skip`    — continuation that still ends with a pending CLIENT tool. The
  *   browser resolves and persists the `output-available` version itself; a
- *   server write here (delayed behind `result.totalUsage` + `billing.consume`)
- *   would land last and clobber it back to `input-available`, leaving a
- *   dangling tool call that 500s the next send. Defer to the client.
+ *   delayed server write could land last and clobber it back to
+ *   `input-available`, leaving a dangling tool call that 500s the next send.
+ *   Defer to the client.
  */
 export function decidePersistAction({
   isContinuation,
