@@ -58,7 +58,7 @@ export const chatTools = {
   }),
   create_mesh: tool({
     description:
-      'Create a 3D mesh from text, images, or an existing mesh plus edit instructions. The mesh backend is already selected by pCAD and must not be changed.',
+      'Create a 3D mesh from text/images, or edit an existing mesh. For an edit, pass the existing mesh ID as meshId and the user edit instruction verbatim as text. Whole-mesh geometric edits such as wider, narrower, taller, shorter, thicker, thinner, larger, and smaller are supported locally. The mesh backend is already selected by pCAD and must not be changed.',
     inputSchema: createMeshInputSchema,
     outputSchema: createMeshOutputSchema,
   }),
