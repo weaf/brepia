@@ -54,3 +54,6 @@ playwright-report/
 test-results/
 b9-report/
 b9-*.png
+.playwright-cli/
+.playwright-mcp/
+.tanstack/
