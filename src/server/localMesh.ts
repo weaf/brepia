@@ -17,6 +17,13 @@ const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8180';
 const GENERATION_TIMEOUT_MS = 30 * 60_000;
 const HEALTH_TIMEOUT_MS = 3_000;
 
+type LocalMeshStage =
+  | 'gateway-health'
+  | 'job-create'
+  | 'image-download'
+  | 'gateway-generate'
+  | 'storage-persist';
+
 type LocalMeshRequestBody = {
   images?: string[];
   mesh?: string;
@@ -57,6 +64,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function localMeshLog(
+  stage: LocalMeshStage,
+  message: string,
+  context: Record<string, unknown> = {},
+) {
+  console.log('[local-mesh]', { stage, message, ...context });
+}
+
 function runBackgroundTask(task: Promise<unknown>) {
   const loggedTask = task.catch((error) => {
     console.error('[local-mesh] background task failed:', error);
@@ -77,6 +92,10 @@ function runBackgroundTask(task: Promise<unknown>) {
 
 async function gatewayHealth(model: CreativeMeshModelId): Promise<void> {
   const baseUrl = gatewayUrl();
+  localMeshLog('gateway-health', 'checking local mesh gateway', {
+    model,
+    gatewayUrl: baseUrl,
+  });
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/health`, {
@@ -103,6 +122,7 @@ async function gatewayHealth(model: CreativeMeshModelId): Promise<void> {
         `${getCreativeMeshModelDefinition(model)?.name ?? model} is not ready. Re-run ./scripts/install-local-mesh-backends.sh.`,
     );
   }
+  localMeshLog('gateway-health', 'gateway ready', { model });
 }
 
 async function ownedMeshImageIds(
@@ -136,7 +156,9 @@ async function imageDataUrl(
     .from('images')
     .download(`${userId}/${conversationId}/${imageId}`);
   if (error || !data) {
-    throw new Error(`Failed to load Creative reference image ${imageId}`);
+    throw new Error(
+      `Failed to load Creative reference image ${imageId}${error?.message ? `: ${error.message}` : ''}`,
+    );
   }
   const bytes = Buffer.from(await data.arrayBuffer());
   const mediaType = data.type || 'image/png';
@@ -182,14 +204,23 @@ async function markLocalMeshFailure(
   meshId: string,
   userId: string,
   conversationId: string,
+  model: CreativeMeshModelId,
+  stage: LocalMeshStage,
   error: unknown,
 ) {
+  console.error('[local-mesh] generation failed', {
+    stage,
+    model,
+    meshId,
+    conversationId,
+    error: errorMessage(error),
+  });
   logError(error, {
     functionName: 'local-mesh',
     statusCode: 500,
     userId,
     conversationId,
-    additionalContext: { meshId },
+    additionalContext: { meshId, model, stage },
   });
   await supabase
     .from('meshes')
@@ -220,13 +251,30 @@ async function generateLocalMesh({
   meshTopology?: 'quads' | 'polys';
   polygonCount?: number;
 }) {
+  let stage: LocalMeshStage = 'image-download';
   try {
+    localMeshLog(stage, 'loading Creative reference images', {
+      model,
+      meshId,
+      imageCount: imageIds.length,
+    });
     const images = await Promise.all(
       imageIds.map((imageId) =>
         imageDataUrl(supabase, userId, conversationId, imageId),
       ),
     );
+    localMeshLog(stage, 'reference images loaded', {
+      model,
+      meshId,
+      imageCount: images.length,
+    });
 
+    stage = 'gateway-generate';
+    localMeshLog(stage, 'starting local mesh generation', {
+      model,
+      meshId,
+      gatewayUrl: gatewayUrl(),
+    });
     const response = await fetch(`${gatewayUrl()}/v1/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -262,6 +310,8 @@ async function generateLocalMesh({
       );
     }
 
+    stage = 'storage-persist';
+    localMeshLog(stage, 'persisting generated GLB', { model, meshId });
     await persistLocalMeshResult({
       supabase,
       userId,
@@ -269,12 +319,15 @@ async function generateLocalMesh({
       meshId,
       bytes: await response.arrayBuffer(),
     });
+    localMeshLog(stage, 'local mesh generation completed', { model, meshId });
   } catch (error) {
     await markLocalMeshFailure(
       supabase,
       meshId,
       userId,
       conversationId,
+      model,
+      stage,
       error,
     );
   }
@@ -356,11 +409,20 @@ export async function handleLocalMeshRequest(
   try {
     await gatewayHealth(model);
   } catch (error) {
+    console.error('[local-mesh] request rejected', {
+      stage: 'gateway-health',
+      model,
+      conversationId,
+      error: errorMessage(error),
+    });
     return localError(errorMessage(error), 503);
   }
 
-  // Local inference has no hosted per-call cost, so it deliberately bypasses
-  // adam-billing. fal.ai requests continue through the unchanged legacy path.
+  localMeshLog('job-create', 'creating local mesh job', {
+    model,
+    conversationId,
+    imageCount: imageIds.length,
+  });
   const { data: meshData, error: meshError } = await supabase
     .from('meshes')
     .insert({
@@ -379,11 +441,22 @@ export async function handleLocalMeshRequest(
     .single();
 
   if (meshError || !meshData) {
+    console.error('[local-mesh] request rejected', {
+      stage: 'job-create',
+      model,
+      conversationId,
+      error: meshError?.message ?? 'Failed to create local mesh job',
+    });
     return localError(
       meshError?.message ?? 'Failed to create local mesh job',
       500,
     );
   }
+  localMeshLog('job-create', 'local mesh job created', {
+    model,
+    conversationId,
+    meshId: meshData.id,
+  });
 
   runBackgroundTask(
     generateLocalMesh({
