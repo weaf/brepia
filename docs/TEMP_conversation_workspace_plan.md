@@ -115,7 +115,7 @@ Validation: full server suite passed with 167 tests / 57 suites / 0 failures at 
 
 ### Step 3E — Agents and diagnostics
 
-**Status: READY FOR USER VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-22**
 
 Conversation-scoped agent metadata is indexed from the authoritative persisted active conversation branch without moving or replacing OpenCode/Codex native session stores.
 
@@ -134,35 +134,26 @@ Implemented on `local-dev-next`:
 - Streaming OpenCode `session.json` includes the exact attach command built by the existing OpenCode transport
 - immutable per-turn JSON stores only identifiers/status/timestamps/result category and bounded safe error metadata
 - no raw prompt, raw stdout, or raw stderr is written to the conversation workspace
-- turn IDs are deterministic from persisted message/tool-call identity; repeated lifecycle runs are idempotent
-- conflicting rewrites of an existing immutable agent turn are rejected instead of silently changing history
-- `agent-events.jsonl` records only actual session/turn additions or changes and is serialized for concurrent append safety
-- old agent conversations can be backfilled lazily on the next generation request without a DB migration
-- agent-history sync runs after existing input/model/render sync and remains inside the non-fatal workspace lifecycle guard
-- OpenCode CLI continues running from the pCAD repository root so `.opencode/agents/pcad-builder.md` and plugins keep loading
-- Codex retains its existing isolated runtime working directory; native external session ownership is unchanged
+- repeated lifecycle runs are idempotent
+- OpenCode/Codex native runtime/session ownership is unchanged
+- user confirmed the resulting agent workspace behavior in the running app
 
-Validation gate before Step 4/completeness audit:
+## Step 4 — Repository-root cleanup and clean-baseline verification
 
-- `npm run typecheck`
-- `npx tsx --test src/server/conversationWorkspaceAgents.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceAgentHistory.test.ts`
-- `npx tsx --test src/server/conversationWorkspaceLifecycle.test.ts`
-- `npx tsx --test src/server/conversationWorkspace.test.ts`
-- `npx tsx --test src/server/*.test.ts`
-- `npm run lint`
-- `npm run build`
-- manual OpenCode Streaming test: use at least two agent turns, then trigger one additional lifecycle pass and verify `agents/opencode/session.json`, immutable turn files, and `logs/agent-events.jsonl`
-- if convenient, repeat with OpenCode CLI or Codex and verify its recovered external session ID under the corresponding agent directory
-- verify diagnostics contain no raw prompt/stdout/stderr and normal agent/CAD generation remains unchanged
+**Status: IN PROGRESS — CLEAN BASELINE FIRST**
 
-Do not start repository cleanup until Step 3E is user validated and the final completeness audit has checked remaining creative/generated model artifacts.
+The verification order is intentionally:
 
-## Step 4 — Repository-root cleanup and guardrails
+1. remove known historical local debug/generated artifacts from the repository root
+2. remove tracked local agent state such as `.omo/` from Git while allowing the external tool to recreate it locally if needed
+3. add narrow `.gitignore` guardrails for known local-only artifacts
+4. capture a human-readable clean root baseline
+5. run one controlled pCAD workflow
+6. diff the repository root against the baseline
+7. classify any newly created root artifact as either legitimate project/runtime state or a remaining routing bug
+8. perform the final completeness audit, including creative/generated mesh output, using the clean before/after evidence
 
-**Status: BLOCKED ON STEP 3E + COMPLETENESS AUDIT**
-
-After production paths are fixed, classify and clean current root artifacts instead of merely moving the mess into generic top-level folders. Add `.gitignore`/test-output guardrails where appropriate.
+Do not use broad ignore rules such as `*.png`, `*.scad`, or `*.stl`; unexpected root artifacts should remain visible during verification.
 
 ## Global requirements
 
@@ -180,4 +171,5 @@ After production paths are fixed, classify and clean current root artifacts inst
 - human-readable titles are independent of filesystem identity
 - old conversations remain usable
 - root contains only project/source/config/documentation files and explicitly owned test/development directories
+- clean-baseline → controlled-run diff produces no unexplained persistent root artifacts
 - this temporary plan is removed after final documentation is updated
