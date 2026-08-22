@@ -10,6 +10,10 @@ set -euo pipefail
 #   - Hunyuan3D-2.1 (shape pipeline; 24 GB-safe)
 #   - Stable Fast 3D (Hugging Face gated)
 #
+# The gateway also coordinates with llama-swap by default: before starting a
+# local 3D worker it unloads resident llama-swap models, then stops the 3D
+# worker after generation so the next LLM request can load normally.
+#
 # Default install root: ~/.local/share/pcad-mesh
 # No sudo is used unless --install-system-deps is explicitly supplied.
 
@@ -31,9 +35,14 @@ Options:
   -h, --help             Show this help.
 
 Environment variables:
-  PCAD_MESH_HOME         Install root (default ~/.local/share/pcad-mesh)
-  HF_TOKEN               Hugging Face read token. Required for Stable Fast 3D weights.
-  HF_HOME                Optional HF cache override; default is under PCAD_MESH_HOME.
+  PCAD_MESH_HOME                 Install root (default ~/.local/share/pcad-mesh)
+  HF_TOKEN                       Hugging Face read token. Required for Stable Fast 3D weights.
+  HF_HOME                        Optional HF cache override; default is under PCAD_MESH_HOME.
+  PCAD_GPU_ARBITRATION           auto (default), required, or off.
+  PCAD_LLAMA_SWAP_URL            llama-swap base URL (default http://127.0.0.1:9292).
+  PCAD_LLAMA_SWAP_API_KEY        Optional bearer token for llama-swap.
+  PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT Seconds to wait for VRAM release (default 90).
+  PCAD_MESH_KEEP_WARM            Keep a 3D worker resident after generation (default false).
 
 The script is safe to re-run. Existing cloned repositories are fast-forwarded and
 existing environments are reused.
@@ -217,6 +226,13 @@ install -m 0644 "$REPO_ROOT/scripts/local-mesh/worker.py" "$RUNTIME_DIR/worker.p
 ENV_FILE="$CONFIG_DIR/env"
 {
   printf 'HF_HOME=%s\n' "$HF_HOME"
+  printf 'PCAD_GPU_ARBITRATION=%s\n' "${PCAD_GPU_ARBITRATION:-auto}"
+  printf 'PCAD_LLAMA_SWAP_URL=%s\n' "${PCAD_LLAMA_SWAP_URL:-http://127.0.0.1:9292}"
+  printf 'PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT=%s\n' "${PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT:-90}"
+  printf 'PCAD_MESH_KEEP_WARM=%s\n' "${PCAD_MESH_KEEP_WARM:-false}"
+  if [[ -n "${PCAD_LLAMA_SWAP_API_KEY:-}" ]]; then
+    printf 'PCAD_LLAMA_SWAP_API_KEY=%s\n' "$PCAD_LLAMA_SWAP_API_KEY"
+  fi
   if [[ -n "${HF_TOKEN:-}" ]]; then
     printf 'HF_TOKEN=%s\n' "$HF_TOKEN"
   fi
@@ -310,6 +326,7 @@ Legacy fal.ai backends remain selectable as quality / fast / ultra.
 Install root:  $PCAD_MESH_HOME
 HF cache:      $HF_HOME
 Gateway:       http://127.0.0.1:8180
+GPU arbiter:   ${PCAD_GPU_ARBITRATION:-auto} -> ${PCAD_LLAMA_SWAP_URL:-http://127.0.0.1:9292}
 
 Useful commands:
   curl -s http://127.0.0.1:8180/health | python -m json.tool
