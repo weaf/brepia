@@ -36,7 +36,7 @@ GATEWAY_ENV_SPEC="pcad-gateway-py310-v2"
 HUNYUAN2_ENV_SPEC="hunyuan3d2-py310-torch251-cu124-v2"
 HUNYUAN21_ENV_SPEC="hunyuan3d21-py310-torch251-cu124-bpy400-v4"
 TRELLIS_ENV_SPEC="trellis-py310-torch240-cu121-v2"
-SF3D_ENV_SPEC="sf3d-py310-torch240-cu121-v2"
+SF3D_ENV_SPEC="sf3d-py310-torch240-cu121-no-build-isolation-v3"
 
 usage() {
   cat <<'EOF'
@@ -304,8 +304,13 @@ mark_env_ready "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
 say "Installing Stable Fast 3D environment"
 ensure_cuda121_torch24_env "$SF3D_ENV"
 mamba_run "$SF3D_ENV" python -m pip install -U pip setuptools==69.5.1 wheel
+# SF3D requirements include two local torch C++/CUDA extensions. Their setup.py
+# imports torch while pip is collecting build metadata. Installing them through
+# the requirements file triggers PEP 517 build isolation, where torch is absent.
+# Install normal dependencies first, then compile the two local extensions with
+# --no-build-isolation so they use this environment's already pinned Torch/CUDA.
 mamba_run "$SF3D_ENV" bash -c \
-  "cd '$SF3D_REPO' && python -m pip install -r requirements.txt && python -m pip install fastapi uvicorn"
+  "cd '$SF3D_REPO' && grep -vE '^\\./(texture_baker|uv_unwrapper)/?$' requirements.txt > .pcad-requirements.txt && python -m pip install -r .pcad-requirements.txt && python -m pip install --no-build-isolation ./texture_baker ./uv_unwrapper && rm -f .pcad-requirements.txt && python -m pip install fastapi uvicorn"
 mark_env_ready "$SF3D_ENV" "$SF3D_ENV_SPEC"
 
 say "Installing gateway runtime files"
