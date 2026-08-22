@@ -1,8 +1,8 @@
 import { isLocalCreativeMeshModel } from '@shared/creativeMeshModels';
-import { handleMeshRequest as handleFalMeshRequest } from './falMesh';
+import { corsHeaders } from './api';
 import { syncConversationGeneratedMeshes } from './conversationWorkspaceGeneratedMeshes';
+import { handleMeshRequest as handleFalMeshRequest } from './falMesh';
 import { handleLocalMeshRequest } from './localMesh';
-import { resolveLocalMeshEditSource } from './localMeshEditContext';
 import { logError } from './serverLog';
 
 function recordBody(body: unknown): Record<string, unknown> | null {
@@ -25,12 +25,37 @@ function requestConversationId(body: unknown): string | null {
     : null;
 }
 
+function requestMeshId(body: unknown): string | null {
+  const record = recordBody(body);
+  const meshId = record?.mesh;
+  return typeof meshId === 'string' && meshId ? meshId : null;
+}
+
+function localMeshEditingDeferredResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        message:
+          'Follow-up editing of locally generated Creative meshes is not enabled yet. Create a new local mesh generation instead.',
+      },
+    }),
+    {
+      status: 422,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    },
+  );
+}
+
 /**
  * Stable entry point for Creative mesh generation.
  *
  * Historical `fast` / `quality` / `ultra` requests keep using the unchanged
  * fal.ai implementation in `falMesh.ts`. Local backend IDs are handled by the
  * pCAD local mesh gateway and never require FAL_KEY.
+ *
+ * Local Creative v1 intentionally supports generation only. The experimental
+ * follow-up mesh-edit path is deferred and rejected here rather than silently
+ * regenerating or claiming an edit succeeded.
  */
 export async function handleMeshRequest(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
@@ -40,9 +65,12 @@ export async function handleMeshRequest(request: Request): Promise<Response> {
   const body = await request.clone().json().catch(() => null);
   const model = requestModel(body);
   if (model && isLocalCreativeMeshModel(model)) {
-    const resolvedBody = await resolveLocalMeshEditSource(request, body);
-    const response = await handleLocalMeshRequest(request, resolvedBody);
-    const conversationId = requestConversationId(resolvedBody);
+    if (requestMeshId(body)) {
+      return localMeshEditingDeferredResponse();
+    }
+
+    const response = await handleLocalMeshRequest(request, body);
+    const conversationId = requestConversationId(body);
     if (response.ok && conversationId) {
       try {
         await syncConversationGeneratedMeshes(request, conversationId);
