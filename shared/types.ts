@@ -82,6 +82,12 @@ export type GenerationStatus = Database['public']['Enums']['generation-status'];
 export type ConversationSettings = {
   model?: Model;
   /**
+   * LLM/agent model used by Creative conversations. `model` remains the
+   * Creative mesh backend (`quality`/`fast`/`ultra`) in that mode, so keeping
+   * the two identities separate avoids treating a mesh preset as an LLM.
+   */
+  creativeAgentModel?: Model;
+  /**
    * Per-conversation follow-up suggestions rendered as pills above the
    * chat input. Regenerated server-side after each non-tool-call
    * assistant turn — see `emitConversationSuggestions` in
