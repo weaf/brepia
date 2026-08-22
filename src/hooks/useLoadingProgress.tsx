@@ -1,17 +1,32 @@
 import { CreativeModel } from '@shared/types';
 import { useEffect, useMemo, useState } from 'react';
 
-// Timing configuration
-export const TIMING_CONFIG = {
+type Timing = { expected: number; min: number; max: number };
+
+// Timing configuration. Local times are deliberately conservative because the
+// first request also lazy-loads weights into VRAM; subsequent requests on the
+// same backend are normally faster.
+export const TIMING_CONFIG: Record<
+  'image' | 'mesh',
+  Record<CreativeModel, Timing>
+> = {
   image: {
-    fast: { expected: 35000, min: 15000, max: 45000 }, // ~35s for textureless image
-    quality: { expected: 120000, min: 60000, max: 150000 }, // ~2 min for standard image
-    ultra: { expected: 150000, min: 90000, max: 200000 }, // ~2.5 min for ultra image (multiview)
+    'local/trellis-v1': { expected: 120000, min: 45000, max: 300000 },
+    'local/hunyuan3d-2': { expected: 90000, min: 30000, max: 240000 },
+    'local/hunyuan3d-2.1': { expected: 150000, min: 60000, max: 360000 },
+    'local/stable-fast-3d': { expected: 45000, min: 15000, max: 120000 },
+    fast: { expected: 35000, min: 15000, max: 45000 },
+    quality: { expected: 120000, min: 60000, max: 150000 },
+    ultra: { expected: 150000, min: 90000, max: 200000 },
   },
   mesh: {
-    fast: { expected: 75000, min: 60000, max: 90000 }, // Total: 60-90s matches UI
-    quality: { expected: 45000, min: 30000, max: 60000 }, // Total: ~45s for SAM 3D
-    ultra: { expected: 270000, min: 240000, max: 300000 }, // Total: 4-5 min matches UI
+    'local/trellis-v1': { expected: 180000, min: 60000, max: 600000 },
+    'local/hunyuan3d-2': { expected: 120000, min: 45000, max: 360000 },
+    'local/hunyuan3d-2.1': { expected: 210000, min: 60000, max: 600000 },
+    'local/stable-fast-3d': { expected: 60000, min: 20000, max: 180000 },
+    fast: { expected: 75000, min: 60000, max: 90000 },
+    quality: { expected: 45000, min: 30000, max: 60000 },
+    ultra: { expected: 270000, min: 240000, max: 300000 },
   },
 };
 
@@ -28,7 +43,7 @@ export function useLoadingProgress(
 
   const actualStartTime = useMemo(() => startTime || Date.now(), [startTime]);
 
-  const modelName = model || 'quality';
+  const modelName = model || 'local/trellis-v1';
 
   const timing = TIMING_CONFIG[modelType][modelName];
 
@@ -41,10 +56,10 @@ export function useLoadingProgress(
       );
 
       setStage(stage);
-      setProgress(progress); // Removed Math.min(90, progress) since getProgress now handles capping
+      setProgress(progress);
     };
 
-    updateProgress(); // Initial update
+    updateProgress();
     const interval = setInterval(updateProgress, 150);
     return () => clearInterval(interval);
   }, [actualStartTime, timing]);
@@ -74,25 +89,18 @@ export function getProgress(
     currentStage = 3;
   }
 
-  // Adaptive progress calculation
-  // If generation is taking longer than expected, slow down progress to avoid completing at 100%
   let progress: number;
 
   if (elapsedTime <= expectedTime) {
-    // Normal case: use linear progression
     progress = (elapsedTime / expectedTime) * 100;
   } else {
-    // Fallback case: slow down exponentially to avoid hitting 100%
     const overtime = elapsedTime - expectedTime;
     const overtimeRatio = overtime / expectedTime;
-
-    // Use logarithmic function to slow down progress when over time
-    // This keeps it under 95% even if generation takes much longer
     progress = 85 + (10 * Math.log(1 + overtimeRatio)) / Math.log(6);
   }
 
   return {
-    progress: Math.min(95, progress), // Cap at 95% to never show "complete" while pending
+    progress: Math.min(95, progress),
     stage: currentStage,
   };
 }
