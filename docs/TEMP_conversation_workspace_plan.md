@@ -181,8 +181,9 @@ Explicitly deferred and not required for Step 4B:
 **Status: IN PROGRESS — FINAL GATE**
 
 - stabilize Local Creative v1 as generation-only; incomplete local follow-up editing must not be exposed as successful functionality
-- run focused workspace/Creative tests and the full server test suite
-- run `npm run typecheck`
+- focused workspace/Creative tests passed after the generated-mesh lifecycle fixture update
+- full server suite passed 2026-08-22: **212 tests / 69 suites / 0 failures**
+- `npm run typecheck` passed at the current Step 4C validation gate
 - run production build because Step 4B/Creative changes touched runtime paths
 - reconcile intentionally deferred Creative runtime work into permanent documentation rather than this temporary plan
 - permanent workspace architecture is documented in `docs/conversation_workspace.md`
