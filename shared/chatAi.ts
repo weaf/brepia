@@ -1,12 +1,13 @@
 import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
+import { CREATIVE_MESH_MODEL_IDS } from './creativeMeshModels.ts';
 import type { MeshFileType, Model } from './types.ts';
 
 export const createMeshInputSchema = z.object({
   text: z.string().optional(),
   imageIds: z.array(z.string()).optional(),
   meshId: z.string().optional(),
-  model: z.enum(['fast', 'quality', 'ultra']).optional(),
+  model: z.enum(CREATIVE_MESH_MODEL_IDS).optional(),
   meshTopology: z.enum(['quads', 'polys']).optional(),
   polygonCount: z.number().optional(),
 });
@@ -54,7 +55,7 @@ export const chatTools = {
   }),
   create_mesh: tool({
     description:
-      'Create a 3D mesh from text, images, or an existing mesh plus edit instructions.',
+      'Create a 3D mesh from text, images, or an existing mesh plus edit instructions. Respect the selected mesh backend supplied by pCAD.',
     inputSchema: createMeshInputSchema,
     outputSchema: createMeshOutputSchema,
   }),
@@ -120,7 +121,7 @@ export type AppUIMessage = UIMessage<
   {
     model?: Model;
     /** Actual LLM/agent used for a Creative turn. `model` remains the mesh
-     * backend preset in Creative mode so retry/UI behavior stays compatible. */
+     * backend ID in Creative mode so retry/UI behavior stays compatible. */
     agentModel?: Model;
     billingTokens?: number;
     // The model's original OpenSCAD for this message's artifact, captured
