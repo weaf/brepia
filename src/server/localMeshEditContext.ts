@@ -29,6 +29,13 @@ const DETERMINISTIC_EDIT_PATTERNS = [
   /\bmindre\b/i,
 ];
 
+type BranchMessage = {
+  id: string;
+  parent_message_id: string | null;
+  parts: unknown;
+  role: string;
+};
+
 export function isDeterministicLocalMeshEditText(value: unknown): boolean {
   return (
     typeof value === 'string' &&
@@ -76,12 +83,14 @@ async function latestActiveBranchMeshId({
     if (visited.has(messageId)) break;
     visited.add(messageId);
 
-    const { data: message, error } = await supabase
+    const queryResult = await supabase
       .from('messages')
       .select('id, parent_message_id, parts, role')
       .eq('id', messageId)
       .eq('conversation_id', conversationId)
       .maybeSingle();
+    const message = queryResult.data as BranchMessage | null;
+    const error = queryResult.error;
     if (error) {
       throw new Error(`Failed to traverse Creative message branch: ${error.message}`);
     }
