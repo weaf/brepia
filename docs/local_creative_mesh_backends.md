@@ -26,13 +26,25 @@ pCAD create_mesh
   -> src/server/mesh.ts
       -> local/* -> src/server/localMesh.ts
                    -> 127.0.0.1:8180 pCAD mesh gateway
+                      -> GPU arbitration with llama-swap
                       -> exactly one GPU worker on 127.0.0.1:8190
       -> quality/fast/ultra -> src/server/falMesh.ts (legacy fal.ai)
 ```
 
 Each local backend has its own Python environment. The gateway kills the active
-worker before starting a different backend, so only one heavyweight CUDA model
-owns VRAM at a time. This is intentional for 24 GB consumer GPUs.
+worker before starting a different backend, so only one heavyweight local 3D
+model owns VRAM at a time.
+
+With GPU arbitration enabled, the gateway also checks llama-swap before a local
+3D generation. If llama-swap has a resident LLM/VLM, the gateway requests a
+manual unload and waits until `/running` reports no resident model before the
+3D worker starts. The default `PCAD_MESH_KEEP_WARM=false` then stops the 3D
+worker before `create_mesh` returns. The next LLM/VLM request can therefore let
+llama-swap load its model again normally. pCAD does not need to know which LLM
+was previously resident.
+
+This is intentional for a single 24 GB consumer GPU. It is model-family
+hot-swapping, not concurrent execution.
 
 Local generation does not consume hosted mesh billing tokens. fal.ai requests
 continue through the existing billing path unchanged.
@@ -84,6 +96,51 @@ pCAD defaults to this gateway URL automatically. Override it only when needed:
 ```bash
 export PCAD_MESH_GATEWAY_URL=http://127.0.0.1:8180
 ```
+
+## GPU arbitration with llama-swap
+
+The installer defaults to:
+
+```text
+PCAD_GPU_ARBITRATION=auto
+PCAD_LLAMA_SWAP_URL=http://127.0.0.1:9292
+PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT=90
+PCAD_MESH_KEEP_WARM=false
+```
+
+`auto` means that a running llama-swap is coordinated with automatically, but a
+machine without llama-swap can still use the local mesh gateway. Use `required`
+when local 3D generation must fail closed unless llama-swap can be contacted:
+
+```bash
+export PCAD_GPU_ARBITRATION=required
+bash ./scripts/install-local-mesh-backends.sh
+```
+
+Use `off` to disable cross-runtime arbitration:
+
+```bash
+export PCAD_GPU_ARBITRATION=off
+```
+
+If llama-swap is protected by a bearer token, set:
+
+```bash
+export PCAD_LLAMA_SWAP_API_KEY='...'
+```
+
+The gateway health response exposes the arbitration state:
+
+```bash
+curl -s http://127.0.0.1:8180/health | python -m json.tool
+```
+
+Look for `arbitration.mode`, `arbitration.connected`,
+`arbitration.lastAction`, and `activeModel`.
+
+For normal single-GPU pCAD use, leave `PCAD_MESH_KEEP_WARM=false`. Setting it to
+`true` is only appropriate when enough VRAM exists to keep the selected 3D
+worker resident while later LLM requests run.
 
 ## Stable Fast 3D access
 
@@ -149,6 +206,13 @@ npm run typecheck
 npx tsx --test tests/creativeMeshModels.test.ts
 ```
 
+Validate the lightweight Python gateway without loading a model:
+
+```bash
+python3 -m py_compile scripts/local-mesh/gateway.py scripts/local-mesh/worker.py
+bash -n scripts/install-local-mesh-backends.sh
+```
+
 After installation:
 
 ```bash
@@ -157,3 +221,16 @@ curl -s http://127.0.0.1:8180/health | python -m json.tool
 
 Then create a new Creative conversation and explicitly select one of the local
 backends in the model picker. A local request must not require `FAL_KEY`.
+
+For the GPU arbitration runtime test, first let llama-swap load an LLM/VLM and
+confirm it appears in its `/running` endpoint. Start a local Creative generation
+and observe the gateway health/logs. The expected sequence is:
+
+```text
+llama-swap model resident
+-> gateway unloads llama-swap
+-> local 3D worker starts
+-> GLB is generated
+-> local 3D worker exits
+-> next LLM request reloads through llama-swap
+```
