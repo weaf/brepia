@@ -10,17 +10,20 @@ set -euo pipefail
 #   - Hunyuan3D-2.1 (shape pipeline; 24 GB-safe)
 #   - Stable Fast 3D (Hugging Face gated)
 #
-# The gateway also coordinates with llama-swap by default: before starting a
-# local 3D worker it unloads resident llama-swap models, then stops the 3D
-# worker after generation so the next LLM request can load normally.
+# GPU backends use two shared, version-pinned toolchain profiles while keeping
+# their Python packages isolated:
+#   modern-cu124: Hunyuan3D-2 + Hunyuan3D-2.1
+#   legacy-cu121: TRELLIS v1 + Stable Fast 3D
+#
+# The NVIDIA driver/system CUDA installation is never modified. Each managed
+# environment gets its own matching nvcc/toolkit and PyTorch CUDA wheel. This
+# prevents a newer system or conda CUDA package from silently compiling an
+# extension against a different CUDA major/minor than PyTorch.
 #
 # Each environment is versioned with a pCAD bootstrap spec. An environment is
 # marked ready only after its complete install succeeds. Missing/stale markers
 # cause that environment to be deleted and recreated, preventing partially
 # installed Python/CUDA stacks from being reused after a failed bootstrap.
-#
-# Default install root: ~/.local/share/pcad-mesh
-# No sudo is used unless --install-system-deps is explicitly supplied.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -30,13 +33,31 @@ DOWNLOAD_WEIGHTS=1
 ENABLE_SERVICE=1
 RECREATE_ENVS=0
 
-# Bump an individual spec whenever its Python/CUDA/dependency bootstrap changes.
-# Old or partial environments are then recreated automatically on the next run.
+# Shared GPU toolchain profiles. Keep PyTorch and nvcc on the same CUDA minor.
+LEGACY_PYTHON="3.10"
+LEGACY_TORCH="2.4.0"
+LEGACY_TORCHVISION="0.19.0"
+LEGACY_CUDA_MINOR="12.1"
+LEGACY_CUDA_TOOLKIT="12.1.1"
+LEGACY_CUDA_LABEL="cuda-12.1.1"
+LEGACY_TORCH_INDEX="https://download.pytorch.org/whl/cu121"
+
+MODERN_PYTHON="3.10"
+MODERN_TORCH="2.5.1"
+MODERN_TORCHVISION="0.20.1"
+MODERN_TORCHAUDIO="2.5.1"
+MODERN_CUDA_MINOR="12.4"
+MODERN_CUDA_TOOLKIT="12.4.1"
+MODERN_CUDA_LABEL="cuda-12.4.1"
+MODERN_TORCH_INDEX="https://download.pytorch.org/whl/cu124"
+
+# Bump an individual spec whenever its bootstrap changes. Old/partial envs are
+# recreated automatically on the next run.
 GATEWAY_ENV_SPEC="pcad-gateway-py310-v2"
-HUNYUAN2_ENV_SPEC="hunyuan3d2-py310-torch251-cu124-v2"
-HUNYUAN21_ENV_SPEC="hunyuan3d21-py310-torch251-cu124-bpy400-v4"
-TRELLIS_ENV_SPEC="trellis-py310-torch240-cu121-v2"
-SF3D_ENV_SPEC="sf3d-py310-torch240-cu121-no-build-isolation-v3"
+HUNYUAN2_ENV_SPEC="hunyuan3d2-modern-cu124-v3"
+HUNYUAN21_ENV_SPEC="hunyuan3d21-modern-cu124-bpy400-v5"
+TRELLIS_ENV_SPEC="trellis-legacy-cu121-v3"
+SF3D_ENV_SPEC="sf3d-legacy-cu121-no-build-isolation-v4"
 
 usage() {
   cat <<'EOF'
@@ -189,9 +210,7 @@ prepare_env() {
 mark_env_ready() {
   local env_path="$1"
   local expected_spec="$2"
-  local marker
-  marker="$(env_marker "$env_path")"
-  printf '%s\n' "$expected_spec" > "$marker"
+  printf '%s\n' "$expected_spec" > "$(env_marker "$env_path")"
 }
 
 ensure_basic_env() {
@@ -201,14 +220,65 @@ ensure_basic_env() {
   fi
 }
 
-ensure_cuda121_torch24_env() {
+ensure_gpu_profile_env() {
   local env_path="$1"
+  local python_version="$2"
+  local cuda_minor="$3"
+  local cuda_toolkit="$4"
+  local cuda_label="$5"
+  local torch_version="$6"
+  local torchvision_version="$7"
+  local torch_index="$8"
+  local torchaudio_version="${9:-}"
+
   if [[ ! -x "$env_path/bin/python" ]]; then
+    # The versioned NVIDIA label is the only CUDA channel. This prevents the
+    # solver from pulling current-main cuda-nvcc (e.g. 13.x) into a 12.x env.
     "$MAMBA" create -y -p "$env_path" \
-      -c pytorch -c nvidia -c conda-forge \
-      python=3.10 pip pytorch=2.4.0 torchvision=0.19.0 \
-      pytorch-cuda=12.1 cuda-toolkit=12.1
+      -c "nvidia/label/$cuda_label" -c conda-forge \
+      "python=$python_version" pip "cuda-toolkit=$cuda_toolkit"
   fi
+
+  mamba_run "$env_path" python -m pip install -U pip
+  if [[ -n "$torchaudio_version" ]]; then
+    mamba_run "$env_path" python -m pip install \
+      "torch==$torch_version" "torchvision==$torchvision_version" "torchaudio==$torchaudio_version" \
+      --index-url "$torch_index"
+  else
+    mamba_run "$env_path" python -m pip install \
+      "torch==$torch_version" "torchvision==$torchvision_version" \
+      --index-url "$torch_index"
+  fi
+
+  verify_cuda_profile "$env_path" "$cuda_minor"
+}
+
+verify_cuda_profile() {
+  local env_path="$1"
+  local expected_minor="$2"
+  local torch_cuda
+  local nvcc_release
+
+  [[ -x "$env_path/bin/nvcc" ]] || die "CUDA profile is incomplete: $env_path/bin/nvcc is missing"
+  torch_cuda="$(mamba_run "$env_path" python -c 'import torch; print(torch.version.cuda or "")')"
+  nvcc_release="$($env_path/bin/nvcc --version | sed -n 's/.*release \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | tail -n 1)"
+
+  if [[ "$torch_cuda" != "$expected_minor" || "$nvcc_release" != "$expected_minor" ]]; then
+    die "CUDA profile mismatch in $env_path: torch=$torch_cuda nvcc=$nvcc_release expected=$expected_minor"
+  fi
+  say "Verified $(basename "$env_path") CUDA profile: torch=$torch_cuda nvcc=$nvcc_release"
+}
+
+ensure_legacy_cuda_env() {
+  ensure_gpu_profile_env "$1" \
+    "$LEGACY_PYTHON" "$LEGACY_CUDA_MINOR" "$LEGACY_CUDA_TOOLKIT" "$LEGACY_CUDA_LABEL" \
+    "$LEGACY_TORCH" "$LEGACY_TORCHVISION" "$LEGACY_TORCH_INDEX"
+}
+
+ensure_modern_cuda_env() {
+  ensure_gpu_profile_env "$1" \
+    "$MODERN_PYTHON" "$MODERN_CUDA_MINOR" "$MODERN_CUDA_TOOLKIT" "$MODERN_CUDA_LABEL" \
+    "$MODERN_TORCH" "$MODERN_TORCHVISION" "$MODERN_TORCH_INDEX" "$MODERN_TORCHAUDIO"
 }
 
 clone_or_update() {
@@ -244,8 +314,6 @@ HUNYUAN2_REPO="$REPOS_DIR/Hunyuan3D-2"
 HUNYUAN21_REPO="$REPOS_DIR/Hunyuan3D-2.1"
 SF3D_REPO="$REPOS_DIR/stable-fast-3d"
 
-# A previous successful install may have an active user service. Stop it before
-# replacing its Python environment/runtime, then re-enable it at the end.
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet pcad-mesh-gateway.service 2>/dev/null; then
   say "Stopping existing pCAD mesh gateway during environment maintenance"
   systemctl --user stop pcad-mesh-gateway.service
@@ -268,56 +336,55 @@ mamba_run "$GATEWAY_ENV" python -m pip install -U pip
 mamba_run "$GATEWAY_ENV" python -m pip install fastapi uvicorn httpx huggingface-hub
 mark_env_ready "$GATEWAY_ENV" "$GATEWAY_ENV_SPEC"
 
-say "Installing Hunyuan3D-2 environment"
-ensure_basic_env "$HUNYUAN2_ENV"
-mamba_run "$HUNYUAN2_ENV" python -m pip install -U pip
-mamba_run "$HUNYUAN2_ENV" python -m pip install \
-  torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
-  --index-url https://download.pytorch.org/whl/cu124
+say "Installing Hunyuan3D-2 environment [modern-cu124]"
+ensure_modern_cuda_env "$HUNYUAN2_ENV"
 mamba_run "$HUNYUAN2_ENV" bash -c \
   "cd '$HUNYUAN2_REPO' && python -m pip install -r requirements.txt && python -m pip install -e . && python -m pip install fastapi uvicorn"
+verify_cuda_profile "$HUNYUAN2_ENV" "$MODERN_CUDA_MINOR"
 mark_env_ready "$HUNYUAN2_ENV" "$HUNYUAN2_ENV_SPEC"
 
-say "Installing Hunyuan3D-2.1 shape environment"
-ensure_basic_env "$HUNYUAN21_ENV"
-mamba_run "$HUNYUAN21_ENV" python -m pip install -U pip
-mamba_run "$HUNYUAN21_ENV" python -m pip install \
-  torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
-  --index-url https://download.pytorch.org/whl/cu124
-# Upstream pins bpy==4.0 but does not currently include Blender's package index.
-# Keep normal PyPI as the primary index for dependencies such as Cython and add
-# Blender's official package index only as an additional source for bpy 4.0.
+say "Installing Hunyuan3D-2.1 shape environment [modern-cu124]"
+ensure_modern_cuda_env "$HUNYUAN21_ENV"
+# Upstream pins bpy==4.0 but does not include Blender's package index.
 mamba_run "$HUNYUAN21_ENV" python -m pip install \
   --extra-index-url https://download.blender.org/pypi/ \
   'bpy==4.0.0'
 mamba_run "$HUNYUAN21_ENV" bash -c \
   "cd '$HUNYUAN21_REPO' && python -m pip install -r requirements.txt && python -m pip install fastapi uvicorn"
+verify_cuda_profile "$HUNYUAN21_ENV" "$MODERN_CUDA_MINOR"
 mark_env_ready "$HUNYUAN21_ENV" "$HUNYUAN21_ENV_SPEC"
 
-say "Installing TRELLIS v1 environment (this compiles CUDA extensions and can take a while)"
-ensure_cuda121_torch24_env "$TRELLIS_ENV"
-mamba_run "$TRELLIS_ENV" bash -c \
-  "cd '$TRELLIS_REPO' && bash ./setup.sh --basic --xformers --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast"
+say "Installing TRELLIS v1 environment [legacy-cu121] (CUDA extensions can take a while)"
+ensure_legacy_cuda_env "$TRELLIS_ENV"
+mamba_run "$TRELLIS_ENV" env \
+  CUDA_HOME="$TRELLIS_ENV" CUDACXX="$TRELLIS_ENV/bin/nvcc" PATH="$TRELLIS_ENV/bin:$PATH" \
+  bash -c "cd '$TRELLIS_REPO' && bash ./setup.sh --basic --xformers --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast"
 mamba_run "$TRELLIS_ENV" python -m pip install fastapi uvicorn
+verify_cuda_profile "$TRELLIS_ENV" "$LEGACY_CUDA_MINOR"
 mark_env_ready "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
 
-say "Installing Stable Fast 3D environment"
-ensure_cuda121_torch24_env "$SF3D_ENV"
-mamba_run "$SF3D_ENV" python -m pip install -U pip setuptools==69.5.1 wheel
-# SF3D requirements include two local torch C++/CUDA extensions. Their setup.py
-# imports torch while pip is collecting build metadata. Installing them through
-# the requirements file triggers PEP 517 build isolation, where torch is absent.
-# Install normal dependencies first, then compile the two local extensions with
-# --no-build-isolation so they use this environment's already pinned Torch/CUDA.
+say "Installing Stable Fast 3D environment [legacy-cu121]"
+ensure_legacy_cuda_env "$SF3D_ENV"
+mamba_run "$SF3D_ENV" python -m pip install setuptools==69.5.1 wheel
+# SF3D requirements include two local torch C++/CUDA extensions whose setup.py
+# imports torch during metadata/build. Install ordinary dependencies first and
+# compile extensions without build isolation, explicitly against the managed
+# CUDA 12.1 toolkit rather than the host's CUDA installation.
 mamba_run "$SF3D_ENV" bash -c \
-  "cd '$SF3D_REPO' && grep -vE '^\\./(texture_baker|uv_unwrapper)/?$' requirements.txt > .pcad-requirements.txt && python -m pip install -r .pcad-requirements.txt && python -m pip install --no-build-isolation ./texture_baker ./uv_unwrapper && rm -f .pcad-requirements.txt && python -m pip install fastapi uvicorn"
+  "cd '$SF3D_REPO' && grep -vE '^\\./(texture_baker|uv_unwrapper)/?$' requirements.txt > .pcad-requirements.txt && python -m pip install -r .pcad-requirements.txt"
+verify_cuda_profile "$SF3D_ENV" "$LEGACY_CUDA_MINOR"
+mamba_run "$SF3D_ENV" env \
+  CUDA_HOME="$SF3D_ENV" CUDACXX="$SF3D_ENV/bin/nvcc" PATH="$SF3D_ENV/bin:$PATH" \
+  python -m pip install --no-build-isolation "$SF3D_REPO/texture_baker" "$SF3D_REPO/uv_unwrapper"
+rm -f "$SF3D_REPO/.pcad-requirements.txt"
+mamba_run "$SF3D_ENV" python -m pip install fastapi uvicorn
+verify_cuda_profile "$SF3D_ENV" "$LEGACY_CUDA_MINOR"
 mark_env_ready "$SF3D_ENV" "$SF3D_ENV_SPEC"
 
 say "Installing gateway runtime files"
 install -m 0644 "$REPO_ROOT/scripts/local-mesh/gateway.py" "$RUNTIME_DIR/gateway.py"
 install -m 0644 "$REPO_ROOT/scripts/local-mesh/worker.py" "$RUNTIME_DIR/worker.py"
 
-# Persist only local runtime configuration. Never write tokens into the repo.
 ENV_FILE="$CONFIG_DIR/env"
 {
   printf 'HF_HOME=%s\n' "$HF_HOME"
@@ -411,10 +478,10 @@ say "Installation complete"
 cat <<EOF
 
 Local Creative backends:
-  TRELLIS v1          local/trellis-v1
-  Hunyuan3D-2         local/hunyuan3d-2
-  Hunyuan3D-2.1       local/hunyuan3d-2.1
-  Stable Fast 3D      local/stable-fast-3d
+  TRELLIS v1          local/trellis-v1   [legacy-cu121]
+  Hunyuan3D-2         local/hunyuan3d-2  [modern-cu124]
+  Hunyuan3D-2.1       local/hunyuan3d-2.1 [modern-cu124]
+  Stable Fast 3D      local/stable-fast-3d [legacy-cu121]
 
 Legacy fal.ai backends remain selectable as quality / fast / ultra.
 
