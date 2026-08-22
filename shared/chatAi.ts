@@ -58,7 +58,7 @@ export const chatTools = {
   }),
   create_mesh: tool({
     description:
-      'Create a 3D mesh from text/images, or edit the current mesh by passing meshId with the requested change. The mesh backend is already selected by pCAD and must not be changed. For simple whole-mesh geometric follow-ups such as wider, narrower, taller, shorter, thicker, thinner, larger, or smaller, keep the edit instruction in text and use the current mesh as context. A tool error means the mesh was not created or changed: never claim that an update succeeded unless this tool returns an output with id and fileType.',
+      'Create a 3D mesh from text and/or reference images. The mesh backend is already selected by pCAD and must not be changed. Local Creative backends currently support generation only; follow-up editing of an existing locally generated mesh is deferred, so do not pass meshId for local backends or claim that a local mesh was edited. A tool error means the mesh was not created or changed: never claim success unless this tool returns an output with id and fileType. meshId remains available only for legacy/backends that explicitly support mesh editing.',
     inputSchema: createMeshInputSchema,
     outputSchema: createMeshOutputSchema,
   }),
