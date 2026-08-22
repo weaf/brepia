@@ -1,0 +1,177 @@
+import { isRecord } from './api';
+import { getServiceRoleSupabaseClient } from './supabaseClient';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const DETERMINISTIC_EDIT_PATTERNS = [
+  /\bwider\b/i,
+  /\bbroader\b/i,
+  /\bbredare\b/i,
+  /\bnarrower\b/i,
+  /\bsmalare\b/i,
+  /\btaller\b/i,
+  /\bhigher\b/i,
+  /\bhögre\b/i,
+  /\bshorter\b/i,
+  /\blägre\b/i,
+  /\bthicker\b/i,
+  /\bdeeper\b/i,
+  /\btjockare\b/i,
+  /\bdjupare\b/i,
+  /\bthinner\b/i,
+  /\bshallower\b/i,
+  /\btunnare\b/i,
+  /\bbigger\b/i,
+  /\blarger\b/i,
+  /\bstörre\b/i,
+  /\bsmaller\b/i,
+  /\bmindre\b/i,
+];
+
+export function isDeterministicLocalMeshEditText(value: unknown): boolean {
+  return (
+    typeof value === 'string' &&
+    DETERMINISTIC_EDIT_PATTERNS.some((pattern) => pattern.test(value))
+  );
+}
+
+function messageHasImageAttachment(parts: unknown): boolean {
+  return (
+    Array.isArray(parts) &&
+    parts.some(
+      (part) =>
+        isRecord(part) &&
+        part.type === 'file' &&
+        (typeof part.mediaType !== 'string' ||
+          part.mediaType.startsWith('image/')),
+    )
+  );
+}
+
+export function createMeshOutputId(parts: unknown): string | null {
+  if (!Array.isArray(parts)) return null;
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (
+      !isRecord(part) ||
+      part.type !== 'tool-create_mesh' ||
+      part.state !== 'output-available' ||
+      !isRecord(part.output) ||
+      typeof part.output.id !== 'string' ||
+      !UUID_RE.test(part.output.id)
+    ) {
+      continue;
+    }
+    return part.output.id;
+  }
+  return null;
+}
+
+async function latestActiveBranchMeshId({
+  conversationId,
+  userId,
+  leafMessageId,
+}: {
+  conversationId: string;
+  userId: string;
+  leafMessageId: string;
+}): Promise<string | null> {
+  const supabase = getServiceRoleSupabaseClient();
+  const visited = new Set<string>();
+  let messageId: string | null = leafMessageId;
+
+  for (let depth = 0; messageId && depth < 200; depth += 1) {
+    if (visited.has(messageId)) break;
+    visited.add(messageId);
+
+    const { data: message, error } = await supabase
+      .from('messages')
+      .select('id, parent_message_id, parts, role')
+      .eq('id', messageId)
+      .eq('conversation_id', conversationId)
+      .maybeSingle();
+    if (error) {
+      throw new Error(`Failed to traverse Creative message branch: ${error.message}`);
+    }
+    if (!message) break;
+
+    if (message.role === 'assistant') {
+      const candidate = createMeshOutputId(message.parts);
+      if (candidate) {
+        const { data: mesh, error: meshError } = await supabase
+          .from('meshes')
+          .select('id')
+          .eq('id', candidate)
+          .eq('user_id', userId)
+          .eq('conversation_id', conversationId)
+          .eq('status', 'success')
+          .maybeSingle();
+        if (meshError) {
+          throw new Error(`Failed to validate Creative source mesh: ${meshError.message}`);
+        }
+        if (mesh) return candidate;
+      }
+    }
+
+    messageId = message.parent_message_id;
+  }
+
+  return null;
+}
+
+/**
+ * The LLM is allowed to omit meshId. For simple follow-up geometry edits,
+ * recover the source mesh from the active message lineage instead of falling
+ * back to image-to-3D regeneration or choosing a mesh from a sibling branch.
+ */
+export async function resolveLocalMeshEditSource(
+  request: Request,
+  body: unknown,
+): Promise<unknown> {
+  if (!isRecord(body)) return body;
+  if (typeof body.mesh === 'string' && UUID_RE.test(body.mesh)) return body;
+  if (!isDeterministicLocalMeshEditText(body.text)) return body;
+  if (typeof body.conversationId !== 'string') return body;
+
+  const authHeader = request.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '');
+  if (!token) return body;
+
+  const supabase = getServiceRoleSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  const userId = userData.user?.id;
+  if (userError || !userId) return body;
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from('conversations')
+    .select('current_message_leaf_id')
+    .eq('id', body.conversationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (conversationError || !conversation?.current_message_leaf_id) return body;
+
+  // A fresh image in the current user turn means this is an image-generation
+  // request, even if the prompt happens to contain a word like "wider".
+  const { data: leaf, error: leafError } = await supabase
+    .from('messages')
+    .select('parts, role')
+    .eq('id', conversation.current_message_leaf_id)
+    .eq('conversation_id', body.conversationId)
+    .maybeSingle();
+  if (leafError || !leaf || leaf.role !== 'user') return body;
+  if (messageHasImageAttachment(leaf.parts)) return body;
+
+  const meshId = await latestActiveBranchMeshId({
+    conversationId: body.conversationId,
+    userId,
+    leafMessageId: conversation.current_message_leaf_id,
+  });
+  if (!meshId) return body;
+
+  console.log('[local-mesh] inferred source mesh from active branch', {
+    conversationId: body.conversationId,
+    meshId,
+  });
+  return { ...body, mesh: meshId };
+}
