@@ -1,13 +1,16 @@
 import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
-import { CREATIVE_MESH_MODEL_IDS } from './creativeMeshModels.ts';
 import type { MeshFileType, Model } from './types.ts';
 
 export const createMeshInputSchema = z.object({
   text: z.string().optional(),
   imageIds: z.array(z.string()).optional(),
   meshId: z.string().optional(),
-  model: z.enum(CREATIVE_MESH_MODEL_IDS).optional(),
+  // Reserved compatibility field. The selected Creative mesh backend belongs
+  // to pCAD's conversation/UI state, not to the LLM. Keeping an optional
+  // never-field preserves the existing execute typing while preventing an
+  // agent from silently overriding Hunyuan/TRELLIS/SF3D/fal selection.
+  model: z.never().optional(),
   meshTopology: z.enum(['quads', 'polys']).optional(),
   polygonCount: z.number().optional(),
 });
@@ -55,7 +58,7 @@ export const chatTools = {
   }),
   create_mesh: tool({
     description:
-      'Create a 3D mesh from text, images, or an existing mesh plus edit instructions. Respect the selected mesh backend supplied by pCAD.',
+      'Create a 3D mesh from text, images, or an existing mesh plus edit instructions. The mesh backend is already selected by pCAD and must not be changed.',
     inputSchema: createMeshInputSchema,
     outputSchema: createMeshOutputSchema,
   }),
