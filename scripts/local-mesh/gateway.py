@@ -2,8 +2,10 @@
 """pCAD local Creative mesh gateway.
 
 The gateway is intentionally lightweight and never imports torch. It owns one
-backend worker process at a time. Switching model terminates the previous
-worker, which releases its CUDA context/VRAM before the new environment starts.
+backend worker process at a time. Before a local 3D job it can also ask
+llama-swap to unload any resident LLM/VLM workers, allowing both stacks to share
+one GPU. The 3D worker is stopped again before the result is returned so the
+next llama-swap request can reload its model on demand.
 """
 
 from __future__ import annotations
@@ -38,6 +40,33 @@ WORKER_STOP_TIMEOUT = 15.0
 GENERATION_TIMEOUT = 30.0 * 60.0
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def payload_has_running_models(payload: Any) -> bool:
+    """Accept the common /running response shapes without coupling to one version."""
+    if payload is None:
+        return False
+    if isinstance(payload, bool):
+        return payload
+    if isinstance(payload, (int, float)):
+        return payload > 0
+    if isinstance(payload, str):
+        return bool(payload.strip())
+    if isinstance(payload, (list, tuple, set)):
+        return len(payload) > 0
+    if isinstance(payload, dict):
+        for key in ("running", "models", "data"):
+            if key in payload:
+                return payload_has_running_models(payload[key])
+        return len(payload) > 0
+    return bool(payload)
+
+
 class GenerateRequest(BaseModel):
     model: str
     prompt: str | None = None
@@ -47,8 +76,129 @@ class GenerateRequest(BaseModel):
     outputFormat: str = "glb"
 
 
+class LlamaSwapArbiter:
+    """Coordinate the local 3D stack with a separately running llama-swap."""
+
+    VALID_MODES = {"off", "auto", "required"}
+
+    def __init__(self) -> None:
+        mode = os.environ.get("PCAD_GPU_ARBITRATION", "auto").strip().lower()
+        if mode not in self.VALID_MODES:
+            raise RuntimeError(
+                "PCAD_GPU_ARBITRATION must be one of: off, auto, required"
+            )
+        self.mode = mode
+        self.base_url = os.environ.get(
+            "PCAD_LLAMA_SWAP_URL", "http://127.0.0.1:9292"
+        ).rstrip("/")
+        self.timeout = float(os.environ.get("PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT", "90"))
+        self.api_key = os.environ.get("PCAD_LLAMA_SWAP_API_KEY", "").strip()
+        self.connected: bool | None = None
+        self.last_running: Any = None
+        self.last_action = "not-run"
+        self.last_error: str | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return self.mode != "off"
+
+    def headers(self) -> dict[str, str]:
+        if not self.api_key:
+            return {}
+        return {"Authorization": f"Bearer {self.api_key}"}
+
+    async def _get_running(self, client: httpx.AsyncClient) -> Any:
+        response = await client.get(
+            f"{self.base_url}/running",
+            headers=self.headers(),
+        )
+        response.raise_for_status()
+        try:
+            return response.json()
+        except ValueError:
+            text = response.text.strip()
+            return text if text else []
+
+    async def prepare_for_mesh(self) -> None:
+        if not self.enabled:
+            self.last_action = "disabled"
+            self.last_error = None
+            return
+
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                running = await self._get_running(client)
+        except Exception as exc:
+            self.connected = False
+            self.last_running = None
+            self.last_error = str(exc)
+            if self.mode == "required":
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "GPU arbitration requires llama-swap, but it is not reachable at "
+                        f"{self.base_url}: {exc}"
+                    ),
+                ) from exc
+            # auto means pCAD is also valid on machines that do not run llama-swap.
+            self.last_action = "llama-swap-unavailable"
+            return
+
+        self.connected = True
+        self.last_running = running
+        self.last_error = None
+        if not payload_has_running_models(running):
+            self.last_action = "already-free"
+            return
+
+        try:
+            async with httpx.AsyncClient(timeout=max(10.0, self.timeout)) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/models/unload",
+                    headers=self.headers(),
+                )
+                response.raise_for_status()
+
+                deadline = time.monotonic() + self.timeout
+                while time.monotonic() < deadline:
+                    await asyncio.sleep(0.5)
+                    running = await self._get_running(client)
+                    self.last_running = running
+                    if not payload_has_running_models(running):
+                        self.last_action = "unloaded-llama-swap"
+                        # Give the NVIDIA driver a moment to release the old CUDA
+                        # context before importing a large Python model stack.
+                        await asyncio.sleep(0.75)
+                        return
+        except Exception as exc:
+            self.last_error = str(exc)
+            raise HTTPException(
+                status_code=503,
+                detail=f"Could not unload llama-swap models before local 3D generation: {exc}",
+            ) from exc
+
+        self.last_error = "timed out waiting for /running to become empty"
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Timed out waiting for llama-swap to release the GPU after "
+                f"{self.timeout:.0f}s"
+            ),
+        )
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "llamaSwapUrl": self.base_url,
+            "connected": self.connected,
+            "lastAction": self.last_action,
+            "lastRunning": self.last_running,
+            "lastError": self.last_error,
+        }
+
+
 class WorkerManager:
-    def __init__(self, home: Path) -> None:
+    def __init__(self, home: Path, arbiter: LlamaSwapArbiter | None = None) -> None:
         self.home = home
         self.runtime_dir = home / "runtime"
         self.logs_dir = home / "logs"
@@ -56,6 +206,11 @@ class WorkerManager:
         self.process_log: Any = None
         self.active_model: str | None = None
         self.lock = asyncio.Lock()
+        self.arbiter = arbiter or LlamaSwapArbiter()
+        # Keeping a PyTorch worker resident conflicts with the normal pCAD flow:
+        # after create_mesh returns, the Creative agent usually needs its LLM
+        # again. Default to cold workers so llama-swap can immediately reload.
+        self.keep_warm = env_bool("PCAD_MESH_KEEP_WARM", False)
 
     def paths(self, model: str) -> tuple[Path, Path]:
         if model not in MODEL_LAYOUT:
@@ -185,34 +340,39 @@ class WorkerManager:
         )
 
     async def generate(self, request: GenerateRequest) -> bytes:
-        # A single lock serializes worker switching and inference. That is an
-        # explicit 24 GB GPU constraint, not an accidental queue.
+        # A single lock serializes both llama-swap eviction and mesh inference.
+        # This is an explicit one-GPU policy, not an accidental queue.
         async with self.lock:
-            await self.ensure_worker(request.model)
+            await self.arbiter.prepare_for_mesh()
             try:
-                async with httpx.AsyncClient(timeout=GENERATION_TIMEOUT) as client:
-                    response = await client.post(
-                        f"{WORKER_URL}/v1/generate",
-                        json=request.model_dump(exclude_none=True),
-                    )
-            except httpx.TimeoutException as exc:
-                raise HTTPException(status_code=504, detail="Local mesh generation timed out") from exc
-            except Exception as exc:
-                raise HTTPException(status_code=502, detail=f"Local mesh worker request failed: {exc}") from exc
-
-            if not response.is_success:
+                await self.ensure_worker(request.model)
                 try:
-                    payload = response.json()
-                    detail = payload.get("detail") or payload.get("error") or response.text
-                except Exception:
-                    detail = response.text
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"{request.model}: {detail}",
-                )
-            if len(response.content) < 20:
-                raise HTTPException(status_code=502, detail="Local mesh worker returned an empty GLB")
-            return response.content
+                    async with httpx.AsyncClient(timeout=GENERATION_TIMEOUT) as client:
+                        response = await client.post(
+                            f"{WORKER_URL}/v1/generate",
+                            json=request.model_dump(exclude_none=True),
+                        )
+                except httpx.TimeoutException as exc:
+                    raise HTTPException(status_code=504, detail="Local mesh generation timed out") from exc
+                except Exception as exc:
+                    raise HTTPException(status_code=502, detail=f"Local mesh worker request failed: {exc}") from exc
+
+                if not response.is_success:
+                    try:
+                        payload = response.json()
+                        detail = payload.get("detail") or payload.get("error") or response.text
+                    except Exception:
+                        detail = response.text
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=f"{request.model}: {detail}",
+                    )
+                if len(response.content) < 20:
+                    raise HTTPException(status_code=502, detail="Local mesh worker returned an empty GLB")
+                return response.content
+            finally:
+                if not self.keep_warm:
+                    await self.stop_worker()
 
 
 def build_app(manager: WorkerManager) -> FastAPI:
@@ -223,6 +383,8 @@ def build_app(manager: WorkerManager) -> FastAPI:
         return {
             "status": "ok",
             "activeModel": manager.active_model,
+            "keepWarm": manager.keep_warm,
+            "arbitration": manager.arbiter.status(),
             "models": {model: manager.model_status(model) for model in MODEL_LAYOUT},
         }
 
