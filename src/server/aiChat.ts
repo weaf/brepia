@@ -428,10 +428,7 @@ function createChatProviders(
     },
     local: () => {
       if (!local) {
-        const override = enabledBuiltinOverride(
-          overrides,
-          'openai-compatible',
-        );
+        const override = enabledBuiltinOverride(overrides, 'openai-compatible');
         local = createOpenAICompatible({
           name: 'local',
           baseURL:
@@ -836,7 +833,7 @@ function creativeTools({
               text: input.text,
               images: input.imageIds,
               mesh: input.meshId,
-              model: input.model ?? model,
+              model,
               meshTopology: input.meshTopology,
               polygonCount: input.polygonCount,
             }),
@@ -1133,7 +1130,9 @@ export async function handleAiChatRequest(req: Request) {
   let providers: ChatProviders;
   let builtinProviderOverrides: BuiltinProviderRuntimeOverrides = {};
   try {
-    builtinProviderOverrides = await loadBuiltinProviderRuntimeOverrides(user.id);
+    builtinProviderOverrides = await loadBuiltinProviderRuntimeOverrides(
+      user.id,
+    );
     providers = createChatProviders(builtinProviderOverrides);
   } catch (error) {
     logError(error, {
@@ -1143,13 +1142,17 @@ export async function handleAiChatRequest(req: Request) {
       conversationId: conversation.id,
       additionalContext: { operation: 'create_providers' },
     });
-    return jsonResponse({ error: 'AI provider settings could not be loaded' }, 503);
+    return jsonResponse(
+      { error: 'AI provider settings could not be loaded' },
+      503,
+    );
   }
 
   const anthropicAuxiliaryAvailable =
     builtinProviderOverrides.anthropic?.enabled !== false &&
     Boolean(
-      builtinProviderOverrides.anthropic?.credential || env('ANTHROPIC_API_KEY'),
+      builtinProviderOverrides.anthropic?.credential ||
+        env('ANTHROPIC_API_KEY'),
     );
 
   const isFirstUserTurn = branchMessages.length === 1 && leafRole === 'user';
@@ -1274,9 +1277,9 @@ export async function handleAiChatRequest(req: Request) {
     modelId: actualModelId,
     requestedModelId:
       conversation.type === 'creative'
-        ? rawBody.agentModel ??
+        ? (rawBody.agentModel ??
           conversation.settings?.creativeAgentModel ??
-          actualModelId
+          actualModelId)
         : rawBody.model,
     ...(conversation.type === 'creative'
       ? { meshModelId: rawBody.model, creativeAgentSource }
