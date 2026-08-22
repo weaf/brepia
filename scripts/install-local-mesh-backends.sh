@@ -34,7 +34,7 @@ RECREATE_ENVS=0
 # Old or partial environments are then recreated automatically on the next run.
 GATEWAY_ENV_SPEC="pcad-gateway-py310-v2"
 HUNYUAN2_ENV_SPEC="hunyuan3d2-py310-torch251-cu124-v2"
-HUNYUAN21_ENV_SPEC="hunyuan3d21-py310-torch251-cu124-bpy400-v3"
+HUNYUAN21_ENV_SPEC="hunyuan3d21-py310-torch251-cu124-bpy400-v4"
 TRELLIS_ENV_SPEC="trellis-py310-torch240-cu121-v2"
 SF3D_ENV_SPEC="sf3d-py310-torch240-cu121-v2"
 
@@ -285,11 +285,10 @@ mamba_run "$HUNYUAN21_ENV" python -m pip install \
   torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
   --index-url https://download.pytorch.org/whl/cu124
 # Upstream pins bpy==4.0 but does not currently include Blender's package index.
-# Blender 4.0 provides the Linux CPython 3.10 wheel from its official index.
-# Install it explicitly first so the unmodified upstream requirements file can
-# resolve bpy==4.0 without relying on a stale third-party mirror.
+# Keep normal PyPI as the primary index for dependencies such as Cython and add
+# Blender's official package index only as an additional source for bpy 4.0.
 mamba_run "$HUNYUAN21_ENV" python -m pip install \
-  --index-url https://download.blender.org/pypi/ \
+  --extra-index-url https://download.blender.org/pypi/ \
   'bpy==4.0.0'
 mamba_run "$HUNYUAN21_ENV" bash -c \
   "cd '$HUNYUAN21_REPO' && python -m pip install -r requirements.txt && python -m pip install fastapi uvicorn"
