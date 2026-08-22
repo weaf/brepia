@@ -20,6 +20,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 type ChatBody = {
   conversationId: string;
   model: string;
+  agentModel?: string;
   thinking?: boolean;
   openCodeExecutionMode?: 'cli' | 'streaming';
 };
@@ -29,6 +30,7 @@ function isChatBody(value: unknown): value is ChatBody {
     isRecord(value) &&
     typeof value.conversationId === 'string' &&
     typeof value.model === 'string' &&
+    (value.agentModel == null || typeof value.agentModel === 'string') &&
     (value.thinking == null || typeof value.thinking === 'boolean') &&
     (value.openCodeExecutionMode == null ||
       value.openCodeExecutionMode === 'cli' ||
@@ -98,6 +100,38 @@ describe('I09 — ChatBody validation accepts openCodeExecutionMode', () => {
       openCodeExecutionMode: 'cli' as const,
     };
     assert.ok(isChatBody(body));
+  });
+});
+
+describe('Creative — ChatBody validation accepts separate agentModel', () => {
+  it('accepts a Creative mesh preset plus a direct agent model', () => {
+    assert.ok(
+      isChatBody({
+        conversationId: 'abc123',
+        model: 'quality',
+        agentModel: 'local/qwen3.6-35b',
+      }),
+    );
+  });
+
+  it('keeps agentModel optional for legacy Creative requests', () => {
+    assert.ok(
+      isChatBody({
+        conversationId: 'abc123',
+        model: 'quality',
+      }),
+    );
+  });
+
+  it('rejects a non-string agentModel', () => {
+    assert.equal(
+      isChatBody({
+        conversationId: 'abc123',
+        model: 'quality',
+        agentModel: 42,
+      }),
+      false,
+    );
   });
 });
 
