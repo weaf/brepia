@@ -54,14 +54,15 @@ describe('Creative agent model selection', () => {
     });
   });
 
-  it('falls back only to a selectable tool-capable catalog model', () => {
+  it('falls back only to a selectable direct tool-capable catalog model', () => {
     const result = selectCreativeAgentModel(
       { settings: { model: 'fast' } },
       undefined,
       [
         entry('disabled/model', { enabled: false }),
         entry('no-tools/model', { supportsTools: false }),
-        entry('local/qwen3.6-35b'),
+        entry('agent/opencode/test/model', { source: 'opencode' }),
+        entry('local/qwen3.6-35b', { source: 'local' }),
       ],
     );
 
@@ -69,6 +70,16 @@ describe('Creative agent model selection', () => {
       modelId: 'local/qwen3.6-35b',
       source: 'catalog',
     });
+  });
+
+  it('returns null when only parametric agent adapters are selectable', () => {
+    const result = selectCreativeAgentModel(
+      { settings: { model: 'quality' } },
+      undefined,
+      [entry('agent/opencode/test/model', { source: 'opencode' })],
+    );
+
+    assert.equal(result, null);
   });
 
   it('returns null when no enabled tool-capable agent exists', () => {
