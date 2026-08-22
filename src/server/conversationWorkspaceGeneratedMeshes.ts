@@ -73,18 +73,23 @@ async function defaultListArtifacts(
     .eq('user_id', user.id);
   if (error) throw error;
 
-  return (data ?? [])
-    .filter(
-      (row) =>
-        row.status === 'success' &&
-        typeof row.file_type === 'string' &&
-        !isUserUploadedInputPrompt(row.prompt, 'mesh'),
-    )
-    .map((row) => ({
-      id: row.id,
-      extension: row.file_type,
-      storagePath: `${user.id}/${conversationId}/${row.id}.${row.file_type}`,
-    }));
+  return (data ?? []).flatMap((row) => {
+    if (
+      row.status !== 'success' ||
+      typeof row.file_type !== 'string' ||
+      isUserUploadedInputPrompt(row.prompt, 'mesh')
+    ) {
+      return [];
+    }
+    const extension = row.file_type;
+    return [
+      {
+        id: row.id,
+        extension,
+        storagePath: `${user.id}/${conversationId}/${row.id}.${extension}`,
+      },
+    ];
+  });
 }
 
 async function defaultDownloadArtifact(
