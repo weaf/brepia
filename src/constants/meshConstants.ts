@@ -1,3 +1,4 @@
+import { CREATIVE_MESH_MODEL_IDS } from '@shared/creativeMeshModels';
 import { CreativeModel, Model } from '@shared/types';
 
 // Mesh generation constants
@@ -9,14 +10,14 @@ export const POLYGON_COUNTS = {
   POLYS_DEFAULT: 100000,
 
   // Model-specific maximums
-  STANDARD_MAX: 0, // SAM 3D doesn't support polygon limits
+  STANDARD_MAX: 0, // backend decides automatically / does not expose a limit
   ULTRA_MAX: 300000, // Meshy v6 API limit is 300k
   TEXTURELESS_MAX: 50000,
 
   // Model-specific defaults
-  STANDARD_DEFAULT: 0, // SAM 3D handles this automatically
+  STANDARD_DEFAULT: 0,
   TEXTURELESS_DEFAULT: 50000,
-  ULTRA_DEFAULT: 300000, // Set to max for ultra quality
+  ULTRA_DEFAULT: 300000,
 
   // UI limits
   MIN_POLYGON_COUNT: 1000,
@@ -41,10 +42,30 @@ export interface ModelConfig {
   };
   showPolygonControls: boolean;
   showNormalIntensity: boolean;
-  maxPolygonCount?: number; // For server-side limits
+  maxPolygonCount?: number;
 }
 
+const LOCAL_MODEL_CONFIG: ModelConfig = {
+  brightness: MATERIAL_DEFAULTS.BRIGHTNESS,
+  roughness: MATERIAL_DEFAULTS.ROUGHNESS,
+  normalIntensity: MATERIAL_DEFAULTS.NORMAL_INTENSITY,
+  polygonCount: {
+    quads: POLYGON_COUNTS.STANDARD_DEFAULT,
+    polys: POLYGON_COUNTS.STANDARD_DEFAULT,
+  },
+  // The first local integration lets each backend keep its native topology.
+  // We can expose backend-specific remesh controls later without pretending
+  // every model honors the historical fal.ai polygon controls.
+  showPolygonControls: false,
+  showNormalIntensity: true,
+  maxPolygonCount: POLYGON_COUNTS.STANDARD_MAX,
+};
+
 export const MODEL_CONFIGS: Record<CreativeModel, ModelConfig> = {
+  'local/trellis-v1': { ...LOCAL_MODEL_CONFIG },
+  'local/hunyuan3d-2': { ...LOCAL_MODEL_CONFIG },
+  'local/hunyuan3d-2.1': { ...LOCAL_MODEL_CONFIG },
+  'local/stable-fast-3d': { ...LOCAL_MODEL_CONFIG },
   fast: {
     brightness: MATERIAL_DEFAULTS.BRIGHTNESS_TEXTURELESS,
     roughness: MATERIAL_DEFAULTS.ROUGHNESS,
@@ -65,7 +86,7 @@ export const MODEL_CONFIGS: Record<CreativeModel, ModelConfig> = {
       quads: POLYGON_COUNTS.STANDARD_DEFAULT,
       polys: POLYGON_COUNTS.STANDARD_DEFAULT,
     },
-    showPolygonControls: false, // SAM 3D doesn't support polygon/quad controls
+    showPolygonControls: false,
     showNormalIntensity: true,
     maxPolygonCount: POLYGON_COUNTS.STANDARD_MAX,
   },
@@ -79,18 +100,14 @@ export const MODEL_CONFIGS: Record<CreativeModel, ModelConfig> = {
     },
     showPolygonControls: true,
     showNormalIntensity: true,
-    maxPolygonCount: POLYGON_COUNTS.ULTRA_MAX, // Meshy v6 limit is 300k
+    maxPolygonCount: POLYGON_COUNTS.ULTRA_MAX,
   },
 };
 
-const CREATIVE_MODEL_LOOKUP: Record<CreativeModel, true> = {
-  fast: true,
-  quality: true,
-  ultra: true,
-};
+const CREATIVE_MODEL_LOOKUP = new Set<string>(CREATIVE_MESH_MODEL_IDS);
 
 export const isCreativeModel = (model: Model): model is CreativeModel => {
-  return Object.prototype.hasOwnProperty.call(CREATIVE_MODEL_LOOKUP, model);
+  return CREATIVE_MODEL_LOOKUP.has(model);
 };
 
 // Helper functions for model configuration
@@ -121,7 +138,6 @@ export const getMaxPolygonCount = (
   model: CreativeModel,
   _topology: 'quads' | 'polys',
 ): number => {
-  // Return model-specific max, topology doesn't affect the limit
   return MODEL_CONFIGS[model].maxPolygonCount || POLYGON_COUNTS.STANDARD_MAX;
 };
 
