@@ -119,6 +119,9 @@ export const meshPreferencesDataSchema = z.object({
 export type AppUIMessage = UIMessage<
   {
     model?: Model;
+    /** Actual LLM/agent used for a Creative turn. `model` remains the mesh
+     * backend preset in Creative mode so retry/UI behavior stays compatible. */
+    agentModel?: Model;
     billingTokens?: number;
     // The model's original OpenSCAD for this message's artifact, captured
     // lazily on the FIRST parameter edit (see `persistParameterEdit`).
