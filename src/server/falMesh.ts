@@ -15,12 +15,9 @@ import {
   type SupabaseClient,
 } from './supabaseClient';
 import { reformatSignedUrl } from './messageUtils';
-import { billing, BillingClientError } from './billingClient';
 import { logApiError, logError } from './serverLog';
 import { Buffer } from 'node:buffer';
 import { env, requiredEnv, webhookBaseUrl } from './env';
-
-const MESH_TOKEN_COST = 30;
 
 // Initialize Sentry for error logging
 
@@ -423,58 +420,8 @@ export async function handleMeshRequest(req: Request) {
       );
     }
 
-    // Deduct tokens for mesh operation via adam-billing
-    if (!userData.user.email) {
-      return new Response(
-        JSON.stringify({ error: { message: 'User email missing' } }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      );
-    }
-
     ensureFalConfig();
     const appBaseUrl = webhookBaseUrl(req.url);
-    const meshReferenceId = crypto.randomUUID();
-    try {
-      const result = await billing.consume(userData.user.email, {
-        tokens: MESH_TOKEN_COST,
-        operation: 'mesh',
-        referenceId: meshReferenceId,
-      });
-      if (!result.ok) {
-        return new Response(
-          JSON.stringify({
-            error: {
-              message: 'insufficient_tokens',
-              code: 'insufficient_tokens',
-              tokensRequired: result.tokensRequired,
-              tokensAvailable: result.tokensAvailable,
-            },
-          }),
-          {
-            status: 402,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
-        );
-      }
-    } catch (err) {
-      const status = err instanceof BillingClientError ? err.status : 502;
-      logError(err, {
-        functionName: 'mesh',
-        statusCode: status,
-        userId: userData.user.id,
-      });
-      return new Response(
-        JSON.stringify({ error: { message: 'billing_unavailable' } }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      );
-    }
-
     const requestBody = await req.json();
 
     debugLog('=== MESH FUNCTION CALLED ===');
