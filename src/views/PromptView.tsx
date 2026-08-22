@@ -67,7 +67,11 @@ export function PromptView() {
 
   const [type, setType] = useState<'parametric' | 'creative'>('parametric');
 
+  // `model` is the normal chat model in Parametric mode, but the mesh backend
+  // preset (`quality`/`fast`/`ultra`) in Creative mode. Creative therefore
+  // carries its LLM separately instead of silently hard-coding Anthropic.
   const [model, setModel] = useState<Model>('openai/gpt-5.6-sol');
+  const [creativeAgentModel, setCreativeAgentModel] = useState<Model>();
 
   // I09B — draft execution mode: owned locally so the transport selector
   // is interactive.  Persisted into new conversation settings (I09C done).
@@ -78,7 +82,8 @@ export function PromptView() {
 
   const handleTypeChange = (newType: 'parametric' | 'creative') => {
     setType(newType);
-    // Reset model to the default for the new type
+    // Reset only the mode-specific primary selector. The Creative LLM is
+    // independent and is populated from the unified selectable catalog.
     if (newType === 'creative') {
       setModel('quality');
     } else {
@@ -144,6 +149,9 @@ export function PromptView() {
   const { mutate: handleGenerate, isPending: isGenerating } = useMutation({
     mutationFn: async (parts: AppUIMessage['parts']) => {
       if (!user?.id) throw new Error('User must be authenticated');
+      if (type === 'creative' && !creativeAgentModel) {
+        throw new Error('Select an AI agent model for Creative mode');
+      }
       const conversationId = draftConversationId;
 
       const text = parts
@@ -164,6 +172,9 @@ export function PromptView() {
       posthog.capture('new_conversation', {
         type: type,
         model_name: model,
+        ...(type === 'creative' && creativeAgentModel
+          ? { agent_model_name: creativeAgentModel }
+          : {}),
         text: text.trim().slice(0, 100),
         image_count: imageCount,
         mesh_count: meshCount,
@@ -195,6 +206,9 @@ export function PromptView() {
               type: type,
               settings: {
                 model: model,
+                ...(type === 'creative' && creativeAgentModel
+                  ? { creativeAgentModel }
+                  : {}),
                 openCodeExecutionMode: executionMode,
                 promptProfileId,
               },
@@ -229,6 +243,13 @@ export function PromptView() {
       });
       if (parts.length === 0) throw new Error('No message parts to send');
 
+      const messageMetadata: AppUIMessage['metadata'] = {
+        model,
+        ...(type === 'creative' && creativeAgentModel
+          ? { agentModel: creativeAgentModel }
+          : {}),
+      };
+
       // Persist the user message before kicking off the chat. The
       // `update_leaf_trigger` on `public.messages` advances the
       // conversation's `current_message_leaf_id` to this row, which is
@@ -237,7 +258,7 @@ export function PromptView() {
       const userMessageId = await persistUserMessage({
         conversationId: conversation.id,
         parts,
-        metadata: { model },
+        metadata: messageMetadata,
         parentMessageId: null,
       });
 
@@ -260,6 +281,9 @@ export function PromptView() {
             body: {
               conversationId: conversation.id,
               model,
+              ...(type === 'creative' && creativeAgentModel
+                ? { agentModel: creativeAgentModel }
+                : {}),
               openCodeExecutionMode: executionMode,
               ...(body ?? {}),
             },
@@ -268,7 +292,7 @@ export function PromptView() {
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       });
       void chat
-        .sendMessage({ id: userMessageId, parts, metadata: { model } })
+        .sendMessage({ id: userMessageId, parts, metadata: messageMetadata })
         .catch((error) => {
           Sentry.captureException(error, {
             extra: {
@@ -442,6 +466,8 @@ export function PromptView() {
                   disabled={limitReached || isGenerating}
                   model={model}
                   setModel={setModel}
+                  agentModel={creativeAgentModel}
+                  setAgentModel={setCreativeAgentModel}
                   showPromptGenerator={true}
                   showFullLabels={true}
                   onTypeChange={handleTypeChange}
