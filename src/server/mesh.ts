@@ -1,6 +1,7 @@
 import { isLocalCreativeMeshModel } from '@shared/creativeMeshModels';
 import { handleMeshRequest as handleFalMeshRequest } from './falMesh';
 import { handleLocalMeshRequest } from './localMesh';
+import { resolveLocalMeshEditSource } from './localMeshEditContext';
 
 function requestModel(body: unknown): string | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
@@ -23,7 +24,8 @@ export async function handleMeshRequest(request: Request): Promise<Response> {
   const body = await request.clone().json().catch(() => null);
   const model = requestModel(body);
   if (model && isLocalCreativeMeshModel(model)) {
-    return handleLocalMeshRequest(request, body);
+    const resolvedBody = await resolveLocalMeshEditSource(request, body);
+    return handleLocalMeshRequest(request, resolvedBody);
   }
 
   return handleFalMeshRequest(request);
