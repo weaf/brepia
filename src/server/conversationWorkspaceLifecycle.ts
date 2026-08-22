@@ -1,5 +1,6 @@
 import { initializeConversationWorkspace } from './conversationWorkspace';
 import { syncConversationAgentHistory } from './conversationWorkspaceAgentHistory';
+import { syncConversationGeneratedMeshes } from './conversationWorkspaceGeneratedMeshes';
 import { syncConversationInputArtifacts } from './conversationWorkspaceInputs';
 import { syncConversationModelSources } from './conversationWorkspaceModels';
 import { syncConversationRenderArtifacts } from './conversationWorkspaceRenders';
@@ -17,6 +18,7 @@ type ConversationWorkspaceRow = {
 
 type WorkspaceInitializer = typeof initializeConversationWorkspace;
 type ConversationInputSync = typeof syncConversationInputArtifacts;
+type ConversationGeneratedMeshSync = typeof syncConversationGeneratedMeshes;
 type ConversationModelSync = typeof syncConversationModelSources;
 type ConversationRenderSync = typeof syncConversationRenderArtifacts;
 type ConversationAgentHistorySync = typeof syncConversationAgentHistory;
@@ -30,6 +32,7 @@ type WorkspaceLifecycleDependencies = {
   loadConversation?: ConversationLoader;
   initializeWorkspace?: WorkspaceInitializer;
   syncInputs?: ConversationInputSync;
+  syncGeneratedMeshes?: ConversationGeneratedMeshSync;
   syncModels?: ConversationModelSync;
   syncRenders?: ConversationRenderSync;
   syncAgents?: ConversationAgentHistorySync;
@@ -94,12 +97,13 @@ async function loadOwnedConversation(
  * conversation row before a chat generation starts. The request is cloned so
  * the downstream AI handler can still consume its original body.
  *
- * After initialization, user-uploaded inputs are mirrored. Parametric
- * conversations then revision successful OpenSCAD sources from the active
- * branch and mirror the build-time preview/inspection images already stored in
- * Supabase. Finally, persisted OpenCode/Codex tool calls from the active branch
- * are backfilled into conversation-scoped agent session/turn diagnostics.
- * All operations are idempotent.
+ * After initialization, user-uploaded inputs are mirrored. Creative
+ * conversations mirror successful generated meshes into `models/generated/`.
+ * Parametric conversations revision successful OpenSCAD sources from the
+ * active branch and mirror the build-time preview/inspection images already
+ * stored in Supabase. Finally, persisted OpenCode/Codex tool calls from the
+ * active branch are backfilled into conversation-scoped agent session/turn
+ * diagnostics. All operations are idempotent.
  */
 export async function syncConversationWorkspaceForChatRequest(
   request: Request,
@@ -119,6 +123,8 @@ export async function syncConversationWorkspaceForChatRequest(
   const initializeWorkspace =
     dependencies.initializeWorkspace ?? initializeConversationWorkspace;
   const syncInputs = dependencies.syncInputs ?? syncConversationInputArtifacts;
+  const syncGeneratedMeshes =
+    dependencies.syncGeneratedMeshes ?? syncConversationGeneratedMeshes;
   const syncModels = dependencies.syncModels ?? syncConversationModelSources;
   const syncRenders =
     dependencies.syncRenders ?? syncConversationRenderArtifacts;
@@ -135,6 +141,9 @@ export async function syncConversationWorkspaceForChatRequest(
     updatedAt: conversation.updated_at,
   });
   await syncInputs(request, conversation.id);
+  if (conversation.type === 'creative') {
+    await syncGeneratedMeshes(request, conversation.id);
+  }
   if (conversation.type === 'parametric') {
     await syncModels(
       request,
