@@ -16,9 +16,9 @@ set -euo pipefail
 #   legacy-cu121: TRELLIS v1 + Stable Fast 3D
 #
 # The NVIDIA driver/system CUDA installation is never modified. Each managed
-# environment gets its own matching nvcc/toolkit and PyTorch CUDA wheel. This
-# prevents a newer system or conda CUDA package from silently compiling an
-# extension against a different CUDA major/minor than PyTorch.
+# environment gets its own matching nvcc/toolkit and PyTorch CUDA wheel. Legacy
+# CUDA builds also get GCC/G++ 12 so CUDA 12.1 never falls back to Ubuntu 24.04's
+# newer system compiler.
 #
 # Each environment is versioned with a pCAD bootstrap spec. An environment is
 # marked ready only after its complete install succeeds. Missing/stale markers
@@ -41,6 +41,7 @@ LEGACY_CUDA_MINOR="12.1"
 LEGACY_CUDA_TOOLKIT="12.1.1"
 LEGACY_CUDA_LABEL="cuda-12.1.1"
 LEGACY_TORCH_INDEX="https://download.pytorch.org/whl/cu121"
+LEGACY_GCC_MAJOR="12"
 
 MODERN_PYTHON="3.10"
 MODERN_TORCH="2.5.1"
@@ -56,8 +57,8 @@ MODERN_TORCH_INDEX="https://download.pytorch.org/whl/cu124"
 GATEWAY_ENV_SPEC="pcad-gateway-py310-v2"
 HUNYUAN2_ENV_SPEC="hunyuan3d2-modern-cu124-v3"
 HUNYUAN21_ENV_SPEC="hunyuan3d21-modern-cu124-bpy400-v5"
-TRELLIS_ENV_SPEC="trellis-legacy-cu121-v3"
-SF3D_ENV_SPEC="sf3d-legacy-cu121-no-build-isolation-v4"
+TRELLIS_ENV_SPEC="trellis-legacy-cu121-gcc12-v4"
+SF3D_ENV_SPEC="sf3d-legacy-cu121-gcc12-no-build-isolation-v5"
 
 usage() {
   cat <<'EOF'
@@ -230,13 +231,18 @@ ensure_gpu_profile_env() {
   local torchvision_version="$7"
   local torch_index="$8"
   local torchaudio_version="${9:-}"
+  local gcc_major="${10:-}"
 
   if [[ ! -x "$env_path/bin/python" ]]; then
-    # The versioned NVIDIA label is the only CUDA channel. This prevents the
-    # solver from pulling current-main cuda-nvcc (e.g. 13.x) into a 12.x env.
-    "$MAMBA" create -y -p "$env_path" \
-      -c "nvidia/label/$cuda_label" -c conda-forge \
+    local create_args=(
+      create -y -p "$env_path"
+      -c "nvidia/label/$cuda_label" -c conda-forge
       "python=$python_version" pip "cuda-toolkit=$cuda_toolkit"
+    )
+    if [[ -n "$gcc_major" ]]; then
+      create_args+=("gcc_linux-64=$gcc_major" "gxx_linux-64=$gcc_major")
+    fi
+    "$MAMBA" "${create_args[@]}"
   fi
 
   mamba_run "$env_path" python -m pip install -U pip
@@ -251,6 +257,9 @@ ensure_gpu_profile_env() {
   fi
 
   verify_cuda_profile "$env_path" "$cuda_minor"
+  if [[ -n "$gcc_major" ]]; then
+    verify_host_compiler_profile "$env_path" "$gcc_major"
+  fi
 }
 
 verify_cuda_profile() {
@@ -269,10 +278,35 @@ verify_cuda_profile() {
   say "Verified $(basename "$env_path") CUDA profile: torch=$torch_cuda nvcc=$nvcc_release"
 }
 
+legacy_cc_path() {
+  printf '%s/bin/x86_64-conda-linux-gnu-cc\n' "$1"
+}
+
+legacy_cxx_path() {
+  printf '%s/bin/x86_64-conda-linux-gnu-c++\n' "$1"
+}
+
+verify_host_compiler_profile() {
+  local env_path="$1"
+  local expected_major="$2"
+  local cc
+  local cxx
+  local actual_major
+  cc="$(legacy_cc_path "$env_path")"
+  cxx="$(legacy_cxx_path "$env_path")"
+  [[ -x "$cc" ]] || die "Legacy compiler profile is incomplete: $cc is missing"
+  [[ -x "$cxx" ]] || die "Legacy compiler profile is incomplete: $cxx is missing"
+  actual_major="$($cc -dumpversion | cut -d. -f1)"
+  if [[ "$actual_major" != "$expected_major" ]]; then
+    die "Legacy compiler mismatch in $env_path: gcc=$actual_major expected=$expected_major"
+  fi
+  say "Verified $(basename "$env_path") host compiler: GCC $actual_major"
+}
+
 ensure_legacy_cuda_env() {
   ensure_gpu_profile_env "$1" \
     "$LEGACY_PYTHON" "$LEGACY_CUDA_MINOR" "$LEGACY_CUDA_TOOLKIT" "$LEGACY_CUDA_LABEL" \
-    "$LEGACY_TORCH" "$LEGACY_TORCHVISION" "$LEGACY_TORCH_INDEX"
+    "$LEGACY_TORCH" "$LEGACY_TORCHVISION" "$LEGACY_TORCH_INDEX" "" "$LEGACY_GCC_MAJOR"
 }
 
 ensure_modern_cuda_env() {
@@ -345,7 +379,6 @@ mark_env_ready "$HUNYUAN2_ENV" "$HUNYUAN2_ENV_SPEC"
 
 say "Installing Hunyuan3D-2.1 shape environment [modern-cu124]"
 ensure_modern_cuda_env "$HUNYUAN21_ENV"
-# Upstream pins bpy==4.0 but does not include Blender's package index.
 mamba_run "$HUNYUAN21_ENV" python -m pip install \
   --extra-index-url https://download.blender.org/pypi/ \
   'bpy==4.0.0'
@@ -356,29 +389,34 @@ mark_env_ready "$HUNYUAN21_ENV" "$HUNYUAN21_ENV_SPEC"
 
 say "Installing TRELLIS v1 environment [legacy-cu121] (CUDA extensions can take a while)"
 ensure_legacy_cuda_env "$TRELLIS_ENV"
+TRELLIS_CC="$(legacy_cc_path "$TRELLIS_ENV")"
+TRELLIS_CXX="$(legacy_cxx_path "$TRELLIS_ENV")"
 mamba_run "$TRELLIS_ENV" env \
+  CC="$TRELLIS_CC" CXX="$TRELLIS_CXX" CUDAHOSTCXX="$TRELLIS_CXX" \
   CUDA_HOME="$TRELLIS_ENV" CUDACXX="$TRELLIS_ENV/bin/nvcc" PATH="$TRELLIS_ENV/bin:$PATH" \
   bash -c "cd '$TRELLIS_REPO' && bash ./setup.sh --basic --xformers --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast"
 mamba_run "$TRELLIS_ENV" python -m pip install fastapi uvicorn
 verify_cuda_profile "$TRELLIS_ENV" "$LEGACY_CUDA_MINOR"
+verify_host_compiler_profile "$TRELLIS_ENV" "$LEGACY_GCC_MAJOR"
 mark_env_ready "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
 
 say "Installing Stable Fast 3D environment [legacy-cu121]"
 ensure_legacy_cuda_env "$SF3D_ENV"
 mamba_run "$SF3D_ENV" python -m pip install setuptools==69.5.1 wheel
-# SF3D requirements include two local torch C++/CUDA extensions whose setup.py
-# imports torch during metadata/build. Install ordinary dependencies first and
-# compile extensions without build isolation, explicitly against the managed
-# CUDA 12.1 toolkit rather than the host's CUDA installation.
 mamba_run "$SF3D_ENV" bash -c \
   "cd '$SF3D_REPO' && grep -vE '^\\./(texture_baker|uv_unwrapper)/?$' requirements.txt > .pcad-requirements.txt && python -m pip install -r .pcad-requirements.txt"
 verify_cuda_profile "$SF3D_ENV" "$LEGACY_CUDA_MINOR"
+verify_host_compiler_profile "$SF3D_ENV" "$LEGACY_GCC_MAJOR"
+SF3D_CC="$(legacy_cc_path "$SF3D_ENV")"
+SF3D_CXX="$(legacy_cxx_path "$SF3D_ENV")"
 mamba_run "$SF3D_ENV" env \
+  CC="$SF3D_CC" CXX="$SF3D_CXX" CUDAHOSTCXX="$SF3D_CXX" \
   CUDA_HOME="$SF3D_ENV" CUDACXX="$SF3D_ENV/bin/nvcc" PATH="$SF3D_ENV/bin:$PATH" \
   python -m pip install --no-build-isolation "$SF3D_REPO/texture_baker" "$SF3D_REPO/uv_unwrapper"
 rm -f "$SF3D_REPO/.pcad-requirements.txt"
 mamba_run "$SF3D_ENV" python -m pip install fastapi uvicorn
 verify_cuda_profile "$SF3D_ENV" "$LEGACY_CUDA_MINOR"
+verify_host_compiler_profile "$SF3D_ENV" "$LEGACY_GCC_MAJOR"
 mark_env_ready "$SF3D_ENV" "$SF3D_ENV_SPEC"
 
 say "Installing gateway runtime files"
@@ -478,10 +516,10 @@ say "Installation complete"
 cat <<EOF
 
 Local Creative backends:
-  TRELLIS v1          local/trellis-v1   [legacy-cu121]
+  TRELLIS v1          local/trellis-v1   [legacy-cu121 + gcc12]
   Hunyuan3D-2         local/hunyuan3d-2  [modern-cu124]
   Hunyuan3D-2.1       local/hunyuan3d-2.1 [modern-cu124]
-  Stable Fast 3D      local/stable-fast-3d [legacy-cu121]
+  Stable Fast 3D      local/stable-fast-3d [legacy-cu121 + gcc12]
 
 Legacy fal.ai backends remain selectable as quality / fast / ultra.
 
