@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { conversationGeneratedModelDir } from './conversationWorkspace';
 import { isUserUploadedInputPrompt } from './conversationWorkspaceInputs';
 import { getAnonSupabaseClient } from './supabaseClient';
@@ -120,18 +120,8 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function atomicWrite(path: string, bytes: Uint8Array): Promise<void> {
-  const directory = conversationGeneratedModelDir(
-    path.split('/').slice(-4, -3)[0] ?? '',
-  );
-  void directory;
-  await mkdir(join(path, '..'), { recursive: true }).catch(() => undefined);
-}
-
 async function writeGeneratedMesh(path: string, bytes: Uint8Array): Promise<void> {
-  const separator = path.lastIndexOf('/');
-  const directory = separator >= 0 ? path.slice(0, separator) : '.';
-  await mkdir(directory, { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(tempPath, bytes);
