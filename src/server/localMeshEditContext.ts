@@ -36,17 +36,8 @@ export function isDeterministicLocalMeshEditText(value: unknown): boolean {
   );
 }
 
-function messageHasImageAttachment(parts: unknown): boolean {
-  return (
-    Array.isArray(parts) &&
-    parts.some(
-      (part) =>
-        isRecord(part) &&
-        part.type === 'file' &&
-        (typeof part.mediaType !== 'string' ||
-          part.mediaType.startsWith('image/')),
-    )
-  );
+function requestHasImageReferences(body: Record<string, unknown>): boolean {
+  return Array.isArray(body.images) && body.images.length > 0;
 }
 
 export function createMeshOutputId(parts: unknown): string | null {
@@ -121,9 +112,13 @@ async function latestActiveBranchMeshId({
 }
 
 /**
- * The LLM is allowed to omit meshId. For simple follow-up geometry edits,
- * recover the source mesh from the active message lineage instead of falling
+ * The LLM may omit meshId for a simple follow-up geometry edit. Recover the
+ * source mesh from the active persisted message lineage instead of falling
  * back to image-to-3D regeneration or choosing a mesh from a sibling branch.
+ *
+ * current_message_leaf_id is intentionally allowed to point at either the
+ * previous assistant turn or the newly persisted user turn. Tool execution can
+ * race the leaf update, so requiring a particular leaf role is incorrect.
  */
 export async function resolveLocalMeshEditSource(
   request: Request,
@@ -133,6 +128,10 @@ export async function resolveLocalMeshEditSource(
   if (typeof body.mesh === 'string' && UUID_RE.test(body.mesh)) return body;
   if (!isDeterministicLocalMeshEditText(body.text)) return body;
   if (typeof body.conversationId !== 'string') return body;
+
+  // An explicit image reference means this is a new image-driven generation,
+  // even if its text happens to contain a word such as "wider".
+  if (requestHasImageReferences(body)) return body;
 
   const authHeader = request.headers.get('Authorization');
   const token = authHeader?.replace('Bearer ', '');
@@ -151,26 +150,22 @@ export async function resolveLocalMeshEditSource(
     .maybeSingle();
   if (conversationError || !conversation?.current_message_leaf_id) return body;
 
-  // A fresh image in the current user turn means this is an image-generation
-  // request, even if the prompt happens to contain a word like "wider".
-  const { data: leaf, error: leafError } = await supabase
-    .from('messages')
-    .select('parts, role')
-    .eq('id', conversation.current_message_leaf_id)
-    .eq('conversation_id', body.conversationId)
-    .maybeSingle();
-  if (leafError || !leaf || leaf.role !== 'user') return body;
-  if (messageHasImageAttachment(leaf.parts)) return body;
-
   const meshId = await latestActiveBranchMeshId({
     conversationId: body.conversationId,
     userId,
     leafMessageId: conversation.current_message_leaf_id,
   });
-  if (!meshId) return body;
+  if (!meshId) {
+    console.log('[local-mesh] no active-branch source mesh found for edit', {
+      conversationId: body.conversationId,
+      leafMessageId: conversation.current_message_leaf_id,
+    });
+    return body;
+  }
 
   console.log('[local-mesh] inferred source mesh from active branch', {
     conversationId: body.conversationId,
+    leafMessageId: conversation.current_message_leaf_id,
     meshId,
   });
   return { ...body, mesh: meshId };
