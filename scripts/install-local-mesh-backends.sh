@@ -14,6 +14,11 @@ set -euo pipefail
 # local 3D worker it unloads resident llama-swap models, then stops the 3D
 # worker after generation so the next LLM request can load normally.
 #
+# Each environment is versioned with a pCAD bootstrap spec. An environment is
+# marked ready only after its complete install succeeds. Missing/stale markers
+# cause that environment to be deleted and recreated, preventing partially
+# installed Python/CUDA stacks from being reused after a failed bootstrap.
+#
 # Default install root: ~/.local/share/pcad-mesh
 # No sudo is used unless --install-system-deps is explicitly supplied.
 
@@ -23,6 +28,15 @@ PCAD_MESH_HOME="${PCAD_MESH_HOME:-$HOME/.local/share/pcad-mesh}"
 INSTALL_SYSTEM_DEPS=0
 DOWNLOAD_WEIGHTS=1
 ENABLE_SERVICE=1
+RECREATE_ENVS=0
+
+# Bump an individual spec whenever its Python/CUDA/dependency bootstrap changes.
+# Old or partial environments are then recreated automatically on the next run.
+GATEWAY_ENV_SPEC="pcad-gateway-py310-v2"
+HUNYUAN2_ENV_SPEC="hunyuan3d2-py310-torch251-cu124-v2"
+HUNYUAN21_ENV_SPEC="hunyuan3d21-py310-torch251-cu124-bpy400-v3"
+TRELLIS_ENV_SPEC="trellis-py310-torch240-cu121-v2"
+SF3D_ENV_SPEC="sf3d-py310-torch240-cu121-v2"
 
 usage() {
   cat <<'EOF'
@@ -32,6 +46,7 @@ Options:
   --install-system-deps  Install common Ubuntu/Debian build packages with sudo apt.
   --skip-weights         Install code/environments but do not prefetch model weights.
   --no-service           Do not install/enable the user systemd gateway service.
+  --recreate-envs        Force recreation of all five managed Python environments.
   -h, --help             Show this help.
 
 Environment variables:
@@ -44,8 +59,9 @@ Environment variables:
   PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT Seconds to wait for VRAM release (default 90).
   PCAD_MESH_KEEP_WARM            Keep a 3D worker resident after generation (default false).
 
-The script is safe to re-run. Existing cloned repositories are fast-forwarded and
-existing environments are reused.
+The script is safe to re-run. Repository checkouts and the shared Hugging Face
+cache are preserved. Managed Python environments are reused only when their
+completed pCAD bootstrap spec matches the current installer.
 EOF
 }
 
@@ -54,6 +70,7 @@ while [[ $# -gt 0 ]]; do
     --install-system-deps) INSTALL_SYSTEM_DEPS=1 ;;
     --skip-weights) DOWNLOAD_WEIGHTS=0 ;;
     --no-service) ENABLE_SERVICE=0 ;;
+    --recreate-envs) RECREATE_ENVS=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -128,6 +145,55 @@ mamba_run() {
   "$MAMBA" run -p "$env_path" "$@"
 }
 
+assert_managed_env_path() {
+  local env_path="$1"
+  case "$env_path" in
+    "$ENVS_DIR"/*) ;;
+    *) die "Refusing to manage environment outside $ENVS_DIR: $env_path" ;;
+  esac
+  [[ "$env_path" != "$ENVS_DIR" ]] || die "Refusing to remove the environment root"
+}
+
+env_marker() {
+  printf '%s/.pcad-env-spec\n' "$1"
+}
+
+prepare_env() {
+  local env_path="$1"
+  local expected_spec="$2"
+  local marker
+  local current_spec=""
+  marker="$(env_marker "$env_path")"
+  assert_managed_env_path "$env_path"
+
+  if [[ -f "$marker" ]]; then
+    current_spec="$(cat "$marker")"
+  fi
+
+  if [[ $RECREATE_ENVS -eq 1 && -d "$env_path" ]]; then
+    say "Recreating $(basename "$env_path") environment (--recreate-envs)"
+    rm -rf -- "$env_path"
+    return
+  fi
+
+  if [[ -d "$env_path" && "$current_spec" != "$expected_spec" ]]; then
+    if [[ -n "$current_spec" ]]; then
+      say "Recreating $(basename "$env_path") environment (spec changed: $current_spec -> $expected_spec)"
+    else
+      say "Recreating $(basename "$env_path") environment (legacy or incomplete install)"
+    fi
+    rm -rf -- "$env_path"
+  fi
+}
+
+mark_env_ready() {
+  local env_path="$1"
+  local expected_spec="$2"
+  local marker
+  marker="$(env_marker "$env_path")"
+  printf '%s\n' "$expected_spec" > "$marker"
+}
+
 ensure_basic_env() {
   local env_path="$1"
   if [[ ! -x "$env_path/bin/python" ]]; then
@@ -178,6 +244,19 @@ HUNYUAN2_REPO="$REPOS_DIR/Hunyuan3D-2"
 HUNYUAN21_REPO="$REPOS_DIR/Hunyuan3D-2.1"
 SF3D_REPO="$REPOS_DIR/stable-fast-3d"
 
+# A previous successful install may have an active user service. Stop it before
+# replacing its Python environment/runtime, then re-enable it at the end.
+if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet pcad-mesh-gateway.service 2>/dev/null; then
+  say "Stopping existing pCAD mesh gateway during environment maintenance"
+  systemctl --user stop pcad-mesh-gateway.service
+fi
+
+prepare_env "$GATEWAY_ENV" "$GATEWAY_ENV_SPEC"
+prepare_env "$HUNYUAN2_ENV" "$HUNYUAN2_ENV_SPEC"
+prepare_env "$HUNYUAN21_ENV" "$HUNYUAN21_ENV_SPEC"
+prepare_env "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
+prepare_env "$SF3D_ENV" "$SF3D_ENV_SPEC"
+
 clone_or_update https://github.com/microsoft/TRELLIS.git "$TRELLIS_REPO" 1
 clone_or_update https://github.com/Tencent-Hunyuan/Hunyuan3D-2.git "$HUNYUAN2_REPO"
 clone_or_update https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "$HUNYUAN21_REPO"
@@ -187,6 +266,7 @@ say "Installing pCAD mesh gateway environment"
 ensure_basic_env "$GATEWAY_ENV"
 mamba_run "$GATEWAY_ENV" python -m pip install -U pip
 mamba_run "$GATEWAY_ENV" python -m pip install fastapi uvicorn httpx huggingface-hub
+mark_env_ready "$GATEWAY_ENV" "$GATEWAY_ENV_SPEC"
 
 say "Installing Hunyuan3D-2 environment"
 ensure_basic_env "$HUNYUAN2_ENV"
@@ -196,6 +276,7 @@ mamba_run "$HUNYUAN2_ENV" python -m pip install \
   --index-url https://download.pytorch.org/whl/cu124
 mamba_run "$HUNYUAN2_ENV" bash -c \
   "cd '$HUNYUAN2_REPO' && python -m pip install -r requirements.txt && python -m pip install -e . && python -m pip install fastapi uvicorn"
+mark_env_ready "$HUNYUAN2_ENV" "$HUNYUAN2_ENV_SPEC"
 
 say "Installing Hunyuan3D-2.1 shape environment"
 ensure_basic_env "$HUNYUAN21_ENV"
@@ -203,20 +284,30 @@ mamba_run "$HUNYUAN21_ENV" python -m pip install -U pip
 mamba_run "$HUNYUAN21_ENV" python -m pip install \
   torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 \
   --index-url https://download.pytorch.org/whl/cu124
+# Upstream pins bpy==4.0 but does not currently include Blender's package index.
+# Blender 4.0 provides the Linux CPython 3.10 wheel from its official index.
+# Install it explicitly first so the unmodified upstream requirements file can
+# resolve bpy==4.0 without relying on a stale third-party mirror.
+mamba_run "$HUNYUAN21_ENV" python -m pip install \
+  --index-url https://download.blender.org/pypi/ \
+  'bpy==4.0.0'
 mamba_run "$HUNYUAN21_ENV" bash -c \
   "cd '$HUNYUAN21_REPO' && python -m pip install -r requirements.txt && python -m pip install fastapi uvicorn"
+mark_env_ready "$HUNYUAN21_ENV" "$HUNYUAN21_ENV_SPEC"
 
 say "Installing TRELLIS v1 environment (this compiles CUDA extensions and can take a while)"
 ensure_cuda121_torch24_env "$TRELLIS_ENV"
 mamba_run "$TRELLIS_ENV" bash -c \
   "cd '$TRELLIS_REPO' && bash ./setup.sh --basic --xformers --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast"
 mamba_run "$TRELLIS_ENV" python -m pip install fastapi uvicorn
+mark_env_ready "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
 
 say "Installing Stable Fast 3D environment"
 ensure_cuda121_torch24_env "$SF3D_ENV"
 mamba_run "$SF3D_ENV" python -m pip install -U pip setuptools==69.5.1 wheel
 mamba_run "$SF3D_ENV" bash -c \
   "cd '$SF3D_REPO' && python -m pip install -r requirements.txt && python -m pip install fastapi uvicorn"
+mark_env_ready "$SF3D_ENV" "$SF3D_ENV_SPEC"
 
 say "Installing gateway runtime files"
 install -m 0644 "$REPO_ROOT/scripts/local-mesh/gateway.py" "$RUNTIME_DIR/gateway.py"
