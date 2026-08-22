@@ -154,52 +154,40 @@ Implemented on `local-dev-next`:
 
 ### Step 4B — Creative/generated-mesh completeness audit
 
-**Status: IN PROGRESS — NEXT GATE**
+**Status: COMPLETE — USER VALIDATED 2026-08-22**
 
-The Creative runtime detour established a working local image-to-3D path before this audit continues:
+The Creative runtime detour established a working local image-to-3D path and the workspace audit then completed the original ownership objective:
 
 - local Creative model selection is available in pCAD alongside legacy fal.ai backends
 - local mesh gateway is installed and healthy
-- `local/hunyuan3d-2` image → GLB → pCAD viewer has been manually validated
-- Creative image aliases such as `image-1.png` are resolved to authoritative stored image UUIDs before mesh generation
-- local runtime installation/toolchain work is separate from the conversation-workspace ownership goal
-- follow-up mesh editing (`make it wider`, semantic/localized edits) is explicitly **DEFERRED**; it is not a Step 4B completion requirement
-- TRELLIS runtime repair, Hunyuan3D-2.1 validation, Stable Fast 3D gated weights and full GPU arbitration validation are also separate runtime follow-ups and do not block the workspace audit
+- `local/hunyuan3d-2` image → GLB → pCAD viewer was manually validated
+- Creative image aliases are resolved to authoritative stored image UUIDs before mesh generation
+- uploaded source images are mirrored under `input/images/`
+- successful generated Creative meshes are mirrored from authoritative Supabase mesh storage under `models/generated/<mesh-id>.<ext>`
+- local Creative generation performs a post-success generated-mesh sync; lifecycle sync provides idempotent backfill for existing conversations
+- controlled Creative root before/after diffs produced no unexplained repository-root artifacts
+- user validated the resulting Creative workspace layout and clean-root behavior
 
-Step 4B now verifies the original workspace objective for Creative mode:
+Explicitly deferred and not required for Step 4B:
 
-1. run one successful Creative image-to-3D generation
-2. identify the corresponding conversation UUID/workspace
-3. enumerate the workspace files after the successful generation
-4. verify the original uploaded image is present under `input/images/`
-5. determine whether the generated GLB is persisted under the intended `models/generated/` ownership path
-6. verify no Creative runtime artifact appears in the repository root
-7. if generated mesh persistence is missing, implement the smallest authoritative-storage → workspace mirror needed for successful Creative meshes
-8. repeat the Creative run / lifecycle sync and confirm idempotence
-
-Expected durable ownership is:
-
-```text
-conversations/<uuid>/
-├── input/images/<source-image-id>.<ext>
-└── models/generated/<generated-mesh-id>.glb
-```
-
-Supabase remains authoritative; the local generated mesh is a conversation-owned mirror, not a replacement for storage/database ownership.
+- follow-up local mesh editing (`make it wider`, semantic/localized edits)
+- TRELLIS runtime repair/validation
+- Hunyuan3D-2.1 runtime validation
+- Stable Fast 3D gated weights/runtime validation
+- full GPU arbitration validation
 
 ### Step 4C — Final validation and documentation cleanup
 
-**Status: PENDING**
+**Status: IN PROGRESS — FINAL GATE**
 
-After Step 4B is complete:
-
-- repeat root baseline diff after the Creative workflow
-- run focused workspace tests and full server test suite
+- stabilize Local Creative v1 as generation-only; incomplete local follow-up editing must not be exposed as successful functionality
+- run focused workspace/Creative tests and the full server test suite
 - run `npm run typecheck`
-- run production build if the Step 4B implementation touches runtime/build paths
-- reconcile any intentionally deferred Creative runtime work into permanent docs/issues rather than this temporary workspace plan
-- update permanent architecture documentation
-- remove this temporary plan only after all workspace completion criteria are satisfied
+- run production build because Step 4B/Creative changes touched runtime paths
+- reconcile intentionally deferred Creative runtime work into permanent documentation rather than this temporary plan
+- permanent workspace architecture is documented in `docs/conversation_workspace.md`
+- reconcile local working-tree/stash state before final branch completion
+- remove this temporary plan only after all final validation checks are green
 
 ## Global requirements
 
@@ -218,5 +206,6 @@ After Step 4B is complete:
 - old conversations remain usable
 - generated Creative meshes are mirrored into their owning conversation workspace
 - root contains only project/source/config/documentation files and explicitly owned test/development directories
-- clean-baseline → controlled-run diff produces no unexplained persistent root artifacts
-- this temporary plan is removed after final documentation is updated
+- clean-baseline → controlled-run diffs produce no unexplained persistent root artifacts for both parametric and Creative workflows
+- permanent workspace architecture documentation exists
+- this temporary plan is removed after final validation succeeds
