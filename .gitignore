@@ -20,6 +20,10 @@ conversations/
 # Local agent/runtime state
 .omo/
 
+# Python runtime/build caches
+__pycache__/
+*.py[cod]
+
 # Local debug and manual acceptance artifacts
 /debug-settings*.png
 /parametric_box*.png
