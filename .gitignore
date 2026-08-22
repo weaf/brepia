@@ -17,6 +17,18 @@ dist-ssr
 # Local per-conversation runtime workspaces
 conversations/
 
+# Local agent/runtime state
+.omo/
+
+# Local debug and manual acceptance artifacts
+/debug-settings*.png
+/parametric_box*.png
+/parametric_box*.scad
+/parametric_box*.stl
+/test_box.scad
+/vision_request.json
+/pastel-box.html
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
