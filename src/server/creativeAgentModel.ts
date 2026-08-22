@@ -26,7 +26,12 @@ function nonEmptyModel(value: unknown): string | null {
  * are deliberately not silently replaced when a provider later becomes
  * disabled/hidden; the normal model initialization path will surface that
  * configuration error. Only legacy Creative conversations with no agent
- * choice at all fall back to the first selectable tool-capable catalog model.
+ * choice at all fall back to the first selectable direct tool-capable model.
+ *
+ * OpenCode/Codex catalog entries are excluded from automatic Creative fallback
+ * because pCAD's current agent adapters are intentionally parametric/OpenSCAD
+ * specific. They can be enabled for Creative later when those adapters gain a
+ * create_mesh result contract instead of being selected accidentally here.
  */
 export function selectCreativeAgentModel(
   conversation: CreativeConversation,
@@ -44,7 +49,11 @@ export function selectCreativeAgentModel(
   }
 
   const fallback = selectableCatalog.find(
-    (entry) => entry.enabled && entry.available && entry.supportsTools === true,
+    (entry) =>
+      entry.source !== 'opencode' &&
+      entry.enabled &&
+      entry.available &&
+      entry.supportsTools === true,
   );
   return fallback
     ? { modelId: normalizeModelId(fallback.id), source: 'catalog' }
