@@ -97,8 +97,8 @@ export async function persistAssistantParts({
   // branch from the DB on continuation, so we must NOT report success on a
   // no-op (the tool output would be lost and the server would continue from a
   // stale/absent branch). Retry briefly to let the INSERT land, then throw so
-  // the caller can pause/surface it. ~1.7s total covers the insert latency
-  // (stream close + `result.totalUsage` + `billing.consume`) without hanging.
+  // the caller can pause/surface it. The retry window covers normal stream
+  // finalization and persistence latency without hanging the UI indefinitely.
   const MAX_ATTEMPTS = 6;
   const RETRY_DELAY_MS = 350;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
