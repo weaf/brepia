@@ -30,7 +30,6 @@ Implemented on `remove-billing`:
 - legacy fal mesh generation no longer consumes a fixed mesh credit charge
 - legacy fal mesh generation no longer returns billing/credit failures before starting a mesh job
 - stale persistence comments that depended on `billing.consume` timing were corrected
-- billing API/auth/UI files remain temporarily in place so runtime decoupling can be validated independently
 
 Validation completed by user:
 
@@ -40,39 +39,56 @@ Validation completed by user:
 
 ## Step 2 — Remove billing from auth/session state
 
-**Status: IMPLEMENTED — AWAITING VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-23**
 
-Implemented on `remove-billing`:
+Implemented and validated on `remove-billing`:
 
 - removed billing polling and billing schemas/fallback state from `AuthProvider`
-- removed billing from the actual `AuthContext` value/type
-- auth loading now depends only on auth/session and profile loading, never billing
+- auth loading depends only on auth/session and profile loading, never billing
 - removed billing query invalidation from mesh realtime events
-- removed subscription/trial properties from PostHog identity and made identity wait only for profile data
-- moved the still-needed billing poll into a temporary `LegacyBillingProvider` outside `AuthProvider`
-- retained a temporary compatibility bridge in `useAuth()` so Step 3 can remove existing billing UI independently without breaking the branch between steps
-- the compatibility bridge does not alter auth `isLoading`; it exposes legacy billing data only to the UI that will be deleted in Step 3
+- removed subscription/trial properties from PostHog identity
+- separated the legacy billing poll from auth during the transition to Step 3
 
-Validation gate:
+Validation completed by user:
 
-- `npm run typecheck`
-- focused auth/UI tests if present
-- full server suite remains green
-- signed-in app loads even when billing is slow/unavailable; auth/profile state itself must not wait on billing
+- typecheck green
+- full server suite green
+- production build green
+- signed-in/runtime smoke check green
 
-The temporary `LegacyBillingProvider`, legacy billing context types, and the compatibility `billing` field exposed by `useAuth()` are Step 3 deletion targets, not final architecture.
+The temporary legacy billing provider/context introduced to keep the branch buildable between Step 2 and Step 3 has now been removed as part of Step 3.
 
 ## Step 3 — Remove billing UI and client services
 
-**Status: PENDING**
+**Status: IMPLEMENTED — AWAITING ROUTE REGEN + VALIDATION**
 
-- remove credits/token-pack UI and hooks
-- remove subscription/trial/plan/limit UI
-- remove subscription route and billing links
-- remove billing product/checkout client services
-- clean Settings and other surfaces that expose payment state
-- remove `LegacyBillingProvider`, legacy billing context, and the temporary `useAuth()` billing compatibility bridge
-- regenerate route tree through the normal project tooling; do not hand-maintain generated routing output
+Implemented on `remove-billing`:
+
+- removed the home-page credits control
+- removed credits, trial, low-credit, and limit-reached components
+- removed trial dialog
+- removed token-pack and billing-product hooks
+- removed subscription purchase client service
+- removed Billing section and payment copy from Settings
+- removed Subscriptions link from the sidebar
+- removed credit/token gating from PromptView and EditorView
+- removed HTTP 402 billing-specific fetch/error handling from ChatSession
+- removed billing query invalidation from completed chat turns
+- removed `LegacyBillingProvider`, legacy billing context, and the temporary `useAuth()` billing compatibility bridge
+- removed the `/subscription` source route
+
+Required generated-file step before validation:
+
+- regenerate `src/routeTree.gen.ts` through TanStack/Vite tooling so the deleted `/subscription` route disappears from the generated route tree
+- do not hand-edit `src/routeTree.gen.ts`
+
+Validation gate after route regeneration:
+
+- `npm run typecheck`
+- full server suite remains green
+- `npm run build`
+- smoke check home page, Settings, existing editor conversation, send/retry flow
+- confirm there are no credits/subscription/trial controls visible and generation input is not payment-gated
 
 ## Step 4 — Remove billing backend/configuration
 
