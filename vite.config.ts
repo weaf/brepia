@@ -115,6 +115,7 @@ export default defineConfig({
     tanstackStart({
       router: {
         basepath: normalizedAppBase,
+        semicolons: true,
       },
       spa: {
         enabled: true,
