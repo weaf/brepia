@@ -106,35 +106,15 @@ export function TermsOfServiceView() {
 
               <section>
                 <h2 className="mb-3 text-xl font-semibold text-white">
-                  6. Subscription and Payments
+                  6. Termination
                 </h2>
                 <div className="space-y-3 text-gray-400">
                   <p>
-                    6.1. Some features of the Service require a paid
-                    subscription.
-                  </p>
-                  <p>
-                    6.2. Subscription fees are non-refundable except where
-                    required by law.
-                  </p>
-                  <p>
-                    6.3. We reserve the right to modify subscription pricing
-                    with notice.
-                  </p>
-                </div>
-              </section>
-
-              <section>
-                <h2 className="mb-3 text-xl font-semibold text-white">
-                  7. Termination
-                </h2>
-                <div className="space-y-3 text-gray-400">
-                  <p>
-                    7.1. We may terminate or suspend your access to the Service
+                    6.1. We may terminate or suspend your access to the Service
                     at any time for violations of these terms.
                   </p>
                   <p>
-                    7.2. You may terminate your account at any time by following
+                    6.2. You may terminate your account at any time by following
                     the instructions on the Service.
                   </p>
                 </div>
@@ -142,7 +122,7 @@ export function TermsOfServiceView() {
 
               <section>
                 <h2 className="mb-3 text-xl font-semibold text-white">
-                  8. Disclaimer of Warranties
+                  7. Disclaimer of Warranties
                 </h2>
                 <p className="text-gray-400">
                   The Service is provided "as is" without any warranties,
@@ -153,7 +133,7 @@ export function TermsOfServiceView() {
 
               <section>
                 <h2 className="mb-3 text-xl font-semibold text-white">
-                  9. Limitation of Liability
+                  8. Limitation of Liability
                 </h2>
                 <p className="text-gray-400">
                   To the maximum extent permitted by law, AdamCAD shall not be
@@ -164,7 +144,7 @@ export function TermsOfServiceView() {
 
               <section>
                 <h2 className="mb-3 text-xl font-semibold text-white">
-                  10. Changes to Terms
+                  9. Changes to Terms
                 </h2>
                 <p className="text-gray-400">
                   We reserve the right to modify these terms at any time. We
@@ -175,7 +155,7 @@ export function TermsOfServiceView() {
 
               <section>
                 <h2 className="mb-3 text-xl font-semibold text-white">
-                  11. Contact Information
+                  10. Contact Information
                 </h2>
                 <p className="text-gray-400">
                   For questions about these Terms of Service, please contact us
