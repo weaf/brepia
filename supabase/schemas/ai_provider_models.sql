@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS "public"."ai_provider_models" (
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_provider_models_pkey" ON "public"."ai_provider_models" USING btree ("id");
 ALTER TABLE "public"."ai_provider_models" ADD CONSTRAINT "ai_provider_models_pkey" PRIMARY KEY USING INDEX "ai_provider_models_pkey";
 
-ALTER TABLE "public"."ai_provider_models" ADD CONSTRAINT "ai_provider_models_provider_id_fkey" FOREIGN KEY ("provider_id") REFERENCES "public"."ai_providers"("id") ON UPDATE CASCADE ON DELETE CASCADE;
-ALTER TABLE "public"."ai_provider_models" ADD CONSTRAINT "ai_provider_models_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON UPDATE CASCADE ON DELETE CASCADE;
+ALTER TABLE "public"."ai_provider_models" ADD CONSTRAINT "ai_provider_models_provider_id_fkey" FOREIGN KEY ("provider_id") REFERENCES "public"."ai_providers"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."ai_provider_models" ADD CONSTRAINT "ai_provider_models_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_provider_models_provider_model_unique" ON "public"."ai_provider_models" USING btree ("provider_id", "model_id");
 CREATE INDEX IF NOT EXISTS "ai_provider_models_provider_id_idx" ON "public"."ai_provider_models" USING btree ("provider_id");
