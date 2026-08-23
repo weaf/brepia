@@ -1,4 +1,5 @@
 import { AuthProvider } from '@/contexts/AuthProvider';
+import { LegacyBillingProvider } from '@/contexts/LegacyBillingProvider';
 import { TooltipProvider } from './components/ui/tooltip';
 import { Toaster } from './components/ui/toaster';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -29,14 +30,16 @@ function App({ error }: { error?: unknown }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <PostHogProvider>
-          <MeshFilesProvider>
-            <TooltipProvider delayDuration={0}>
-              <Toaster />
-              {error !== undefined ? <ErrorView error={error} /> : <Outlet />}
-            </TooltipProvider>
-          </MeshFilesProvider>
-        </PostHogProvider>
+        <LegacyBillingProvider>
+          <PostHogProvider>
+            <MeshFilesProvider>
+              <TooltipProvider delayDuration={0}>
+                <Toaster />
+                {error !== undefined ? <ErrorView error={error} /> : <Outlet />}
+              </TooltipProvider>
+            </MeshFilesProvider>
+          </PostHogProvider>
+        </LegacyBillingProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
