@@ -28,7 +28,7 @@ describe('OpenCode agent result parsing', () => {
       '{"code":"// Cube parameters\n' +
       '// Size of the cube\'s sides\n' +
       'cube_size = 30;\n\n' +
-      'color(\"SteelBlue\")\n' +
+      'color(\\"SteelBlue\\")\n' +
       'cube(size = cube_size);\n' +
       '","message":"Klart — jag skapade kuben."}';
 
