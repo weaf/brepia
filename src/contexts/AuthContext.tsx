@@ -1,38 +1,17 @@
 import { createContext, useContext } from 'react';
 import { Session, User } from '@supabase/supabase-js';
+import { LegacyBillingContext } from './legacyBillingContext';
 
-export type SubscriptionLevel = 'standard' | 'pro' | 'max';
-export type PlanLevel = SubscriptionLevel | 'free';
-
-export type BillingStatus = {
-  user: {
-    hasTrialed: boolean;
-  };
-  subscription: {
-    level: SubscriptionLevel;
-    status: string | null;
-    currentPeriodEnd: string | null;
-  } | null;
-  tokens: {
-    free: number;
-    subscription: number;
-    purchased: number;
-    total: number;
-  };
-};
-
-const ACTIVE_STATUSES = new Set(['active', 'trialing']);
-
-export function getLevel(billing: BillingStatus | null | undefined): PlanLevel {
-  if (!billing?.subscription) return 'free';
-  if (!ACTIVE_STATUSES.has(billing.subscription.status ?? '')) return 'free';
-  return billing.subscription.level;
-}
+export {
+  getLevel,
+  type BillingStatus,
+  type PlanLevel,
+  type SubscriptionLevel,
+} from './legacyBillingContext';
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
-  billing: BillingStatus | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
@@ -47,10 +26,20 @@ export const AuthContext = createContext<AuthContextType | undefined>(
   undefined,
 );
 
+/**
+ * AuthContext itself is billing-free. The merged `billing` field below is a
+ * temporary compatibility bridge for legacy billing UI and is removed in
+ * Step 3 together with those consumers. Billing does not affect `isLoading`.
+ */
 export function useAuth() {
   const context = useContext(AuthContext);
+  const legacyBilling = useContext(LegacyBillingContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  return {
+    ...context,
+    billing: legacyBilling.billing,
+    billingIsLoading: legacyBilling.isLoading,
+  };
 }
