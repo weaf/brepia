@@ -23,13 +23,11 @@ import {
   stepCountIs,
   streamText,
   type LanguageModel,
-  type LanguageModelUsage,
   type UIMessageStreamWriter,
 } from 'ai';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import imageType from 'image-type';
 import { z } from 'zod';
-import { billing, BillingClientError } from './billingClient';
 import { corsHeaders, isRecord } from './api';
 import {
   loadBuiltinProviderRuntimeOverrides,
@@ -60,46 +58,6 @@ import {
   cancelActiveGeneration,
 } from './activeGeneration';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
-
-const MODEL_PRICES: Record<
-  string,
-  { input: number; output: number; cacheRead?: number; cacheWrite?: number }
-> = {
-  'anthropic/claude-fable-5': { input: 10, output: 50 },
-  'anthropic/claude-opus-4.8': { input: 5, output: 25 },
-  'anthropic/claude-sonnet-5': { input: 2, output: 10 },
-  'anthropic/claude-opus-4': { input: 15, output: 75 },
-  'anthropic/claude-sonnet-4.6': { input: 3, output: 15 },
-  'anthropic/claude-sonnet-4.5': { input: 3, output: 15 },
-  'anthropic/claude-haiku-4.5': { input: 1, output: 5 },
-  'google/gemini-3.1-pro-preview': {
-    input: 1.25,
-    output: 10,
-    cacheRead: 0.31,
-    cacheWrite: 1.25,
-  },
-  // 3.7 Flash rates are Google's introductory pricing through Dec 31,
-  // 2026; they double on Jan 1, 2027 (to 1.5 / 7.5 / 0.15).
-  'google/gemini-3.7-flash': {
-    input: 0.75,
-    output: 3.75,
-    cacheRead: 0.075,
-    cacheWrite: 0.75,
-  },
-  'openai/gpt-5.6-sol': {
-    input: 5,
-    output: 30,
-    cacheRead: 0.5,
-    cacheWrite: 6.25,
-  },
-  'x-ai/grok-4.6': { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 2 },
-  'moonshotai/kimi-k2.6': { input: 0.6, output: 2.5 },
-  'moonshotai/kimi-k3': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3 },
-  'z-ai/glm-5.2': { input: 1.2, output: 4.1 },
-};
-
-const FALLBACK_MODEL_PRICE = { input: 15, output: 75 };
-const USD_PER_BILLING_TOKEN = 0.01;
 
 export const PARAMETRIC_AGENT_PROMPT = `You are Adam, an agentic AI CAD editor that creates and modifies OpenSCAD models. The user can see a live preview of the model on the right while you work.
 
@@ -554,50 +512,6 @@ function supportsForcedToolChoice(modelId: string): boolean {
   return !rejectsForcedToolChoice(modelId);
 }
 
-function priceFor(modelId: string) {
-  const entry = MODEL_PRICES[modelId] ?? FALLBACK_MODEL_PRICE;
-  return {
-    input: entry.input,
-    output: entry.output,
-    cacheRead: entry.cacheRead ?? entry.input * 0.1,
-    cacheWrite: entry.cacheWrite ?? entry.input * 1.25,
-  };
-}
-
-function usdCostFromUsage(modelId: string, usage: LanguageModelUsage): number {
-  const price = priceFor(modelId);
-  const cacheRead = usage.inputTokenDetails.cacheReadTokens ?? 0;
-  const cacheWrite = usage.inputTokenDetails.cacheWriteTokens ?? 0;
-  const inputTotal = usage.inputTokens ?? 0;
-  const noCacheInput =
-    usage.inputTokenDetails.noCacheTokens ??
-    Math.max(0, inputTotal - cacheRead - cacheWrite);
-  const outputTotal = usage.outputTokens ?? 0;
-
-  return (
-    (noCacheInput * price.input +
-      cacheRead * price.cacheRead +
-      cacheWrite * price.cacheWrite +
-      outputTotal * price.output) /
-    1_000_000
-  );
-}
-
-function billingMultiplier(): number {
-  const raw = Number(env('CADAM_BILLING_MULTIPLIER'));
-  return Number.isFinite(raw) && raw > 0 ? raw : 1;
-}
-
-function billingTokensFromUsage(
-  modelId: string,
-  usage: LanguageModelUsage,
-  billingSource?: 'custom',
-): number {
-  if (billingSource === 'custom') return 0;
-  const usdCost = usdCostFromUsage(modelId, usage) * billingMultiplier();
-  return Math.max(1, Math.ceil(usdCost / USD_PER_BILLING_TOKEN));
-}
-
 type SupabaseAnon = ReturnType<typeof getAnonSupabaseClient>;
 
 type BranchMessageRow = Pick<
@@ -994,7 +908,7 @@ export async function handleAiChatRequest(req: Request) {
     data: { user },
   } = await supabaseClient.auth.getUser();
 
-  if (!user?.id || !user.email) {
+  if (!user?.id) {
     return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
@@ -1069,30 +983,6 @@ export async function handleAiChatRequest(req: Request) {
       { error: 'Failed to resolve conversation system prompt' },
       500,
     );
-  }
-
-  try {
-    const status = await billing.getStatus(user.email);
-    if (status.tokens.total <= 0) {
-      return jsonResponse(
-        {
-          error: 'insufficient_tokens',
-          code: 'insufficient_tokens',
-          tokensRequired: 1,
-          tokensAvailable: 0,
-        },
-        402,
-      );
-    }
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: error instanceof BillingClientError ? error.status : 502,
-      userId: user.id,
-      conversationId: conversation.id,
-      additionalContext: { operation: 'billing_preflight' },
-    });
-    return jsonResponse({ error: 'Billing service unavailable' }, 503);
   }
 
   const tools =
@@ -1315,10 +1205,6 @@ export async function handleAiChatRequest(req: Request) {
   let chatProviderOptions: ProviderOptions | undefined;
   let customSupportsVision: boolean | undefined;
   const builtinDriver = builtinDriverForModelId(actualModelId);
-  let customBillingSource: 'custom' | undefined =
-    builtinDriver && builtinProviderOverrides[builtinDriver]?.credential
-      ? 'custom'
-      : undefined;
   try {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
@@ -1345,7 +1231,6 @@ export async function handleAiChatRequest(req: Request) {
         chatLanguageModel = built.model;
         chatProviderOptions = built.providerOptions;
         customSupportsVision = built.capabilities.supportsVision;
-        customBillingSource = 'custom';
       } catch (error) {
         logError(error, {
           functionName: 'ai-chat',
@@ -1544,19 +1429,12 @@ export async function handleAiChatRequest(req: Request) {
           originalMessages: branchMessages,
           generateMessageId: () => crypto.randomUUID(),
           onFinish: async ({ responseMessage, isContinuation }) => {
-            const usage = await result.totalUsage;
-            const billingTokens = billingTokensFromUsage(
-              actualModelId,
-              usage,
-              customBillingSource,
-            );
             const metadata = {
               ...(responseMessage.metadata ?? {}),
               model: rawBody.model,
               ...(conversation.type === 'creative'
                 ? { agentModel: actualModelId }
                 : {}),
-              billingTokens,
             };
 
             const finalizedParts =
@@ -1606,26 +1484,6 @@ export async function handleAiChatRequest(req: Request) {
                 userId: user.id,
                 conversationId: conversation.id,
                 additionalContext: { operation: 'persist_response_message' },
-              });
-            }
-
-            try {
-              if (customBillingSource !== 'custom') {
-                await billing.consume(user.email!, {
-                  tokens: billingTokens,
-                  operation:
-                    conversation.type === 'creative' ? 'chat' : 'parametric',
-                  referenceId: responseMessage.id,
-                });
-              }
-            } catch (error) {
-              logError(error, {
-                functionName: 'ai-chat',
-                statusCode:
-                  error instanceof BillingClientError ? error.status : 502,
-                userId: user.id,
-                conversationId: conversation.id,
-                additionalContext: { operation: 'billing_consume' },
               });
             }
 

@@ -183,10 +183,9 @@ type ActivePreview =
 function ConversationEditor() {
   const { conversation, updateConversation, updateConversationAsync } =
     useConversation();
-  const { user, billing } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const totalTokens = billing?.tokens.total ?? 0;
 
   // ── Per-conversation UI state ───────────────────────────────────────────
   const [model, setModel] = useState<Model>(
@@ -727,7 +726,6 @@ function ConversationEditor() {
             initialBranch={initialBranch}
             model={model}
             setModel={updateSelectedModel}
-            isDisabled={totalTokens <= 0}
             executionMode={executionMode}
             onExecutionModeChange={handleExecutionModeChange}
             onSendParts={handleSendParts}

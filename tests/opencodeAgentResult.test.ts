@@ -23,6 +23,49 @@ describe('OpenCode agent result parsing', () => {
     });
   });
 
+  it('repairs raw newlines inside a provider JSON code string', () => {
+    const response =
+      '{"code":"// Cube parameters\n' +
+      '// Size of the cube\'s sides\n' +
+      'cube_size = 30;\n\n' +
+      'color(\\"SteelBlue\\")\n' +
+      'cube(size = cube_size);\n' +
+      '","message":"Klart — jag skapade kuben."}';
+
+    const parsed = parseAgentResult(response);
+    assert.deepEqual(parsed, {
+      code: [
+        '// Cube parameters',
+        "// Size of the cube's sides",
+        'cube_size = 30;',
+        '',
+        'color("SteelBlue")',
+        'cube(size = cube_size);',
+      ].join('\n'),
+      message: 'Klart — jag skapade kuben.',
+    });
+
+    const parts = finishWithParametricToolCall(response, {
+      type: 'finish',
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: {
+          total: 0,
+          noCache: undefined,
+          cacheRead: undefined,
+          cacheWrite: undefined,
+        },
+        outputTokens: { total: 0, text: undefined, reasoning: undefined },
+      },
+    });
+    assert.equal(parts[0]?.type, 'tool-call');
+    if (parts[0]?.type === 'tool-call') {
+      assert.equal(parts[0].toolName, 'build_parametric_model');
+      const input = JSON.parse(parts[0].input) as { code?: string };
+      assert.equal(input.code, parsed.code);
+    }
+  });
+
   it('uses a structured reasoning result when the text channel is empty', () => {
     const envelope = JSON.stringify({
       code: 'cube([10, 10, 10]);',

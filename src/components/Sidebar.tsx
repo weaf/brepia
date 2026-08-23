@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Menu, Plus, LogOut, Crown, Settings, LayoutGrid } from 'lucide-react';
+import { Menu, Plus, LogOut, Settings, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoProvider } from '@/lib/supabase';
-import { BILLING_URL } from '@/config/billing';
 import {
   Sheet,
   SheetContent,
@@ -391,17 +390,6 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <a
-                      href={BILLING_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center"
-                    >
-                      <Crown className="mr-2 h-4 w-4" />
-                      <span>Subscriptions</span>
-                    </a>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

@@ -10,7 +10,9 @@
  * Accepted formats (preserved from the CLI baseline — do NOT invent a new
  * schema):
  *   1. A JSON object `{ code, message }`, either bare or inside a fenced
- *      ` ```json ` / ` ``` ` block.
+ *      ` ```json ` / ` ``` ` block. Provider output that is otherwise valid
+ *      but contains raw JSON control characters inside strings is normalized
+ *      before parsing.
  *   2. A fenced OpenSCAD block (` ```scad ` / ` ```openscad ` / bare
  *      ` ``` `) whose contents are treated as the code.
  *   3. Plain prose with no fenced block or JSON -> `code` is undefined;
@@ -45,6 +47,9 @@ export function buildAgentOutputContract(): string {
     '  {"code":"complete runnable OpenSCAD source or empty string",',
     '   "message":"short user-facing status"}',
     '',
+    'The object must be valid JSON. Escape line breaks and other control',
+    'characters inside JSON strings (for example, use \\n inside `code`).',
+    '',
     'For a CAD build/edit/fix request:',
     '  - code = complete, runnable OpenSCAD program',
     '  - message = short status (e.g. "Box with bottom created")',
@@ -75,6 +80,92 @@ type StructuredAgentResultMatch = {
   result: AgentResult;
   start: number;
 };
+
+/**
+ * Some OpenCode providers emit the requested JSON envelope with literal
+ * newlines/tabs inside the `code` string instead of JSON escapes. That text is
+ * JSON-shaped but `JSON.parse` rejects it. Repair only raw C0 control
+ * characters while we are inside a JSON string; structural JSON remains
+ * untouched and still has to parse normally.
+ */
+function escapeRawControlCharactersInJsonStrings(value: string): string {
+  let escaped = false;
+  let inString = false;
+  let changed = false;
+  let result = '';
+
+  for (const character of value) {
+    if (!inString) {
+      result += character;
+      if (character === '"') inString = true;
+      continue;
+    }
+
+    if (escaped) {
+      result += character;
+      escaped = false;
+      continue;
+    }
+
+    if (character === '\\') {
+      result += character;
+      escaped = true;
+      continue;
+    }
+
+    if (character === '"') {
+      result += character;
+      inString = false;
+      continue;
+    }
+
+    const codePoint = character.charCodeAt(0);
+    if (codePoint >= 0x20) {
+      result += character;
+      continue;
+    }
+
+    changed = true;
+    switch (character) {
+      case '\b':
+        result += '\\b';
+        break;
+      case '\f':
+        result += '\\f';
+        break;
+      case '\n':
+        result += '\\n';
+        break;
+      case '\r':
+        result += '\\r';
+        break;
+      case '\t':
+        result += '\\t';
+        break;
+      default:
+        result += `\\u${codePoint.toString(16).padStart(4, '0')}`;
+        break;
+    }
+  }
+
+  return changed ? result : value;
+}
+
+function parseStructuredEnvelope(
+  candidate: string,
+): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(candidate) as Record<string, unknown>;
+  } catch {
+    const normalized = escapeRawControlCharactersInJsonStrings(candidate);
+    if (normalized === candidate) return undefined;
+    try {
+      return JSON.parse(normalized) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  }
+}
 
 function structuredAgentResultMatches(
   text: string,
@@ -111,33 +202,27 @@ function structuredAgentResultMatches(
 
       if (depth !== 0) continue;
 
-      try {
-        const parsed = JSON.parse(text.slice(start, end + 1)) as Record<
-          string,
-          unknown
-        >;
-        if (
-          !Object.prototype.hasOwnProperty.call(parsed, 'code') &&
-          !Object.prototype.hasOwnProperty.call(parsed, 'message')
-        ) {
-          break;
-        }
-
-        const code =
-          typeof parsed.code === 'string' && parsed.code.trim()
-            ? parsed.code.trim()
-            : undefined;
-        matches.push({
-          start,
-          end: end + 1,
-          result: {
-            code,
-            message: typeof parsed.message === 'string' ? parsed.message : '',
-          },
-        });
-      } catch {
-        // Not a complete JSON result envelope; try the next opening brace.
+      const parsed = parseStructuredEnvelope(text.slice(start, end + 1));
+      if (!parsed) break;
+      if (
+        !Object.prototype.hasOwnProperty.call(parsed, 'code') &&
+        !Object.prototype.hasOwnProperty.call(parsed, 'message')
+      ) {
+        break;
       }
+
+      const code =
+        typeof parsed.code === 'string' && parsed.code.trim()
+          ? parsed.code.trim()
+          : undefined;
+      matches.push({
+        start,
+        end: end + 1,
+        result: {
+          code,
+          message: typeof parsed.message === 'string' ? parsed.message : '',
+        },
+      });
       break;
     }
   }

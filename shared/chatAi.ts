@@ -126,7 +126,6 @@ export type AppUIMessage = UIMessage<
     /** Actual LLM/agent used for a Creative turn. `model` remains the mesh
      * backend ID in Creative mode so retry/UI behavior stays compatible. */
     agentModel?: Model;
-    billingTokens?: number;
     // The model's original OpenSCAD for this message's artifact, captured
     // lazily on the FIRST parameter edit (see `persistParameterEdit`).
     // Parameter edits rewrite the live `tool-build_parametric_model` input

@@ -1,40 +1,10 @@
-import { billing, BillingClientError } from '@/server/billingClient';
 import { isRecord } from '@/server/api';
 import {
   getServiceRoleSupabaseClient,
   type SupabaseClient,
 } from '@/server/supabaseClient';
 
-export type CancellationFeedback =
-  | 'customer_service'
-  | 'low_quality'
-  | 'missing_features'
-  | 'other'
-  | 'switched_service'
-  | 'too_complex'
-  | 'too_expensive'
-  | 'unused';
-
-export function isCancellationFeedback(
-  value: unknown,
-): value is CancellationFeedback {
-  switch (value) {
-    case 'customer_service':
-    case 'low_quality':
-    case 'missing_features':
-    case 'other':
-    case 'switched_service':
-    case 'too_complex':
-    case 'too_expensive':
-    case 'unused':
-      return true;
-    default:
-      return false;
-  }
-}
-
 export type TeardownOptions = {
-  reason?: CancellationFeedback;
   /**
    * Await storage deletion BEFORE removing the auth user, and let a storage
    * failure propagate. Used by the server-to-server purge route so its 200
@@ -47,49 +17,20 @@ export type TeardownOptions = {
 };
 
 /**
- * Runs the full teardown for a single user: cancels the email-keyed billing
- * subscription, deletes the Supabase auth user (which cascades sessions,
- * accounts, and user-keyed rows via FK / RLS cascade), and removes the user's
- * storage buckets. Both the session-authed `delete-user` route and the
- * internal server-to-server `internal/account/delete` route call this so the
- * teardown behavior stays identical.
+ * Runs the full teardown for a single user: deletes the Supabase auth user
+ * (which cascades sessions, accounts, and user-keyed rows via FK / RLS
+ * cascade) and removes the user's storage objects. Both the session-authed
+ * `delete-user` route and the internal server-to-server
+ * `internal/account/delete` route call this so teardown behavior stays
+ * identical.
  *
- * Billing cancellation is always best-effort (logged, never fatal). Storage
- * ordering depends on `awaitStorage` (see TeardownOptions).
+ * Storage ordering depends on `awaitStorage` (see TeardownOptions).
  */
 export async function teardownUser(
   supabase: SupabaseClient,
-  user: { id: string; email: string },
+  user: { id: string },
   options: TeardownOptions = {},
 ): Promise<void> {
-  try {
-    const subscription = await billing.cancelSubscription(user.email, {
-      feedback: options.reason,
-    });
-    if (!subscription.canceled) {
-      switch (subscription.reason) {
-        case 'no_subscription':
-        case 'already_canceled':
-          break;
-        default: {
-          const unknownReason: never = subscription.reason;
-          throw new Error(
-            `Unknown subscription cancellation reason: ${unknownReason}`,
-          );
-        }
-      }
-    }
-  } catch (subscriptionError) {
-    if (subscriptionError instanceof BillingClientError) {
-      console.error('Failed to cancel user subscription:', {
-        status: subscriptionError.status,
-        body: subscriptionError.body,
-      });
-    } else {
-      console.error('Failed to cancel user subscription:', subscriptionError);
-    }
-  }
-
   if (options.awaitStorage) {
     // Storage-first, awaited: if this throws the auth user still exists, so the
     // caller's retry re-lists and completes — no silently-orphaned blobs.

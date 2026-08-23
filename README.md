@@ -203,10 +203,8 @@ npm run dev
   GOOGLE_API_KEY="<Test Google API Key>"
   FAL_KEY="<Test FAL API Key>"
   SUPABASE_SERVICE_ROLE_KEY="<Test Service Role Key>"
-  BILLING_SERVICE_URL="<Test Billing Service URL>"
-  BILLING_SERVICE_KEY="<Test Billing Service Key>"
   ENVIRONMENT="local"
-  ADAM_URL="<Adam URL or dev URL>" # Checkout and portal redirect target
+  ADAM_URL="<Adam URL or dev URL>"
   WEBHOOK_BASE_URL="<Public TanStack App URL>" # Your app URL for /cadam/api callbacks
   NGROK_URL="<NGROK URL>" # Optional local Supabase Storage tunnel for provider-readable signed URLs
   ```

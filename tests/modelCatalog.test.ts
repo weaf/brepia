@@ -15,7 +15,11 @@
  */
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'vitest';
+import { describe, it, vi } from 'vitest';
+
+vi.mock('../src/server/opencode', () => ({
+  opencodeModels: vi.fn().mockRejectedValue(new Error('OpenCode unavailable')),
+}));
 
 // ---------------------------------------------------------------------------
 // Test 1: Built-in models are the default
