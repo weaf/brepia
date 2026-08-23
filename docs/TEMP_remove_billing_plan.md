@@ -17,7 +17,7 @@ Provider/API costs are deployment concerns, not an in-product pCAD billing syste
 
 ## Step 1 — Remove billing from generation runtime
 
-**Status: IMPLEMENTED — AWAITING VALIDATION**
+**Status: COMPLETE — USER VALIDATED 2026-08-23**
 
 Implemented on `remove-billing`:
 
@@ -32,24 +32,35 @@ Implemented on `remove-billing`:
 - stale persistence comments that depended on `billing.consume` timing were corrected
 - billing API/auth/UI files remain temporarily in place so runtime decoupling can be validated independently
 
-Validation gate:
+Validation completed by user:
 
-- Parametric and Creative generation handlers do not require `BILLING_SERVICE_URL` or `BILLING_SERVICE_KEY`
-- focused server tests pass
-- full server suite passes
-- typecheck passes
-
-Note: the application-level auth provider still polls billing state until Step 2. Step 1 therefore establishes generation-runtime independence; full application independence from billing configuration is a Step 2/4 completion criterion.
+- focused server tests green
+- full server suite green
+- typecheck green
 
 ## Step 2 — Remove billing from auth/session state
 
-**Status: PENDING**
+**Status: IMPLEMENTED — AWAITING VALIDATION**
 
-- remove billing polling from `AuthProvider`
-- remove billing/subscription/plan/trial state from `AuthContext`
-- remove billing from auth loading behavior
-- remove plan/trial PostHog properties or replace them with non-billing identity metadata where appropriate
-- remove mesh-event billing query invalidation
+Implemented on `remove-billing`:
+
+- removed billing polling and billing schemas/fallback state from `AuthProvider`
+- removed billing from the actual `AuthContext` value/type
+- auth loading now depends only on auth/session and profile loading, never billing
+- removed billing query invalidation from mesh realtime events
+- removed subscription/trial properties from PostHog identity and made identity wait only for profile data
+- moved the still-needed billing poll into a temporary `LegacyBillingProvider` outside `AuthProvider`
+- retained a temporary compatibility bridge in `useAuth()` so Step 3 can remove existing billing UI independently without breaking the branch between steps
+- the compatibility bridge does not alter auth `isLoading`; it exposes legacy billing data only to the UI that will be deleted in Step 3
+
+Validation gate:
+
+- `npm run typecheck`
+- focused auth/UI tests if present
+- full server suite remains green
+- signed-in app loads even when billing is slow/unavailable; auth/profile state itself must not wait on billing
+
+The temporary `LegacyBillingProvider`, legacy billing context types, and the compatibility `billing` field exposed by `useAuth()` are Step 3 deletion targets, not final architecture.
 
 ## Step 3 — Remove billing UI and client services
 
@@ -60,6 +71,7 @@ Note: the application-level auth provider still polls billing state until Step 2
 - remove subscription route and billing links
 - remove billing product/checkout client services
 - clean Settings and other surfaces that expose payment state
+- remove `LegacyBillingProvider`, legacy billing context, and the temporary `useAuth()` billing compatibility bridge
 - regenerate route tree through the normal project tooling; do not hand-maintain generated routing output
 
 ## Step 4 — Remove billing backend/configuration
