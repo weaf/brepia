@@ -60,7 +60,7 @@ The temporary legacy billing provider/context introduced to keep the branch buil
 
 ## Step 3 — Remove billing UI and client services
 
-**Status: IMPLEMENTED — BUILD VALIDATED; GENERATED ROUTE TREE STILL NEEDS COMMIT**
+**Status: COMPLETE — ROUTES REGENERATED 2026-08-23**
 
 Implemented on `remove-billing`:
 
@@ -77,21 +77,17 @@ Implemented on `remove-billing`:
 - removed `LegacyBillingProvider`, legacy billing context, and the temporary `useAuth()` billing compatibility bridge
 - removed the `/subscription` source route
 - repaired two unrelated test-harness failures discovered during validation: the creative mesh test now uses Vitest, and the model catalog test mocks unavailable OpenCode instead of invoking the real CLI
+- regenerated `src/routeTree.gen.ts`; `/subscription` is absent from the generated route tree
 
-Validation completed by user:
+Validation evidence:
 
 - production build green on 2026-08-23
 - prerender completed successfully for `/cadam`
-
-Generated-file note:
-
-- remote `src/routeTree.gen.ts` still reflects the old source routes
-- regenerate it through TanStack/Vite tooling after Step 4 source-route deletions so `/subscription` and all removed billing API routes disappear in one generated update
-- do not hand-edit `src/routeTree.gen.ts`
+- generated route tree committed as `3096ad9`
 
 ## Step 4 — Remove billing backend/configuration
 
-**Status: IMPLEMENTED — AWAITING ROUTE REGEN + VALIDATION**
+**Status: COMPLETE — ROUTES REGENERATED 2026-08-23**
 
 Implemented on `remove-billing`:
 
@@ -105,29 +101,34 @@ Implemented on `remove-billing`:
 - preserved Supabase auth-user deletion semantics
 - preserved storage deletion ordering and retry semantics for both user-facing deletion and internal purge
 - removed `BILLING_SERVICE_URL` and `BILLING_SERVICE_KEY` from `.env.local.template`
+- regenerated `src/routeTree.gen.ts`; all removed billing API routes are absent
 
-Required generated-file step before validation:
+Validation evidence:
 
-- regenerate `src/routeTree.gen.ts` through TanStack/Vite tooling
-- confirm `/subscription`, `/api/billing-status`, `/api/billing-products`, and `/api/billing-checkout` are absent
-
-Validation gate:
-
-- `npm run typecheck`
-- full test suite
-- `npm run build`
-- account deletion regression check
-- confirm app starts without billing environment variables
+- generated route tree committed as `3096ad9`
+- production build and prerender completed successfully after route regeneration
 
 ## Step 5 — Audit documentation and residual references
 
-**Status: PENDING**
+**Status: IMPLEMENTED — AWAITING FINAL REGRESSION**
 
-- search code/docs/tests for `billing`, `subscription`, `credits`, `token pack`, `trial`, Stripe identifiers, and billing-only env names
-- distinguish historical migration content from active runtime dependencies
-- update README/integration/docs where current behavior still describes payment functionality
-- confirm no user-facing generation limit depends on credits/payment
-- remove any dead billing-era helper code left behind by earlier decoupling steps
+Audit and cleanup completed on `remove-billing`:
+
+- removed dead `FreeTrialButton` UI component
+- removed dead invoice-status badge UI component
+- removed the obsolete cancellation-reason step and "cancel your plan" language from account deletion
+- account deletion now sends no billing/cancellation payload
+- removed the active `Subscription and Payments` section from the in-app Terms of Service and renumbered following sections
+- removed billing-service environment variables and checkout wording from README setup instructions
+- verified the OpenCode integration guide does not describe a billing workflow
+- verified PostHog helper contains no billing/subscription/trial properties
+- verified package dependencies contain no Stripe SDK dependency
+- retained historical billing/token Supabase migrations intentionally as migration history
+
+Audit rule:
+
+- historical migration content and clearly historical implementation plans may still contain billing terminology; they are not active runtime dependencies and are intentionally not rewritten solely to erase history
+- active runtime, current setup documentation, and user-facing UI must not depend on billing, subscriptions, credits, trials, checkout, or token packs
 
 ## Step 6 — Final regression and cleanup
 
@@ -135,10 +136,11 @@ Validation gate:
 
 - `npm run typecheck`
 - focused tests for auth/chat/mesh/delete-user changes
-- full server test suite
+- full test suite
 - production build
 - runtime smoke test: Parametric generation without billing env
 - runtime smoke test: local Creative generation without billing env
+- runtime smoke test: account deletion path remains functional
 - verify clean working tree/root behavior
 - replace this temporary plan with permanent architecture notes if needed, then remove it
 
