@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js';
+import { getAccountAccess } from './accountAdmin';
 import { getAnonSupabaseClient } from './supabaseClient';
 
 export const corsHeaders = {
@@ -31,7 +32,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export async function requireUser(request: Request): Promise<User> {
+/** Authenticate the bearer token without applying pCAD account authorization. */
+export async function authenticateUser(request: Request): Promise<User> {
   const supabase = getAnonSupabaseClient({
     global: {
       headers: { Authorization: request.headers.get('Authorization') ?? '' },
@@ -40,4 +42,16 @@ export async function requireUser(request: Request): Promise<User> {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user?.email) throw new Error('Unauthorized');
   return data.user;
+}
+
+/**
+ * Standard API guard. A valid Supabase session is not sufficient: pCAD account
+ * access must also be active. This makes pending/disabled a server-side rule,
+ * not merely a UI convention.
+ */
+export async function requireUser(request: Request): Promise<User> {
+  const user = await authenticateUser(request);
+  const access = await getAccountAccess(user);
+  if (access.status !== 'active') throw new Error('Unauthorized');
+  return user;
 }
