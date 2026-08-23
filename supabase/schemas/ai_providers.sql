@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS "public"."ai_providers" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_providers_pkey" ON "public"."ai_providers" USING btree ("id");
 ALTER TABLE "public"."ai_providers" ADD CONSTRAINT "ai_providers_pkey" PRIMARY KEY USING INDEX "ai_providers_pkey";
-ALTER TABLE "public"."ai_providers" ADD CONSTRAINT "ai_providers_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON UPDATE CASCADE ON DELETE CASCADE;
+ALTER TABLE "public"."ai_providers" ADD CONSTRAINT "ai_providers_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ai_providers_user_slug_unique" ON "public"."ai_providers" USING btree ("user_id", "slug");
 CREATE INDEX IF NOT EXISTS "ai_providers_user_enabled_idx" ON "public"."ai_providers" USING btree ("user_id", "enabled");
