@@ -60,7 +60,7 @@ The temporary legacy billing provider/context introduced to keep the branch buil
 
 ## Step 3 — Remove billing UI and client services
 
-**Status: IMPLEMENTED — AWAITING ROUTE REGEN + VALIDATION**
+**Status: IMPLEMENTED — BUILD VALIDATED; GENERATED ROUTE TREE STILL NEEDS COMMIT**
 
 Implemented on `remove-billing`:
 
@@ -76,30 +76,48 @@ Implemented on `remove-billing`:
 - removed billing query invalidation from completed chat turns
 - removed `LegacyBillingProvider`, legacy billing context, and the temporary `useAuth()` billing compatibility bridge
 - removed the `/subscription` source route
+- repaired two unrelated test-harness failures discovered during validation: the creative mesh test now uses Vitest, and the model catalog test mocks unavailable OpenCode instead of invoking the real CLI
 
-Required generated-file step before validation:
+Validation completed by user:
 
-- regenerate `src/routeTree.gen.ts` through TanStack/Vite tooling so the deleted `/subscription` route disappears from the generated route tree
+- production build green on 2026-08-23
+- prerender completed successfully for `/cadam`
+
+Generated-file note:
+
+- remote `src/routeTree.gen.ts` still reflects the old source routes
+- regenerate it through TanStack/Vite tooling after Step 4 source-route deletions so `/subscription` and all removed billing API routes disappear in one generated update
 - do not hand-edit `src/routeTree.gen.ts`
-
-Validation gate after route regeneration:
-
-- `npm run typecheck`
-- full server suite remains green
-- `npm run build`
-- smoke check home page, Settings, existing editor conversation, send/retry flow
-- confirm there are no credits/subscription/trial controls visible and generation input is not payment-gated
 
 ## Step 4 — Remove billing backend/configuration
 
-**Status: PENDING**
+**Status: IMPLEMENTED — AWAITING ROUTE REGEN + VALIDATION**
 
-- remove billing API routes
-- remove `billingClient.ts`
-- remove billing URL/config modules and plan marketing config that no longer has a consumer
-- remove billing cancellation from user teardown while preserving auth-user and storage deletion semantics
-- remove `BILLING_SERVICE_URL`, `BILLING_SERVICE_KEY`, and billing-only environment/config references
-- remove billing-only tests
+Implemented on `remove-billing`:
+
+- removed `/api/billing-status`
+- removed `/api/billing-products`
+- removed `/api/billing-checkout`
+- removed `src/server/billingClient.ts`
+- removed `src/config/billing.ts`
+- removed `src/config/plan-features.ts`
+- removed billing cancellation and cancellation-feedback handling from account teardown
+- preserved Supabase auth-user deletion semantics
+- preserved storage deletion ordering and retry semantics for both user-facing deletion and internal purge
+- removed `BILLING_SERVICE_URL` and `BILLING_SERVICE_KEY` from `.env.local.template`
+
+Required generated-file step before validation:
+
+- regenerate `src/routeTree.gen.ts` through TanStack/Vite tooling
+- confirm `/subscription`, `/api/billing-status`, `/api/billing-products`, and `/api/billing-checkout` are absent
+
+Validation gate:
+
+- `npm run typecheck`
+- full test suite
+- `npm run build`
+- account deletion regression check
+- confirm app starts without billing environment variables
 
 ## Step 5 — Audit documentation and residual references
 
