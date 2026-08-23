@@ -27,5 +27,6 @@ schema_paths = [
   "./schemas/conversations.sql",
   "./schemas/prompts.sql",
   "./schemas/ai_providers.sql",
+  "./schemas/user_ai_preferences.sql",
   "./schemas/*.sql",
 ]
