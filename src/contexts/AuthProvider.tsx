@@ -4,9 +4,7 @@ import { supabase, ssoClaims } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import posthog from 'posthog-js';
-import { AuthContext, type BillingStatus, getLevel } from './AuthContext';
-import { apiJson } from '@/services/api';
-import { z } from 'zod';
+import { AuthContext } from './AuthContext';
 
 // Build an absolute, same-frontend redirect URL for Supabase auth emails / OAuth.
 // Uses the current origin + Vite base path so links return to whichever frontend
@@ -17,44 +15,6 @@ function getAppRedirectUrl(path: string) {
 
   return `${window.location.origin}${basePath}${path}`;
 }
-
-const LOCAL_BILLING_STATUS: BillingStatus = {
-  user: { hasTrialed: false },
-  subscription: {
-    level: 'pro',
-    status: 'active',
-    currentPeriodEnd: new Date(
-      Date.now() + 365 * 24 * 60 * 60 * 1000,
-    ).toISOString(),
-  },
-  tokens: {
-    free: 1_000_000,
-    subscription: 1_000_000,
-    purchased: 1_000_000,
-    total: 3_000_000,
-  },
-};
-
-const billingStatusSchema = z.object({
-  user: z.object({ hasTrialed: z.boolean() }),
-  subscription: z
-    .object({
-      level: z.union([
-        z.literal('standard'),
-        z.literal('pro'),
-        z.literal('max'),
-      ]),
-      status: z.string().nullable(),
-      currentPeriodEnd: z.string().nullable(),
-    })
-    .nullable(),
-  tokens: z.object({
-    free: z.number(),
-    subscription: z.number(),
-    purchased: z.number(),
-    total: z.number(),
-  }),
-});
 
 const ensurePermission = async () => {
   if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -109,23 +69,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Poll adam-billing for subscription state + token balances. 30s cadence
-  // matches the prior user_extradata poll — adam-billing is the source of
-  // truth; no local realtime channel anymore.
-  const { data: billing, isLoading: isBillingLoading } = useQuery({
-    queryKey: ['billing', 'status'],
-    enabled: !!user,
-    refetchInterval: 30000,
-    queryFn: async (): Promise<BillingStatus> => {
-      try {
-        return await apiJson('billing-status', {}, billingStatusSchema);
-      } catch (err) {
-        if (import.meta.env.DEV) return LOCAL_BILLING_STATUS;
-        throw err;
-      }
-    },
-  });
-
   // Fetch user's profile data directly (avoiding circular dependency)
   const { data: profile, isLoading: isProfileLoading } = useQuery({
     queryKey: ['profile', user?.id],
@@ -167,7 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               queryKey: ['meshData', payload.id],
             });
             queryClient.invalidateQueries({ queryKey: ['mesh', payload.id] });
-            queryClient.invalidateQueries({ queryKey: ['billing', 'status'] });
 
             if (
               payload.status === 'success' &&
@@ -207,23 +149,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user, queryClient, navigate, profile?.notifications_enabled]);
 
-  // Track user in PostHog once we have all their data
+  // Track identity/profile only. Billing attributes are intentionally excluded.
   useEffect(() => {
-    if (
-      user &&
-      !posthogSent.current &&
-      !isBillingLoading &&
-      !isProfileLoading
-    ) {
+    if (user && !posthogSent.current && !isProfileLoading) {
       posthog.identify(user.id, {
         email: user.email,
         full_name: ssoClaims(user)?.name || profile?.full_name,
-        subscription: getLevel(billing),
-        has_trialed: billing?.user.hasTrialed ?? false,
       });
       posthogSent.current = true;
     }
-  }, [user, isBillingLoading, billing, profile, isProfileLoading]);
+  }, [user, profile, isProfileLoading]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -287,9 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         session,
         user,
-        billing: billing ?? null,
-        isLoading:
-          isLoading || (!!user && (isBillingLoading || isProfileLoading)),
+        isLoading: isLoading || (!!user && isProfileLoading),
         signIn,
         signUp,
         signInWithMagicLink,
