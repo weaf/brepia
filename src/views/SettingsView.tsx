@@ -14,6 +14,7 @@ import { AvatarUpdateDialog } from '@/components/auth/AvatarUpdateDialog';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
+import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
 
 export default function SettingsView() {
   const { user, resetPassword } = useAuth();
@@ -26,9 +27,7 @@ export default function SettingsView() {
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editingName) {
-      nameInputRef.current?.focus();
-    }
+    if (editingName) nameInputRef.current?.focus();
   }, [editingName]);
 
   useEffect(() => {
@@ -42,10 +41,7 @@ export default function SettingsView() {
         onSuccess: () => {
           setEditingName(false);
           setNewName(profile?.full_name || '');
-          toast({
-            title: 'Success',
-            description: 'Your name has been updated',
-          });
+          toast({ title: 'Success', description: 'Your name has been updated' });
         },
         onError: (e) => {
           Sentry.captureException(e);
@@ -61,16 +57,13 @@ export default function SettingsView() {
 
   const handleUpdateNotifications = async (notificationsEnabled: boolean) => {
     updateProfile(
+      { notifications_enabled: notificationsEnabled },
       {
-        notifications_enabled: notificationsEnabled,
-      },
-      {
-        onSuccess: () => {
+        onSuccess: () =>
           toast({
             title: 'Success',
             description: 'Your notifications have been updated',
-          });
-        },
+          }),
         onError: (e) => {
           Sentry.captureException(e);
           toast({
@@ -89,27 +82,22 @@ export default function SettingsView() {
         if (!user?.email) throw new Error('User email not found');
         await resetPassword(user.email);
       },
-      onSuccess: () => {
+      onSuccess: () =>
         toast({
           title: 'Success',
           description:
             'Password reset instructions have been sent to your email',
-        });
-      },
-      onError: () => {
+        }),
+      onError: () =>
         toast({
           title: 'Error',
           description: 'Failed to reset password',
           variant: 'destructive',
-        });
-      },
+        }),
     });
 
-  // When SSO owns the identity and an external account page is configured,
-  // profile / email / password / delete are managed there (the
-  // accounts.google.com model) rather than edited in-app. Self-host (no SSO
-  // or no account URL) keeps the native controls. `ssoManaged` is imported from
-  // @/lib/supabase so every SSO gate shares one definition.
+  const localAccount = user?.email?.endsWith('@pcad.invalid') ?? false;
+
   return (
     <div className="flex min-h-full w-full items-center justify-center bg-adam-background-1 px-6 py-10">
       <div className="w-full max-w-xl">
@@ -123,7 +111,6 @@ export default function SettingsView() {
         </header>
 
         <div className="flex flex-col gap-4">
-          {/* Account */}
           <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
             <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
               Account
@@ -225,9 +212,11 @@ export default function SettingsView() {
                 </div>
 
                 <div className="py-5">
-                  <div className="text-sm text-adam-neutral-50">Email</div>
+                  <div className="text-sm text-adam-neutral-50">
+                    {localAccount ? 'Account type' : 'Email'}
+                  </div>
                   <div className="mt-0.5 truncate text-xs text-adam-neutral-200">
-                    {user?.email}
+                    {localAccount ? 'Local username/password account' : user?.email}
                   </div>
                 </div>
 
@@ -235,32 +224,34 @@ export default function SettingsView() {
                   <div className="min-w-0">
                     <div className="text-sm text-adam-neutral-50">Password</div>
                     <div className="mt-0.5 text-xs text-adam-neutral-200">
-                      Send a reset link to your email
+                      {localAccount
+                        ? 'Password is managed by an administrator'
+                        : 'Send a reset link to your email'}
                     </div>
                   </div>
-                  <Button
-                    onClick={() => handleResetPassword()}
-                    disabled={isResetLoading}
-                    variant="dark"
-                    className="flex-shrink-0 rounded-full font-light"
-                  >
-                    {isResetLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Reset Password'
-                    )}
-                  </Button>
+                  {!localAccount && (
+                    <Button
+                      onClick={() => handleResetPassword()}
+                      disabled={isResetLoading}
+                      variant="dark"
+                      className="flex-shrink-0 rounded-full font-light"
+                    >
+                      {isResetLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Reset Password'
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
           </section>
 
-          {/* Notifications */}
           <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
             <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
               Notifications
             </h2>
-
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-adam-neutral-50">Responses</div>
@@ -276,15 +267,11 @@ export default function SettingsView() {
             </div>
           </section>
 
-          {/* Data & Privacy — when SSO owns the identity, account deletion is
-              handled in the Adam account ("Manage account" above), so the
-              in-app delete is hidden to avoid a partial, one-sided delete. */}
           {!ssoManaged && (
             <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
               <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
                 Data and privacy
               </h2>
-
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="text-sm text-adam-neutral-50">
@@ -306,7 +293,7 @@ export default function SettingsView() {
             </section>
           )}
 
-          {/* P07A: AI settings wrapper — models, prompts, providers in tabs */}
+          <AdminSettingsSection />
           <AiSettingsSection />
 
           <div className="mt-2 flex items-center justify-center gap-3 text-xs text-adam-neutral-300">
@@ -316,9 +303,7 @@ export default function SettingsView() {
             >
               Terms of Service
             </Link>
-            <span aria-hidden className="text-adam-neutral-700">
-              •
-            </span>
+            <span aria-hidden className="text-adam-neutral-700">•</span>
             <Link
               to="/privacy-policy"
               className="transition-colors hover:text-adam-neutral-50"
