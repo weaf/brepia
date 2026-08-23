@@ -26,6 +26,26 @@ CREATE OR REPLACE TRIGGER update_previews_updated_at
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+CREATE OR REPLACE TRIGGER update_user_ai_preferences_updated_at
+    BEFORE UPDATE ON "public"."user_ai_preferences"
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE TRIGGER update_prompt_profiles_updated_at
+    BEFORE UPDATE ON "public"."prompt_profiles"
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE TRIGGER update_ai_providers_updated_at
+    BEFORE UPDATE ON "public"."ai_providers"
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE TRIGGER update_ai_provider_models_updated_at
+    BEFORE UPDATE ON "public"."ai_provider_models"
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 CREATE OR REPLACE TRIGGER update_user_accounts_updated_at
     BEFORE UPDATE ON "public"."user_accounts"
     FOR EACH ROW
