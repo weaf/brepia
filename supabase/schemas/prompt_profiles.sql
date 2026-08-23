@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS "public"."prompt_profiles" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
-ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_pkey" PRIMARY KEY USING INDEX IF NOT EXISTS "prompt_profiles_pkey";
+CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_pkey" ON "public"."prompt_profiles" USING btree ("id");
+
+ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_pkey" PRIMARY KEY USING INDEX "prompt_profiles_pkey";
 
 ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON UPDATE CASCADE ON DELETE CASCADE;
 
