@@ -135,7 +135,7 @@ A showcase of what CADAM builds from a single plain-language description — fro
       <td><a href="benchmarks/06-threaded-jar-and-lid.md"><strong>Threaded jar &amp; screw-on lid</strong></a></td>
       <td>Create a small storage jar with external screw threads at the neck and a matching screw-on lid with internal threads. Jar body 60 mm diameter, 70 mm tall, 2.5 mm walls; show the lid unscrewed and sitting beside the jar.</td>
       <td>9 dims<br>2 colors</td>
-      <td><img src="benchmarks/06-threaded-jar-and-lid.gif" alt="Threaded jar &amp; screw-on lid orbit" width="200"></td>
+      <td><img src="benchmarks/06-threaded-jar-and-lid.gif" alt="Threaded jar &amp; screw-on lid — real threads orbit" width="200"></td>
     </tr>
     <tr>
       <td><a href="benchmarks/07-bevel-gear-drive.md"><strong>Right-angle bevel gear drive</strong></a></td>
@@ -203,10 +203,8 @@ npm run dev
   GOOGLE_API_KEY="<Test Google API Key>"
   FAL_KEY="<Test FAL API Key>"
   SUPABASE_SERVICE_ROLE_KEY="<Test Service Role Key>"
-  BILLING_SERVICE_URL="<Test Billing Service URL>"
-  BILLING_SERVICE_KEY="<Test Billing Service Key>"
   ENVIRONMENT="local"
-  ADAM_URL="<Adam URL or dev URL>" # Checkout and portal redirect target
+  ADAM_URL="<Adam URL or dev URL>"
   WEBHOOK_BASE_URL="<Public TanStack App URL>" # Your app URL for /cadam/api callbacks
   NGROK_URL="<NGROK URL>" # Optional local Supabase Storage tunnel for provider-readable signed URLs
   ```
@@ -276,7 +274,7 @@ This app wouldn't be possible without the work of:
 
 - [OpenSCAD](https://github.com/openscad/openscad)
 - [openscad-wasm](https://github.com/openscad/openscad-wasm)
-- [openscad-playground](https://github.com/openscad/openscad-playground)
+- [openscad-playground](https://github.com/seasick/openscad-playground)
 - [openscad-web-gui](https://github.com/seasick/openscad-web-gui)
 - [dingcad](https://github.com/yacineMTB/dingcad)
 
