@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import {
+  authenticateUser,
   isRecord,
   json,
   methodNotAllowed,
@@ -45,13 +46,14 @@ export const Route = createFileRoute('/api/delete-user')({
           if (scope === 'registration') {
             return json(await getRegistrationSettings());
           }
-
-          const user = await requireUser(request);
           if (scope === 'access') {
+            const user = await authenticateUser(request);
             return json(
               await getAccountAccess(user, { allowAdminBootstrap: true }),
             );
           }
+
+          const user = await requireUser(request);
           if (scope === 'users') {
             await requireAdmin(user);
             return json({ users: await listAdminUsers() });
@@ -62,12 +64,7 @@ export const Route = createFileRoute('/api/delete-user')({
         }
       },
       POST: async ({ request }) => {
-        let body: unknown;
-        try {
-          body = await request.json().catch(() => ({}));
-        } catch {
-          body = {};
-        }
+        const body = await request.json().catch(() => ({}));
 
         try {
           const user = await requireUser(request);
