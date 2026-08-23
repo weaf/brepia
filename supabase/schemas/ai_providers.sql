@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS "public"."ai_providers" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
-ALTER TABLE "public"."ai_providers" ADD CONSTRAINT "ai_providers_pkey" PRIMARY KEY USING INDEX IF NOT EXISTS "ai_providers_pkey";
+CREATE UNIQUE INDEX IF NOT EXISTS "ai_providers_pkey" ON "public"."ai_providers" USING btree ("id");
+
+ALTER TABLE "public"."ai_providers" ADD CONSTRAINT "ai_providers_pkey" PRIMARY KEY USING INDEX "ai_providers_pkey";
 
 ALTER TABLE "public"."ai_providers" ADD CONSTRAINT "ai_providers_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON UPDATE CASCADE ON DELETE CASCADE;
 
