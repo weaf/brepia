@@ -22,7 +22,7 @@ ALTER TABLE "public"."messages" ADD CONSTRAINT "messages_payload_present"
 
 CREATE INDEX IF NOT EXISTS messages_conversation_id_idx ON "public"."messages" USING btree (conversation_id);
 
-CREATE POLICY "Public conversations messages" ON "public"."messages" FOR SELECT TO "authenticated", "anon" USING ((EXISTS ( SELECT 1
+CREATE POLICY "Public conversations messages" ON "public"."messages" FOR SELECT TO "anon", "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."conversations"
   WHERE (("conversations"."id" = "messages"."conversation_id") AND ("conversations"."privacy" = 'public'::"public"."privacy_type")))));
 
