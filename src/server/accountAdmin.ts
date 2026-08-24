@@ -528,7 +528,9 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
   const nextStatus = input.status ?? account.status;
   await assertActiveAdminInvariant(supabase, account, nextRole, nextStatus);
 
-  const accountUpdates: Record<string, unknown> = {};
+  const accountUpdates: Partial<
+    Pick<AccountRow, 'username' | 'contact_email' | 'role' | 'status'>
+  > = {};
   let oldAuthEmail: string | null = null;
 
   if (input.username !== undefined) {
