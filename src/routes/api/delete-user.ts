@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import {
   authenticateUser,
   isRecord,
+  isUnauthorizedError,
   json,
   methodNotAllowed,
   preflight,
@@ -26,6 +27,9 @@ import { teardownUser } from '@/server/deleteUserTeardown';
 function accountError(error: unknown) {
   if (error instanceof AccountAdminError) {
     return json({ error: error.code }, error.status);
+  }
+  if (isUnauthorizedError(error)) {
+    return json({ error: 'Unauthorized' }, 401);
   }
   console.error('[account-admin]', error);
   return json({ error: 'internal_error' }, 500);
