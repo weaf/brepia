@@ -23,6 +23,10 @@ CREATE POLICY "Anyone can view a public conversation" ON "public"."conversations
 CREATE POLICY "Users can manage their own conversations" ON "public"."conversations" USING ( (SELECT "auth"."uid"()) = "user_id" );
 ALTER TABLE "public"."conversations" ENABLE ROW LEVEL SECURITY;
 
+GRANT ALL ON TABLE "public"."conversations" TO anon;
+GRANT ALL ON TABLE "public"."conversations" TO authenticated;
+GRANT ALL ON TABLE "public"."conversations" TO service_role;
+
 CREATE OR REPLACE FUNCTION public.set_conversation_suggestions(
   p_conversation_id uuid,
   p_suggestions jsonb
