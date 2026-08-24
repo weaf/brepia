@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS "public"."messages" (
     "parts" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
     "metadata" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
     "content" "jsonb",
-    "rating" smallint DEFAULT '0'::smallint NOT NULL,
+    "rating" smallint DEFAULT 0::smallint NOT NULL,
     "parent_message_id" "uuid"
 );
 
