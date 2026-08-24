@@ -20,7 +20,13 @@ export function SignUpView() {
   const navigate = useNavigate();
   const location = useLocation();
   const { session, user, isLoading: authLoading } = useAuth();
-  const { data: registration, isLoading: policyLoading } = useQuery({
+  const {
+    data: registration,
+    isLoading: policyLoading,
+    isError: policyFailed,
+    isFetching: policyFetching,
+    refetch: refetchRegistration,
+  } = useQuery({
     queryKey: ['registration-settings'],
     queryFn: getRegistrationSettings,
   });
@@ -74,10 +80,50 @@ export function SignUpView() {
       registration.identityPolicy === 'email_or_social') &&
     registration.allowedSocialProviders.includes('google');
 
-  if (
-    policyLoading ||
-    (!registration?.bootstrapAvailable && !registration?.allowRegistration)
-  ) {
+  if (policyLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
+        <Loader2 className="h-5 w-5 animate-spin text-white" />
+      </div>
+    );
+  }
+
+  if (policyFailed || !registration) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
+        <div className="w-full max-w-md rounded-lg bg-adam-bg-secondary-dark p-8 text-center shadow-md">
+          <h1 className="text-xl font-semibold text-white">
+            Registration unavailable
+          </h1>
+          <p className="mt-3 text-sm text-adam-text-secondary">
+            pCAD could not load the registration policy from the server.
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            <Button
+              type="button"
+              className="w-full"
+              disabled={policyFetching}
+              onClick={() => void refetchRegistration()}
+            >
+              {policyFetching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                'Try again'
+              )}
+            </Button>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/signin">Back to sign in</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!registration.bootstrapAvailable && !registration.allowRegistration) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
         <Loader2 className="h-5 w-5 animate-spin text-white" />
@@ -148,7 +194,7 @@ export function SignUpView() {
                 </p>
               )}
 
-              {registration?.requireAdminApproval && (
+              {registration.requireAdminApproval && (
                 <p className="mt-4 text-center text-xs text-adam-text-secondary">
                   New accounts require administrator approval before pCAD can be
                   used.
