@@ -32,6 +32,17 @@ export function SignUpView() {
     if (!authLoading && session && user) navigate({ to: '/', replace: true });
   }, [session, user, authLoading, navigate]);
 
+  useEffect(() => {
+    if (
+      !policyLoading &&
+      registration &&
+      !registration.bootstrapAvailable &&
+      !registration.allowRegistration
+    ) {
+      navigate({ to: '/signin', replace: true });
+    }
+  }, [policyLoading, registration, navigate]);
+
   const { mutate: signInWithGoogle, isPending: isSigningInWithGoogle } =
     useMutation({
       mutationFn: async () => {
@@ -50,13 +61,29 @@ export function SignUpView() {
         }),
     });
 
+  const bootstrap = registration?.bootstrapAvailable === true;
   const emailAllowed =
-    registration?.identityPolicy === 'email' ||
-    registration?.identityPolicy === 'email_or_social';
+    !bootstrap &&
+    registration?.allowRegistration === true &&
+    (registration.identityPolicy === 'email' ||
+      registration.identityPolicy === 'email_or_social');
   const socialAllowed =
-    (registration?.identityPolicy === 'social' ||
-      registration?.identityPolicy === 'email_or_social') &&
+    !bootstrap &&
+    registration?.allowRegistration === true &&
+    (registration.identityPolicy === 'social' ||
+      registration.identityPolicy === 'email_or_social') &&
     registration.allowedSocialProviders.includes('google');
+
+  if (
+    policyLoading ||
+    (!registration?.bootstrapAvailable && !registration?.allowRegistration)
+  ) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
+        <Loader2 className="h-5 w-5 animate-spin text-white" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
@@ -68,20 +95,24 @@ export function SignUpView() {
               alt="CADAM Logo"
               className="h-8 w-auto"
             />
-            <h1 className="text-xl font-semibold text-white">Create account</h1>
+            <h1 className="text-xl font-semibold text-white">
+              {bootstrap ? 'Create administrator account' : 'Create account'}
+            </h1>
           </div>
 
-          {policyLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-white" />
-            </div>
-          ) : !registration?.allowRegistration ? (
-            <div className="space-y-4 text-center">
+          {bootstrap ? (
+            <div className="space-y-5 text-center">
               <p className="text-sm text-adam-text-secondary">
-                Self registration is disabled. Ask an administrator to create
-                your account.
+                No account exists yet. Create the first administrator using a
+                username or email address and a password.
               </p>
-              <Link to="/signin" className="text-sm text-adam-blue hover:underline">
+              <Button asChild className="w-full p-6">
+                <Link to="/signup-email">Create first administrator</Link>
+              </Button>
+              <Link
+                to="/signin"
+                className="inline-block text-sm text-adam-blue hover:underline"
+              >
                 Back to sign in
               </Link>
             </div>
@@ -117,7 +148,7 @@ export function SignUpView() {
                 </p>
               )}
 
-              {registration.requireAdminApproval && (
+              {registration?.requireAdminApproval && (
                 <p className="mt-4 text-center text-xs text-adam-text-secondary">
                   New accounts require administrator approval before pCAD can be
                   used.
