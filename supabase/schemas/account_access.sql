@@ -35,12 +35,6 @@ CREATE POLICY "Users can view their own account access"
 
 ALTER TABLE "public"."user_accounts" ENABLE ROW LEVEL SECURITY;
 
--- These tables are consumed through pCAD's server API only. Do not expose
--- them directly through the Data API to browser roles; server-side code uses
--- the service role instead.
-REVOKE ALL ON TABLE "public"."user_accounts" FROM anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "public"."user_accounts" TO service_role;
-
 CREATE TABLE IF NOT EXISTS "public"."registration_settings" (
     "id" smallint DEFAULT 1 NOT NULL,
     "allow_registration" boolean DEFAULT false NOT NULL,
@@ -57,6 +51,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS registration_settings_pkey ON "public"."regist
 ALTER TABLE "public"."registration_settings" ADD CONSTRAINT "registration_settings_pkey" PRIMARY KEY USING INDEX "registration_settings_pkey";
 
 ALTER TABLE "public"."registration_settings" ENABLE ROW LEVEL SECURITY;
-
-REVOKE ALL ON TABLE "public"."registration_settings" FROM anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "public"."registration_settings" TO service_role;
