@@ -16,3 +16,7 @@ ALTER TABLE "public"."prompts" VALIDATE CONSTRAINT "prompts_user_id_fkey";
 CREATE POLICY "Users can view their own prompts" ON "public"."prompts" FOR SELECT USING ((SELECT "auth"."uid"()) = "user_id");
 
 ALTER TABLE "public"."prompts" ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE "public"."prompts" TO anon;
+GRANT ALL ON TABLE "public"."prompts" TO authenticated;
+GRANT ALL ON TABLE "public"."prompts" TO service_role;
