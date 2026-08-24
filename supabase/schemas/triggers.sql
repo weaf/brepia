@@ -56,10 +56,9 @@ CREATE OR REPLACE TRIGGER update_registration_settings_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
--- Profile + pCAD account creation trigger for new Supabase users.
--- The first password/email identity is serialized with a transaction advisory
--- lock and becomes the initial active administrator only when it was created
--- by pCAD's trusted server-side bootstrap flow.
+-- Create the public profile + pCAD account row as soon as Supabase inserts the
+-- auth user. First-admin authorization is deliberately not decided here:
+-- GoTrue applies custom app_metadata later in the same admin-create transaction.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -71,34 +70,10 @@ DECLARE
   configured_identity_policy text := 'email';
   configured_social_providers text[] := ARRAY['google']::text[];
   auth_provider text := COALESCE(NEW.raw_app_meta_data->>'provider', 'email');
-  bootstrap_requested boolean := COALESCE(NEW.raw_app_meta_data->>'pcad_bootstrap', 'false') = 'true';
   provider_allowed boolean := false;
-  is_first_user boolean := false;
-  initial_role text := 'user';
   initial_status text := 'pending';
   local_username text := NULL;
 BEGIN
-  -- Serialize the first-user decision. Concurrent auth.users inserts cannot
-  -- both observe themselves as the sole committed account after this lock.
-  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('pcad:first-admin'));
-
-  SELECT count(*) = 1
-  INTO is_first_user
-  FROM auth.users;
-
-  -- First-admin bootstrap is server-authorized and password/email only.
-  -- A normal client signUp() cannot set raw_app_meta_data.pcad_bootstrap, so
-  -- direct signups cannot claim administrator ownership of an empty install.
-  IF is_first_user AND (auth_provider <> 'email' OR NOT bootstrap_requested) THEN
-    RAISE EXCEPTION 'pcad_first_account_requires_bootstrap';
-  END IF;
-
-  -- A concurrent bootstrap request that loses the first-user race must fail
-  -- rather than becoming a normal pending/active registration.
-  IF bootstrap_requested AND NOT is_first_user THEN
-    RAISE EXCEPTION 'pcad_bootstrap_unavailable';
-  END IF;
-
   SELECT
     allow_registration,
     require_admin_approval,
@@ -126,10 +101,7 @@ BEGIN
     ELSE false
   END;
 
-  IF is_first_user THEN
-    initial_role := 'admin';
-    initial_status := 'active';
-  ELSIF registration_enabled AND provider_allowed AND NOT approval_required THEN
+  IF registration_enabled AND provider_allowed AND NOT approval_required THEN
     initial_status := 'active';
   END IF;
 
@@ -160,7 +132,7 @@ BEGIN
       WHEN NEW.email LIKE '%@pcad.invalid' THEN NULL
       ELSE NEW.email
     END,
-    initial_role,
+    'user',
     initial_status
   )
   ON CONFLICT (user_id) DO NOTHING;
@@ -172,3 +144,68 @@ $$;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- GoTrue's admin create-user flow inserts auth.users first and applies custom
+-- app_metadata later inside the same transaction. A deferred constraint trigger
+-- therefore validates the final stored auth row at commit time. This keeps the
+-- bootstrap marker in trusted app_metadata while rejecting a normal client
+-- signUp() from claiming the first administrator account.
+CREATE OR REPLACE FUNCTION public.enforce_first_admin_bootstrap()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  final_app_metadata jsonb;
+  auth_provider text := 'email';
+  bootstrap_requested boolean := false;
+  is_first_user boolean := false;
+BEGIN
+  -- Serialize the final first-user decision. Concurrent bootstrap transactions
+  -- cannot both commit as the initial administrator.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('pcad:first-admin'));
+
+  SELECT raw_app_meta_data
+  INTO final_app_metadata
+  FROM auth.users
+  WHERE id = NEW.id;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  auth_provider := COALESCE(final_app_metadata->>'provider', 'email');
+  bootstrap_requested :=
+    COALESCE(final_app_metadata->>'pcad_bootstrap', 'false') = 'true';
+
+  SELECT count(*) = 1
+  INTO is_first_user
+  FROM auth.users;
+
+  IF is_first_user AND
+     (auth_provider <> 'email' OR NOT bootstrap_requested) THEN
+    RAISE EXCEPTION 'pcad_first_account_requires_bootstrap';
+  END IF;
+
+  IF bootstrap_requested AND NOT is_first_user THEN
+    RAISE EXCEPTION 'pcad_bootstrap_unavailable';
+  END IF;
+
+  IF is_first_user THEN
+    UPDATE public.user_accounts
+    SET role = 'admin', status = 'active'
+    WHERE user_id = NEW.id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'pcad_bootstrap_account_state_missing';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE CONSTRAINT TRIGGER enforce_first_admin_bootstrap_on_auth_user_created
+  AFTER INSERT ON auth.users
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_first_admin_bootstrap();
