@@ -32,3 +32,7 @@ CREATE POLICY "Public conversations images" ON "public"."images" FOR SELECT TO "
 CREATE POLICY "User can manage their data" ON "public"."images" TO "authenticated" USING ((( SELECT "auth"."uid"()) = "user_id")) WITH CHECK ((( SELECT "auth"."uid"()) = "user_id"));
 
 ALTER TABLE "public"."images" ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE "public"."images" TO anon;
+GRANT ALL ON TABLE "public"."images" TO authenticated;
+GRANT ALL ON TABLE "public"."images" TO service_role;
