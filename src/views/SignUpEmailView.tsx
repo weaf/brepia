@@ -6,18 +6,33 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { getRegistrationSettings } from '@/services/accountAdminService';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  bootstrapFirstAdmin,
+  getRegistrationSettings,
+} from '@/services/accountAdminService';
+
+function passwordAuthEmail(identifier: string) {
+  const normalized = identifier.trim().toLowerCase();
+  return normalized.includes('@') ? normalized : `${normalized}@pcad.invalid`;
+}
 
 export function SignUpEmailView() {
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { signUp, session, user, isLoading: authLoading } = useAuth();
+  const {
+    signUp,
+    signIn,
+    session,
+    user,
+    isLoading: authLoading,
+  } = useAuth();
   const { data: registration, isLoading: policyLoading } = useQuery({
     queryKey: ['registration-settings'],
     queryFn: getRegistrationSettings,
@@ -27,22 +42,34 @@ export function SignUpEmailView() {
     if (!authLoading && session && user) navigate({ to: '/', replace: true });
   }, [session, user, authLoading, navigate]);
 
+  const bootstrap = registration?.bootstrapAvailable === true;
   const emailAllowed =
     registration?.allowRegistration === true &&
     (registration.identityPolicy === 'email' ||
       registration.identityPolicy === 'email_or_social');
+  const registrationAllowed = bootstrap || emailAllowed;
+
+  useEffect(() => {
+    if (!policyLoading && registration && !registrationAllowed) {
+      navigate({ to: '/signin', replace: true });
+    }
+  }, [policyLoading, registration, registrationAllowed, navigate]);
 
   const handleSignUp = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!emailAllowed) {
+    if (!registrationAllowed) return;
+
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    if (!normalizedIdentifier) return;
+    if (!bootstrap && !normalizedIdentifier.includes('@')) {
       toast({
-        title: 'Registration unavailable',
-        description: 'Email registration is not enabled by the administrator.',
+        title: 'Email required',
+        description: 'Normal self registration requires an email address.',
         variant: 'destructive',
       });
       return;
     }
-    if (!name.trim()) return;
+    if (!bootstrap && !name.trim()) return;
     if (password !== confirmPassword) {
       toast({
         title: 'Whoopsies',
@@ -54,20 +81,34 @@ export function SignUpEmailView() {
 
     setIsLoading(true);
     try {
-      await signUp(email.trim(), password, name.trim());
+      if (bootstrap) {
+        await bootstrapFirstAdmin({
+          identifier: normalizedIdentifier,
+          password,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ['registration-settings'],
+        });
+        await signIn(passwordAuthEmail(normalizedIdentifier), password);
+        toast({ title: 'Administrator account created' });
+        navigate({ to: '/', replace: true });
+        return;
+      }
+
+      await signUp(normalizedIdentifier, password, name.trim());
       toast({
         title: 'Verify your email',
         description: registration?.requireAdminApproval
           ? 'Verify your email, then an administrator must approve the account.'
           : 'Please check your email to verify your account before signing in.',
       });
-      sessionStorage.setItem('pendingSignupEmail', email.trim());
+      sessionStorage.setItem('pendingSignupEmail', normalizedIdentifier);
       navigate({ to: '/confirm-email' });
     } catch (error) {
       toast({
-        title: 'Whoopsies',
+        title: bootstrap ? 'Could not create administrator' : 'Whoopsies',
         description:
-          error instanceof Error ? error.message : 'Something went wrong',
+          error instanceof Error ? error.message.replace(/_/g, ' ') : 'Something went wrong',
         variant: 'destructive',
       });
     } finally {
@@ -75,31 +116,10 @@ export function SignUpEmailView() {
     }
   };
 
-  if (policyLoading) {
+  if (policyLoading || !registrationAllowed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
         <Loader2 className="h-6 w-6 animate-spin text-white" />
-      </div>
-    );
-  }
-
-  if (!emailAllowed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
-        <div className="w-full max-w-md rounded-lg bg-adam-bg-secondary-dark p-8 text-center shadow-md">
-          <h1 className="text-xl font-semibold text-white">
-            Email registration unavailable
-          </h1>
-          <p className="mt-3 text-sm text-adam-text-secondary">
-            Registration is disabled or requires a social identity.
-          </p>
-          <Link
-            to="/signup"
-            className="mt-5 inline-block text-sm text-adam-blue hover:underline"
-          >
-            Back to registration
-          </Link>
-        </div>
       </div>
     );
   }
@@ -114,33 +134,53 @@ export function SignUpEmailView() {
               alt="CADAM Logo"
               className="h-8 w-auto"
             />
-            <h1 className="text-2xl font-semibold text-white">Create Account</h1>
+            <h1 className="text-2xl font-semibold text-white">
+              {bootstrap ? 'Create Administrator' : 'Create Account'}
+            </h1>
           </div>
 
           <form onSubmit={handleSignUp} className="space-y-6">
+            {!bootstrap && (
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-white">
+                  Full Name
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="border-gray-700 bg-adam-bg-dark px-4 text-white"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-white">Full Name</Label>
+              <Label htmlFor="identifier" className="text-white">
+                {bootstrap ? 'Username or email' : 'Email'}
+              </Label>
               <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                id="identifier"
+                type={bootstrap ? 'text' : 'email'}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
+                minLength={bootstrap ? 3 : undefined}
+                autoComplete="username"
                 className="border-gray-700 bg-adam-bg-dark px-4 text-white"
               />
+              {bootstrap && (
+                <p className="text-xs text-adam-text-secondary">
+                  A username creates a local pCAD account. An email address creates
+                  a normal email/password account.
+                </p>
+              )}
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-white">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border-gray-700 bg-adam-bg-dark px-4 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-white">Password</Label>
+              <Label htmlFor="password" className="text-white">
+                Password
+              </Label>
               <Input
                 id="password"
                 type="password"
@@ -168,7 +208,7 @@ export function SignUpEmailView() {
               />
             </div>
 
-            {registration?.requireAdminApproval && (
+            {!bootstrap && registration?.requireAdminApproval && (
               <p className="text-xs text-adam-text-secondary">
                 This installation requires administrator approval for new
                 accounts.
@@ -177,16 +217,20 @@ export function SignUpEmailView() {
 
             <Button type="submit" className="w-full p-6" disabled={isLoading}>
               {isLoading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating account...</>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {bootstrap ? 'Creating administrator...' : 'Creating account...'}
+                </>
+              ) : bootstrap ? (
+                'Create Administrator'
               ) : (
                 'Create Account'
               )}
             </Button>
 
             <div className="text-center text-sm text-white">
-              Already have an account?{' '}
               <Link to="/signin" className="text-adam-blue hover:underline">
-                Sign in
+                Back to sign in
               </Link>
             </div>
           </form>
