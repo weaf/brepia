@@ -29,3 +29,7 @@ ALTER TABLE "public"."previews" VALIDATE CONSTRAINT "previews_mesh_id_fkey";
 ALTER TABLE "public"."previews" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage their own previews" ON "public"."previews" USING ( (SELECT "auth"."uid"()) = "user_id" );
+
+GRANT ALL ON TABLE "public"."previews" TO anon;
+GRANT ALL ON TABLE "public"."previews" TO authenticated;
+GRANT ALL ON TABLE "public"."previews" TO service_role;
