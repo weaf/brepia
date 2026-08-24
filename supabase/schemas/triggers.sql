@@ -57,8 +57,9 @@ CREATE OR REPLACE TRIGGER update_registration_settings_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Profile + pCAD account creation trigger for new Supabase users.
--- Existing users are treated as active by the server until an account row is
--- materialized, preserving backward compatibility during rollout.
+-- The first password/email identity is serialized with a transaction advisory
+-- lock and becomes the initial active administrator. This prevents concurrent
+-- first-registration attempts from creating multiple bootstrap admins.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -71,8 +72,26 @@ DECLARE
   configured_social_providers text[] := ARRAY['google']::text[];
   auth_provider text := COALESCE(NEW.raw_app_meta_data->>'provider', 'email');
   provider_allowed boolean := false;
+  is_first_user boolean := false;
+  initial_role text := 'user';
   initial_status text := 'pending';
+  local_username text := NULL;
 BEGIN
+  -- Serialize the first-user decision. Concurrent auth.users inserts cannot
+  -- both observe themselves as the sole committed account after this lock.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('pcad:first-admin'));
+
+  SELECT count(*) = 1
+  INTO is_first_user
+  FROM auth.users;
+
+  -- Bootstrap is deliberately password/email only. If a social identity is
+  -- somehow invoked directly while the installation is empty, abort creation
+  -- rather than orphaning the installation or granting social bootstrap admin.
+  IF is_first_user AND auth_provider <> 'email' THEN
+    RAISE EXCEPTION 'pcad_first_account_requires_password';
+  END IF;
+
   SELECT
     allow_registration,
     require_admin_approval,
@@ -100,8 +119,15 @@ BEGIN
     ELSE false
   END;
 
-  IF registration_enabled AND provider_allowed AND NOT approval_required THEN
+  IF is_first_user THEN
+    initial_role := 'admin';
     initial_status := 'active';
+  ELSIF registration_enabled AND provider_allowed AND NOT approval_required THEN
+    initial_status := 'active';
+  END IF;
+
+  IF NEW.email LIKE '%@pcad.invalid' THEN
+    local_username := split_part(NEW.email, '@', 1);
   END IF;
 
   INSERT INTO public.profiles (user_id, full_name)
@@ -113,13 +139,21 @@ BEGIN
     )
   );
 
-  INSERT INTO public.user_accounts (user_id, contact_email, status)
+  INSERT INTO public.user_accounts (
+    user_id,
+    username,
+    contact_email,
+    role,
+    status
+  )
   VALUES (
     NEW.id,
+    local_username,
     CASE
       WHEN NEW.email LIKE '%@pcad.invalid' THEN NULL
       ELSE NEW.email
     END,
+    initial_role,
     initial_status
   )
   ON CONFLICT (user_id) DO NOTHING;
