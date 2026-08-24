@@ -34,6 +34,155 @@ export type Database = {
   };
   public: {
     Tables: {
+      ai_local_model_metadata: {
+        Row: {
+          context_limit: number | null;
+          created_at: string;
+          display_name: string | null;
+          id: string;
+          is_visible: boolean;
+          model_id: string;
+          output_limit: number | null;
+          supports_thinking: boolean;
+          supports_tools: boolean;
+          supports_vision: boolean;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          context_limit?: number | null;
+          created_at?: string;
+          display_name?: string | null;
+          id?: string;
+          is_visible?: boolean;
+          model_id: string;
+          output_limit?: number | null;
+          supports_thinking?: boolean;
+          supports_tools?: boolean;
+          supports_vision?: boolean;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          context_limit?: number | null;
+          created_at?: string;
+          display_name?: string | null;
+          id?: string;
+          is_visible?: boolean;
+          model_id?: string;
+          output_limit?: number | null;
+          supports_thinking?: boolean;
+          supports_tools?: boolean;
+          supports_vision?: boolean;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      ai_provider_models: {
+        Row: {
+          context_limit: number | null;
+          created_at: string;
+          description: string | null;
+          display_name: string;
+          id: string;
+          is_visible: boolean;
+          model_id: string;
+          output_limit: number | null;
+          provider_id: string;
+          supports_thinking: boolean;
+          supports_tools: boolean;
+          supports_vision: boolean;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          context_limit?: number | null;
+          created_at?: string;
+          description?: string | null;
+          display_name: string;
+          id?: string;
+          is_visible?: boolean;
+          model_id: string;
+          output_limit?: number | null;
+          provider_id: string;
+          supports_thinking?: boolean;
+          supports_tools?: boolean;
+          supports_vision?: boolean;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          context_limit?: number | null;
+          created_at?: string;
+          description?: string | null;
+          display_name?: string;
+          id?: string;
+          is_visible?: boolean;
+          model_id?: string;
+          output_limit?: number | null;
+          provider_id?: string;
+          supports_thinking?: boolean;
+          supports_tools?: boolean;
+          supports_vision?: boolean;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ai_provider_models_provider_id_fkey';
+            columns: ['provider_id'];
+            isOneToOne: false;
+            referencedRelation: 'ai_providers';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ai_providers: {
+        Row: {
+          base_url: string;
+          created_at: string;
+          credential_ciphertext: string | null;
+          credential_iv: string | null;
+          credential_tag: string | null;
+          driver: string;
+          enabled: boolean;
+          id: string;
+          name: string;
+          slug: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          base_url: string;
+          created_at?: string;
+          credential_ciphertext?: string | null;
+          credential_iv?: string | null;
+          credential_tag?: string | null;
+          driver: string;
+          enabled?: boolean;
+          id?: string;
+          name: string;
+          slug: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          base_url?: string;
+          created_at?: string;
+          credential_ciphertext?: string | null;
+          credential_iv?: string | null;
+          credential_tag?: string | null;
+          driver?: string;
+          enabled?: boolean;
+          id?: string;
+          name?: string;
+          slug?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       conversations: {
         Row: {
           created_at: string | null;
@@ -151,8 +300,8 @@ export type Database = {
       };
       messages: {
         Row: {
-          conversation_id: string;
           content: Json | null;
+          conversation_id: string;
           created_at: string;
           id: string;
           metadata: Json;
@@ -162,8 +311,8 @@ export type Database = {
           role: string;
         };
         Insert: {
-          conversation_id: string;
           content?: Json | null;
+          conversation_id: string;
           created_at?: string;
           id?: string;
           metadata?: Json;
@@ -173,8 +322,8 @@ export type Database = {
           role: string;
         };
         Update: {
-          conversation_id?: string;
           content?: Json | null;
+          conversation_id?: string;
           created_at?: string;
           id?: string;
           metadata?: Json;
@@ -268,6 +417,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      prompt_profiles: {
+        Row: {
+          archived: boolean;
+          base_revision: string | null;
+          created_at: string;
+          description: string | null;
+          id: string;
+          mode: string;
+          name: string;
+          prompt_template: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          archived?: boolean;
+          base_revision?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          mode?: string;
+          name: string;
+          prompt_template: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          archived?: boolean;
+          base_revision?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          mode?: string;
+          name?: string;
+          prompt_template?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       prompts: {
         Row: {
           created_at: string;
@@ -289,207 +477,104 @@ export type Database = {
         };
         Relationships: [];
       };
+      registration_settings: {
+        Row: {
+          allow_registration: boolean;
+          allowed_social_providers: string[];
+          created_at: string;
+          id: number;
+          identity_policy: string;
+          require_admin_approval: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          allow_registration?: boolean;
+          allowed_social_providers?: string[];
+          created_at?: string;
+          id?: number;
+          identity_policy?: string;
+          require_admin_approval?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          allow_registration?: boolean;
+          allowed_social_providers?: string[];
+          created_at?: string;
+          id?: number;
+          identity_policy?: string;
+          require_admin_approval?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      user_accounts: {
+        Row: {
+          contact_email: string | null;
+          created_at: string;
+          role: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+          username: string | null;
+        };
+        Insert: {
+          contact_email?: string | null;
+          created_at?: string;
+          role?: string;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+          username?: string | null;
+        };
+        Update: {
+          contact_email?: string | null;
+          created_at?: string;
+          role?: string;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+          username?: string | null;
+        };
+        Relationships: [];
+      };
       user_ai_preferences: {
         Row: {
-          user_id: string;
-          hidden_model_ids: string[];
+          created_at: string;
           default_prompt_profile_id: string | null;
-          created_at: string;
+          hidden_model_ids: string[];
           updated_at: string;
+          user_id: string;
+          vision_deep_model_id: string | null;
+          vision_fast_model_id: string | null;
         };
         Insert: {
-          user_id?: string;
-          hidden_model_ids?: string[];
+          created_at?: string;
           default_prompt_profile_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          user_id?: string;
           hidden_model_ids?: string[];
+          updated_at?: string;
+          user_id: string;
+          vision_deep_model_id?: string | null;
+          vision_fast_model_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
           default_prompt_profile_id?: string | null;
-          created_at?: string;
+          hidden_model_ids?: string[];
           updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'user_ai_preferences_user_id_fkey';
-            columns: ['user_id'];
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      prompt_profiles: {
-        Row: {
-          id: string;
-          user_id: string;
-          name: string;
-          description: string | null;
-          prompt_template: string;
-          mode: 'overlay' | 'fork';
-          base_revision: string | null;
-          archived: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          name: string;
-          description?: string | null;
-          prompt_template: string;
-          mode?: 'overlay' | 'fork';
-          base_revision?: string | null;
-          archived?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
           user_id?: string;
-          name?: string;
-          description?: string | null;
-          prompt_template?: string;
-          mode?: 'overlay' | 'fork';
-          base_revision?: string | null;
-          archived?: boolean;
-          created_at?: string;
-          updated_at?: string;
+          vision_deep_model_id?: string | null;
+          vision_fast_model_id?: string | null;
         };
-        Relationships: [
-          {
-            foreignKeyName: 'prompt_profiles_user_id_fkey';
-            columns: ['user_id'];
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      ai_providers: {
-        Row: {
-          id: string;
-          user_id: string;
-          slug: string;
-          name: string;
-          driver: string;
-          base_url: string;
-          credential_ciphertext: string | null;
-          credential_iv: string | null;
-          credential_tag: string | null;
-          enabled: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          slug: string;
-          name: string;
-          driver: string;
-          base_url: string;
-          credential_ciphertext?: string | null;
-          credential_iv?: string | null;
-          credential_tag?: string | null;
-          enabled?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          slug?: string;
-          name?: string;
-          driver?: string;
-          base_url?: string;
-          credential_ciphertext?: string | null;
-          credential_iv?: string | null;
-          credential_tag?: string | null;
-          enabled?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'ai_providers_user_id_fkey';
-            columns: ['user_id'];
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      ai_provider_models: {
-        Row: {
-          id: string;
-          provider_id: string;
-          user_id: string;
-          model_id: string;
-          display_name: string;
-          description: string | null;
-          supports_tools: boolean;
-          supports_thinking: boolean;
-          supports_vision: boolean;
-          context_limit: number | null;
-          output_limit: number | null;
-          is_visible: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          provider_id: string;
-          user_id: string;
-          model_id: string;
-          display_name: string;
-          description?: string | null;
-          supports_tools?: boolean;
-          supports_thinking?: boolean;
-          supports_vision?: boolean;
-          context_limit?: number | null;
-          output_limit?: number | null;
-          is_visible?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          provider_id?: string;
-          user_id?: string;
-          model_id?: string;
-          display_name?: string;
-          description?: string | null;
-          supports_tools?: boolean;
-          supports_thinking?: boolean;
-          supports_vision?: boolean;
-          context_limit?: number | null;
-          output_limit?: number | null;
-          is_visible?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'ai_provider_models_provider_id_fkey';
-            columns: ['provider_id'];
-            referencedRelation: 'ai_providers';
-            referencedColumns: ['id'];
-          },
-          {
-            foreignKeyName: 'ai_provider_models_user_id_fkey';
-            columns: ['user_id'];
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
+        Relationships: [];
       };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      trigger_update_updated_at: {
-        Args: Record<string, never>;
-        Returns: unknown;
+      set_conversation_suggestions: {
+        Args: { p_conversation_id: string; p_suggestions: Json };
+        Returns: undefined;
       };
     };
     Enums: {

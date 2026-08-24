@@ -5,12 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import {
   createLocalUser,
@@ -26,7 +21,7 @@ import {
 
 function errorMessage(error: unknown) {
   if (!(error instanceof Error)) return 'Something went wrong';
-  return error.message.replaceAll('_', ' ');
+  return error.message.replace(/_/g, ' ');
 }
 
 export function AdminSettingsSection() {
@@ -397,7 +392,10 @@ function UserEditor({
     >
       {user.localAccount && (
         <Field label="Username">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
         </Field>
       )}
       <Field label="Display name">
@@ -499,7 +497,8 @@ function RegistrationTab({
           onChange={(event) =>
             setSettings((current) => ({
               ...current,
-              identityPolicy: event.target.value as RegistrationSettings['identityPolicy'],
+              identityPolicy: event.target
+                .value as RegistrationSettings['identityPolicy'],
             }))
           }
         >
@@ -513,8 +512,8 @@ function RegistrationTab({
         <div className="border-t border-adam-neutral-800 pt-5">
           <div className="text-sm text-adam-neutral-50">Allowed providers</div>
           <p className="mt-1 text-xs text-adam-neutral-200">
-            A provider must also be configured in Supabase before it can be
-            used for sign-in.
+            A provider must also be configured in Supabase before it can be used
+            for sign-in.
           </p>
           <ProviderToggle
             label="Google"
