@@ -248,6 +248,10 @@ export function SignInView() {
     );
   }
 
+  const signupAvailable =
+    registration?.bootstrapAvailable === true ||
+    registration?.allowRegistration === true;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
       <div className="w-full max-w-md">
@@ -348,11 +352,15 @@ export function SignInView() {
               )}
             </Button>
 
-            {registration?.allowRegistration && (
+            {signupAvailable && (
               <div className="text-center text-sm text-white">
-                Don't have an account?{' '}
+                {registration?.bootstrapAvailable
+                  ? 'No account exists yet. '
+                  : "Don't have an account? "}
                 <Link to="/signup" className="text-adam-blue hover:underline">
-                  Sign up
+                  {registration?.bootstrapAvailable
+                    ? 'Create administrator'
+                    : 'Sign up'}
                 </Link>
               </div>
             )}
