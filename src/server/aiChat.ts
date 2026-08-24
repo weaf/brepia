@@ -1204,7 +1204,7 @@ export async function handleAiChatRequest(req: Request) {
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
   let customSupportsVision: boolean | undefined;
-  const builtinDriver = builtinDriverForModelId(actualModelId);
+  const _builtinDriver = builtinDriverForModelId(actualModelId);
   try {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
