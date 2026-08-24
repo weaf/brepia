@@ -269,7 +269,7 @@ function UsersTab({
                       Approve
                     </Button>
                   )}
-                  {user.role !== 'admin' && user.status === 'active' && (
+                  {user.status === 'active' && (
                     <Button
                       size="sm"
                       variant="dark"
@@ -308,24 +308,22 @@ function UsersTab({
                   >
                     Edit
                   </Button>
-                  {user.role !== 'admin' && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      aria-label="Delete user"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete ${user.fullName || user.username || user.email || 'this user'} and all associated data?`,
-                          )
-                        ) {
-                          deleteMutation.mutate(user.userId);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    aria-label="Delete user"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete ${user.fullName || user.username || user.email || 'this user'} and all associated data?`,
+                        )
+                      ) {
+                        deleteMutation.mutate(user.userId);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
 
@@ -360,6 +358,7 @@ function UserEditor({
   const [fullName, setFullName] = useState(user.fullName ?? '');
   const [contactEmail, setContactEmail] = useState(user.contactEmail ?? '');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'admin' | 'user'>(user.role);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -368,6 +367,7 @@ function UserEditor({
         ...(user.localAccount ? { username } : {}),
         fullName,
         contactEmail: contactEmail || null,
+        role,
         ...(password ? { password } : {}),
       }),
     onSuccess: async () => {
@@ -408,6 +408,18 @@ function UserEditor({
           onChange={(e) => setContactEmail(e.target.value)}
         />
       </Field>
+      <Field label="Role">
+        <select
+          className="h-10 w-full rounded-md border border-adam-neutral-700 bg-adam-background-1 px-3 text-sm text-adam-neutral-50"
+          value={role}
+          onChange={(event) =>
+            setRole(event.target.value as 'admin' | 'user')
+          }
+        >
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+      </Field>
       <Field label="New password">
         <Input
           type="password"
@@ -442,7 +454,13 @@ function RegistrationTab({
   useEffect(() => setSettings(initial), [initial]);
 
   const mutation = useMutation({
-    mutationFn: () => saveRegistrationSettings(settings),
+    mutationFn: () =>
+      saveRegistrationSettings({
+        allowRegistration: settings.allowRegistration,
+        requireAdminApproval: settings.requireAdminApproval,
+        identityPolicy: settings.identityPolicy,
+        allowedSocialProviders: settings.allowedSocialProviders,
+      }),
     onSuccess: async (saved) => {
       setSettings(saved);
       await queryClient.invalidateQueries({
@@ -466,7 +484,7 @@ function RegistrationTab({
     <div className="space-y-5">
       <SettingSwitch
         title="Allow self registration"
-        description="When disabled, only an administrator can create users."
+        description="When disabled, only an administrator can create users. A completely empty installation can still create its first administrator."
         checked={settings.allowRegistration}
         onCheckedChange={(allowRegistration) =>
           setSettings((current) => ({ ...current, allowRegistration }))
@@ -557,6 +575,7 @@ function ProviderToggle({
       <span className="text-sm text-adam-neutral-100">{label}</span>
       <Switch
         checked={checked}
+        disabled={!settings.allowRegistration}
         onCheckedChange={(enabled) =>
           setSettings((current) => ({
             ...current,
