@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import TextAreaChat from '@/components/TextAreaChat';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
 import { Model } from '@shared/types';
 import { conversationTitleFromText } from '@shared/conversationTitle';
@@ -29,6 +29,7 @@ import type { AppUIMessage } from '@shared/chatAi';
 import { ensureInputRecords } from '@/lib/aiMessages';
 import { persistUserMessage } from '@/services/messageService';
 import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
+import { getRegistrationSettings } from '@/services/accountAdminService';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -51,6 +52,20 @@ export function PromptView() {
   const { data: profile, isLoading: isProfileLoading } = useProfile();
   const { isSidebarOpen } = useLayoutContext();
   const queryClient = useQueryClient();
+  const { data: registration } = useQuery({
+    queryKey: ['registration-settings'],
+    queryFn: getRegistrationSettings,
+    staleTime: 30_000,
+    enabled: !user && !ssoProvider,
+  });
+
+  const signupAvailable =
+    Boolean(ssoProvider) ||
+    registration?.bootstrapAvailable === true ||
+    registration?.allowRegistration === true;
+  const signupLabel = registration?.bootstrapAvailable
+    ? 'Create Administrator'
+    : 'Sign Up';
 
   const firstName = useMemo(() => {
     // Wait until the profile query resolves for signed-in users so the
@@ -367,15 +382,17 @@ export function PromptView() {
       >
         {!user && (
           <div className="fixed right-4 top-4 z-10 flex flex-row gap-2">
-            <Button
-              variant="light"
-              onClick={() =>
-                ssoProvider ? signInWithSso() : navigate({ to: '/signup' })
-              }
-              className="w-auto"
-            >
-              Sign Up
-            </Button>
+            {signupAvailable && (
+              <Button
+                variant="light"
+                onClick={() =>
+                  ssoProvider ? signInWithSso() : navigate({ to: '/signup' })
+                }
+                className="w-auto"
+              >
+                {signupLabel}
+              </Button>
+            )}
             <Button
               onClick={() =>
                 ssoProvider ? signInWithSso() : navigate({ to: '/signin' })
@@ -449,19 +466,25 @@ export function PromptView() {
                   >
                     Sign in
                   </Link>{' '}
-                  or{' '}
-                  <Link
-                    to="/signup"
-                    onClick={(e) => {
-                      if (ssoProvider) {
-                        e.preventDefault();
-                        signInWithSso();
-                      }
-                    }}
-                    className="!text-adam-blue hover:!text-adam-blue/80"
-                  >
-                    create an account
-                  </Link>{' '}
+                  {signupAvailable ? (
+                    <>
+                      or{' '}
+                      <Link
+                        to="/signup"
+                        onClick={(e) => {
+                          if (ssoProvider) {
+                            e.preventDefault();
+                            signInWithSso();
+                          }
+                        }}
+                        className="!text-adam-blue hover:!text-adam-blue/80"
+                      >
+                        {registration?.bootstrapAvailable
+                          ? 'create the administrator account'
+                          : 'create an account'}
+                      </Link>{' '}
+                    </>
+                  ) : null}
                   to start generating
                 </p>
               )}

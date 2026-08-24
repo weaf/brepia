@@ -19,6 +19,10 @@ export type RegistrationSettings = {
   allowedSocialProviders: string[];
 };
 
+export type RegistrationState = RegistrationSettings & {
+  bootstrapAvailable: boolean;
+};
+
 export type AccountAccess = {
   userId: string;
   username: string | null;
@@ -67,15 +71,6 @@ export class AccountAdminError extends Error {
   }
 }
 
-// Database types are generated from the local Supabase schema. The branch adds
-// these tables declaratively first; shared/database.ts must be regenerated with
-// `supabase gen types typescript --local` after the generated migration exists.
-// Keep the escape hatch isolated here so the rest of the feature stays typed.
-function fromAccountTable(supabase: SupabaseClient, table: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (supabase as any).from(table);
-}
-
 function isLocalAuthEmail(email: string | null | undefined) {
   return Boolean(email?.toLowerCase().endsWith('@pcad.invalid'));
 }
@@ -101,6 +96,32 @@ function realEmail(email: string | null | undefined) {
   return email;
 }
 
+function normalizeBootstrapIdentifier(identifier: string) {
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized) throw new AccountAdminError('identifier_required');
+
+  if (normalized.includes('@')) {
+    const [local, domain, ...rest] = normalized.split('@');
+    if (!local || !domain || rest.length > 0 || domain.startsWith('.')) {
+      throw new AccountAdminError('invalid_email');
+    }
+    return {
+      authEmail: normalized,
+      username: null as string | null,
+      contactEmail: normalized,
+      displayName: local,
+    };
+  }
+
+  const username = validateUsername(normalized);
+  return {
+    authEmail: localAuthEmail(username),
+    username,
+    contactEmail: null as string | null,
+    displayName: username,
+  };
+}
+
 function toAccess(row: AccountRow): AccountAccess {
   return {
     userId: row.user_id,
@@ -114,7 +135,8 @@ async function getAccountRow(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<AccountRow | null> {
-  const { data, error } = await fromAccountTable(supabase, 'user_accounts')
+  const { data, error } = await supabase
+    .from('user_accounts')
     .select('user_id,username,contact_email,role,status')
     .eq('user_id', userId)
     .maybeSingle();
@@ -135,7 +157,8 @@ async function materializeLegacyAccount(
     role: 'user',
     status: 'active',
   };
-  const { data, error } = await fromAccountTable(supabase, 'user_accounts')
+  const { data, error } = await supabase
+    .from('user_accounts')
     .upsert(row, { onConflict: 'user_id' })
     .select('user_id,username,contact_email,role,status')
     .single();
@@ -144,12 +167,46 @@ async function materializeLegacyAccount(
 }
 
 async function hasActiveAdmin(supabase: SupabaseClient) {
-  const { count, error } = await fromAccountTable(supabase, 'user_accounts')
+  const { count, error } = await supabase
+    .from('user_accounts')
     .select('user_id', { count: 'exact', head: true })
     .eq('role', 'admin')
     .eq('status', 'active');
   if (error) throw new AccountAdminError('failed_to_check_admin', 500);
   return (count ?? 0) > 0;
+}
+
+async function countOtherActiveAdmins(
+  supabase: SupabaseClient,
+  excludedUserId: string,
+) {
+  const { count, error } = await supabase
+    .from('user_accounts')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('role', 'admin')
+    .eq('status', 'active')
+    .neq('user_id', excludedUserId);
+  if (error) throw new AccountAdminError('failed_to_check_admin', 500);
+  return count ?? 0;
+}
+
+async function assertActiveAdminInvariant(
+  supabase: SupabaseClient,
+  current: AccountRow,
+  nextRole: AccountRole,
+  nextStatus: AccountStatus,
+) {
+  const removesActiveAdmin =
+    current.role === 'admin' &&
+    current.status === 'active' &&
+    (nextRole !== 'admin' || nextStatus !== 'active');
+
+  if (
+    removesActiveAdmin &&
+    (await countOtherActiveAdmins(supabase, current.user_id)) === 0
+  ) {
+    throw new AccountAdminError('cannot_remove_last_admin', 409);
+  }
 }
 
 async function canBootstrapAdmin(supabase: SupabaseClient, user: User) {
@@ -158,14 +215,23 @@ async function canBootstrapAdmin(supabase: SupabaseClient, user: User) {
     return user.email?.trim().toLowerCase() === configuredEmail;
   }
 
-  // Safe zero-config local bootstrap: only a deployment with exactly one auth
-  // user may promote that sole existing account automatically.
+  // Backward-compatible upgrade path for installations that existed before
+  // first-user bootstrap: a sole pre-existing auth account may become admin.
   const { data, error } = await supabase.auth.admin.listUsers({
     page: 1,
     perPage: 2,
   });
   if (error) throw new AccountAdminError('failed_to_check_admin_bootstrap', 500);
   return data.users.length === 1 && data.users[0]?.id === user.id;
+}
+
+async function bootstrapAvailable(supabase: SupabaseClient) {
+  const { data, error } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 1,
+  });
+  if (error) throw new AccountAdminError('failed_to_check_bootstrap', 500);
+  return data.users.length === 0;
 }
 
 export async function getAccountAccess(
@@ -184,7 +250,8 @@ export async function getAccountAccess(
     !(await hasActiveAdmin(supabase)) &&
     (await canBootstrapAdmin(supabase, user))
   ) {
-    const { data, error } = await fromAccountTable(supabase, 'user_accounts')
+    const { data, error } = await supabase
+      .from('user_accounts')
       .update({ role: 'admin', status: 'active' })
       .eq('user_id', user.id)
       .select('user_id,username,contact_email,role,status')
@@ -211,12 +278,11 @@ export async function requireAdmin(user: User): Promise<AccountAccess> {
   return access;
 }
 
-export async function getRegistrationSettings(): Promise<RegistrationSettings> {
-  const supabase = getServiceRoleSupabaseClient();
-  const { data, error } = await fromAccountTable(
-    supabase,
-    'registration_settings',
-  )
+async function loadRegistrationSettings(
+  supabase: SupabaseClient,
+): Promise<RegistrationSettings> {
+  const { data, error } = await supabase
+    .from('registration_settings')
     .select(
       'id,allow_registration,require_admin_approval,identity_policy,allowed_social_providers',
     )
@@ -233,9 +299,18 @@ export async function getRegistrationSettings(): Promise<RegistrationSettings> {
   };
 }
 
+export async function getRegistrationSettings(): Promise<RegistrationState> {
+  const supabase = getServiceRoleSupabaseClient();
+  const [settings, isBootstrapAvailable] = await Promise.all([
+    loadRegistrationSettings(supabase),
+    bootstrapAvailable(supabase),
+  ]);
+  return { ...settings, bootstrapAvailable: isBootstrapAvailable };
+}
+
 export async function updateRegistrationSettings(
   input: RegistrationSettings,
-): Promise<RegistrationSettings> {
+): Promise<RegistrationState> {
   if (!['email', 'social', 'email_or_social'].includes(input.identityPolicy)) {
     throw new AccountAdminError('invalid_identity_policy');
   }
@@ -247,28 +322,69 @@ export async function updateRegistrationSettings(
     ),
   );
   if (
-    (input.identityPolicy === 'social' ||
-      input.identityPolicy === 'email_or_social') &&
-    allowedSocialProviders.length === 0 &&
-    input.identityPolicy === 'social'
+    input.identityPolicy === 'social' &&
+    allowedSocialProviders.length === 0
   ) {
     throw new AccountAdminError('social_provider_required');
   }
 
   const supabase = getServiceRoleSupabaseClient();
-  const { error } = await fromAccountTable(supabase, 'registration_settings')
-    .upsert(
-      {
-        id: 1,
-        allow_registration: Boolean(input.allowRegistration),
-        require_admin_approval: Boolean(input.requireAdminApproval),
-        identity_policy: input.identityPolicy,
-        allowed_social_providers: allowedSocialProviders,
-      },
-      { onConflict: 'id' },
-    );
+  const { error } = await supabase.from('registration_settings').upsert(
+    {
+      id: 1,
+      allow_registration: Boolean(input.allowRegistration),
+      require_admin_approval: Boolean(input.requireAdminApproval),
+      identity_policy: input.identityPolicy,
+      allowed_social_providers: allowedSocialProviders,
+    },
+    { onConflict: 'id' },
+  );
   if (error) throw new AccountAdminError('failed_to_update_registration', 500);
   return getRegistrationSettings();
+}
+
+export type BootstrapFirstAdminInput = {
+  identifier: string;
+  password: string;
+};
+
+export async function bootstrapFirstAdmin(input: BootstrapFirstAdminInput) {
+  if (input.password.length < 6) {
+    throw new AccountAdminError('password_too_short');
+  }
+
+  const credentials = normalizeBootstrapIdentifier(input.identifier);
+  const supabase = getServiceRoleSupabaseClient();
+  if (!(await bootstrapAvailable(supabase))) {
+    throw new AccountAdminError('bootstrap_unavailable', 409);
+  }
+
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: credentials.authEmail,
+    password: input.password,
+    email_confirm: true,
+    app_metadata: { pcad_bootstrap: true },
+    user_metadata: { full_name: credentials.displayName },
+  });
+
+  if (error || !data.user) {
+    if (!(await bootstrapAvailable(supabase))) {
+      throw new AccountAdminError('bootstrap_unavailable', 409);
+    }
+    throw new AccountAdminError('failed_to_create_bootstrap_admin', 500);
+  }
+
+  const account = await getAccountRow(supabase, data.user.id);
+  if (!account || account.role !== 'admin' || account.status !== 'active') {
+    await supabase.auth.admin.deleteUser(data.user.id);
+    throw new AccountAdminError('bootstrap_unavailable', 409);
+  }
+
+  return {
+    userId: data.user.id,
+    username: credentials.username,
+    email: credentials.contactEmail,
+  };
 }
 
 async function listAuthUsers(supabase: SupabaseClient): Promise<User[]> {
@@ -286,10 +402,9 @@ async function listAuthUsers(supabase: SupabaseClient): Promise<User[]> {
 export async function listAdminUsers(): Promise<AdminUser[]> {
   const supabase = getServiceRoleSupabaseClient();
   const users = await listAuthUsers(supabase);
-  const { data: accountData, error: accountError } = await fromAccountTable(
-    supabase,
-    'user_accounts',
-  ).select('user_id,username,contact_email,role,status');
+  const { data: accountData, error: accountError } = await supabase
+    .from('user_accounts')
+    .select('user_id,username,contact_email,role,status');
   if (accountError) throw new AccountAdminError('failed_to_list_accounts', 500);
 
   const { data: profileData, error: profileError } = await supabase
@@ -344,7 +459,8 @@ export async function createLocalUser(input: CreateLocalUserInput) {
   }
 
   const supabase = getServiceRoleSupabaseClient();
-  const { data: existing } = await fromAccountTable(supabase, 'user_accounts')
+  const { data: existing } = await supabase
+    .from('user_accounts')
     .select('user_id')
     .eq('username', username)
     .maybeSingle();
@@ -354,6 +470,7 @@ export async function createLocalUser(input: CreateLocalUserInput) {
     email: localAuthEmail(username),
     password: input.password,
     email_confirm: true,
+    app_metadata: { pcad_admin_created: true },
     user_metadata: {
       full_name: input.fullName?.trim() || username,
       pcad_local_account: true,
@@ -363,10 +480,7 @@ export async function createLocalUser(input: CreateLocalUserInput) {
     throw new AccountAdminError('failed_to_create_user', 500);
   }
 
-  const { error: accountError } = await fromAccountTable(
-    supabase,
-    'user_accounts',
-  ).upsert(
+  const { error: accountError } = await supabase.from('user_accounts').upsert(
     {
       user_id: data.user.id,
       username,
@@ -391,6 +505,7 @@ export type UpdateAdminUserInput = {
   password?: string;
   fullName?: string;
   contactEmail?: string | null;
+  role?: AccountRole;
   status?: AccountStatus;
 };
 
@@ -402,14 +517,20 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
   let account = await getAccountRow(supabase, user.id);
   if (!account) account = await materializeLegacyAccount(supabase, user);
 
+  if (input.role && !['admin', 'user'].includes(input.role)) {
+    throw new AccountAdminError('invalid_account_role');
+  }
   if (input.status && !['pending', 'active', 'disabled'].includes(input.status)) {
     throw new AccountAdminError('invalid_account_status');
   }
-  if (account.role === 'admin' && input.status && input.status !== 'active') {
-    throw new AccountAdminError('cannot_disable_admin', 409);
-  }
 
-  const accountUpdates: Record<string, unknown> = {};
+  const nextRole = input.role ?? account.role;
+  const nextStatus = input.status ?? account.status;
+  await assertActiveAdminInvariant(supabase, account, nextRole, nextStatus);
+
+  const accountUpdates: Partial<
+    Pick<AccountRow, 'username' | 'contact_email' | 'role' | 'status'>
+  > = {};
   let oldAuthEmail: string | null = null;
 
   if (input.username !== undefined) {
@@ -417,10 +538,8 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
       throw new AccountAdminError('username_requires_local_account', 409);
     }
     const username = validateUsername(input.username);
-    const { data: conflicting } = await fromAccountTable(
-      supabase,
-      'user_accounts',
-    )
+    const { data: conflicting } = await supabase
+      .from('user_accounts')
       .select('user_id')
       .eq('username', username)
       .neq('user_id', user.id)
@@ -477,13 +596,12 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
     }
     accountUpdates.contact_email = contactEmail;
   }
+  if (input.role !== undefined) accountUpdates.role = input.role;
   if (input.status !== undefined) accountUpdates.status = input.status;
 
   if (Object.keys(accountUpdates).length > 0) {
-    const { error: accountError } = await fromAccountTable(
-      supabase,
-      'user_accounts',
-    )
+    const { error: accountError } = await supabase
+      .from('user_accounts')
       .update(accountUpdates)
       .eq('user_id', user.id);
     if (accountError) {
@@ -503,14 +621,9 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
 export async function assertUserCanBeDeleted(userId: string) {
   const supabase = getServiceRoleSupabaseClient();
   const row = await getAccountRow(supabase, userId);
-  if (!row || row.role !== 'admin') return;
+  if (!row || row.role !== 'admin' || row.status !== 'active') return;
 
-  const { count, error } = await fromAccountTable(supabase, 'user_accounts')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('role', 'admin')
-    .eq('status', 'active');
-  if (error) throw new AccountAdminError('failed_to_check_admin', 500);
-  if ((count ?? 0) <= 1) {
-    throw new AccountAdminError('cannot_delete_last_admin', 409);
+  if ((await countOtherActiveAdmins(supabase, userId)) === 0) {
+    throw new AccountAdminError('cannot_remove_last_admin', 409);
   }
 }

@@ -11,6 +11,7 @@ import {
 import {
   AccountAdminError,
   assertUserCanBeDeleted,
+  bootstrapFirstAdmin,
   createLocalUser,
   getAccountAccess,
   getRegistrationSettings,
@@ -18,6 +19,7 @@ import {
   requireAdmin,
   updateAdminUser,
   updateRegistrationSettings,
+  type AccountRole,
   type AccountStatus,
   type RegistrationIdentityPolicy,
 } from '@/server/accountAdmin';
@@ -71,6 +73,12 @@ export const Route = createFileRoute('/api/delete-user')({
         const body = await request.json().catch(() => ({}));
 
         try {
+          if (isRecord(body) && body.action === 'bootstrap-admin') {
+            const identifier = stringValue(body, 'identifier') ?? '';
+            const password = stringValue(body, 'password') ?? '';
+            return json(await bootstrapFirstAdmin({ identifier, password }), 201);
+          }
+
           const user = await requireUser(request);
 
           // Backward-compatible self-delete contract used by the existing
@@ -104,7 +112,9 @@ export const Route = createFileRoute('/api/delete-user')({
             const userId = stringValue(body, 'userId');
             if (!userId) return json({ error: 'user_id_required' }, 400);
             const statusValue = stringValue(body, 'status');
+            const roleValue = stringValue(body, 'role');
             const status = statusValue as AccountStatus | undefined;
+            const role = roleValue as AccountRole | undefined;
             return json(
               await updateAdminUser({
                 userId,
@@ -124,6 +134,7 @@ export const Route = createFileRoute('/api/delete-user')({
                   Object.prototype.hasOwnProperty.call(body, 'contactEmail')
                     ? stringValue(body, 'contactEmail') ?? null
                     : undefined,
+                role,
                 status,
               }),
             );
