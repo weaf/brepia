@@ -205,7 +205,9 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE CONSTRAINT TRIGGER enforce_first_admin_bootstrap_on_auth_user_created
+DROP TRIGGER IF EXISTS enforce_first_admin_bootstrap_on_auth_user_created ON auth.users;
+
+CREATE CONSTRAINT TRIGGER enforce_first_admin_bootstrap_on_auth_user_created
   AFTER INSERT ON auth.users
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION public.enforce_first_admin_bootstrap();
