@@ -30,3 +30,7 @@ CREATE POLICY "Everyone can view meshes associated with public conversations" ON
 CREATE POLICY "Users can manage their meshes" ON "public"."meshes" USING ( (SELECT "auth"."uid"()) = "user_id" );
 
 ALTER TABLE "public"."meshes" ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE "public"."meshes" TO anon;
+GRANT ALL ON TABLE "public"."meshes" TO authenticated;
+GRANT ALL ON TABLE "public"."meshes" TO service_role;

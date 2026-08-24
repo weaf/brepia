@@ -151,7 +151,9 @@ async function currentLeafImageIds(
     .eq('conversation_id', conversationId)
     .maybeSingle();
   if (error) {
-    throw new Error(`Failed to resolve Creative reference images: ${error.message}`);
+    throw new Error(
+      `Failed to resolve Creative reference images: ${error.message}`,
+    );
   }
   if (!data || data.role !== 'user') return [];
   return imageIdsFromMessageParts(data.parts);
@@ -211,7 +213,9 @@ async function imageDataUrl(
   return `data:${mediaType};base64,${bytes.toString('base64')}`;
 }
 
-function parseDeterministicMeshEdit(text: string | undefined): MeshTransform | null {
+function parseDeterministicMeshEdit(
+  text: string | undefined,
+): MeshTransform | null {
   if (!text) return null;
   const value = text.toLowerCase();
   let scaleX = 1;
@@ -236,7 +240,12 @@ function parseDeterministicMeshEdit(text: string | undefined): MeshTransform | n
   apply([/\bnarrower\b/, /\bsmalare\b/], 'x', 0.8, 'narrower');
   apply([/\btaller\b/, /\bhigher\b/, /\bhögre\b/], 'y', 1.25, 'taller');
   apply([/\bshorter\b/, /\blägre\b/], 'y', 0.8, 'shorter');
-  apply([/\bthicker\b/, /\bdeeper\b/, /\btjockare\b/, /\bdjupare\b/], 'z', 1.25, 'thicker');
+  apply(
+    [/\bthicker\b/, /\bdeeper\b/, /\btjockare\b/, /\bdjupare\b/],
+    'z',
+    1.25,
+    'thicker',
+  );
   apply([/\bthinner\b/, /\bshallower\b/, /\btunnare\b/], 'z', 0.8, 'thinner');
   apply([/\bbigger\b/, /\blarger\b/, /\bstörre\b/], 'all', 1.2, 'larger');
   apply([/\bsmaller\b/, /\bmindre\b/], 'all', 0.8, 'smaller');
@@ -248,7 +257,9 @@ function parseDeterministicMeshEdit(text: string | undefined): MeshTransform | n
 function paddedJsonChunk(value: unknown): Buffer {
   const raw = Buffer.from(JSON.stringify(value), 'utf8');
   const padding = (4 - (raw.length % 4)) % 4;
-  return padding === 0 ? raw : Buffer.concat([raw, Buffer.alloc(padding, 0x20)]);
+  return padding === 0
+    ? raw
+    : Buffer.concat([raw, Buffer.alloc(padding, 0x20)]);
 }
 
 export function transformGlbScale(
@@ -270,7 +281,8 @@ export function transformGlbScale(
     const type = input.readUInt32LE(offset + 4);
     const start = offset + 8;
     const end = start + length;
-    if (end > input.length) throw new Error('Source GLB contains an invalid chunk');
+    if (end > input.length)
+      throw new Error('Source GLB contains an invalid chunk');
     chunks.push({ type, data: input.subarray(start, end) });
     offset = end;
   }
@@ -279,6 +291,7 @@ export function transformGlbScale(
   if (!jsonChunk) throw new Error('Source GLB has no JSON chunk');
 
   const parsed = JSON.parse(
+    // eslint-disable-next-line no-control-regex
     jsonChunk.data.toString('utf8').replace(/[\u0000\u0020]+$/g, ''),
   ) as Record<string, unknown>;
   const scenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
@@ -343,11 +356,15 @@ async function loadOwnedMeshBytes({
     .eq('user_id', userId)
     .eq('conversation_id', conversationId)
     .maybeSingle();
-  if (error) throw new Error(`Failed to load source mesh metadata: ${error.message}`);
+  if (error)
+    throw new Error(`Failed to load source mesh metadata: ${error.message}`);
   if (!mesh) throw new Error('Source mesh was not found in this conversation');
-  if (mesh.status !== 'success') throw new Error('Source mesh is not ready to edit');
+  if (mesh.status !== 'success')
+    throw new Error('Source mesh is not ready to edit');
   if (mesh.file_type !== 'glb') {
-    throw new Error('Local Creative Mesh Editing v1 currently supports GLB sources only');
+    throw new Error(
+      'Local Creative Mesh Editing v1 currently supports GLB sources only',
+    );
   }
 
   const { data, error: downloadError } = await supabase.storage
@@ -595,9 +612,9 @@ export async function handleLocalMeshRequest(
   request: Request,
   parsedBody?: unknown,
 ): Promise<Response> {
-  const body = (isRecord(parsedBody)
-    ? parsedBody
-    : await request.json().catch(() => null)) as LocalMeshRequestBody | null;
+  const body = (
+    isRecord(parsedBody) ? parsedBody : await request.json().catch(() => null)
+  ) as LocalMeshRequestBody | null;
   if (!body) return localError('Invalid local mesh request body');
 
   const model = body.model;
@@ -697,13 +714,19 @@ export async function handleLocalMeshRequest(
     }
   }
 
-  localMeshLog('job-create', body.mesh ? 'creating local mesh edit job' : 'creating local mesh generation job', {
-    model,
-    conversationId,
-    imageCount: imageIds.length,
-    sourceMeshId: body.mesh,
-    transform: transform?.label,
-  });
+  localMeshLog(
+    'job-create',
+    body.mesh
+      ? 'creating local mesh edit job'
+      : 'creating local mesh generation job',
+    {
+      model,
+      conversationId,
+      imageCount: imageIds.length,
+      sourceMeshId: body.mesh,
+      transform: transform?.label,
+    },
+  );
   const { data: meshData, error: meshError } = await supabase
     .from('meshes')
     .insert({
@@ -715,7 +738,9 @@ export async function handleLocalMeshRequest(
         ...(text ? { text } : {}),
         ...(imageIds.length > 0 ? { images: imageIds } : {}),
         ...(body.mesh ? { mesh: body.mesh } : {}),
-        ...(transform ? { transform: { scale: transform.scale, label: transform.label } } : {}),
+        ...(transform
+          ? { transform: { scale: transform.scale, label: transform.label } }
+          : {}),
         model,
       },
     })

@@ -14,20 +14,19 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { GoogleIcon } from '@/components/icons/CompanyIcons';
 import { validateRedirectUrl } from '@/lib/utils';
+import { getRegistrationSettings } from '@/services/accountAdminService';
 
 function getAppRedirectUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-
   return `${window.location.origin}${basePath}${path}`;
 }
 
 function getRedirectNavigationOptions(path: string) {
   const url = new URL(path, window.location.origin);
   const search = Object.fromEntries(url.searchParams.entries());
-
   return {
     to: url.pathname,
     search,
@@ -35,13 +34,20 @@ function getRedirectNavigationOptions(path: string) {
   };
 }
 
+function passwordAuthEmail(identifier: string) {
+  const normalized = identifier.trim().toLowerCase();
+  return normalized.includes('@') ? normalized : `${normalized}@pcad.invalid`;
+}
+
 export function SignInView() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'password' | 'magiclink'>('password');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -53,66 +59,53 @@ export function SignInView() {
     isLoading: authLoading,
   } = useAuth();
   const { toast } = useToast();
+  const { data: registration } = useQuery({
+    queryKey: ['registration-settings'],
+    queryFn: getRegistrationSettings,
+    staleTime: 30_000,
+  });
 
-  // Get and validate redirect parameter from URL
   const searchParams = new URLSearchParams(location.searchStr);
-  const rawRedirectPath = searchParams.get('redirect');
-  const redirectPath = validateRedirectUrl(rawRedirectPath);
+  const redirectPath = validateRedirectUrl(searchParams.get('redirect'));
 
-  // Redirect to home if already authenticated
   useEffect(() => {
-    if (!authLoading && session && user) {
-      navigate({ to: '/', replace: true });
-    }
+    if (!authLoading && session && user) navigate({ to: '/', replace: true });
   }, [session, user, authLoading, navigate]);
 
   const { mutate: signInWithGoogle, isPending: isSigningInWithGoogle } =
     useMutation({
       mutationFn: async () => {
-        // Use Supabase's built-in redirectTo parameter with validated URL
-        const redirectTo =
-          redirectPath !== '/'
-            ? getAppRedirectUrl(redirectPath)
-            : getAppRedirectUrl('/');
-
-        await supabase.auth.signInWithOAuth({
+        const redirectTo = getAppRedirectUrl(redirectPath);
+        const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: {
-            redirectTo,
-          },
+          options: { redirectTo },
         });
+        if (error) throw error;
       },
-      onError: (error) => {
+      onError: (error) =>
         toast({
           title: 'Whoopsies',
           description:
             error instanceof Error ? error.message : 'Something went wrong',
           variant: 'destructive',
-        });
-      },
+        }),
     });
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-
     try {
-      await signIn(email, password);
-      // Navigate to validated redirect path
+      await signIn(passwordAuthEmail(identifier), password);
       navigate(getRedirectNavigationOptions(redirectPath));
     } catch (err) {
-      const error = err as AuthError;
+      const authError = err as AuthError;
       const message =
-        error.message === 'Invalid login credentials'
-          ? 'Invalid email or password'
+        authError.message === 'Invalid login credentials'
+          ? 'Invalid username/email or password'
           : 'An error occurred while signing in';
       setError(message);
-      toast({
-        title: 'Whoopsies',
-        description: message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Whoopsies', description: message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -120,18 +113,23 @@ export function SignInView() {
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!identifier.includes('@')) {
+      const message = 'Enter an email address to use email sign-in.';
+      setError(message);
+      toast({ title: 'Email required', description: message, variant: 'destructive' });
+      return;
+    }
     setIsLoading(true);
     setError(null);
-
     try {
-      await signInWithMagicLink(email);
+      await signInWithMagicLink(identifier.trim());
       setMagicLinkSent(true);
     } catch (err) {
-      const error = err as AuthError;
-      setError(error.message);
+      const authError = err as AuthError;
+      setError(authError.message);
       toast({
         title: 'Whoopsies',
-        description: error.message,
+        description: authError.message,
         variant: 'destructive',
       });
     } finally {
@@ -139,22 +137,19 @@ export function SignInView() {
     }
   };
 
-  const [otp, setOtp] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
-
   const handleVerifyOtp = async () => {
     if (otp.length !== 6) return;
     setIsVerifying(true);
     setError(null);
     try {
-      await verifyOtp(email, otp);
+      await verifyOtp(identifier.trim(), otp);
       navigate(getRedirectNavigationOptions(redirectPath));
     } catch (err) {
-      const error = err as AuthError;
-      setError(error.message);
+      const authError = err as AuthError;
+      setError(authError.message);
       toast({
         title: 'Whoopsies',
-        description: error.message,
+        description: authError.message,
         variant: 'destructive',
       });
     } finally {
@@ -176,41 +171,32 @@ export function SignInView() {
               }}
               className="flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-white"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Back
+              <ArrowLeft className="h-4 w-4" /> Back
             </button>
-
             <div className="flex flex-col items-center gap-2 py-2">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-adam-blue/20">
                 <Mail className="h-6 w-6 text-adam-blue" />
               </div>
-              <h3 className="text-lg font-semibold text-white">
-                Check your email
-              </h3>
+              <h3 className="text-lg font-semibold text-white">Check your email</h3>
               <p className="text-center text-sm text-gray-400">
-                We sent a magic link to{' '}
-                <span className="font-medium text-white">{email}</span>
+                We sent a sign-in email to{' '}
+                <span className="font-medium text-white">{identifier}</span>
               </p>
             </div>
-
             {error && (
               <div className="rounded-md bg-red-900/50 p-3 text-sm text-red-200">
                 {error}
               </div>
             )}
-
             <div className="relative flex items-center gap-3 py-2">
               <div className="h-px flex-1 bg-gray-700" />
-              <span className="text-xs text-gray-500">
-                or enter code manually
-              </span>
+              <span className="text-xs text-gray-500">or enter code manually</span>
               <div className="h-px flex-1 bg-gray-700" />
             </div>
-
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                handleVerifyOtp();
+                void handleVerifyOtp();
               }}
               className="flex flex-col gap-4"
             >
@@ -219,41 +205,30 @@ export function SignInView() {
                   maxLength={6}
                   value={otp}
                   onChange={setOtp}
-                  onComplete={handleVerifyOtp}
+                  onComplete={() => void handleVerifyOtp()}
                   className="gap-2"
                 >
                   <InputOTPGroup className="text-white">
-                    <InputOTPSlot
-                      index={0}
-                      className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
-                    />
-                    <InputOTPSlot
-                      index={1}
-                      className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
-                    />
-                    <InputOTPSlot
-                      index={2}
-                      className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
-                    />
+                    {[0, 1, 2].map((index) => (
+                      <InputOTPSlot
+                        key={index}
+                        index={index}
+                        className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
+                      />
+                    ))}
                   </InputOTPGroup>
                   <InputOTPSeparator className="text-gray-500" />
                   <InputOTPGroup className="text-white">
-                    <InputOTPSlot
-                      index={3}
-                      className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
-                    />
-                    <InputOTPSlot
-                      index={4}
-                      className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
-                    />
-                    <InputOTPSlot
-                      index={5}
-                      className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
-                    />
+                    {[3, 4, 5].map((index) => (
+                      <InputOTPSlot
+                        key={index}
+                        index={index}
+                        className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
+                      />
+                    ))}
                   </InputOTPGroup>
                 </InputOTP>
               </div>
-
               <Button
                 type="submit"
                 variant="outline"
@@ -261,10 +236,7 @@ export function SignInView() {
                 disabled={otp.length !== 6 || isVerifying}
               >
                 {isVerifying ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
-                  </>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
                 ) : (
                   'Verify Code'
                 )}
@@ -281,24 +253,21 @@ export function SignInView() {
       <div className="w-full max-w-md">
         <div className="flex flex-col gap-4 rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
           <div className="mb-4 flex flex-col items-center justify-center">
-            <div>
-              <img
-                src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-                alt="CADAM Logo"
-                className="w-32"
-              />
-            </div>
+            <img
+              src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
+              alt="CADAM Logo"
+              className="w-32"
+            />
           </div>
-          <div className="w-full">
-            <Button
-              onClick={() => signInWithGoogle()}
-              className="flex w-full items-center gap-2 hover:bg-adam-blue/10"
-              disabled={isSigningInWithGoogle}
-            >
-              <GoogleIcon className="w-4" />
-              <span>Continue with Google</span>
-            </Button>
-          </div>
+
+          <Button
+            onClick={() => signInWithGoogle()}
+            className="flex w-full items-center gap-2 hover:bg-adam-blue/10"
+            disabled={isSigningInWithGoogle}
+          >
+            <GoogleIcon className="w-4" />
+            <span>Continue with Google</span>
+          </Button>
 
           <form
             onSubmit={mode === 'password' ? handleSignIn : handleMagicLink}
@@ -311,16 +280,19 @@ export function SignInView() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-white">
-                Email
+              <Label htmlFor="identifier" className="text-white">
+                {mode === 'password' ? 'Username or email' : 'Email'}
               </Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="identifier"
+                type={mode === 'password' ? 'text' : 'email'}
+                placeholder={
+                  mode === 'password' ? 'Enter username or email' : 'Enter your email'
+                }
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
+                autoComplete={mode === 'password' ? 'username' : 'email'}
                 className="border-gray-700 bg-adam-bg-dark px-4 text-white placeholder:text-gray-400 max-[430px]:text-base"
               />
             </div>
@@ -328,15 +300,15 @@ export function SignInView() {
             {mode === 'password' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-white">
-                    Password
-                  </Label>
-                  <Link
-                    to="/reset-password"
-                    className="text-sm text-adam-blue hover:text-adam-blue/80"
-                  >
-                    Forgot password?
-                  </Link>
+                  <Label htmlFor="password" className="text-white">Password</Label>
+                  {identifier.includes('@') && (
+                    <Link
+                      to="/reset-password"
+                      className="text-sm text-adam-blue hover:text-adam-blue/80"
+                    >
+                      Forgot password?
+                    </Link>
+                  )}
                 </div>
                 <Input
                   id="password"
@@ -345,6 +317,7 @@ export function SignInView() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="current-password"
                   className="border-gray-700 bg-adam-bg-dark px-4 text-white placeholder:text-gray-400 max-[430px]:text-base"
                 />
               </div>
@@ -360,33 +333,29 @@ export function SignInView() {
                 }}
               >
                 {mode === 'password'
-                  ? 'Sign in with magic link instead'
+                  ? 'Sign in with email code instead'
                   : 'Sign in with password instead'}
               </button>
             </div>
 
             <Button type="submit" className="w-full p-6" disabled={isLoading}>
               {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {mode === 'password' ? 'Signing in...' : 'Sending...'}
-                </>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'password' ? 'Signing in...' : 'Sending...'}</>
               ) : mode === 'password' ? (
                 'Sign In'
               ) : (
-                'Send Magic Link'
+                'Send Sign-in Email'
               )}
             </Button>
 
-            <div className="text-center text-sm text-white">
-              Don't have an account?{' '}
-              <Link
-                to="/signup"
-                className="text-adam-blue hover:text-adam-blue/80"
-              >
-                Sign up
-              </Link>
-            </div>
+            {registration?.allowRegistration && (
+              <div className="text-center text-sm text-white">
+                Don't have an account?{' '}
+                <Link to="/signup" className="text-adam-blue hover:underline">
+                  Sign up
+                </Link>
+              </div>
+            )}
           </form>
         </div>
       </div>

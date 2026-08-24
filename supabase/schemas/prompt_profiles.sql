@@ -1,6 +1,6 @@
--- P01C: prompt_profiles table schema definition
--- Generated from migration: 20260816135311_prompt_profiles.sql
--- Updated: 20260816 P04G added mode column with overlay/fork values
+-- P01C: prompt_profiles final declarative schema
+-- Base: 20260816135311_prompt_profiles.sql
+-- Mode: 20260816140000_add_prompt_profile_mode.sql
 
 CREATE TABLE IF NOT EXISTS "public"."prompt_profiles" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
@@ -15,10 +15,25 @@ CREATE TABLE IF NOT EXISTS "public"."prompt_profiles" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
-ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_pkey" PRIMARY KEY USING INDEX IF NOT EXISTS "prompt_profiles_pkey";
+CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_pkey" ON "public"."prompt_profiles" USING btree ("id");
+ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_pkey" PRIMARY KEY USING INDEX "prompt_profiles_pkey";
+ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
-ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON UPDATE CASCADE ON DELETE CASCADE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_user_name_unique" ON "public"."prompt_profiles" USING btree ("user_id", "lower"(name)) WHERE archived = false;
-
+CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_user_name_unique" ON "public"."prompt_profiles" USING btree ("user_id", lower("name")) WHERE archived = false;
 CREATE INDEX IF NOT EXISTS "prompt_profiles_user_archived_idx" ON "public"."prompt_profiles" USING btree ("user_id", "archived");
+
+ALTER TABLE "public"."prompt_profiles" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "prompt_profiles_select" ON "public"."prompt_profiles"
+    FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "prompt_profiles_insert" ON "public"."prompt_profiles"
+    FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "prompt_profiles_update" ON "public"."prompt_profiles"
+    FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "prompt_profiles_delete" ON "public"."prompt_profiles"
+    FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
+GRANT ALL ON TABLE "public"."prompt_profiles" TO anon;
+GRANT ALL ON TABLE "public"."prompt_profiles" TO authenticated;
+GRANT ALL ON TABLE "public"."prompt_profiles" TO service_role;
+GRANT ALL ON TABLE "public"."prompt_profiles" TO postgres;
