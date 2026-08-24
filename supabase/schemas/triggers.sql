@@ -58,8 +58,8 @@ CREATE OR REPLACE TRIGGER update_registration_settings_updated_at
 
 -- Profile + pCAD account creation trigger for new Supabase users.
 -- The first password/email identity is serialized with a transaction advisory
--- lock and becomes the initial active administrator. This prevents concurrent
--- first-registration attempts from creating multiple bootstrap admins.
+-- lock and becomes the initial active administrator only when it was created
+-- by pCAD's trusted server-side bootstrap flow.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -71,6 +71,7 @@ DECLARE
   configured_identity_policy text := 'email';
   configured_social_providers text[] := ARRAY['google']::text[];
   auth_provider text := COALESCE(NEW.raw_app_meta_data->>'provider', 'email');
+  bootstrap_requested boolean := COALESCE(NEW.raw_app_meta_data->>'pcad_bootstrap', 'false') = 'true';
   provider_allowed boolean := false;
   is_first_user boolean := false;
   initial_role text := 'user';
@@ -85,11 +86,17 @@ BEGIN
   INTO is_first_user
   FROM auth.users;
 
-  -- Bootstrap is deliberately password/email only. If a social identity is
-  -- somehow invoked directly while the installation is empty, abort creation
-  -- rather than orphaning the installation or granting social bootstrap admin.
-  IF is_first_user AND auth_provider <> 'email' THEN
-    RAISE EXCEPTION 'pcad_first_account_requires_password';
+  -- First-admin bootstrap is server-authorized and password/email only.
+  -- A normal client signUp() cannot set raw_app_meta_data.pcad_bootstrap, so
+  -- direct signups cannot claim administrator ownership of an empty install.
+  IF is_first_user AND (auth_provider <> 'email' OR NOT bootstrap_requested) THEN
+    RAISE EXCEPTION 'pcad_first_account_requires_bootstrap';
+  END IF;
+
+  -- A concurrent bootstrap request that loses the first-user race must fail
+  -- rather than becoming a normal pending/active registration.
+  IF bootstrap_requested AND NOT is_first_user THEN
+    RAISE EXCEPTION 'pcad_bootstrap_unavailable';
   END IF;
 
   SELECT
