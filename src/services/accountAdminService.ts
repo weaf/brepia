@@ -15,6 +15,7 @@ export const RegistrationSettingsSchema = z.object({
   requireAdminApproval: z.boolean(),
   identityPolicy: z.enum(['email', 'social', 'email_or_social']),
   allowedSocialProviders: z.array(z.string()),
+  bootstrapAvailable: z.boolean(),
 });
 
 export type RegistrationSettings = z.infer<typeof RegistrationSettingsSchema>;
@@ -66,6 +67,20 @@ function adminAction<T>(body: Record<string, unknown>, schema: z.ZodType<T>) {
 
 const SuccessSchema = z.object({ success: z.boolean() });
 
+export function bootstrapFirstAdmin(input: {
+  identifier: string;
+  password: string;
+}) {
+  return adminAction(
+    { action: 'bootstrap-admin', ...input },
+    z.object({
+      userId: z.string(),
+      username: z.string().nullable(),
+      email: z.string().nullable(),
+    }),
+  );
+}
+
 export function createLocalUser(input: {
   username: string;
   password: string;
@@ -84,6 +99,7 @@ export function updateAdminUser(input: {
   password?: string;
   fullName?: string;
   contactEmail?: string | null;
+  role?: 'admin' | 'user';
   status?: 'pending' | 'active' | 'disabled';
 }) {
   return adminAction({ action: 'update-user', ...input }, SuccessSchema);
@@ -93,7 +109,9 @@ export function deleteAdminUser(userId: string) {
   return adminAction({ action: 'delete-user', userId }, SuccessSchema);
 }
 
-export function saveRegistrationSettings(settings: RegistrationSettings) {
+export function saveRegistrationSettings(
+  settings: Omit<RegistrationSettings, 'bootstrapAvailable'>,
+) {
   return adminAction(
     { action: 'update-registration', ...settings },
     RegistrationSettingsSchema,
