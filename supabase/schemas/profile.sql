@@ -19,3 +19,7 @@ ALTER TABLE "public"."profiles" VALIDATE CONSTRAINT "profiles_user_id_fkey";
 CREATE POLICY "Users can manage their own profile" ON "public"."profiles" USING ( (SELECT "auth"."uid"()) = "user_id" );
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE "public"."profiles" TO anon;
+GRANT ALL ON TABLE "public"."profiles" TO authenticated;
+GRANT ALL ON TABLE "public"."profiles" TO service_role;
