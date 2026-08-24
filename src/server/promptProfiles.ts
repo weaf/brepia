@@ -27,6 +27,16 @@ import type {
 
 export const BUILTIN_PROFILE_ID = 'builtin:parametric';
 
+type PromptProfileMode = PromptProfileDetailDto['mode'];
+
+function parsePromptProfileMode(mode: string): PromptProfileMode {
+  if (mode === 'overlay' || mode === 'fork') {
+    return mode;
+  }
+
+  throw new Error(`Invalid prompt profile mode: ${mode}`);
+}
+
 let _cachedBuiltinFingerprint: string | null = null;
 
 /**
@@ -107,7 +117,7 @@ export async function getUserPromptProfiles(
     userId: row.user_id,
     name: row.name,
     description: row.description,
-    mode: row.mode,
+    mode: parsePromptProfileMode(row.mode),
     fingerprint: null,
     editable: true,
     deletable: true,
@@ -152,7 +162,7 @@ export async function getPromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
-    mode: data.mode,
+    mode: parsePromptProfileMode(data.mode),
     fingerprint: null,
     editable: true,
     deletable: true,
@@ -237,8 +247,10 @@ export async function updatePromptProfile(
     throw new Error('Prompt profile not found');
   }
 
+  const existingMode = parsePromptProfileMode(existing.mode);
+
   // Fork mode: cannot change mode
-  if (existing.mode === 'fork' && input.mode) {
+  if (existingMode === 'fork' && input.mode) {
     throw new Error('Cannot change mode of a forked profile');
   }
 
@@ -248,7 +260,7 @@ export async function updatePromptProfile(
       name: input.name,
       description: input.description ?? null,
       prompt_template: input.promptTemplate,
-      mode: input.mode ?? existing.mode,
+      mode: input.mode ?? existingMode,
       base_revision: input.baseRevision ?? null,
       updated_at: new Date().toISOString(),
     })
@@ -266,7 +278,7 @@ export async function updatePromptProfile(
     name: data.name,
     description: data.description,
     promptTemplate: data.prompt_template,
-    mode: data.mode,
+    mode: parsePromptProfileMode(data.mode),
     fingerprint: null,
     editable: true,
     deletable: true,
