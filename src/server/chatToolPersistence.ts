@@ -21,6 +21,17 @@ export const DANGLING_TOOL_ERROR_TEXT =
   'Tool execution did not complete (the previous request was interrupted).';
 
 /**
+ * The messages table intentionally rejects rows whose `parts` array is empty
+ * (unless the legacy `content` column is populated). AI-SDK can still invoke
+ * the UI-message `onFinish` callback with an empty response after a provider
+ * fails before emitting any assistant payload. Treat that as a transport/model
+ * failure only — there is no assistant message to persist.
+ */
+export function hasPersistableMessageParts(parts: readonly unknown[]): boolean {
+  return parts.length > 0;
+}
+
+/**
  * A message part that carries a tool call — either a statically-typed `tool-*`
  * part or the SDK's `dynamic-tool` part. Shared by the dangling check and the
  * pending check so the two can never drift out of sync (an asymmetry would let
