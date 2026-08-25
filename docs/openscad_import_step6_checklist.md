@@ -47,15 +47,25 @@ Expected architecture: parameter changes rewrite the canonical build tool input 
 
 Expected architecture: `conversations.current_message_leaf_id` is authoritative; `Tree.getPath()` rebuilds the selected branch and `ChatSession` selects the latest complete artifact on that path.
 
-## B. Fix with AI — implementation required
+## B. Fix with AI — IMPLEMENTED, MANUAL UI CHECK PENDING
 
-Audit result: `OpenSCADPreview` exposes a `fixError(error)` callback and conditionally renders the `Fix with AI` button, but `EditorView` currently mounts `OpenSCADPreview` without supplying `fixError` on desktop or mobile.
+Implementation status:
 
-Do not mark this regression green until the editor wires the button into the normal ChatSession send path without creating a second AI/chat transport.
+- [x] Add bounded compiler-diagnostic prompt builder.
+- [x] Do not duplicate the full SCAD source in the repair prompt; the active complete artifact remains authoritative.
+- [x] Route `Fix with AI` through the existing conversation submit path rather than creating a second transport/API path.
+- [x] Keep current model, execution mode, DB persistence and active leaf semantics identical to a normal user message.
+- [x] Focused prompt/submit-bridge/import regressions verified green by operator.
+- [x] Typecheck verified green by operator.
+- [x] ESLint verified green by operator.
+- [x] Production build verified green by operator.
+- [ ] Manually trigger an OpenSCAD compile error in the editor and verify `Fix with AI` creates a normal user turn and repairs the current artifact.
+
+The repair bridge is conversation-id keyed and forwards into the already-mounted normal chat submit callback. It contains no AI transport, fetch or persistence implementation of its own.
 
 ## C. Remaining Step 6 checks
 
-After A and B:
+After A and the manual B check:
 
 - STL export
 - DXF export
