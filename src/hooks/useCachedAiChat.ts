@@ -24,6 +24,7 @@ type CallbackRefs = {
 
 const callbackRefs = new Map<string, CallbackRefs>();
 const handledToolCallIds = new Map<string, Set<string>>();
+const cachedTransports = new Map<string, ReactChatInit['transport']>();
 
 function refsFor(id: string): CallbackRefs {
   let refs = callbackRefs.get(id);
@@ -66,6 +67,7 @@ function evictIfNeeded() {
     chatCache.delete(result.value);
     callbackRefs.delete(result.value);
     handledToolCallIds.delete(result.value);
+    cachedTransports.delete(result.value);
   }
 }
 
@@ -166,17 +168,25 @@ export function useCachedAiChat({
 
   const chat = useMemo(() => {
     const existing = chatCache.get(id);
-    if (existing) {
+    if (existing && cachedTransports.get(id) === transport) {
       touch(id);
       return existing;
     }
 
     const initial = initialConfigRef.current;
+    // A model / CLI-vs-Streaming change creates a new transport object in
+    // ChatSession. Rebuild the cached Chat for that conversation so the next
+    // send actually uses the selected model, while carrying the live message
+    // state forward. Previously the cache key was only conversation.id, which
+    // could silently keep using the model that was active on first mount.
+    const seedMessages = existing
+      ? ([...existing.messages] as AppUIMessage[])
+      : initial.messages;
     const created = new Chat<AppUIMessage>({
       ...initial.rest,
       id,
-      messages: initial.messages,
-      transport: initial.transport,
+      messages: seedMessages,
+      transport,
       onError: (error) => refs.onError.current?.(userFacingChatError(error)),
       onFinish: (ctx) => refs.onFinish.current?.(ctx),
       onData: (ctx) => refs.onData.current?.(ctx),
@@ -189,9 +199,10 @@ export function useCachedAiChat({
     });
 
     chatCache.set(id, created);
+    cachedTransports.set(id, transport);
     evictIfNeeded();
     return created;
-  }, [handled, id, refs]);
+  }, [handled, id, refs, transport]);
 
   // Android browsers can suspend a background tab and tear down its HTTP/SSE
   // connection. The server keeps consuming/persisting the AI stream, but the
@@ -257,13 +268,14 @@ export function createAndCacheAiChat(
     id: string;
   },
 ) {
-  const { id, sendAutomaticallyWhen, ...rest } = options;
+  const { id, sendAutomaticallyWhen, transport, ...rest } = options;
   const refs = refsFor(id);
   const handled = handledToolsFor(id);
   refs.sendAutomaticallyWhen.current = sendAutomaticallyWhen;
   const chat = new Chat<AppUIMessage>({
     ...rest,
     id,
+    transport,
     onError: (error) => refs.onError.current?.(userFacingChatError(error)),
     onFinish: (ctx) => refs.onFinish.current?.(ctx),
     onData: (ctx) => refs.onData.current?.(ctx),
@@ -276,6 +288,7 @@ export function createAndCacheAiChat(
   });
 
   chatCache.set(id, chat);
+  cachedTransports.set(id, transport);
   evictIfNeeded();
   return chat;
 }
