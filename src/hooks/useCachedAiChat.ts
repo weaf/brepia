@@ -2,6 +2,7 @@ import { Chat } from '@ai-sdk/react';
 import { useEffect, useMemo, useRef } from 'react';
 import type { AppUIMessage } from '@shared/chatAi';
 import { persistedCompletionCoversLiveTurn } from './chatCompletionReconciliation';
+import { userFacingChatError } from './chatErrorPresentation';
 
 const MAX_CACHE_SIZE = 10;
 
@@ -176,7 +177,7 @@ export function useCachedAiChat({
       id,
       messages: initial.messages,
       transport: initial.transport,
-      onError: (error) => refs.onError.current?.(error),
+      onError: (error) => refs.onError.current?.(userFacingChatError(error)),
       onFinish: (ctx) => refs.onFinish.current?.(ctx),
       onData: (ctx) => refs.onData.current?.(ctx),
       onToolCall: (ctx) => {
@@ -207,12 +208,14 @@ export function useCachedAiChat({
       isLocallyInFlight &&
       messages !== undefined &&
       persistedCompletionCoversLiveTurn(chat.messages, messages);
+    let recoveredFromPersistence = false;
 
     if (persistedCompletesLiveTurn && messages) {
       void chat.stop();
       if (messageSnapshot(chat.messages) !== messageSnapshot(messages)) {
         chat.messages = messages;
       }
+      recoveredFromPersistence = true;
     } else if (isLocallyInFlight) {
       return;
     } else if (
@@ -221,9 +224,13 @@ export function useCachedAiChat({
       messageSnapshot(chat.messages) !== messageSnapshot(messages)
     ) {
       chat.messages = messages;
+      recoveredFromPersistence = true;
     }
 
-    if (chat.status === 'error' && chat.messages.length > 0) {
+    // A genuine provider/model error must remain visible to the user. Clear a
+    // cached error only when a fresh persisted DB snapshot actually recovered
+    // the chat (for example after a mobile SSE disconnect).
+    if (chat.status === 'error' && recoveredFromPersistence) {
       chat.clearError();
     }
 
@@ -257,7 +264,7 @@ export function createAndCacheAiChat(
   const chat = new Chat<AppUIMessage>({
     ...rest,
     id,
-    onError: (error) => refs.onError.current?.(error),
+    onError: (error) => refs.onError.current?.(userFacingChatError(error)),
     onFinish: (ctx) => refs.onFinish.current?.(ctx),
     onData: (ctx) => refs.onData.current?.(ctx),
     onToolCall: (ctx) => {
