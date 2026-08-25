@@ -26,9 +26,10 @@ export type ScadDependencyIssue = {
 
 const BUNDLED_LIBRARY_ROOTS = new Set(['BOSL', 'BOSL2', 'MCAD']);
 const MAX_RETAINED_COMPILE_ERROR_CHARS = 12_000;
+const SCAD_FILENAME = /\.scad(?:\.txt)?$/i;
 
 function assertScadFilename(filename: string): void {
-  if (!/\.scad$/i.test(filename.trim())) {
+  if (!SCAD_FILENAME.test(filename.trim())) {
     throw new ScadImportError(
       'invalid_extension',
       'Choose a single OpenSCAD .scad file.',
@@ -212,7 +213,7 @@ export async function readScadImportFile(file: File): Promise<string> {
 
 export function scadImportTitle(filename: string): string {
   const basename = filename.split(/[\\/]/).at(-1) ?? filename;
-  const withoutExtension = basename.replace(/\.scad$/i, '').trim();
+  const withoutExtension = basename.replace(/\.scad(?:\.txt)?$/i, '').trim();
   return withoutExtension || 'Imported OpenSCAD model';
 }
 
