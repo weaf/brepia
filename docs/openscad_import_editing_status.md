@@ -14,7 +14,9 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 3 — Local `.scad` upload is complete and externally verified green.**
 
-**Step 4 — AI continuation is active. OpenCode streaming and CLI are manually verified. Exact imported-artifact continuity and latest-artifact selection are now automatically verified green. Refresh-before-edit and parameter-edit → AI continuity tests have been added and await operator validation.**
+**Step 4 — AI continuation is complete and externally verified green for the import-specific contract.**
+
+**Step 5 — GitHub/Gist URL import is now active.**
 
 ## Completed architecture/audit work
 
@@ -126,17 +128,23 @@ Step 3 gate closed on 2026-08-25 after the operator reported the focused/full te
 
 An earlier mobile run appeared to return to/reload the landing view and required opening the menu to find the imported model. A later run on 2026-08-25 navigated directly to the imported model as intended. The issue is therefore intermittent/not currently reproducible and does not block the import feature. Keep it as a Step 6 regression check rather than implementing a speculative fix now.
 
-## Step 4 — AI continuation — ACTIVE
+## Step 4 — AI continuation — COMPLETE
 
 - [x] Core import → first pCAD edit path verified manually through OpenCode streaming.
-- [x] Verify the first edit receives the exact complete imported artifact, not a truncated/reconstructed copy — focused AI SDK regression verified green by operator on 2026-08-25.
-- [x] Verify standard AI SDK provider boundary preserves the imported complete artifact — focused regression verified green by operator on 2026-08-25.
-- [x] Verify OpenCode CLI path — imported-model edit verified successfully by operator on 2026-08-25.
-- [x] Verify OpenCode streaming path — imported-model edit verified successfully by operator on 2026-08-25.
-- [ ] Verify refresh before first edit — DB-style reload → AI SDK continuity regression added; operator validation pending.
-- [ ] Verify parameter edit followed by AI edit — persisted edited artifact → AI SDK continuity regression added; operator validation pending.
-- [ ] Verify retry/branching/history continuity.
-- [x] Verify successive AI edits select the latest complete artifact rather than the original import at the OpenCode prompt boundary — focused regression verified green by operator on 2026-08-25.
+- [x] First edit receives the exact complete imported artifact, not a truncated/reconstructed copy.
+- [x] Standard AI SDK provider boundary preserves the complete imported artifact.
+- [x] OpenCode CLI imported-model edit verified manually.
+- [x] OpenCode streaming imported-model edit verified manually.
+- [x] Refresh before first edit preserves the imported artifact through DB-style reload → AI SDK conversion.
+- [x] Parameter edit followed by AI edit sends the persisted edited artifact rather than the original import.
+- [x] Retry/branching keeps sibling branch artifacts isolated and selected leaf determines the artifact used for continuation.
+- [x] History/restore preserves the exact complete artifact when restored as a new leaf.
+- [x] Successive AI edits select the latest complete artifact rather than the original import at the OpenCode prompt boundary.
+- [x] Focused Step 4 regression tests verified green by operator.
+- [x] Typecheck verified green by operator after Step 4 regressions.
+- [x] ESLint verified green by operator after Step 4 regressions.
+
+Step 4 gate closed on 2026-08-25 after operator reported all focused continuity regressions, typecheck and ESLint green. The import-specific continuation contract is therefore complete across standard AI SDK conversion, OpenCode CLI/streaming, refresh, parameters, branch selection and restore/history.
 
 ### Deferred cross-mode multi-turn regression
 
@@ -144,7 +152,7 @@ Observed on both OpenCode streaming and CLI: one follow-up chat after an edit wo
 
 Revisit this after the external-model work is complete. The later regression should determine whether failure originates in message-tree/leaf continuity, cached chat/session state, OpenCode session handling, transport state, or latest-artifact selection. It should explicitly test 4+ sequential edits and verify every turn starts from the immediately preceding complete artifact.
 
-## Step 5 — GitHub/Gist URL import
+## Step 5 — GitHub/Gist URL import — ACTIVE
 
 - [ ] Add GitHub blob URL normalization.
 - [ ] Add raw GitHub URL normalization.
@@ -152,6 +160,17 @@ Revisit this after the external-model work is complete. The later regression sho
 - [ ] Enforce same source validation and dependency preflight as upload.
 - [ ] Add malformed/security test cases.
 - [ ] Verify no generic arbitrary-host server fetch exists.
+
+Security contract for Step 5:
+
+- provider-specific URL parsing only;
+- reject URL credentials;
+- normalize to structured GitHub/Gist identifiers before retrieval;
+- server chooses fixed trusted GitHub API/raw destinations;
+- reject traversal and dangerous encoding forms;
+- enforce the same 256,000-byte source boundary before decode;
+- Gist must resolve to exactly one `.scad` candidate;
+- do not introduce a generic `fetch(userUrl)` endpoint.
 
 ## Step 6 — Full editor regression and product polish
 
@@ -191,4 +210,4 @@ Deferred:
 
 ## Next action
 
-Validate the new focused Step 4 refresh/parameter continuity regressions. If green, continue with retry/branch/history continuity. Do not investigate the shared third/later-turn instability yet; retain it for dedicated regression work after the external-model work.
+Implement **Step 5 — GitHub/Gist URL import** using provider-specific parsing/normalization and fixed trusted GitHub retrieval paths. Reuse the existing local SCAD validation, bounded compile and imported-artifact persistence flow unchanged wherever possible.
