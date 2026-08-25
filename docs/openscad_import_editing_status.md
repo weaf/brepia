@@ -16,7 +16,9 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 4 — AI continuation is complete and externally verified green for the import-specific contract.**
 
-**Step 5 — GitHub/Gist URL import is now active.**
+**Step 5 — GitHub/Gist URL import is complete and externally verified green.**
+
+**Step 6 — Full editor regression and product polish is now active.**
 
 ## Completed architecture/audit work
 
@@ -152,27 +154,37 @@ Observed on both OpenCode streaming and CLI: one follow-up chat after an edit wo
 
 Revisit this after the external-model work is complete. The later regression should determine whether failure originates in message-tree/leaf continuity, cached chat/session state, OpenCode session handling, transport state, or latest-artifact selection. It should explicitly test 4+ sequential edits and verify every turn starts from the immediately preceding complete artifact.
 
-## Step 5 — GitHub/Gist URL import — ACTIVE
+## Step 5 — GitHub/Gist URL import — COMPLETE
 
-- [ ] Add GitHub blob URL normalization.
-- [ ] Add raw GitHub URL normalization.
-- [ ] Add single-file Gist import.
-- [ ] Enforce same source validation and dependency preflight as upload.
-- [ ] Add malformed/security test cases.
-- [ ] Verify no generic arbitrary-host server fetch exists.
+- [x] GitHub blob URL normalization.
+- [x] Raw `raw.githubusercontent.com` URL normalization.
+- [x] Single-file Gist import with exactly one `.scad` candidate.
+- [x] Same 256,000-byte source limit, UTF-8 validation and dependency preflight as local upload.
+- [x] Provider-specific authenticated server retrieval through fixed `api.github.com` endpoints.
+- [x] Reject URL credentials, unsupported hosts, query parameters, encoded path syntax, raw/encoded traversal forms and non-SCAD file paths.
+- [x] Reject malformed/ambiguous/truncated Gist payloads.
+- [x] No generic arbitrary-host `fetch(userUrl)` server path introduced.
+- [x] Local upload and GitHub/Gist import reuse the same bounded compile → conversation → imported-artifact persistence service.
+- [x] Focused GitHub/import/security tests verified green by operator.
+- [x] Typecheck verified green by operator.
+- [x] ESLint verified green by operator.
+- [x] Production build verified green by operator.
+- [x] GitHub blob import verified manually through product UI.
+- [x] Raw GitHub import verified manually through product UI.
+- [x] Single-file Gist import verified manually through product UI.
 
-Security contract for Step 5:
+Step 5 gate closed on 2026-08-25 after the operator reported all automated validation green and manually verified all three supported URL forms in the product UI.
 
-- provider-specific URL parsing only;
-- reject URL credentials;
-- normalize to structured GitHub/Gist identifiers before retrieval;
-- server chooses fixed trusted GitHub API/raw destinations;
-- reject traversal and dangerous encoding forms;
-- enforce the same 256,000-byte source boundary before decode;
-- Gist must resolve to exactly one `.scad` candidate;
-- do not introduce a generic `fetch(userUrl)` endpoint.
+### Build warnings observed during Step 5 validation
 
-## Step 6 — Full editor regression and product polish
+The production build succeeds, but two pre-existing/general build warnings were observed and should be handled separately from the OpenSCAD import feature:
+
+- `lottie-web` uses direct `eval` inside `node_modules/lottie-web/build/player/lottie.js`; this is third-party code and is relevant to future CSP/security-hardening or dependency replacement/upgrade work.
+- Vite/Rolldown reports some minified chunks larger than 1000 kB; treat this as bundle/performance technical debt and review dynamic imports/code splitting during broader product optimization.
+
+Neither warning originates from the SCAD URL-import implementation and neither blocks Step 5.
+
+## Step 6 — Full editor regression and product polish — ACTIVE
 
 - [ ] Preview regression.
 - [ ] Parameter UI/persistence regression.
@@ -210,4 +222,4 @@ Deferred:
 
 ## Next action
 
-Implement **Step 5 — GitHub/Gist URL import** using provider-specific parsing/normalization and fixed trusted GitHub retrieval paths. Reuse the existing local SCAD validation, bounded compile and imported-artifact persistence flow unchanged wherever possible.
+Continue **Step 6 — Full editor regression and product polish**. Verify preview, parameter persistence and reload/history/branch behavior first, then Fix with AI, exports, share and conversation-workspace mirrors. Keep the shared third/later-turn OpenCode instability deferred until after the external-model work.
