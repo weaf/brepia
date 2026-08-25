@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-const MAX_SOURCE_BYTES = 256_000;
-const VALIDATION_TIMEOUT_MS = 20_000;
+import {
+  OPENSCAD_COMPILE_TIMEOUT_MS,
+  OPENSCAD_MAX_OUTPUT_BYTES,
+  OPENSCAD_MAX_SOURCE_BYTES,
+} from '@/lib/openScadLimits';
 
 export type OpenScadValidation = {
   valid: boolean;
@@ -26,7 +28,7 @@ function compile(
     );
     let diagnostics = '';
     const stop = () => child.kill('SIGKILL');
-    const timer = setTimeout(stop, VALIDATION_TIMEOUT_MS);
+    const timer = setTimeout(stop, OPENSCAD_COMPILE_TIMEOUT_MS);
     signal?.addEventListener('abort', stop, { once: true });
     child.stderr.on('data', (chunk: Buffer) => {
       diagnostics = `${diagnostics}${chunk}`.slice(-12_000);
@@ -44,17 +46,17 @@ function compile(
   });
 }
 
-/** Compile an isolated OpenSCAD candidate.  Nothing from the project is read. */
+/** Compile an isolated OpenSCAD candidate. Nothing from the project is read. */
 export async function validateOpenScad(
   code: string,
   signal?: AbortSignal,
 ): Promise<OpenScadValidation> {
-  if (Buffer.byteLength(code, 'utf8') > MAX_SOURCE_BYTES) {
+  if (Buffer.byteLength(code, 'utf8') > OPENSCAD_MAX_SOURCE_BYTES) {
     return {
       valid: false,
       exitCode: null,
       outputBytes: 0,
-      diagnostics: `OpenSCAD source exceeds ${MAX_SOURCE_BYTES} bytes.`,
+      diagnostics: `OpenSCAD source exceeds ${OPENSCAD_MAX_SOURCE_BYTES} bytes.`,
     };
   }
 
@@ -64,11 +66,29 @@ export async function validateOpenScad(
   try {
     await writeFile(sourcePath, code, 'utf8');
     const result = await compile(sourcePath, outputPath, signal);
-    const valid = result.exitCode === 0;
+    if (result.exitCode !== 0) {
+      return {
+        valid: false,
+        exitCode: result.exitCode,
+        outputBytes: 0,
+        diagnostics: result.diagnostics || null,
+      };
+    }
+
+    const outputBytes = (await stat(outputPath)).size;
+    if (outputBytes > OPENSCAD_MAX_OUTPUT_BYTES) {
+      return {
+        valid: false,
+        exitCode: result.exitCode,
+        outputBytes,
+        diagnostics: `OpenSCAD output exceeds ${OPENSCAD_MAX_OUTPUT_BYTES} bytes.`,
+      };
+    }
+
     return {
-      valid,
+      valid: true,
       exitCode: result.exitCode,
-      outputBytes: valid ? (await readFile(outputPath)).byteLength : 0,
+      outputBytes,
       diagnostics: result.diagnostics || null,
     };
   } finally {

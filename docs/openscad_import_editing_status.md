@@ -8,9 +8,13 @@ Last updated: 2026-08-25
 
 Architecture audit is complete and the V1 architecture is approved.
 
-Implementation has not started.
+**Step 1 — Render safety foundation is implemented in code, but its runtime gate is not yet closed.**
 
-## Completed
+The implementation now uses shared OpenSCAD resource limits, bounded worker requests, terminate/recreate recovery, pending-request cleanup, crash/message-error recovery, output-size guards, and replay of cached worker filesystem files after a worker reset.
+
+Focused Vitest coverage has been added for the shared limits and worker lifecycle. The tests have not been executed in the current ChatGPT execution environment because the repository has no GitHub Actions workflow and the available local container cannot resolve GitHub to clone/install the project. Do not mark Step 1 complete until the commands and manual recovery scenarios below pass in a normal pCAD checkout.
+
+## Completed architecture/audit work
 
 - [x] Verify current master commit.
 - [x] Audit current `EditorView` artifact selection and message-tree behavior.
@@ -29,21 +33,51 @@ Implementation has not started.
 - [x] Identify missing worker timeout/recovery as a V1 prerequisite.
 - [x] Record existing `Fix with AI` wiring gap for regression work.
 
-## Pending
+## Step 1 — Render safety foundation
 
-### Step 1 — Render safety foundation
+### Implemented
 
-- [ ] Add shared SCAD source-size policy.
-- [ ] Add preview-worker compile timeout.
-- [ ] Add preview-worker terminate/recreate recovery.
-- [ ] Add tool-worker compile timeout.
-- [ ] Add tool-worker terminate/recreate recovery.
-- [ ] Cleanly reject/clear pending requests on timeout/crash.
-- [ ] Add bounded output-size handling.
-- [ ] Verify normal compile after forced timeout.
-- [ ] Verify AI tool compile after forced timeout.
+- [x] Add shared SCAD source-size policy: 256,000 UTF-8 bytes.
+- [x] Share the source-size limit with native server-side OpenSCAD validation.
+- [x] Add 20,000 ms request timeout for preview/export/tool worker operations.
+- [x] Add preview-worker terminate/recreate recovery.
+- [x] Add tool-worker terminate/recreate recovery.
+- [x] Cleanly reject and clear all pending requests on timeout/crash/message error.
+- [x] Preserve ordinary compiler errors without unnecessarily discarding a healthy worker.
+- [x] Add 64 MiB combined primary/companion output-size guard.
+- [x] Enforce output limit inside the worker before returning large results.
+- [x] Enforce the same output policy in native server validation without reading an oversized output into memory.
+- [x] Replay cached worker filesystem files after a timeout/crash creates a fresh worker.
+- [x] Add focused limit tests in `tests/openScadLimits.test.ts`.
+- [x] Add focused worker lifecycle/recovery tests in `tests/openScadWorkerClient.test.ts`.
 
-### Step 2 — Imported artifact persistence primitive
+### Runtime gate still pending
+
+- [ ] Run focused Vitest tests successfully.
+- [ ] Run the full Vitest regression suite successfully.
+- [ ] Run TypeScript/typecheck successfully.
+- [ ] Run ESLint successfully.
+- [ ] Run production build successfully.
+- [ ] Verify a normal cube compiles in the real browser worker.
+- [ ] Verify a syntax error returns diagnostics without wedging the worker.
+- [ ] Verify a pathological/extreme model reaches the timeout and the worker terminates.
+- [ ] Verify a normal model compiles immediately after the forced timeout.
+- [ ] Verify an existing `import("mesh.stl")` flow rewrites its cached file after worker recovery.
+- [ ] Verify AI `build_parametric_model` compilation succeeds after a prior tool-worker timeout.
+
+Recommended automated validation:
+
+```bash
+npm test -- tests/openScadLimits.test.ts tests/openScadWorkerClient.test.ts
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Step 1 remains the active gate. **Do not start Step 2 or user-facing import until the timeout/recovery scenarios above are actually executed and pass.**
+
+## Step 2 — Imported artifact persistence primitive
 
 - [ ] Add import-event + synthetic assistant artifact persistence helper.
 - [ ] Add import provenance metadata.
@@ -55,7 +89,7 @@ Implementation has not started.
 - [ ] Verify retry/restore/branch behavior.
 - [ ] Verify workspace model revision discovery.
 
-### Step 3 — Local `.scad` upload
+## Step 3 — Local `.scad` upload
 
 - [ ] Add single-file import UI.
 - [ ] Validate `.scad`, 256 kB max and strict UTF-8.
@@ -65,7 +99,7 @@ Implementation has not started.
 - [ ] Open imported artifact as current preview.
 - [ ] Add fixtures/tests for supported and unsupported inputs.
 
-### Step 4 — AI continuation
+## Step 4 — AI continuation
 
 - [ ] Verify first user edit receives exact imported complete artifact.
 - [ ] Verify standard AI SDK provider.
@@ -75,7 +109,7 @@ Implementation has not started.
 - [ ] Verify parameter edit followed by AI edit.
 - [ ] Verify retry/branching/history continuity.
 
-### Step 5 — GitHub/Gist URL import
+## Step 5 — GitHub/Gist URL import
 
 - [ ] Add GitHub blob URL normalization.
 - [ ] Add raw GitHub URL normalization.
@@ -84,7 +118,7 @@ Implementation has not started.
 - [ ] Add malformed/security test cases.
 - [ ] Verify no generic arbitrary-host server fetch exists.
 
-### Step 6 — Full editor regression and product polish
+## Step 6 — Full editor regression and product polish
 
 - [ ] Preview regression.
 - [ ] Parameter UI/persistence regression.
@@ -120,4 +154,4 @@ Deferred:
 
 ## Next action
 
-Start **Step 1 — Render safety foundation**. Do not implement import UI before timeout/recovery behavior is proven for both the preview worker and the long-lived AI tool worker.
+Close the **Step 1 runtime gate** using the automated commands and manual worker-recovery scenarios above. If all pass, mark Step 1 complete and proceed to **Step 2 — Imported artifact persistence primitive**.
