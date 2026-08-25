@@ -18,7 +18,7 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 5 — GitHub/Gist URL import is complete and externally verified green.**
 
-**Step 6 — Full editor regression and product polish is active. Export/share/workspace verification is complete; two final product regressions remain.**
+**Step 6 — Full editor regression and product polish is complete and externally verified green.**
 
 ## Completed architecture/audit work
 
@@ -92,6 +92,8 @@ Step 2 gate closed on 2026-08-25 after operator reported all requested validatio
 - [x] Add a dedicated `Import SCAD` action on the signed-in parametric landing page.
 - [x] Keep SCAD import separate from ordinary image/STL chat attachments.
 - [x] Accept one `.scad` file only; extension check is case-insensitive.
+- [x] Accept the Android/browser filename alias `.scad.txt` while continuing to reject ordinary `.txt` files.
+- [x] Expose both `.scad` and `.scad.txt` in the mobile file picker.
 - [x] Enforce shared 256,000-byte limit before decoding.
 - [x] Strict UTF-8 decoding with optional UTF-8 BOM removal.
 - [x] Reject NUL/binary-like input.
@@ -119,16 +121,17 @@ Step 2 gate closed on 2026-08-25 after operator reported all requested validatio
 - [x] ESLint verified green by operator.
 - [x] Production build verified green by operator.
 - [x] Real `.scad` model imported successfully through the product UI.
+- [x] Android/browser `.scad.txt` filename alias verified with real SCAD files.
 - [x] Imported model persisted as a normal pCAD model/conversation and could be modified through pCAD.
 - [x] No import-path functional blocker observed in manual end-to-end use.
 
-The focused validation suite covers extension, byte limit, strict UTF-8/BOM behavior, NUL rejection, bundled-library preflight, unsupported custom/relative dependencies, external `import(...)`/`surface(...)` dependency rejection and compiler-failure classification. These edge cases do not need to remain a Step 3 release blocker after the focused and full suites passed.
+The focused validation suite covers extension, Android `.scad.txt` alias handling, byte limit, strict UTF-8/BOM behavior, NUL rejection, bundled-library preflight, unsupported custom/relative dependencies, external `import(...)`/`surface(...)` dependency rejection and compiler-failure classification. These edge cases do not need to remain a Step 3 release blocker after the focused and full suites passed.
 
-Step 3 gate closed on 2026-08-25 after the operator reported the focused/full tests and production build green and successfully imported and edited a real OpenSCAD model through pCAD.
+Step 3 gate closed on 2026-08-25 after the operator reported the focused/full tests and production build green and successfully imported and edited a real OpenSCAD model through pCAD. The later Android filename compatibility regression was also fixed and verified before final Step 6 closure.
 
 ### Mobile post-import navigation observation
 
-An earlier mobile run appeared to return to/reload the landing view and required opening the menu to find the imported model. A later run on 2026-08-25 navigated directly to the imported model as intended. The issue is therefore intermittent/not currently reproducible and does not block the import feature. Keep it as a Step 6 regression check rather than implementing a speculative fix now.
+An earlier mobile run appeared to return to/reload the landing view and required opening the menu to find the imported model. A later run on 2026-08-25 navigated directly to the imported model as intended. Repeated final mobile imports also opened the imported models correctly, so the earlier landing-view behavior was not reproduced and no speculative navigation fix was introduced.
 
 ## Step 4 — AI continuation — COMPLETE
 
@@ -161,7 +164,8 @@ Revisit this after the external-model work is complete. The later regression sho
 - [x] Single-file Gist import with exactly one `.scad` candidate.
 - [x] Same 256,000-byte source limit, UTF-8 validation and dependency preflight as local upload.
 - [x] Provider-specific authenticated server retrieval through fixed `api.github.com` endpoints.
-- [x] Reject URL credentials, unsupported hosts, query parameters, encoded path syntax, raw/encoded traversal forms and non-SCAD file paths.
+- [x] Accept normal percent-encoded GitHub file-path syntax, including encoded spaces and separators, by decoding exactly once before validation.
+- [x] Reject URL credentials, unsupported hosts, query parameters, raw/encoded traversal forms, double-encoded path syntax, backslashes/control characters and non-SCAD file paths.
 - [x] Reject malformed/ambiguous/truncated Gist payloads.
 - [x] No generic arbitrary-host `fetch(userUrl)` server path introduced.
 - [x] Local upload and GitHub/Gist import reuse the same bounded compile → conversation → imported-artifact persistence service.
@@ -169,11 +173,11 @@ Revisit this after the external-model work is complete. The later regression sho
 - [x] Typecheck verified green by operator.
 - [x] ESLint verified green by operator.
 - [x] Production build verified green by operator.
-- [x] GitHub blob import verified manually through product UI.
+- [x] GitHub blob import verified manually through product UI, including a real path containing encoded whitespace/separator syntax.
 - [x] Raw GitHub import verified manually through product UI.
 - [x] Single-file Gist import verified manually through product UI.
 
-Step 5 gate closed on 2026-08-25 after the operator reported all automated validation green and manually verified all three supported URL forms in the product UI.
+Step 5 gate closed on 2026-08-25 after the operator reported all automated validation green and manually verified all three supported URL forms in the product UI. The later encoded-path compatibility regression was also fixed with traversal/double-encoding protections retained and verified before final Step 6 closure.
 
 ### Build warnings observed during Step 5 validation
 
@@ -184,7 +188,7 @@ The production build succeeds, but two pre-existing/general build warnings were 
 
 Neither warning originates from the SCAD URL-import implementation and neither blocks Step 5.
 
-## Step 6 — Full editor regression and product polish — ACTIVE
+## Step 6 — Full editor regression and product polish — COMPLETE
 
 - [x] Preview regression.
 - [x] Parameter UI/persistence regression.
@@ -194,13 +198,21 @@ Neither warning originates from the SCAD URL-import implementation and neither b
 - [x] DXF export regression.
 - [x] Share regression.
 - [x] Conversation-workspace current/revision regression.
-- [ ] Ordinary non-imported conversation regression.
-- [ ] Recheck mobile post-import navigation over repeated imports; latest tests navigated directly to the model, so only fix if the earlier landing-view behavior is reproducible.
-- [ ] After external-model work, investigate intermittent 3rd/later chat failure across both OpenCode CLI and streaming with 4+ sequential-turn regression coverage.
+- [x] Ordinary non-imported conversation regression.
+- [x] Repeated mobile post-import navigation regression; imported models opened consistently and the earlier landing-view behavior was not reproduced, so no speculative navigation fix was added.
 
 The export/share/workspace gate was closed on 2026-08-25 after the operator reported the requested focused imported-artifact test, typecheck, ESLint and production build green and manually confirmed mobile STL/DXF export plus public share behavior working.
 
 A mobile parity defect was fixed in commit `82359c8f91afa1a6f08f213767b75ed7d810d768`: mobile STL/DXF downloads now mirror exports best-effort into the same conversation workspace as desktop while keeping the browser download primary.
+
+The final mobile import pass exposed two concrete compatibility regressions rather than the earlier intermittent navigation observation:
+
+- Android/browser file selection can expose a valid SCAD source as `*.scad.txt`; local import now accepts that specific alias while ordinary `.txt` remains rejected.
+- Legitimate GitHub file links can contain percent-encoded path characters such as `%20` and `%2F`; URL normalization now decodes exactly once, validates the decoded path, and still rejects traversal, double-encoding, backslashes and control characters before the server constructs its fixed `api.github.com` request.
+
+The operator then reported focused import tests, typecheck, ESLint and production build green and confirmed the affected files/import links work in the product.
+
+Step 6 gate closed on 2026-08-25. Steps 1–6 are complete; the feature branch is ready for final merge preparation, while the unrelated regressions below remain explicitly out of scope.
 
 ## Deferred separate regressions discovered during Step 6
 
@@ -220,7 +232,7 @@ Keep the previously observed intermittent third/later turn failure deferred unti
 
 In scope:
 
-- one `.scad` upload;
+- one `.scad` upload (including the mobile/browser `.scad.txt` filename alias for otherwise valid SCAD text);
 - one supported GitHub/Gist `.scad` URL;
 - self-contained SCAD;
 - bundled BOSL/BOSL2/MCAD include/use;
@@ -240,9 +252,6 @@ Deferred:
 
 ## Next action
 
-Finish Step 6 with the two remaining product regressions only:
+Perform the final branch/master diff and regression assessment, then prepare `feature/openscad-import-editing` for merge into `master`.
 
-1. Verify an ordinary non-imported parametric conversation still works normally end to end.
-2. Run repeated mobile SCAD imports and confirm post-import navigation consistently opens the imported model; only implement a fix if the earlier landing-view behavior can be reproduced.
-
-If both are green, close Step 6 and then decide whether to merge `feature/openscad-import-editing` into `master`. Keep the loading-state, empty-assistant-provider-failure and third/later OpenCode-turn regressions separate unless explicitly chosen as the next workstream.
+Do not merge until the operator explicitly approves the merge. Keep the loading-state, empty-assistant-provider-failure and third/later OpenCode-turn regressions separate unless explicitly chosen as the next workstream.
