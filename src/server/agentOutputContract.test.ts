@@ -31,6 +31,19 @@ describe('buildAgentOutputContract', () => {
     );
   });
 
+  it('requires non-empty code for a pCAD user request before the first build result', () => {
+    assert.ok(has('<user_request>'));
+    assert.ok(has('<pcad_build_result>'));
+    assert.ok(
+      has('code MUST be non-empty'),
+      'first CAD creation/revision step must not finish message-only',
+    );
+    assert.ok(
+      has('A message-only result is invalid'),
+      'contract must explicitly reject message-only pre-build completion',
+    );
+  });
+
   it('allows a successful build continuation to finish with empty code', () => {
     assert.ok(
       has('After <pcad_build_result>'),
