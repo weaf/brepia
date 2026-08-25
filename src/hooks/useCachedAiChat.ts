@@ -205,7 +205,7 @@ export function useCachedAiChat({
       chat.status === 'streaming' || chat.status === 'submitted';
     const persistedCompletesLiveTurn =
       isLocallyInFlight &&
-      Boolean(messages) &&
+      messages !== undefined &&
       persistedCompletionCoversLiveTurn(chat.messages, messages);
 
     if (persistedCompletesLiveTurn && messages) {
