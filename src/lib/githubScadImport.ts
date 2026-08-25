@@ -44,24 +44,55 @@ function fail(
   throw new GithubScadImportError(code, message);
 }
 
-function assertSafeRawPathname(url: URL): void {
+/**
+ * Extract the path from the original URL text before WHATWG URL parsing.
+ * `new URL()` canonicalizes dot segments, including percent-encoded forms
+ * such as `%2e%2e`, so security checks that run only on `url.pathname` are
+ * too late to distinguish a traversal-shaped input from an ordinary path.
+ */
+function rawPathname(input: string): string {
+  const schemeSeparator = input.indexOf('://');
+  if (schemeSeparator === -1) return '';
+
+  const authorityStart = schemeSeparator + 3;
+  const pathStart = input.indexOf('/', authorityStart);
+  if (pathStart === -1) return '';
+
+  const queryStart = input.indexOf('?', pathStart);
+  const fragmentStart = input.indexOf('#', pathStart);
+  const candidates = [queryStart, fragmentStart].filter(
+    (index) => index !== -1,
+  );
+  const pathEnd = candidates.length > 0 ? Math.min(...candidates) : input.length;
+  return input.slice(pathStart, pathEnd);
+}
+
+function assertSafeRawInputPath(input: string): void {
+  const pathname = rawPathname(input);
+
   // V1 deliberately rejects encoded path syntax rather than trying to
-  // canonicalize ambiguous/double-encoded traversal forms. Normal GitHub file
-  // URLs do not need encoded separators or dot segments for the supported
-  // single-file import use case.
-  if (/%[0-9a-f]{2}/i.test(url.pathname)) {
+  // canonicalize ambiguous/double-encoded traversal forms. This check must
+  // happen before `new URL()` because WHATWG normalization collapses encoded
+  // dot segments such as `%2e%2e`.
+  if (/%[0-9a-f]{2}/i.test(pathname)) {
     fail(
       'unsafe_encoding',
       'Encoded GitHub path segments are not supported for SCAD import.',
     );
   }
-  if (url.pathname.includes('\\')) {
+  if (pathname.includes('\\')) {
     fail('invalid_path', 'Backslashes are not allowed in GitHub import paths.');
+  }
+  if (
+    pathname
+      .split('/')
+      .some((segment) => segment === '.' || segment === '..')
+  ) {
+    fail('invalid_path', 'GitHub import paths may not contain dot segments.');
   }
 }
 
 function splitPath(url: URL): string[] {
-  assertSafeRawPathname(url);
   const segments = url.pathname.split('/').filter(Boolean);
   if (segments.some((segment) => segment === '.' || segment === '..')) {
     fail('invalid_path', 'GitHub import paths may not contain dot segments.');
@@ -172,6 +203,10 @@ function parseGist(url: URL): GithubScadSource {
 export function normalizeGithubScadUrl(input: string): GithubScadSource {
   const trimmed = input.trim();
   if (!trimmed) fail('invalid_url', 'Enter a GitHub or Gist URL.');
+
+  // Inspect the literal input before WHATWG URL canonicalization can erase
+  // traversal evidence such as `/models/%2e%2e/model.scad` or `/a/../b.scad`.
+  assertSafeRawInputPath(trimmed);
 
   let url: URL;
   try {
