@@ -89,7 +89,7 @@ describe('conversation workspace agent diagnostics', { concurrency: false }, () 
     });
   });
 
-  it('stores immutable idempotent per-turn summaries without raw prompts or stdout', async () => {
+  it('stores immutable first-write-wins per-turn summaries without raw prompts or stdout', async () => {
     await withWorkspaceRoot(async () => {
       await initializeConversationWorkspace({
         conversationId: CONVERSATION_ID,
@@ -131,22 +131,33 @@ describe('conversation workspace agent diagnostics', { concurrency: false }, () 
       assert.equal(raw.includes('stdout'), false);
       assert.equal(raw.includes('stderr'), false);
 
-      const eventsBeforeMismatch = (
+      const eventsBeforeReplay = (
         await readFile(conversationAgentEventsLogPath(CONVERSATION_ID), 'utf8')
       )
         .trim()
         .split('\n');
-      assert.equal(eventsBeforeMismatch.length, 1);
+      assert.equal(eventsBeforeReplay.length, 1);
 
-      await assert.rejects(
-        () =>
-          recordConversationAgentTurn({
-            ...input,
-            status: 'error',
-            error: new Error('should not overwrite'),
-          }),
-        /Immutable agent turn mismatch/,
-      );
+      const replay = await recordConversationAgentTurn({
+        ...input,
+        status: 'error',
+        error: new Error('should not overwrite'),
+      });
+      assert.equal(replay.status, 'success');
+
+      const afterReplay = JSON.parse(await readFile(path, 'utf8')) as {
+        status: string;
+        error?: unknown;
+      };
+      assert.equal(afterReplay.status, 'success');
+      assert.equal(afterReplay.error, undefined);
+
+      const eventsAfterReplay = (
+        await readFile(conversationAgentEventsLogPath(CONVERSATION_ID), 'utf8')
+      )
+        .trim()
+        .split('\n');
+      assert.equal(eventsAfterReplay.length, 1);
     });
   });
 
