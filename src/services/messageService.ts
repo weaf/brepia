@@ -26,6 +26,7 @@ function shouldPollForPendingAssistant(messages: Message[] | undefined): boolean
     id: last.id,
     role: last.role,
     parts,
+    metadata: last.metadata,
   });
 }
 
@@ -148,8 +149,8 @@ export const useMessagesQuery = () => {
     // AI stream, so poll while the newest row is still a recent non-terminal
     // turn: either the user is awaiting the first assistant row, or an
     // assistant exists but is still at build/tool/streaming intermediate state.
-    // Stop immediately once the persisted assistant proves terminal; focus
-    // still triggers an immediate refetch after a full mobile suspension.
+    // Imported synthetic baselines are terminal by definition and therefore do
+    // not poll. Focus still triggers an immediate refetch after suspension.
     refetchInterval: (query) =>
       shouldPollForPendingAssistant(query.state.data)
         ? PENDING_ASSISTANT_POLL_MS
