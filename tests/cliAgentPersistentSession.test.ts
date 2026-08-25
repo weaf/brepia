@@ -144,4 +144,78 @@ describe('persistent CLI agent sessions', () => {
     assert.doesNotMatch(text, /Old assistant prose/);
     assert.doesNotMatch(text, /CAD system context/);
   });
+
+  it('keeps the same OpenCode CLI session and latest artifact through a fourth edit', () => {
+    const sessionId = 'ses_four_turns';
+    const codes = [
+      'revision = 1;\ncube([10,10,10]);',
+      'revision = 2;\ncube([20,10,10]);',
+      'revision = 3;\ncube([20,20,10]);',
+      'revision = 4;\ncube([20,20,20]);',
+    ];
+    const build = (turn: number) => ({
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: encodeCliAgentSessionToolCallId('opencode', sessionId),
+          toolName: 'build_parametric_model',
+          input: {
+            title: 'Box',
+            version: 'v1',
+            code: codes[turn - 1],
+          },
+        },
+      ],
+    });
+    const result = (turn: number, toolCallId: string) => ({
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId,
+          toolName: 'build_parametric_model',
+          output: { type: 'text', value: `turn ${turn} compiled` },
+        },
+      ],
+    });
+
+    const build1 = build(1);
+    const build2 = build(2);
+    const build3 = build(3);
+    const prompt = [
+      { role: 'system', content: 'CAD system context' },
+      { role: 'user', content: [{ type: 'text', text: 'Turn 1: make a box' }] },
+      build1,
+      result(1, (build1.content[0] as { toolCallId: string }).toolCallId),
+      { role: 'user', content: [{ type: 'text', text: 'Turn 2: make it wider' }] },
+      build2,
+      result(2, (build2.content[0] as { toolCallId: string }).toolCallId),
+      { role: 'user', content: [{ type: 'text', text: 'Turn 3: make it deeper' }] },
+      build3,
+      result(3, (build3.content[0] as { toolCallId: string }).toolCallId),
+      { role: 'user', content: [{ type: 'text', text: 'Turn 4: make it taller' }] },
+    ] as unknown as LanguageModelV3Prompt;
+
+    assert.equal(cliAgentSessionIdFromPrompt('opencode', prompt), sessionId);
+
+    const fourthTurn = buildPersistentCliAgentPrompt(prompt, true);
+    assert.match(fourthTurn, /revision = 3;/);
+    assert.doesNotMatch(fourthTurn, /revision = 1;/);
+    assert.doesNotMatch(fourthTurn, /revision = 2;/);
+    assert.match(fourthTurn, /<user_request>\nTurn 4: make it taller\n<\/user_request>/);
+
+    const build4 = build(4);
+    const continuation = [
+      ...prompt,
+      build4,
+      result(4, (build4.content[0] as { toolCallId: string }).toolCallId),
+    ] as unknown as LanguageModelV3Prompt;
+
+    assert.equal(cliAgentSessionIdFromPrompt('opencode', continuation), sessionId);
+    const fourthContinuation = buildPersistentCliAgentPrompt(continuation, true);
+    assert.match(fourthContinuation, /revision = 4;/);
+    assert.match(fourthContinuation, /turn 4 compiled/);
+    assert.match(fourthContinuation, /<task_context>\nTurn 4: make it taller\n<\/task_context>/);
+  });
 });
