@@ -9,7 +9,10 @@ import {
   disposeColoredGroup,
 } from '@/utils/coloredOffMesh';
 import { Button } from '@/components/ui/button';
+import { useConversation } from '@/contexts/ConversationContext';
+import { submitChatText } from '@/lib/chatSubmitBridge';
 import OpenSCADError from '@/lib/OpenSCADError';
+import { openScadFixPrompt } from '@/lib/openScadFixPrompt';
 import { cn } from '@/lib/utils';
 import { MeshFilesContext } from '@/contexts/MeshFilesContext';
 import { createDXFProjectionCode } from '@/utils/dxfUtils';
@@ -64,6 +67,7 @@ export function OpenSCADPreview({
     isError,
     error,
   } = useOpenSCAD();
+  const { conversation } = useConversation();
   const [geometry, setGeometry] = useState<BufferGeometry | null>(null);
   const [coloredGroup, setColoredGroup] = useState<Group | null>(null);
   // Use context directly to avoid throwing if provider is not mounted (e.g. VisualCard)
@@ -85,6 +89,19 @@ export function OpenSCADPreview({
   useEffect(() => {
     fallbackColorRef.current = color;
   }, [color]);
+
+  const handleFixError = useCallback(
+    (compileError: OpenSCADError) => {
+      if (fixError) {
+        fixError(compileError);
+        return;
+      }
+      if (!conversation.id) return;
+      submitChatText(conversation.id, openScadFixPrompt(compileError));
+    },
+    [conversation.id, fixError],
+  );
+  const canFixWithAi = !!fixError || !!conversation.id;
 
   // Shared by preview compilation and on-demand exports so import() files are
   // available in the OpenSCAD worker before either operation runs.
@@ -263,7 +280,10 @@ export function OpenSCADPreview({
           <>
             {isError && (
               <div className="flex h-full items-center justify-center">
-                <FixWithAIButton error={error} fixError={fixError} />
+                <FixWithAIButton
+                  error={error}
+                  fixError={canFixWithAi ? handleFixError : undefined}
+                />
               </div>
             )}
           </>
