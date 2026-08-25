@@ -1,5 +1,8 @@
 import { Button } from '@/components/ui/button';
+import { useConversation } from '@/contexts/ConversationContext';
+import { registerChatTextSubmitter } from '@/lib/chatSubmitBridge';
 import { cn } from '@/lib/utils';
+import { useEffect } from 'react';
 
 interface SuggestionPillsProps {
   suggestions: string[];
@@ -12,6 +15,18 @@ export function SuggestionPills({
   suggestions,
   onSelect,
 }: SuggestionPillsProps) {
+  const { conversation } = useConversation();
+
+  useEffect(
+    () =>
+      registerChatTextSubmitter(conversation.id, (text) => {
+        if (disabled) return false;
+        onSelect(text);
+        return true;
+      }),
+    [conversation.id, disabled, onSelect],
+  );
+
   if (!suggestions.length) return null;
 
   return (
