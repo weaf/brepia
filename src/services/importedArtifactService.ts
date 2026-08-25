@@ -46,5 +46,16 @@ export async function persistImportedArtifact({
   );
   if (error) throw error;
 
+  // The normal INSERT trigger advances the leaf for each inserted message.
+  // A multi-row INSERT should therefore end at the assistant row, but make
+  // that invariant explicit instead of depending on backend row-processing
+  // order. This also makes the imported two-row baseline deterministic for
+  // the server's parent-chain walk immediately after navigation.
+  const { error: leafError } = await supabase
+    .from('conversations')
+    .update({ current_message_leaf_id: assistantMessageId })
+    .eq('id', conversationId);
+  if (leafError) throw leafError;
+
   return { userMessageId, assistantMessageId, toolCallId };
 }

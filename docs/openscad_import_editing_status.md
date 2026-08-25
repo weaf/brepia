@@ -10,7 +10,9 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 1 — Render safety foundation is complete and externally verified green.**
 
-**Step 2 — Imported artifact persistence primitive is implemented in code; focused runtime verification is pending.**
+**Step 2 — Imported artifact persistence primitive is complete and externally verified green.**
+
+**Step 3 — Local `.scad` upload is implemented in code; runtime/UI verification is pending.**
 
 ## Completed architecture/audit work
 
@@ -53,53 +55,86 @@ Architecture audit is complete and the V1 architecture is approved.
 
 Step 1 gate closed on 2026-08-25 after operator reported all requested validation green.
 
-## Step 2 — Imported artifact persistence primitive
+## Step 2 — Imported artifact persistence primitive — COMPLETE
+
+- [x] Typed import provenance metadata (`artifactOrigin`).
+- [x] Pure shared builder for import-event + synthetic assistant artifact rows.
+- [x] Client persistence service using one bulk `messages` INSERT for the two-row baseline.
+- [x] Stable synthetic `tool_import_<uuid>` tool-call IDs.
+- [x] Successful baseline as `output-available` with normal build output.
+- [x] Retained compile failure as `output-error` with bounded `errorText` supplied by caller.
+- [x] No dangling `input-available`/`input-streaming` initial state.
+- [x] Complete SCAD only in normal `build_parametric_model.input`, not ordinary chat text or metadata.
+- [x] Import event is a user root; imported artifact is its assistant child.
+- [x] Artifact extraction sees both success and error baselines.
+- [x] Successful imported artifact is discovered by workspace revision logic as a normal build.
+- [x] Failed imported artifact is not falsely recorded as a successful workspace revision.
+- [x] Imported assistant leaf is explicitly set after bulk insert so current leaf does not depend on multi-row processing order.
+- [x] Focused tests in `tests/importedArtifact.test.ts`.
+- [x] Focused Step 2 test verified green by operator.
+- [x] Full Vitest regression suite verified green by operator.
+- [x] Typecheck verified green by operator.
+- [x] ESLint verified green by operator.
+- [x] Production build verified green by operator.
+
+Step 2 gate closed on 2026-08-25 after operator reported all requested validation green.
+
+## Step 3 — Local `.scad` upload
 
 ### Implemented
 
-- [x] Add typed import provenance metadata (`artifactOrigin`).
-- [x] Add pure shared builder for import-event + synthetic assistant artifact rows.
-- [x] Add client persistence service using one bulk `messages` INSERT for the two-row baseline.
-- [x] Generate stable synthetic `tool_import_<uuid>` tool-call IDs.
-- [x] Support successful baseline as `output-available` with normal build output.
-- [x] Support retained compile failure as `output-error` with bounded `errorText` supplied by caller.
-- [x] Ensure imported baseline never uses dangling `input-available`/`input-streaming` state.
-- [x] Keep complete SCAD only in normal `build_parametric_model.input`, not ordinary chat text or metadata.
-- [x] Keep import event as a user root and imported artifact as its assistant child.
-- [x] Verify by focused test construction that artifact extraction sees both success and error baselines.
-- [x] Verify by focused test construction that a successful imported artifact is discovered by workspace revision logic as a normal build.
-- [x] Verify failed import is not falsely recorded as a successful workspace revision.
-- [x] Add focused tests in `tests/importedArtifact.test.ts`.
+- [x] Add a dedicated `Import SCAD` action on the signed-in parametric landing page.
+- [x] Keep SCAD import separate from ordinary image/STL chat attachments.
+- [x] Accept one `.scad` file only; extension check is case-insensitive.
+- [x] Enforce shared 256,000-byte limit before decoding.
+- [x] Strict UTF-8 decoding with optional UTF-8 BOM removal.
+- [x] Reject NUL/binary-like input.
+- [x] Enforce minimum source length required by the normal parametric artifact contract.
+- [x] Dependency preflight accepts bundled BOSL, BOSL2 and MCAD include/use.
+- [x] Dependency preflight rejects custom/relative include/use.
+- [x] Dependency preflight rejects `import(...)` and `surface(...)` external file dependencies in V1.
+- [x] Ignore dependency-looking examples inside comments and string literals.
+- [x] Run bounded OpenSCAD compile through the hardened long-lived tool worker before conversation creation.
+- [x] Treat timeout/worker/output-limit failures as blocking import failures.
+- [x] Retain ordinary OpenSCAD compile/syntax failures as `output-error` so the imported source can be opened and repaired by AI later.
+- [x] Bound retained compiler diagnostics to 12,000 characters.
+- [x] Create a normal parametric conversation using the currently selected model and OpenCode execution mode.
+- [x] Preserve the user's current prompt profile in imported conversation settings.
+- [x] Persist the imported two-message baseline without starting an AI turn.
+- [x] Navigate directly to the normal editor after persistence.
+- [x] Best-effort delete the conversation if authoritative imported messages fail to persist.
+- [x] Add focused validation/preflight fixtures in `tests/scadImport.test.ts`.
 
-### Runtime gate pending
+### Runtime/UI gate pending
 
-- [ ] Run `tests/importedArtifact.test.ts` successfully.
+- [ ] Run `tests/scadImport.test.ts` successfully.
+- [ ] Run `tests/importedArtifact.test.ts` successfully after deterministic-leaf change.
 - [ ] Run full Vitest regression suite successfully.
 - [ ] Run typecheck successfully.
 - [ ] Run ESLint successfully.
 - [ ] Run production build successfully.
+- [ ] Import a self-contained cube SCAD from the landing page and verify automatic editor preview.
+- [ ] Import a BOSL2 SCAD and verify bundled library compilation.
+- [ ] Import a BOSL SCAD and verify bundled library compilation.
+- [ ] Import an MCAD SCAD and verify bundled library compilation.
+- [ ] Verify a syntax-broken SCAD opens as a retained error artifact instead of disappearing or starting AI automatically.
+- [ ] Verify oversized SCAD is rejected before conversation creation.
+- [ ] Verify invalid UTF-8/NUL source is rejected before conversation creation.
+- [ ] Verify custom include/use is rejected with an explicit unsupported-dependency message.
+- [ ] Verify `import("mesh.stl")`, SVG/DXF-style external assets and `surface(...)` dependencies are rejected in V1.
+- [ ] Verify refresh after successful import keeps the imported model as the current artifact.
 
-Recommended validation:
+Recommended automated validation:
 
 ```bash
-npm test -- tests/importedArtifact.test.ts
+npm test -- tests/scadImport.test.ts tests/importedArtifact.test.ts
 npm test
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-Do not start Step 3 until this gate passes.
-
-## Step 3 — Local `.scad` upload
-
-- [ ] Add single-file import UI.
-- [ ] Validate `.scad`, 256 kB max and strict UTF-8.
-- [ ] Add dependency preflight.
-- [ ] Run bounded compile before opening editor.
-- [ ] Create parametric conversation and imported message pair.
-- [ ] Open imported artifact as current preview.
-- [ ] Add fixtures/tests for supported and unsupported inputs.
+Step 3 remains the active gate. **Do not start Step 4 until the automated suite and core browser import scenarios above pass.**
 
 ## Step 4 — AI continuation
 
@@ -156,4 +191,4 @@ Deferred:
 
 ## Next action
 
-Close the **Step 2 runtime gate**. If green, mark Step 2 complete and proceed to **Step 3 — Local `.scad` upload**.
+Close the **Step 3 runtime/UI gate**. If green, mark Step 3 complete and proceed to **Step 4 — AI continuation**.
