@@ -8,6 +8,9 @@ export type ChatCompletionMessageLike = {
   id: string;
   role: string;
   parts: readonly ChatCompletionPartLike[];
+  metadata?: {
+    artifactOrigin?: { type?: unknown };
+  } | null;
 };
 
 function isUnresolvedPart(part: ChatCompletionPartLike): boolean {
@@ -40,11 +43,13 @@ function isResolvedAnswerUser(part: ChatCompletionPartLike): boolean {
  *
  * A resolved build_parametric_model by itself is deliberately NOT terminal:
  * it normally triggers the browser -> server auto-continuation that lets the
- * agent inspect the build result and either revise again or finish. The turn is
- * terminal only when answer_user is resolved, or when a completed text reply
- * appears after the final build (the OpenCode/Codex adapters can finish this
- * way). Messages without a parametric build use normal resolved text/tool
- * completion semantics.
+ * agent inspect the build result and either revise again or finish. Imported
+ * synthetic baselines are the explicit exception: they intentionally start as
+ * a completed build/error without an AI turn, so no continuation is expected.
+ * Otherwise the turn is terminal only when answer_user is resolved, or when a
+ * completed text reply appears after the final build (the OpenCode/Codex
+ * adapters can finish this way). Messages without a parametric build use normal
+ * resolved text/tool completion semantics.
  */
 export function isTerminalAssistantMessage(
   message: ChatCompletionMessageLike | undefined,
@@ -53,6 +58,8 @@ export function isTerminalAssistantMessage(
     return false;
   }
   if (message.parts.some(isUnresolvedPart)) return false;
+
+  if (message.metadata?.artifactOrigin?.type === 'import') return true;
 
   const lastBuildIndex = message.parts.reduce(
     (last, part, index) =>
