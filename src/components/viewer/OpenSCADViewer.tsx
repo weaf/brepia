@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { MeshFilesContext } from '@/contexts/MeshFilesContext';
 import { createDXFProjectionCode } from '@/utils/dxfUtils';
 import { DxfExporter } from '@/utils/downloadUtils';
+import { OpenSCADFixModelPicker } from '@/components/viewer/OpenSCADFixModelPicker';
 
 // Extract import() filenames from OpenSCAD code
 function extractImportFilenames(code: string): string[] {
@@ -325,34 +326,37 @@ function FixWithAIButton({
         </div>
       </div>
       {fixError && error && error.name === 'OpenSCADError' && (
-        <Button
-          variant="ghost"
-          className={cn(
-            'group relative flex items-center gap-2 rounded-lg border',
-            'bg-gradient-to-br from-adam-blue/20 to-adam-neutral-800/70 p-3',
-            'border-adam-blue/30 text-adam-text-primary',
-            'transition-all duration-300 ease-in-out',
-            'hover:border-adam-blue/70 hover:bg-adam-blue/50 hover:text-white',
-            'hover:shadow-[0_0_25px_rgba(249,115,184,0.4)]',
-            'focus:outline-none focus:ring-2 focus:ring-adam-blue/30',
-          )}
-          onClick={() => {
-            // error crosses the worker boundary as a plain object, so
-            // instanceof OpenSCADError won't narrow — check the name
-            // discriminator and narrow via a local type guard instead of
-            // a cast.
-            const isOpenSCADError = (e: unknown): e is OpenSCADError =>
-              !!e &&
-              typeof e === 'object' &&
-              'name' in e &&
-              e.name === 'OpenSCADError';
-            if (isOpenSCADError(error)) fixError?.(error);
-          }}
-        >
-          <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-adam-blue/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-          <Wrench className="h-4 w-4 transition-transform duration-300 group-hover:rotate-12" />
-          <span className="relative text-sm font-medium">Fix with AI</span>
-        </Button>
+        <>
+          <OpenSCADFixModelPicker />
+          <Button
+            variant="ghost"
+            className={cn(
+              'group relative flex items-center gap-2 rounded-lg border',
+              'bg-gradient-to-br from-adam-blue/20 to-adam-neutral-800/70 p-3',
+              'border-adam-blue/30 text-adam-text-primary',
+              'transition-all duration-300 ease-in-out',
+              'hover:border-adam-blue/70 hover:bg-adam-blue/50 hover:text-white',
+              'hover:shadow-[0_0_25px_rgba(249,115,184,0.4)]',
+              'focus:outline-none focus:ring-2 focus:ring-adam-blue/30',
+            )}
+            onClick={() => {
+              // error crosses the worker boundary as a plain object, so
+              // instanceof OpenSCADError won't narrow — check the name
+              // discriminator and narrow via a local type guard instead of
+              // a cast.
+              const isOpenSCADError = (e: unknown): e is OpenSCADError =>
+                !!e &&
+                typeof e === 'object' &&
+                'name' in e &&
+                e.name === 'OpenSCADError';
+              if (isOpenSCADError(error)) fixError?.(error);
+            }}
+          >
+            <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-adam-blue/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <Wrench className="h-4 w-4 transition-transform duration-300 group-hover:rotate-12" />
+            <span className="relative text-sm font-medium">Fix with AI</span>
+          </Button>
+        </>
       )}
     </div>
   );
