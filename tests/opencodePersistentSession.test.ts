@@ -117,6 +117,85 @@ describe('persistent OpenCode sessions', () => {
     assert.equal(turnPrompt.includes('width = 20;'), false);
   });
 
+  it('keeps fourth-turn streaming context on the immediately preceding artifact', () => {
+    const codes = [
+      'revision = 1;\ncube([10,10,10]);',
+      'revision = 2;\ncube([20,10,10]);',
+      'revision = 3;\ncube([20,20,10]);',
+      'revision = 4;\ncube([20,20,20]);',
+    ];
+    const prompt = [
+      { role: 'system', content: 'CAD context' },
+      { role: 'user', content: [{ type: 'text', text: 'Turn 1: make a box' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'build_parametric_model',
+            input: { title: 'Box', version: 'v1', code: codes[0] },
+          },
+        ],
+      },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 1 compiled' } }] },
+      { role: 'user', content: [{ type: 'text', text: 'Turn 2: make it wider' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-2',
+            toolName: 'build_parametric_model',
+            input: { title: 'Box', version: 'v1', code: codes[1] },
+          },
+        ],
+      },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-2', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 2 compiled' } }] },
+      { role: 'user', content: [{ type: 'text', text: 'Turn 3: make it deeper' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-3',
+            toolName: 'build_parametric_model',
+            input: { title: 'Box', version: 'v1', code: codes[2] },
+          },
+        ],
+      },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-3', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 3 compiled' } }] },
+      { role: 'user', content: [{ type: 'text', text: 'Turn 4: make it taller' }] },
+    ] as unknown as LanguageModelV3Prompt;
+
+    const fourthTurn = buildPersistentOpenCodePrompt(prompt, false);
+    assert.match(fourthTurn, /revision = 3;/);
+    assert.doesNotMatch(fourthTurn, /revision = 1;/);
+    assert.doesNotMatch(fourthTurn, /revision = 2;/);
+    assert.match(fourthTurn, /<user_request>\s*Turn 4: make it taller/);
+
+    const continuation = [
+      ...prompt,
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-4',
+            toolName: 'build_parametric_model',
+            input: { title: 'Box', version: 'v1', code: codes[3] },
+          },
+        ],
+      },
+      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-4', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 4 compiled' } }] },
+    ] as unknown as LanguageModelV3Prompt;
+
+    const fourthContinuation = buildPersistentOpenCodePrompt(continuation, false);
+    assert.match(fourthContinuation, /revision = 4;/);
+    assert.match(fourthContinuation, /turn 4 compiled/);
+    assert.equal(fourthContinuation.includes('<user_request>'), false);
+  });
+
   it('switches model in place instead of creating another session', async () => {
     const conversationId = '123e4567-e89b-12d3-a456-426614174000';
     const sessionId = buildOpenCodeSessionId(conversationId);
