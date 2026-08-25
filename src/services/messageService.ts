@@ -1,4 +1,5 @@
 import { useConversation } from '@/contexts/ConversationContext';
+import { isTerminalAssistantMessage } from '@/hooks/chatCompletionReconciliation';
 import { supabase } from '@/lib/supabase';
 import type { AppUIMessage } from '@shared/chatAi';
 import type { Conversation, Message } from '@shared/types';
@@ -9,11 +10,23 @@ const PENDING_ASSISTANT_MAX_AGE_MS = 10 * 60_000;
 
 function shouldPollForPendingAssistant(messages: Message[] | undefined): boolean {
   const last = messages?.at(-1);
-  if (!last || last.role !== 'user') return false;
+  if (!last) return false;
 
   const createdAt = Date.parse(last.created_at);
   if (!Number.isFinite(createdAt)) return false;
-  return Date.now() - createdAt < PENDING_ASSISTANT_MAX_AGE_MS;
+  if (Date.now() - createdAt >= PENDING_ASSISTANT_MAX_AGE_MS) return false;
+
+  if (last.role === 'user') return true;
+  if (last.role !== 'assistant') return false;
+
+  const parts = Array.isArray(last.parts)
+    ? (last.parts as AppUIMessage['parts'])
+    : [];
+  return !isTerminalAssistantMessage({
+    id: last.id,
+    role: last.role,
+    parts,
+  });
 }
 
 /**
@@ -131,11 +144,12 @@ export const useMessagesQuery = () => {
     refetchOnWindowFocus: 'always',
     refetchIntervalInBackground: true,
     // Mobile browsers may suspend the foreground fetch/SSE connection when
-    // Chrome is backgrounded. The server independently consumes the AI stream
-    // and persists its response, so while the DB branch still ends in a recent
-    // user message we briefly poll for the assistant row. Keep polling while
-    // hidden whenever the browser still allows background work; focus always
-    // triggers an immediate refetch after a full mobile suspension.
+    // Chrome is backgrounded. The server independently consumes/persists the
+    // AI stream, so poll while the newest row is still a recent non-terminal
+    // turn: either the user is awaiting the first assistant row, or an
+    // assistant exists but is still at build/tool/streaming intermediate state.
+    // Stop immediately once the persisted assistant proves terminal; focus
+    // still triggers an immediate refetch after a full mobile suspension.
     refetchInterval: (query) =>
       shouldPollForPendingAssistant(query.state.data)
         ? PENDING_ASSISTANT_POLL_MS
