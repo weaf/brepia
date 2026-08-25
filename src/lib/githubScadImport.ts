@@ -36,7 +36,14 @@ export class GithubScadImportError extends Error {
 
 const SIMPLE_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const GIST_ID = /^[A-Fa-f0-9]+$/;
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
 
 function fail(
   code: GithubScadImportErrorCode,
@@ -95,7 +102,7 @@ function decodeSafeRawInputPath(input: string): string {
   if (decoded.includes('\\')) {
     fail('invalid_path', 'Backslashes are not allowed in GitHub import paths.');
   }
-  if (CONTROL_CHARACTERS.test(decoded)) {
+  if (hasControlCharacters(decoded)) {
     fail('invalid_path', 'Control characters are not allowed in GitHub import paths.');
   }
   if (
@@ -130,7 +137,7 @@ function assertFileSegment(value: string): void {
     value === '..' ||
     value.includes('/') ||
     value.includes('\\') ||
-    CONTROL_CHARACTERS.test(value)
+    hasControlCharacters(value)
   ) {
     fail('invalid_path', 'Invalid GitHub file path.');
   }
