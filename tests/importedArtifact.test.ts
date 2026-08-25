@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import Tree from '@shared/Tree';
 import { chatTools, type AppUIMessage } from '@shared/chatAi';
 import { buildImportedArtifactMessages } from '@shared/importedArtifact';
-import { getBuildParametricModelArtifact } from '@shared/parametricParts';
+import {
+  getBuildParametricModelArtifact,
+  replaceBuildParametricModelOutput,
+} from '@shared/parametricParts';
 import { collectSuccessfulParametricBuilds } from '@/server/conversationWorkspaceModels';
 
 const conversationId = '11111111-2222-4333-8444-555555555555';
@@ -40,6 +43,36 @@ function asUiMessage(message: ReturnType<typeof build>[number]): AppUIMessage {
   };
 }
 
+async function modelBuildInputs(messages: AppUIMessage[]): Promise<unknown[]> {
+  const modelMessages = await convertToModelMessages<AppUIMessage>(messages, {
+    tools: chatTools,
+  });
+  const inputs: unknown[] = [];
+  for (const message of modelMessages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (!part || typeof part !== 'object') continue;
+      const record = part as unknown as Record<string, unknown>;
+      if (
+        record['type'] === 'tool-call' &&
+        record['toolName'] === 'build_parametric_model'
+      ) {
+        inputs.push(record['input']);
+      }
+    }
+  }
+  return inputs;
+}
+
+function followUp(text: string): AppUIMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: 'user',
+    parts: [{ type: 'text', text }],
+    metadata: {},
+  };
+}
+
 describe('imported artifact persistence primitive', () => {
   it('creates an import event followed by the assistant artifact as the active leaf', () => {
     const [user, assistant] = build({ status: 'success' });
@@ -71,35 +104,64 @@ describe('imported artifact persistence primitive', () => {
 
   it('preserves the exact imported artifact in AI SDK model messages for the first edit', async () => {
     const [user, assistant] = build({ status: 'success' });
-    const followUp: AppUIMessage = {
-      id: 'dddddddd-4444-4444-8444-444444444444',
-      role: 'user',
-      parts: [{ type: 'text', text: 'Make the bracket wider.' }],
-      metadata: {},
+    const inputs = await modelBuildInputs([
+      asUiMessage(user),
+      asUiMessage(assistant),
+      followUp('Make the bracket wider.'),
+    ]);
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toEqual(artifact);
+    expect((inputs[0] as { code: string }).code).toBe(code);
+  });
+
+  it('preserves the imported artifact after a DB-style JSON reload before the first edit', async () => {
+    const persistedRows = JSON.parse(JSON.stringify(build({ status: 'success' }))) as ReturnType<
+      typeof build
+    >;
+    const [reloadedUser, reloadedAssistant] = persistedRows;
+
+    const inputs = await modelBuildInputs([
+      asUiMessage(reloadedUser),
+      asUiMessage(reloadedAssistant),
+      followUp('Increase the height after reload.'),
+    ]);
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toEqual(artifact);
+    expect((inputs[0] as { code: string }).code).toBe(code);
+  });
+
+  it('sends a persisted parameter-edited artifact to AI instead of the original import', async () => {
+    const [user, assistant] = build({ status: 'success' });
+    const parameterEditedCode =
+      'width = 35;\nheight = 10;\ncube([width, width, height]);\n';
+    const parameterEditedArtifact = {
+      ...artifact,
+      code: parameterEditedCode,
+    };
+    const editedAssistant: AppUIMessage = {
+      ...asUiMessage(assistant),
+      parts: replaceBuildParametricModelOutput(
+        assistant.parts,
+        parameterEditedArtifact,
+      ),
+      metadata: {
+        ...assistant.metadata,
+        originalCode: code,
+      },
     };
 
-    const modelMessages = await convertToModelMessages<AppUIMessage>(
-      [asUiMessage(user), asUiMessage(assistant), followUp],
-      { tools: chatTools },
-    );
+    const inputs = await modelBuildInputs([
+      asUiMessage(user),
+      editedAssistant,
+      followUp('Now make it taller too.'),
+    ]);
 
-    const modelParts: unknown[] = [];
-    for (const message of modelMessages) {
-      if (Array.isArray(message.content)) modelParts.push(...message.content);
-    }
-    const buildCall = modelParts.find((part) => {
-      if (!part || typeof part !== 'object') return false;
-      const record = part as Record<string, unknown>;
-      return (
-        record['type'] === 'tool-call' &&
-        record['toolName'] === 'build_parametric_model'
-      );
-    });
-
-    expect(buildCall).toBeDefined();
-    const input = (buildCall as Record<string, unknown>)['input'];
-    expect(input).toEqual(artifact);
-    expect((input as { code: string }).code).toBe(code);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toEqual(parameterEditedArtifact);
+    expect((inputs[0] as { code: string }).code).toBe(parameterEditedCode);
+    expect((inputs[0] as { code: string }).code).not.toBe(code);
   });
 
   it('retains a failed imported artifact as output-error without creating a pending tool call', () => {
