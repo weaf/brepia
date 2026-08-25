@@ -20,6 +20,11 @@ export type ToolPartLike = { type: string; state?: string };
 export const DANGLING_TOOL_ERROR_TEXT =
   'Tool execution did not complete (the previous request was interrupted).';
 
+export const EMPTY_ASSISTANT_RESPONSE = 'empty-assistant-response' as const;
+export type PendingClientToolState =
+  | boolean
+  | typeof EMPTY_ASSISTANT_RESPONSE;
+
 /**
  * The messages table intentionally rejects rows whose `parts` array is empty
  * (unless the legacy `content` column is populated). AI-SDK can still invoke
@@ -73,13 +78,19 @@ export function resolveDanglingToolParts<T extends ToolPartLike>(
 }
 
 /**
- * Does this turn end awaiting a CLIENT-side tool result? `input-available`
- * means the model finished emitting the call but no result is attached — for
- * our client-resolved tools that means the browser still owns it.
+ * Does this turn end awaiting a CLIENT-side tool result?
+ *
+ * `true` means the model emitted a client-owned tool call whose output has not
+ * been attached yet. `false` means there is no such pending tool. The explicit
+ * `EMPTY_ASSISTANT_RESPONSE` sentinel means the provider failed/finished before
+ * emitting any assistant payload at all. It is intentionally truthy so the
+ * existing aiChat call site also skips post-response suggestion generation,
+ * while `decidePersistAction` can distinguish it from a genuine pending tool.
  */
 export function hasPendingClientToolCall(
   parts: readonly ToolPartLike[],
-): boolean {
+): PendingClientToolState {
+  if (!hasPersistableMessageParts(parts)) return EMPTY_ASSISTANT_RESPONSE;
   return parts.some(
     (part) => isToolPart(part) && part.state === 'input-available',
   );
@@ -96,19 +107,21 @@ export type PersistAction = 'insert' | 'update' | 'skip';
  *   auto-resubmit re-reads the branch.
  * - `update`  — continuation with everything resolved (or pure text / no
  *   tools). Safe to write; the client isn't persisting this turn.
- * - `skip`    — continuation that still ends with a pending CLIENT tool. The
- *   browser resolves and persists the `output-available` version itself; a
- *   delayed server write could land last and clobber it back to
- *   `input-available`, leaving a dangling tool call that 500s the next send.
- *   Defer to the client.
+ * - `skip`    — either an empty provider response (there is no valid assistant
+ *   row to persist) or a continuation that still ends with a pending CLIENT
+ *   tool. In the latter case the browser resolves and persists the
+ *   `output-available` version itself; a delayed server write could land last
+ *   and clobber it back to `input-available`, leaving a dangling tool call that
+ *   500s the next send. Defer to the client.
  */
 export function decidePersistAction({
   isContinuation,
   hasPendingToolCall,
 }: {
   isContinuation: boolean;
-  hasPendingToolCall: boolean;
+  hasPendingToolCall: PendingClientToolState;
 }): PersistAction {
+  if (hasPendingToolCall === EMPTY_ASSISTANT_RESPONSE) return 'skip';
   if (!isContinuation) return 'insert';
   return hasPendingToolCall ? 'skip' : 'update';
 }
