@@ -5,6 +5,7 @@ import { useNavigate } from '@tanstack/react-router';
 import * as Sentry from '@sentry/react';
 import posthog from 'posthog-js';
 import { Button } from '@/components/ui/button';
+import { GithubScadImportButton } from '@/components/GithubScadImportButton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { readScadImportFile } from '@/lib/scadImport';
@@ -70,7 +71,7 @@ export function ScadImportButton({
   };
 
   return (
-    <>
+    <div className="flex flex-wrap justify-end gap-2">
       <input
         ref={inputRef}
         type="file"
@@ -97,6 +98,11 @@ export function ScadImportButton({
         )}
         {importMutation.isPending ? 'Importing SCAD…' : 'Import SCAD'}
       </Button>
-    </>
+      <GithubScadImportButton
+        model={model}
+        executionMode={executionMode}
+        disabled={disabled || importMutation.isPending}
+      />
+    </div>
   );
 }
