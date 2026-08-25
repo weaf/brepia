@@ -1,5 +1,7 @@
+import { convertToModelMessages } from 'ai';
 import { describe, expect, it } from 'vitest';
 import Tree from '@shared/Tree';
+import { chatTools, type AppUIMessage } from '@shared/chatAi';
 import { buildImportedArtifactMessages } from '@shared/importedArtifact';
 import { getBuildParametricModelArtifact } from '@shared/parametricParts';
 import { collectSuccessfulParametricBuilds } from '@/server/conversationWorkspaceModels';
@@ -29,6 +31,15 @@ function build(baseline: { status: 'success' } | { status: 'error'; errorText: s
   });
 }
 
+function asUiMessage(message: ReturnType<typeof build>[number]): AppUIMessage {
+  return {
+    id: message.id,
+    role: message.role,
+    parts: message.parts,
+    metadata: message.metadata,
+  };
+}
+
 describe('imported artifact persistence primitive', () => {
   it('creates an import event followed by the assistant artifact as the active leaf', () => {
     const [user, assistant] = build({ status: 'success' });
@@ -56,6 +67,39 @@ describe('imported artifact persistence primitive', () => {
       output: { status: 'success', message: 'Imported OpenSCAD model.' },
     });
     expect(getBuildParametricModelArtifact(assistant.parts)).toEqual(artifact);
+  });
+
+  it('preserves the exact imported artifact in AI SDK model messages for the first edit', async () => {
+    const [user, assistant] = build({ status: 'success' });
+    const followUp: AppUIMessage = {
+      id: 'dddddddd-4444-4444-8444-444444444444',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Make the bracket wider.' }],
+      metadata: {},
+    };
+
+    const modelMessages = await convertToModelMessages<AppUIMessage>(
+      [asUiMessage(user), asUiMessage(assistant), followUp],
+      { tools: chatTools },
+    );
+
+    const modelParts: unknown[] = [];
+    for (const message of modelMessages) {
+      if (Array.isArray(message.content)) modelParts.push(...message.content);
+    }
+    const buildCall = modelParts.find((part) => {
+      if (!part || typeof part !== 'object') return false;
+      const record = part as Record<string, unknown>;
+      return (
+        record['type'] === 'tool-call' &&
+        record['toolName'] === 'build_parametric_model'
+      );
+    });
+
+    expect(buildCall).toBeDefined();
+    const input = (buildCall as Record<string, unknown>)['input'];
+    expect(input).toEqual(artifact);
+    expect((input as { code: string }).code).toBe(code);
   });
 
   it('retains a failed imported artifact as output-error without creating a pending tool call', () => {
