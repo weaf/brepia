@@ -14,7 +14,7 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 3 — Local `.scad` upload is complete and externally verified green.**
 
-**Step 4 — AI continuation is active. OpenCode streaming import → edit has been verified manually; OpenCode CLI verification is in progress.**
+**Step 4 — AI continuation is active. Both OpenCode streaming and CLI import → edit paths are manually verified. A broader multi-turn chat instability exists in both modes and is deferred for dedicated regression work after the external-model work.**
 
 ## Completed architecture/audit work
 
@@ -122,26 +122,27 @@ The focused validation suite covers extension, byte limit, strict UTF-8/BOM beha
 
 Step 3 gate closed on 2026-08-25 after the operator reported the focused/full tests and production build green and successfully imported and edited a real OpenSCAD model through pCAD.
 
-### Deferred mobile navigation polish
+### Mobile post-import navigation observation
 
-On mobile, after import the route/data transition succeeds, but the imported model is not surfaced as prominently as it could be: the operator observed the landing view appear to reload and then found the new model from the mobile menu. This does not prevent import or editing and is deferred to Step 6 product polish.
-
-Preferred Step 6 UX candidates:
-
-- automatically surface the imported model/editor pane after import; or
-- automatically open/reveal the mobile navigation/model entry after import.
+An earlier mobile run appeared to return to/reload the landing view and required opening the menu to find the imported model. A later run on 2026-08-25 navigated directly to the imported model as intended. The issue is therefore intermittent/not currently reproducible and does not block the import feature. Keep it as a Step 6 regression check rather than implementing a speculative fix now.
 
 ## Step 4 — AI continuation — ACTIVE
 
 - [x] Core import → first pCAD edit path verified manually through OpenCode streaming.
 - [ ] Verify the first edit receives the exact complete imported artifact, not a truncated/reconstructed copy.
 - [ ] Verify standard AI SDK provider path.
-- [ ] Verify OpenCode CLI path — operator test in progress.
-- [x] Verify OpenCode streaming path — one imported-model iteration verified successfully by operator on 2026-08-25.
+- [x] Verify OpenCode CLI path — imported-model edit verified successfully by operator on 2026-08-25.
+- [x] Verify OpenCode streaming path — imported-model edit verified successfully by operator on 2026-08-25.
 - [ ] Verify refresh before first edit.
 - [ ] Verify parameter edit followed by AI edit.
 - [ ] Verify retry/branching/history continuity.
 - [ ] Verify successive AI edits continue from the latest complete artifact rather than the original import.
+
+### Deferred cross-mode multi-turn regression
+
+Observed on both OpenCode streaming and CLI: one follow-up chat after an edit works, while a later turn (commonly around the third chat/iteration) can fail intermittently; in some runs three turns work. Because the behavior is shared by both execution modes and is not specific to imported OpenSCAD models, it is not treated as an import-feature blocker.
+
+Revisit this after the external-model work is complete. The later regression should determine whether failure originates in message-tree/leaf continuity, cached chat/session state, OpenCode session handling, transport state, or latest-artifact selection. It should explicitly test 4+ sequential edits and verify every turn starts from the immediately preceding complete artifact.
 
 ## Step 5 — GitHub/Gist URL import
 
@@ -163,7 +164,8 @@ Preferred Step 6 UX candidates:
 - [ ] Share regression.
 - [ ] Conversation-workspace current/revision regression.
 - [ ] Ordinary non-imported conversation regression.
-- [ ] Improve post-import mobile navigation so the imported model/editor is surfaced immediately without requiring manual menu discovery.
+- [ ] Recheck mobile post-import navigation over repeated imports; latest test navigated directly to the model, so only fix if the earlier landing-view behavior is reproducible.
+- [ ] After external-model work, investigate intermittent 3rd/later chat failure across both OpenCode CLI and streaming with 4+ sequential-turn regression coverage.
 
 ## V1 boundaries
 
@@ -189,4 +191,4 @@ Deferred:
 
 ## Next action
 
-Complete the **OpenCode CLI** continuation check, then verify artifact continuity across first/successive edits and the remaining supported execution paths without changing the canonical prompt/message-tree architecture.
+Continue **Step 4 — AI continuation** with the remaining import-specific continuity checks and standard AI SDK provider path. Do not investigate the shared third/later-turn instability yet; retain it for dedicated regression work after the external-model work.
