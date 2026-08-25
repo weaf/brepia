@@ -78,6 +78,14 @@ export type MeshPreferencesData = {
   polygonCount: number;
 };
 
+export type ImportedArtifactOrigin = {
+  type: 'import';
+  source: 'upload' | 'github';
+  filename: string;
+  importedAt: string;
+  canonicalUrl?: string;
+};
+
 /**
  * Conversation-level signals the server emits as transient stream parts
  * (`writer.write({ transient: true, type: 'data-X', data })`). Transient
@@ -126,6 +134,10 @@ export type AppUIMessage = UIMessage<
     /** Actual LLM/agent used for a Creative turn. `model` remains the mesh
      * backend ID in Creative mode so retry/UI behavior stays compatible. */
     agentModel?: Model;
+    /** Provenance for a SCAD artifact that entered pCAD through import.
+     * UI-only metadata: the complete source remains solely in the normal
+     * build_parametric_model tool input and is not duplicated here. */
+    artifactOrigin?: ImportedArtifactOrigin;
     // The model's original OpenSCAD for this message's artifact, captured
     // lazily on the FIRST parameter edit (see `persistParameterEdit`).
     // Parameter edits rewrite the live `tool-build_parametric_model` input
