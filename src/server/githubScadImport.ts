@@ -191,6 +191,12 @@ async function resolveGist(
       'GitHub returned an invalid Gist payload.',
     );
   }
+  if (payload['truncated'] === true) {
+    throw new GithubScadResolveError(
+      'gist_truncated',
+      'The Gist file list is truncated by GitHub and cannot be imported unambiguously.',
+    );
+  }
   const files = payload['files'];
   if (!files || typeof files !== 'object' || Array.isArray(files)) {
     throw new GithubScadResolveError(
