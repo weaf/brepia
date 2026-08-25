@@ -36,6 +36,7 @@ export class GithubScadImportError extends Error {
 
 const SIMPLE_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const GIST_ID = /^[A-Fa-f0-9]+$/;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
 function fail(
   code: GithubScadImportErrorCode,
@@ -67,33 +68,49 @@ function rawPathname(input: string): string {
   return input.slice(pathStart, pathEnd);
 }
 
-function assertSafeRawInputPath(input: string): void {
+/**
+ * Decode the literal GitHub path exactly once, then validate the decoded
+ * representation. Legitimate GitHub links commonly percent-encode spaces and
+ * may encode a path separator when copied from mobile/browser UIs. Traversal,
+ * backslashes, controls and double-encoded path syntax remain rejected.
+ */
+function decodeSafeRawInputPath(input: string): string {
   const pathname = rawPathname(input);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    fail('unsafe_encoding', 'The GitHub import path contains invalid encoding.');
+  }
 
-  // V1 deliberately rejects encoded path syntax rather than trying to
-  // canonicalize ambiguous/double-encoded traversal forms. This check must
-  // happen before `new URL()` because WHATWG normalization collapses encoded
-  // dot segments such as `%2e%2e`.
-  if (/%[0-9a-f]{2}/i.test(pathname)) {
+  // Reject a second encoded layer such as %252e%252e or %252f. The server
+  // never decodes the path again, but refusing it keeps the accepted identity
+  // unambiguous and prevents traversal-shaped inputs being hidden in encoding.
+  if (/%[0-9a-f]{2}/i.test(decoded)) {
     fail(
       'unsafe_encoding',
-      'Encoded GitHub path segments are not supported for SCAD import.',
+      'Double-encoded GitHub path segments are not supported for SCAD import.',
     );
   }
-  if (pathname.includes('\\')) {
+  if (decoded.includes('\\')) {
     fail('invalid_path', 'Backslashes are not allowed in GitHub import paths.');
   }
+  if (CONTROL_CHARACTERS.test(decoded)) {
+    fail('invalid_path', 'Control characters are not allowed in GitHub import paths.');
+  }
   if (
-    pathname
+    decoded
       .split('/')
       .some((segment) => segment === '.' || segment === '..')
   ) {
     fail('invalid_path', 'GitHub import paths may not contain dot segments.');
   }
+
+  return decoded;
 }
 
-function splitPath(url: URL): string[] {
-  const segments = url.pathname.split('/').filter(Boolean);
+function splitPath(pathname: string): string[] {
+  const segments = pathname.split('/').filter(Boolean);
   if (segments.some((segment) => segment === '.' || segment === '..')) {
     fail('invalid_path', 'GitHub import paths may not contain dot segments.');
   }
@@ -106,6 +123,19 @@ function assertSimpleSegment(value: string, label: string): void {
   }
 }
 
+function assertFileSegment(value: string): void {
+  if (
+    !value ||
+    value === '.' ||
+    value === '..' ||
+    value.includes('/') ||
+    value.includes('\\') ||
+    CONTROL_CHARACTERS.test(value)
+  ) {
+    fail('invalid_path', 'Invalid GitHub file path.');
+  }
+}
+
 function assertScadPath(path: string): string {
   const filename = path.split('/').at(-1) ?? '';
   if (!filename || !/\.scad$/i.test(filename)) {
@@ -114,8 +144,20 @@ function assertScadPath(path: string): string {
   return filename;
 }
 
-function parseGithubBlob(url: URL): GithubScadSource {
-  const segments = splitPath(url);
+function canonicalFileUrl(
+  owner: string,
+  repo: string,
+  ref: string,
+  path: string,
+): string {
+  const encodedPath = path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  return `https://github.com/${owner}/${repo}/blob/${ref}/${encodedPath}`;
+}
+
+function parseGithubBlob(segments: string[]): GithubScadSource {
   if (segments.length < 5 || segments[2] !== 'blob') {
     fail(
       'invalid_path',
@@ -128,7 +170,7 @@ function parseGithubBlob(url: URL): GithubScadSource {
   assertSimpleSegment(repo, 'repository');
   assertSimpleSegment(ref, 'ref');
   if (pathParts.length === 0) fail('invalid_path', 'GitHub file path is missing.');
-  for (const segment of pathParts) assertSimpleSegment(segment, 'file path');
+  for (const segment of pathParts) assertFileSegment(segment);
 
   const path = pathParts.join('/');
   const filename = assertScadPath(path);
@@ -140,12 +182,11 @@ function parseGithubBlob(url: URL): GithubScadSource {
     ref,
     path,
     filename,
-    canonicalUrl: `https://github.com/${owner}/${repo}/blob/${ref}/${path}`,
+    canonicalUrl: canonicalFileUrl(owner, repo, ref, path),
   };
 }
 
-function parseRawGithub(url: URL): GithubScadSource {
-  const segments = splitPath(url);
+function parseRawGithub(segments: string[]): GithubScadSource {
   if (segments.length < 4) {
     fail(
       'invalid_path',
@@ -158,7 +199,7 @@ function parseRawGithub(url: URL): GithubScadSource {
   assertSimpleSegment(repo, 'repository');
   assertSimpleSegment(ref, 'ref');
   if (pathParts.length === 0) fail('invalid_path', 'GitHub file path is missing.');
-  for (const segment of pathParts) assertSimpleSegment(segment, 'file path');
+  for (const segment of pathParts) assertFileSegment(segment);
 
   const path = pathParts.join('/');
   const filename = assertScadPath(path);
@@ -170,12 +211,11 @@ function parseRawGithub(url: URL): GithubScadSource {
     ref,
     path,
     filename,
-    canonicalUrl: `https://github.com/${owner}/${repo}/blob/${ref}/${path}`,
+    canonicalUrl: canonicalFileUrl(owner, repo, ref, path),
   };
 }
 
-function parseGist(url: URL): GithubScadSource {
-  const segments = splitPath(url);
+function parseGist(segments: string[]): GithubScadSource {
   // Supported forms are gist.github.com/<id> and gist.github.com/<owner>/<id>.
   // Extra path fragments and file anchors are intentionally rejected in V1;
   // the server resolves exactly one .scad candidate from the gist metadata.
@@ -204,9 +244,10 @@ export function normalizeGithubScadUrl(input: string): GithubScadSource {
   const trimmed = input.trim();
   if (!trimmed) fail('invalid_url', 'Enter a GitHub or Gist URL.');
 
-  // Inspect the literal input before WHATWG URL canonicalization can erase
-  // traversal evidence such as `/models/%2e%2e/model.scad` or `/a/../b.scad`.
-  assertSafeRawInputPath(trimmed);
+  // Inspect and decode the literal input before WHATWG URL canonicalization can
+  // erase traversal evidence such as `/models/%2e%2e/model.scad` or
+  // `/a/../b.scad`.
+  const decodedPathname = decodeSafeRawInputPath(trimmed);
 
   let url: URL;
   try {
@@ -231,10 +272,11 @@ export function normalizeGithubScadUrl(input: string): GithubScadSource {
     );
   }
 
+  const segments = splitPath(decodedPathname);
   const host = url.hostname.toLowerCase();
-  if (host === 'github.com') return parseGithubBlob(url);
-  if (host === 'raw.githubusercontent.com') return parseRawGithub(url);
-  if (host === 'gist.github.com') return parseGist(url);
+  if (host === 'github.com') return parseGithubBlob(segments);
+  if (host === 'raw.githubusercontent.com') return parseRawGithub(segments);
+  if (host === 'gist.github.com') return parseGist(segments);
 
   fail(
     'unsupported_host',
