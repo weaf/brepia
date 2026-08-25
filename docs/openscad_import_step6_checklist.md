@@ -1,6 +1,6 @@
 # OpenSCAD Import — Step 6 regression checklist
 
-Status: active
+Status: complete
 Date: 2026-08-25
 Branch: `feature/openscad-import-editing`
 
@@ -18,32 +18,32 @@ cube([width, width, height]);
 
 ### A1 — initial preview
 
-- Import the model using local SCAD upload or one of the supported GitHub/Gist URL forms.
-- The editor opens directly.
-- The imported geometry becomes the active preview without clicking an Eye button.
-- No AI turn starts automatically.
+- [x] Import the model using local SCAD upload or one of the supported GitHub/Gist URL forms.
+- [x] The editor opens directly.
+- [x] The imported geometry becomes the active preview without clicking an Eye button.
+- [x] No AI turn starts automatically.
 
 Expected architecture: the DB branch seeds `ChatSession`; its latest-preview effect selects the imported `tool-build_parametric_model` artifact and calls `onViewArtifact`.
 
 ### A2 — parameter UI and persistence
 
-- Change `width` from 20 to a visibly different value, e.g. 35.
-- Preview updates.
-- Change `height` as a second parameter edit.
-- Refresh the browser.
-- Both edited values remain in the parameter controls and preview.
-- Reset/default semantics still point at the originally authored values (20 and 10), not the edited values.
+- [x] Change `width` from 20 to a visibly different value, e.g. 35.
+- [x] Preview updates.
+- [x] Change `height` as a second parameter edit.
+- [x] Refresh the browser.
+- [x] Both edited values remain in the parameter controls and preview.
+- [x] Reset/default semantics still point at the originally authored values (20 and 10), not the edited values.
 
 Expected architecture: parameter changes rewrite the canonical build tool input on the assistant message. `metadata.originalCode` is captured lazily on first edit so defaults survive reload while live values come from the persisted edited artifact.
 
 ### A3 — history / branch selection
 
-- Ask AI for one model edit and let it finish.
-- Create or select an alternate branch using the existing retry/edit/history controls.
-- Switch between the two leaves.
-- Preview follows the selected leaf and does not remain stuck on the other branch.
-- Refresh while the alternate leaf is selected.
-- The same branch and corresponding preview return after reload.
+- [x] Ask AI for one model edit and let it finish.
+- [x] Create or select an alternate branch using the existing retry/edit/history controls.
+- [x] Switch between the two leaves.
+- [x] Preview follows the selected leaf and does not remain stuck on the other branch.
+- [x] Refresh while the alternate leaf is selected.
+- [x] The same branch and corresponding preview return after reload.
 
 Expected architecture: `conversations.current_message_leaf_id` is authoritative; `Tree.getPath()` rebuilds the selected branch and `ChatSession` selects the latest complete artifact on that path.
 
@@ -110,10 +110,18 @@ A secondary server-hardening issue was exposed by the failed provider call: when
 
 Operator reported the requested automated gate and the mobile export/share end-to-end checks working on 2026-08-25.
 
-## D. Remaining Step 6 checks
+## D. Final Step 6 regressions — COMPLETE
 
-- [ ] Ordinary non-imported parametric conversation regression.
-- [ ] Repeated mobile post-import navigation regression.
+- [x] Ordinary non-imported parametric conversation regression verified end-to-end.
+- [x] Repeated mobile post-import navigation regression verified; imports consistently opened the imported model and the earlier intermittent landing-view behavior was not reproduced.
+- [x] Android/browser `.scad.txt` filename compatibility issue reproduced, fixed and verified with real files.
+- [x] Legitimate GitHub percent-encoded file paths (`%20`, `%2F`) reproduced, fixed and verified while traversal/double-encoding protections remained covered by regression tests.
+- [x] Focused SCAD/GitHub import tests green after the final compatibility fixes.
+- [x] Typecheck green after final compatibility fixes.
+- [x] ESLint green after final compatibility fixes.
+- [x] Production build green after final compatibility fixes.
+
+Step 6 closed on 2026-08-25.
 
 ### Deferred loading-state regression
 
@@ -129,4 +137,4 @@ This strongly suggests a client-side completion/loading-state synchronization pr
 
 Do not paper over this with an arbitrary timeout. The UI should stop loading from an authoritative completion condition and reveal the already-persisted artifact without requiring a page reload.
 
-The previously observed intermittent third/later OpenCode turn remains explicitly deferred until after the external-model work and is tracked separately from this loading-state issue.
+The empty-assistant persistence issue after an early provider failure and the previously observed intermittent third/later OpenCode turn remain explicitly deferred and separate from the import feature. The cross-mode third/later turn investigation remains scheduled after the external-model work and should include 4+ sequential turns.
