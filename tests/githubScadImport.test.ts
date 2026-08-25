@@ -35,6 +35,24 @@ describe('GitHub SCAD URL normalization', () => {
     });
   });
 
+  it('accepts normal GitHub percent-encoding for spaces and path separators', () => {
+    expect(
+      normalizeGithubScadUrl(
+        'https://github.com/Noty-design/Parametric-designs/blob/main/Flexible%20figure%2Fkropp4.scad',
+      ),
+    ).toEqual({
+      provider: 'github',
+      kind: 'file',
+      owner: 'Noty-design',
+      repo: 'Parametric-designs',
+      ref: 'main',
+      path: 'Flexible figure/kropp4.scad',
+      filename: 'kropp4.scad',
+      canonicalUrl:
+        'https://github.com/Noty-design/Parametric-designs/blob/main/Flexible%20figure/kropp4.scad',
+    });
+  });
+
   it('normalizes a raw GitHub URL to the canonical blob identity', () => {
     expect(
       normalizeGithubScadUrl(
@@ -81,7 +99,7 @@ describe('GitHub SCAD URL normalization', () => {
     ).toThrow(/credentials/i);
   });
 
-  it('rejects query parameters, encoded paths, traversal forms and non-SCAD files', () => {
+  it('rejects query parameters, traversal, double encoding, backslashes and non-SCAD files', () => {
     expect(() =>
       normalizeGithubScadUrl(
         'https://github.com/example/cad/blob/main/model.scad?raw=1',
@@ -91,7 +109,17 @@ describe('GitHub SCAD URL normalization', () => {
       normalizeGithubScadUrl(
         'https://github.com/example/cad/blob/main/models/%2e%2e/model.scad',
       ),
-    ).toThrow(/encoded/i);
+    ).toThrow(/dot segments/i);
+    expect(() =>
+      normalizeGithubScadUrl(
+        'https://github.com/example/cad/blob/main/models/%252e%252e/model.scad',
+      ),
+    ).toThrow(/double-encoded/i);
+    expect(() =>
+      normalizeGithubScadUrl(
+        'https://github.com/example/cad/blob/main/models%5cmodel.scad',
+      ),
+    ).toThrow(/backslashes/i);
     expect(() =>
       normalizeGithubScadUrl(
         'https://raw.githubusercontent.com/example/cad/main/model.stl',
@@ -130,6 +158,35 @@ describe('trusted GitHub SCAD retrieval', () => {
       'https://api.github.com/repos/example/cad/contents/model.scad?ref=main',
     );
     expect(calledUrl).not.toContain('raw.githubusercontent.com');
+  });
+
+  it('retrieves a percent-encoded GitHub path through the fixed API endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: 'file',
+          encoding: 'base64',
+          size: Buffer.byteLength(scad),
+          content: Buffer.from(scad, 'utf8').toString('base64'),
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await resolveGithubScadImport(
+      'https://github.com/Noty-design/Parametric-designs/blob/main/Flexible%20figure%2Fkropp4.scad',
+    );
+
+    expect(result).toEqual({
+      filename: 'kropp4.scad',
+      code: scad,
+      canonicalUrl:
+        'https://github.com/Noty-design/Parametric-designs/blob/main/Flexible%20figure/kropp4.scad',
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      'https://api.github.com/repos/Noty-design/Parametric-designs/contents/Flexible%20figure/kropp4.scad?ref=main',
+    );
   });
 
   it('rejects repository files above the shared SCAD byte limit before decoding', async () => {
