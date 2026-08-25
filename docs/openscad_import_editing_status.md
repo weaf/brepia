@@ -14,7 +14,7 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 3 — Local `.scad` upload is complete and externally verified green.**
 
-**Step 4 — AI continuation is active. Both OpenCode streaming and CLI import → edit paths are manually verified. A broader multi-turn chat instability exists in both modes and is deferred for dedicated regression work after the external-model work.**
+**Step 4 — AI continuation is active. OpenCode streaming and CLI are manually verified. Exact imported-artifact continuity and latest-artifact selection are now automatically verified green. Refresh-before-edit and parameter-edit → AI continuity tests have been added and await operator validation.**
 
 ## Completed architecture/audit work
 
@@ -129,14 +129,14 @@ An earlier mobile run appeared to return to/reload the landing view and required
 ## Step 4 — AI continuation — ACTIVE
 
 - [x] Core import → first pCAD edit path verified manually through OpenCode streaming.
-- [ ] Verify the first edit receives the exact complete imported artifact, not a truncated/reconstructed copy.
-- [ ] Verify standard AI SDK provider path.
+- [x] Verify the first edit receives the exact complete imported artifact, not a truncated/reconstructed copy — focused AI SDK regression verified green by operator on 2026-08-25.
+- [x] Verify standard AI SDK provider boundary preserves the imported complete artifact — focused regression verified green by operator on 2026-08-25.
 - [x] Verify OpenCode CLI path — imported-model edit verified successfully by operator on 2026-08-25.
 - [x] Verify OpenCode streaming path — imported-model edit verified successfully by operator on 2026-08-25.
-- [ ] Verify refresh before first edit.
-- [ ] Verify parameter edit followed by AI edit.
+- [ ] Verify refresh before first edit — DB-style reload → AI SDK continuity regression added; operator validation pending.
+- [ ] Verify parameter edit followed by AI edit — persisted edited artifact → AI SDK continuity regression added; operator validation pending.
 - [ ] Verify retry/branching/history continuity.
-- [ ] Verify successive AI edits continue from the latest complete artifact rather than the original import.
+- [x] Verify successive AI edits select the latest complete artifact rather than the original import at the OpenCode prompt boundary — focused regression verified green by operator on 2026-08-25.
 
 ### Deferred cross-mode multi-turn regression
 
@@ -191,4 +191,4 @@ Deferred:
 
 ## Next action
 
-Continue **Step 4 — AI continuation** with the remaining import-specific continuity checks and standard AI SDK provider path. Do not investigate the shared third/later-turn instability yet; retain it for dedicated regression work after the external-model work.
+Validate the new focused Step 4 refresh/parameter continuity regressions. If green, continue with retry/branch/history continuity. Do not investigate the shared third/later-turn instability yet; retain it for dedicated regression work after the external-model work.
