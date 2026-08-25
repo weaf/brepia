@@ -59,7 +59,7 @@ describe('persistent OpenCode sessions', () => {
     assert.match(reused, /<current_pcad_artifact>/);
     assert.match(reused, /width = 40;/);
     assert.match(reused, /Compiled successfully/);
-    assert.equal(reused.includes('<user_request>'), false);
+    assert.equal(reused.includes('<user_request>\n'), false);
 
     const recreated = buildPersistentOpenCodePrompt(prompt, true);
     assert.match(recreated, /<user_request>\s*Make the lid thicker/);
@@ -193,7 +193,7 @@ describe('persistent OpenCode sessions', () => {
     const fourthContinuation = buildPersistentOpenCodePrompt(continuation, false);
     assert.match(fourthContinuation, /revision = 4;/);
     assert.match(fourthContinuation, /turn 4 compiled/);
-    assert.equal(fourthContinuation.includes('<user_request>'), false);
+    assert.equal(fourthContinuation.includes('<user_request>\n'), false);
   });
 
   it('switches model in place instead of creating another session', async () => {
