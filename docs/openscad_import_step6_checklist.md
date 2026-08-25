@@ -47,7 +47,7 @@ Expected architecture: parameter changes rewrite the canonical build tool input 
 
 Expected architecture: `conversations.current_message_leaf_id` is authoritative; `Tree.getPath()` rebuilds the selected branch and `ChatSession` selects the latest complete artifact on that path.
 
-## B. Fix with AI — CORE FLOW VERIFIED, MODEL-SELECTION UX POLISH PENDING
+## B. Fix with AI — CORE FLOW AND MODEL-SELECTION UX VERIFIED
 
 Implementation status:
 
@@ -57,28 +57,30 @@ Implementation status:
 - [x] Keep current model, execution mode, DB persistence and active leaf semantics identical to a normal user message.
 - [x] Preserve serialized `OpenSCADError` identity across the worker boundary so the button renders for real compile errors.
 - [x] Focused prompt/submit-bridge/import/worker-error regressions verified green by operator.
-- [x] Typecheck verified green by operator.
-- [x] ESLint verified green by operator.
-- [x] Production build verified green by operator.
+- [x] Typecheck verified green by operator for the core repair wiring.
+- [x] ESLint verified green by operator for the core repair wiring.
+- [x] Production build verified green by operator for the core repair wiring.
 - [x] Manually trigger a real OpenSCAD compile error and verify the `Fix with AI` button renders.
 - [x] Pressing `Fix with AI` reaches the normal chat/model transport.
 - [x] Complete one successful AI repair turn with a deliberately misspelled OpenSCAD parameter and verify the repaired artifact becomes the active preview.
-- [ ] Improve error-state UX so the user can deliberately choose/confirm the AI model before the repair turn is submitted; do not silently fall back to a different model.
+- [x] Expose the normal conversation model selection directly in the compile-error state before `Fix with AI`.
+- [x] Keep the error-state selector bound to the same conversation model state rather than introducing a separate hidden repair model or automatic fallback.
+- [x] Manually verify the error-state model selector and successful repair UX.
+- [ ] Run the focused model-picker bridge test/typecheck/lint/build gate after the model-selection UX change.
 
 Manual observations on 2026-08-25:
 
 - The deliberately broken source used `heiht` instead of `height`; OpenSCAD produced a real compile error and the `Fix with AI` action rendered.
 - An initial repair attempt used the conversation's saved/default `openai/gpt-5.6-sol` selection. pCAD routed that model through the built-in OpenRouter provider, which had no usable credential and correctly failed with `Missing Authentication header`.
-- After the operator selected a working model in the existing chat model picker and pressed `Fix with AI` again, the repair completed successfully. This verifies the repair bridge, active-artifact continuity and normal model transport end-to-end.
-- Product UX should therefore make model choice explicit at the error state rather than treating a stale/default saved model as an implicit repair choice. The repair must continue to use the normal conversation model state; there must not be a separate hidden "fix model" or automatic provider fallback.
+- After the operator selected a working model in the normal model picker and pressed `Fix with AI` again, the repair completed successfully.
+- The follow-up model-selection UX exposes the same authoritative conversation model selection in the compile-error state. The operator manually verified that this works as intended.
+- Model selection itself does not change OpenCode execution mode. The conversation keeps `settings.openCodeExecutionMode`; when absent, editor state defaults to `cli`. This setting only decides CLI vs streaming for transports that use the OpenCode execution mode; ordinary hosted/local provider transports remain normal provider calls.
 
 A secondary server-hardening issue was exposed by the failed provider call: when a provider fails before emitting any assistant payload, `aiChat.ts` currently attempts to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Track this separately and ensure empty provider responses are skipped rather than persisted. Do not conflate this with the OpenSCAD import or Fix-with-AI routing contract.
 
 The repair bridge is conversation-id keyed and forwards into the already-mounted normal chat submit callback. It contains no AI transport, fetch or persistence implementation of its own.
 
 ## C. Remaining Step 6 checks
-
-After A and the model-selection UX polish in B:
 
 - STL export
 - DXF export
@@ -88,4 +90,18 @@ After A and the model-selection UX polish in B:
 - ordinary non-imported parametric conversation
 - repeated mobile post-import navigation
 
-The previously observed intermittent third/later OpenCode turn remains explicitly deferred until after the external-model work.
+### Deferred loading-state regression
+
+Observed manually on 2026-08-25: after an AI model has apparently completed the model generation, the editor can remain in the loading/spinner state for a long time. Reloading the page then immediately shows the completed model.
+
+This strongly suggests a client-side completion/loading-state synchronization problem rather than lost model output: the completed artifact survives reload and can be reconstructed from persisted state. Investigate later as a separate regression. Check at minimum:
+
+- `ChatSession` AI SDK status transition and `onLoadingChange` lifecycle;
+- whether `isChatStreaming` is cleared after the final tool/output step;
+- auto-continuation / `answer_user` completion semantics;
+- race between persisted assistant artifact, query refresh and chat status;
+- whether behavior differs between OpenCode CLI, OpenCode streaming and normal provider transports.
+
+Do not paper over this with an arbitrary timeout. The UI should stop loading from an authoritative completion condition and reveal the already-persisted artifact without requiring a page reload.
+
+The previously observed intermittent third/later OpenCode turn remains explicitly deferred until after the external-model work and is tracked separately from this loading-state issue.
