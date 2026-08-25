@@ -7,16 +7,8 @@ import posthog from 'posthog-js';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
-import {
-  boundedScadCompileError,
-  isBlockingScadCompileError,
-  readScadImportFile,
-  scadImportTitle,
-} from '@/lib/scadImport';
-import { persistImportedArtifact } from '@/services/importedArtifactService';
-import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
-import type { ImportedArtifactBaseline } from '@shared/importedArtifact';
+import { readScadImportFile } from '@/lib/scadImport';
+import { createImportedScadProject } from '@/services/scadProjectImportService';
 import type { Model } from '@shared/types';
 
 export function ScadImportButton({
@@ -39,90 +31,23 @@ export function ScadImportButton({
       if (!user?.id) throw new Error('User must be authenticated');
 
       const code = await readScadImportFile(file);
-      const title = scadImportTitle(file.name);
-
-      let baseline: ImportedArtifactBaseline;
-      try {
-        await previewScadColoredViaToolWorker(code);
-        baseline = { status: 'success' };
-      } catch (error) {
-        if (isBlockingScadCompileError(error)) throw error;
-        baseline = {
-          status: 'error',
-          errorText: `Compilation failed:\n${boundedScadCompileError(error)}`,
-        };
-      }
-
-      const { data: aiPreferences, error: preferencesError } = await supabase
-        .from('user_ai_preferences')
-        .select('default_prompt_profile_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (preferencesError) {
-        throw new Error(
-          `Failed to load AI preferences: ${preferencesError.message}`,
-        );
-      }
-
-      const conversationId = crypto.randomUUID();
-      const { data: conversation, error: conversationError } = await supabase
-        .from('conversations')
-        .insert({
-          id: conversationId,
-          user_id: user.id,
-          title,
-          type: 'parametric',
-          settings: {
-            model,
-            openCodeExecutionMode: executionMode,
-            promptProfileId: aiPreferences?.default_prompt_profile_id ?? null,
-          },
-        })
-        .select()
-        .single();
-      if (conversationError) {
-        throw new Error(
-          `Failed to create conversation: ${conversationError.message}`,
-        );
-      }
-      if (!conversation) throw new Error('Failed to create conversation');
-
-      try {
-        await persistImportedArtifact({
-          conversationId,
-          artifact: { title, version: 'v1', code },
-          origin: {
-            type: 'import',
-            source: 'upload',
-            filename: file.name,
-            importedAt: new Date().toISOString(),
-          },
-          baseline,
-        });
-      } catch (error) {
-        // Avoid leaving an empty project behind if the authoritative imported
-        // message pair did not persist. Conversation/message FK cascade handles
-        // any partial rows should the backend ever stop treating the bulk insert
-        // atomically.
-        try {
-          await supabase
-            .from('conversations')
-            .delete()
-            .eq('id', conversationId)
-            .eq('user_id', user.id);
-        } catch {
-          // Preserve the original import failure; cleanup is best-effort.
-        }
-        throw error;
-      }
-
-      posthog.capture('openscad_imported', {
-        conversation_id: conversationId,
+      const result = await createImportedScadProject({
+        userId: user.id,
+        model,
+        executionMode,
         filename: file.name,
-        compile_status: baseline.status,
+        code,
+        origin: { source: 'upload' },
       });
 
-      return { conversationId };
+      posthog.capture('openscad_imported', {
+        conversation_id: result.conversationId,
+        filename: file.name,
+        source: 'upload',
+        compile_status: result.baseline.status,
+      });
+
+      return result;
     },
     onSuccess: async ({ conversationId }) => {
       await queryClient.invalidateQueries({ queryKey: ['conversations'] });
