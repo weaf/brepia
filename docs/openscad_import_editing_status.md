@@ -18,7 +18,7 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 5 — GitHub/Gist URL import is complete and externally verified green.**
 
-**Step 6 — Full editor regression and product polish is now active.**
+**Step 6 — Full editor regression and product polish is active. Export/share/workspace verification is complete; two final product regressions remain.**
 
 ## Completed architecture/audit work
 
@@ -186,17 +186,35 @@ Neither warning originates from the SCAD URL-import implementation and neither b
 
 ## Step 6 — Full editor regression and product polish — ACTIVE
 
-- [ ] Preview regression.
-- [ ] Parameter UI/persistence regression.
-- [ ] Reload/history/branch regression.
-- [ ] Fix with AI wiring verification/fix.
-- [ ] STL export regression.
-- [ ] DXF export regression.
-- [ ] Share regression.
-- [ ] Conversation-workspace current/revision regression.
+- [x] Preview regression.
+- [x] Parameter UI/persistence regression.
+- [x] Reload/history/branch regression.
+- [x] Fix with AI wiring verification/fix.
+- [x] STL export regression.
+- [x] DXF export regression.
+- [x] Share regression.
+- [x] Conversation-workspace current/revision regression.
 - [ ] Ordinary non-imported conversation regression.
-- [ ] Recheck mobile post-import navigation over repeated imports; latest test navigated directly to the model, so only fix if the earlier landing-view behavior is reproducible.
+- [ ] Recheck mobile post-import navigation over repeated imports; latest tests navigated directly to the model, so only fix if the earlier landing-view behavior is reproducible.
 - [ ] After external-model work, investigate intermittent 3rd/later chat failure across both OpenCode CLI and streaming with 4+ sequential-turn regression coverage.
+
+The export/share/workspace gate was closed on 2026-08-25 after the operator reported the requested focused imported-artifact test, typecheck, ESLint and production build green and manually confirmed mobile STL/DXF export plus public share behavior working.
+
+A mobile parity defect was fixed in commit `82359c8f91afa1a6f08f213767b75ed7d810d768`: mobile STL/DXF downloads now mirror exports best-effort into the same conversation workspace as desktop while keeping the browser download primary.
+
+## Deferred separate regressions discovered during Step 6
+
+### Empty assistant persistence after early provider failure
+
+If a provider fails before emitting an assistant payload, `aiChat.ts` can attempt to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Harden this separately by skipping empty assistant persistence; it is not part of the OpenSCAD import contract.
+
+### Loading/spinner completion synchronization
+
+After an AI model has apparently completed generation, the editor can remain in a loading/spinner state until reload, while the completed artifact is already persisted and appears immediately after reload. Investigate `ChatSession` status transitions, `isChatStreaming`, auto-continuation completion semantics and the persistence/query-refresh race. Do not fix this with an arbitrary timeout.
+
+### Cross-mode third/later OpenCode turn
+
+Keep the previously observed intermittent third/later turn failure deferred until after the external-model work. Test 4+ sequential turns across both CLI and streaming and verify every turn continues from the immediately preceding complete artifact.
 
 ## V1 boundaries
 
@@ -222,4 +240,9 @@ Deferred:
 
 ## Next action
 
-Continue **Step 6 — Full editor regression and product polish**. Verify preview, parameter persistence and reload/history/branch behavior first, then Fix with AI, exports, share and conversation-workspace mirrors. Keep the shared third/later-turn OpenCode instability deferred until after the external-model work.
+Finish Step 6 with the two remaining product regressions only:
+
+1. Verify an ordinary non-imported parametric conversation still works normally end to end.
+2. Run repeated mobile SCAD imports and confirm post-import navigation consistently opens the imported model; only implement a fix if the earlier landing-view behavior can be reproduced.
+
+If both are green, close Step 6 and then decide whether to merge `feature/openscad-import-editing` into `master`. Keep the loading-state, empty-assistant-provider-failure and third/later OpenCode-turn regressions separate unless explicitly chosen as the next workstream.
