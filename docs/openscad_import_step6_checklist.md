@@ -47,7 +47,7 @@ Expected architecture: parameter changes rewrite the canonical build tool input 
 
 Expected architecture: `conversations.current_message_leaf_id` is authoritative; `Tree.getPath()` rebuilds the selected branch and `ChatSession` selects the latest complete artifact on that path.
 
-## B. Fix with AI — IMPLEMENTED, MANUAL UI CHECK BLOCKED BY PROVIDER CONFIG
+## B. Fix with AI — CORE FLOW VERIFIED, MODEL-SELECTION UX POLISH PENDING
 
 Implementation status:
 
@@ -62,17 +62,23 @@ Implementation status:
 - [x] Production build verified green by operator.
 - [x] Manually trigger a real OpenSCAD compile error and verify the `Fix with AI` button renders.
 - [x] Pressing `Fix with AI` reaches the normal chat/model transport.
-- [ ] Complete one successful AI repair turn and verify the corrected artifact becomes the active preview.
+- [x] Complete one successful AI repair turn with a deliberately misspelled OpenSCAD parameter and verify the repaired artifact becomes the active preview.
+- [ ] Improve error-state UX so the user can deliberately choose/confirm the AI model before the repair turn is submitted; do not silently fall back to a different model.
 
-Manual observation on 2026-08-25: the repair request reached the normal model transport, but the selected model was `openai/gpt-5.6-sol`, which pCAD routes through the built-in OpenRouter provider. The request failed with `Missing Authentication header`, indicating no usable OpenRouter credential was available for that user/server configuration. This is a provider configuration blocker, not a failure of the Fix-with-AI submit bridge.
+Manual observations on 2026-08-25:
 
-A secondary server-hardening issue was exposed by the same failed provider call: when the provider fails before emitting any assistant payload, `aiChat.ts` currently attempts to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Track this separately and ensure empty provider responses are skipped rather than persisted. Do not conflate this with the OpenSCAD import or Fix-with-AI routing contract.
+- The deliberately broken source used `heiht` instead of `height`; OpenSCAD produced a real compile error and the `Fix with AI` action rendered.
+- An initial repair attempt used the conversation's saved/default `openai/gpt-5.6-sol` selection. pCAD routed that model through the built-in OpenRouter provider, which had no usable credential and correctly failed with `Missing Authentication header`.
+- After the operator selected a working model in the existing chat model picker and pressed `Fix with AI` again, the repair completed successfully. This verifies the repair bridge, active-artifact continuity and normal model transport end-to-end.
+- Product UX should therefore make model choice explicit at the error state rather than treating a stale/default saved model as an implicit repair choice. The repair must continue to use the normal conversation model state; there must not be a separate hidden "fix model" or automatic provider fallback.
+
+A secondary server-hardening issue was exposed by the failed provider call: when a provider fails before emitting any assistant payload, `aiChat.ts` currently attempts to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Track this separately and ensure empty provider responses are skipped rather than persisted. Do not conflate this with the OpenSCAD import or Fix-with-AI routing contract.
 
 The repair bridge is conversation-id keyed and forwards into the already-mounted normal chat submit callback. It contains no AI transport, fetch or persistence implementation of its own.
 
 ## C. Remaining Step 6 checks
 
-After A and the successful manual B repair check:
+After A and the model-selection UX polish in B:
 
 - STL export
 - DXF export
