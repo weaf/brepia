@@ -1,10 +1,10 @@
 /**
  * Pure logic for the chat persistence boundary, kept free of `@shared` and SDK
  * imports so it's unit-testable in isolation (`deno test
- * src/server/chatToolPersistence.test.ts`). The concerns here are the things
- * standing between a normal multi-step parametric turn and a permanently-
- * bricked conversation, so they're worth isolating and testing directly. See
- * `aiChat.ts` for the call sites.
+ * src/server/chatToolPersistence.test.ts`). The two concerns here are the only
+ * things standing between a normal multi-step parametric turn and a
+ * permanently-bricked conversation, so they're worth isolating and testing
+ * directly. See `aiChat.ts` for the call sites.
  *
  * Background: the parametric tools (`build_parametric_model`, `answer_user`)
  * have no server `execute` — the browser is the sole authority for their
@@ -79,28 +79,25 @@ export type PersistAction = 'insert' | 'update' | 'skip';
 /**
  * Decide what the server's `onFinish` should do with the response message.
  *
- * - `insert`  — new assistant row (the leaf was a user message). Write only
- *   when there is actual payload. A pending tool call is valid payload because
- *   the row must exist for the client's `onToolOutput` UPDATE to land.
+ * - `insert`  — new assistant row (the leaf was a user message). Always write,
+ *   even with a pending tool call: the row must exist for the client's
+ *   `onToolOutput` UPDATE to land, and the client resolves it before the
+ *   auto-resubmit re-reads the branch.
  * - `update`  — continuation with everything resolved (or pure text / no
- *   tools). Safe to write when there is actual payload; the client isn't
- *   persisting this turn.
- * - `skip`    — either there is no payload at all (for example the provider
- *   failed before emitting anything), or a continuation still ends with a
- *   pending CLIENT tool. Empty rows violate `messages_payload_present`, while
- *   pending continuations are client-owned and a delayed server write could
- *   clobber the resolved result.
+ *   tools). Safe to write; the client isn't persisting this turn.
+ * - `skip`    — continuation that still ends with a pending CLIENT tool. The
+ *   browser resolves and persists the `output-available` version itself; a
+ *   delayed server write could land last and clobber it back to
+ *   `input-available`, leaving a dangling tool call that 500s the next send.
+ *   Defer to the client.
  */
 export function decidePersistAction({
   isContinuation,
   hasPendingToolCall,
-  hasPayload,
 }: {
   isContinuation: boolean;
   hasPendingToolCall: boolean;
-  hasPayload: boolean;
 }): PersistAction {
-  if (!hasPayload) return 'skip';
   if (!isContinuation) return 'insert';
   return hasPendingToolCall ? 'skip' : 'update';
 }
