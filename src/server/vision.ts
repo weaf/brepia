@@ -27,6 +27,9 @@ import { logWarning } from './serverLog';
 const VISION_TIMEOUT_MS = 5 * 60_000;
 const MAX_CACHE_ENTRIES = 128;
 
+export const VISION_NOT_CONFIGURED_MESSAGE =
+  'Vision models are not configured. Open Settings → Vision and select a Fast vision model before using a text-only model or OpenCode/Codex with images.';
+
 type VisionTransportKind = 'normal' | 'streaming-opencode' | 'cli-agent';
 export type VisionAnalysisKind = 'reference' | 'inspection';
 
@@ -246,11 +249,10 @@ async function analyzeImagesWithConfiguredVision(
   const preferences = await getPreferencesByUserId(userId);
   const selectedModelId = selectVisionModelId(kind, preferences);
   if (!selectedModelId) {
-    logWarning(
-      `pCAD vision fallback is not configured for ${kind} analysis`,
-      { functionName: 'pcad-vision-fallback' },
-    );
-    return undefined;
+    logWarning(VISION_NOT_CONFIGURED_MESSAGE, {
+      functionName: 'pcad-vision-fallback',
+    });
+    throw new Error(VISION_NOT_CONFIGURED_MESSAGE);
   }
 
   const key = cacheKey(userId, kind, selectedModelId, images, userRequest);
