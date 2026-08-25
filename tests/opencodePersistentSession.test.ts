@@ -65,6 +65,58 @@ describe('persistent OpenCode sessions', () => {
     assert.match(recreated, /<user_request>\s*Make the lid thicker/);
   });
 
+  it('uses the latest complete artifact instead of the original import on a later edit', () => {
+    const originalCode = 'width = 20;\nheight = 10;\ncube([width, width, height]);';
+    const latestCode = 'width = 36;\nheight = 14;\ncube([width, width, height]);';
+    const prompt = [
+      { role: 'system', content: 'CAD context' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'tool_import_1',
+            toolName: 'build_parametric_model',
+            input: {
+              title: 'Imported box',
+              version: 'v1',
+              code: originalCode,
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Make it wider' }],
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-2',
+            toolName: 'build_parametric_model',
+            input: {
+              title: 'Imported box',
+              version: 'v1',
+              code: latestCode,
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Make it taller too' }],
+      },
+    ] as unknown as LanguageModelV3Prompt;
+
+    const turnPrompt = buildPersistentOpenCodePrompt(prompt, false);
+    assert.match(turnPrompt, /<current_pcad_artifact>/);
+    assert.match(turnPrompt, /width = 36;/);
+    assert.match(turnPrompt, /height = 14;/);
+    assert.equal(turnPrompt.includes('width = 20;'), false);
+  });
+
   it('switches model in place instead of creating another session', async () => {
     const conversationId = '123e4567-e89b-12d3-a456-426614174000';
     const sessionId = buildOpenCodeSessionId(conversationId);
