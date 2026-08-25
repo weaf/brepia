@@ -24,7 +24,16 @@ describe('local SCAD import validation', () => {
     expect(source).toBe(VALID_SOURCE);
   });
 
-  it('rejects non-SCAD files', () => {
+  it('accepts Android/browser .scad.txt filename aliases', () => {
+    expect(
+      decodeScadImportBytes('kropp4.scad.txt', bytes(VALID_SOURCE)),
+    ).toBe(VALID_SOURCE);
+    expect(
+      decodeScadImportBytes('MODEL.SCAD.TXT', bytes(VALID_SOURCE)),
+    ).toBe(VALID_SOURCE);
+  });
+
+  it('rejects ordinary TXT files that are not SCAD filename aliases', () => {
     expect(() => decodeScadImportBytes('bracket.txt', bytes(VALID_SOURCE)))
       .toThrowError(ScadImportError);
     try {
@@ -98,9 +107,10 @@ ${VALID_SOURCE}
     expect(findUnsupportedScadDependencies(source)).toEqual([]);
   });
 
-  it('derives a clean artifact title from the filename', () => {
+  it('derives a clean artifact title from SCAD and Android alias filenames', () => {
     expect(scadImportTitle('/tmp/My Bracket.scad')).toBe('My Bracket');
     expect(scadImportTitle('part.SCAD')).toBe('part');
+    expect(scadImportTitle('kropp4.scad.txt')).toBe('kropp4');
   });
 
   it('classifies resource/lifecycle failures as blocking import failures', () => {
