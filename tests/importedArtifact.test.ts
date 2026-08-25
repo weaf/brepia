@@ -7,6 +7,7 @@ import {
   getBuildParametricModelArtifact,
   replaceBuildParametricModelOutput,
 } from '@shared/parametricParts';
+import type { ParametricArtifact } from '@shared/types';
 import { collectSuccessfulParametricBuilds } from '@/server/conversationWorkspaceModels';
 
 const conversationId = '11111111-2222-4333-8444-555555555555';
@@ -22,6 +23,15 @@ const origin = {
   importedAt: '2026-08-25T06:30:00.000Z',
 };
 
+type TestRow = {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant';
+  parts: AppUIMessage['parts'];
+  metadata: AppUIMessage['metadata'];
+  parent_message_id: string | null;
+};
+
 function build(baseline: { status: 'success' } | { status: 'error'; errorText: string }) {
   return buildImportedArtifactMessages({
     conversationId,
@@ -34,12 +44,17 @@ function build(baseline: { status: 'success' } | { status: 'error'; errorText: s
   });
 }
 
-function asUiMessage(message: ReturnType<typeof build>[number]): AppUIMessage {
+function asUiMessage(message: {
+  id: string;
+  role: 'user' | 'assistant';
+  parts: AppUIMessage['parts'];
+  metadata?: AppUIMessage['metadata'];
+}): AppUIMessage {
   return {
     id: message.id,
     role: message.role,
     parts: message.parts,
-    metadata: message.metadata,
+    metadata: message.metadata ?? {},
   };
 }
 
@@ -70,6 +85,36 @@ function followUp(text: string): AppUIMessage {
     role: 'user',
     parts: [{ type: 'text', text }],
     metadata: {},
+  };
+}
+
+function buildAssistantRow({
+  id,
+  parentMessageId,
+  nextArtifact,
+  nextToolCallId,
+}: {
+  id: string;
+  parentMessageId: string;
+  nextArtifact: ParametricArtifact;
+  nextToolCallId: string;
+}): TestRow {
+  const [, importedAssistant] = build({ status: 'success' });
+  const parts = replaceBuildParametricModelOutput(
+    importedAssistant.parts,
+    nextArtifact,
+  ).map((part) =>
+    part.type === 'tool-build_parametric_model'
+      ? { ...part, toolCallId: nextToolCallId }
+      : part,
+  );
+  return {
+    id,
+    conversation_id: conversationId,
+    role: 'assistant',
+    parts,
+    metadata: {},
+    parent_message_id: parentMessageId,
   };
 }
 
@@ -162,6 +207,106 @@ describe('imported artifact persistence primitive', () => {
     expect(inputs[0]).toEqual(parameterEditedArtifact);
     expect((inputs[0] as { code: string }).code).toBe(parameterEditedCode);
     expect((inputs[0] as { code: string }).code).not.toBe(code);
+  });
+
+  it('keeps retry branches isolated and uses the selected branch artifact', async () => {
+    const [importUser, importAssistant] = build({ status: 'success' });
+    const editUser: TestRow = {
+      id: 'dddddddd-4444-4444-8444-444444444444',
+      conversation_id: conversationId,
+      role: 'user',
+      parts: [{ type: 'text', text: 'Make it wider.' }],
+      metadata: {},
+      parent_message_id: importAssistant.id,
+    };
+    const branchAArtifact: ParametricArtifact = {
+      ...artifact,
+      code: 'width = 30;\nheight = 10;\ncube([width, width, height]);\n',
+    };
+    const branchBArtifact: ParametricArtifact = {
+      ...artifact,
+      code: 'width = 45;\nheight = 10;\ncube([width, width, height]);\n',
+    };
+    const branchA = buildAssistantRow({
+      id: 'eeeeeeee-5555-4555-8555-555555555555',
+      parentMessageId: editUser.id,
+      nextArtifact: branchAArtifact,
+      nextToolCallId: 'tool_branch_a',
+    });
+    const branchB = buildAssistantRow({
+      id: 'ffffffff-6666-4666-8666-666666666666',
+      parentMessageId: editUser.id,
+      nextArtifact: branchBArtifact,
+      nextToolCallId: 'tool_branch_b',
+    });
+    const tree = new Tree<TestRow>([
+      importUser as TestRow,
+      importAssistant as TestRow,
+      editUser,
+      branchA,
+      branchB,
+    ]);
+
+    const branchAInputs = await modelBuildInputs([
+      ...tree.getPath(branchA.id).map(asUiMessage),
+      followUp('Continue from branch A.'),
+    ]);
+    const branchBInputs = await modelBuildInputs([
+      ...tree.getPath(branchB.id).map(asUiMessage),
+      followUp('Continue from branch B.'),
+    ]);
+
+    expect(branchAInputs.at(-1)).toEqual(branchAArtifact);
+    expect(branchBInputs.at(-1)).toEqual(branchBArtifact);
+    expect(branchAInputs.at(-1)).not.toEqual(branchBArtifact);
+    expect(branchBInputs.at(-1)).not.toEqual(branchAArtifact);
+  });
+
+  it('preserves the exact artifact when a history item is restored as a new leaf', async () => {
+    const [importUser, importAssistant] = build({ status: 'success' });
+    const editUser: TestRow = {
+      id: '12121212-7777-4777-8777-777777777777',
+      conversation_id: conversationId,
+      role: 'user',
+      parts: [{ type: 'text', text: 'Round the edges.' }],
+      metadata: {},
+      parent_message_id: importAssistant.id,
+    };
+    const editedArtifact: ParametricArtifact = {
+      ...artifact,
+      code: 'width = 28;\nheight = 12;\ncube([width, width, height]);\n',
+    };
+    const originalAssistant = buildAssistantRow({
+      id: '13131313-8888-4888-8888-888888888888',
+      parentMessageId: editUser.id,
+      nextArtifact: editedArtifact,
+      nextToolCallId: 'tool_history_original',
+    });
+    const restoredAssistant: TestRow = {
+      ...originalAssistant,
+      id: '14141414-9999-4999-8999-999999999999',
+      parts: JSON.parse(JSON.stringify(originalAssistant.parts)) as AppUIMessage['parts'],
+      metadata: JSON.parse(
+        JSON.stringify(originalAssistant.metadata ?? {}),
+      ) as AppUIMessage['metadata'],
+    };
+    const tree = new Tree<TestRow>([
+      importUser as TestRow,
+      importAssistant as TestRow,
+      editUser,
+      originalAssistant,
+      restoredAssistant,
+    ]);
+
+    const restoredInputs = await modelBuildInputs([
+      ...tree.getPath(restoredAssistant.id).map(asUiMessage),
+      followUp('Continue from the restored model.'),
+    ]);
+
+    expect(restoredInputs.at(-1)).toEqual(editedArtifact);
+    expect(getBuildParametricModelArtifact(restoredAssistant.parts)).toEqual(
+      editedArtifact,
+    );
   });
 
   it('retains a failed imported artifact as output-error without creating a pending tool call', () => {
