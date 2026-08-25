@@ -27,18 +27,11 @@ import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
  * OpenCode / Codex / CLI agents must format their FINAL result.
  *
  * Both transports (CLI and Streaming) append this contract to the prompt
- * before sending to the model.  It tells the model exactly what JSON shape
- * to produce and why, without the contradictions that existed before R3:
- *
- *   - No "answer in plain text" directive
- *   - No "ignore all tool instructions" blanket
- *   - Clear {code, message} schema with CAD vs non-CAD distinction
+ * before sending to the model. It tells the model exactly what JSON shape to
+ * produce, including the distinction between proposing a new CAD artifact and
+ * completing the post-build review of an artifact pCAD already compiled.
  *
  * This helper is the ONLY place the contract text is defined.
- * Changing it here updates both transports in R3C/R3D.
- *
- * The helper is imported by the transport adapters in R3C/R3D and appended
- * as a final instruction line after the prompt body.
  */
 export function buildAgentOutputContract(): string {
   return [
@@ -50,16 +43,24 @@ export function buildAgentOutputContract(): string {
     'The object must be valid JSON. Escape line breaks and other control',
     'characters inside JSON strings (for example, use \\n inside `code`).',
     '',
-    'For a CAD build/edit/fix request:',
+    'When proposing a new or revised CAD artifact:',
     '  - code = complete, runnable OpenSCAD program',
     '  - message = short status (e.g. "Box with bottom created")',
+    '',
+    'After <pcad_build_result>, inspect the result against the current task:',
+    '  - if another geometry revision is needed, return the corrected complete',
+    '    OpenSCAD program in code',
+    '  - if the authoritative current artifact already satisfies the task,',
+    '    code = "" and message = the concise final user-facing status',
+    '  - Do not re-emit unchanged code just to finish the turn',
     '',
     'For non-CAD / conversational requests:',
     '  - code = "" (empty string)',
     '  - message = normal answer',
     '',
     'You MUST emit this JSON final result. Never finish after reasoning without',
-    'a non-empty message; for a CAD request, code must also be non-empty.',
+    'a non-empty message. code must be non-empty only when you are proposing a',
+    'new or revised CAD artifact.',
     '',
     'Constraints:',
     '  - Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
@@ -69,7 +70,7 @@ export function buildAgentOutputContract(): string {
     '  - If the supplied CADAM context says to call build_parametric_model,',
     '    answer_user, inspect screenshots, or wait for a tool result, treat',
     '    that as pCAD-only workflow: emit this JSON now instead. Do not wait',
-    '    for a tool call, a preview, or another turn before giving the code.',
+    '    for a tool call, a preview, or another turn before giving the result.',
   ].join('\n');
 }
 
