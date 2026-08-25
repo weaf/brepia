@@ -223,6 +223,17 @@ function buildTurnRecord(
   };
 }
 
+function sameTurnIdentity(
+  existing: ConversationAgentTurnRecord,
+  input: ConversationAgentTurnInput,
+): boolean {
+  return (
+    existing.id === input.id &&
+    existing.conversationId === input.conversationId &&
+    existing.agent === input.agent
+  );
+}
+
 export async function recordConversationAgentTurn(
   input: ConversationAgentTurnInput,
 ): Promise<ConversationAgentTurnRecord> {
@@ -241,10 +252,14 @@ export async function recordConversationAgentTurn(
   } catch (error) {
     if (!isFsErrorWithCode(error, 'EEXIST')) throw error;
     const existing = await readJsonRecord<ConversationAgentTurnRecord>(path);
-    if (existing && JSON.stringify(existing) === JSON.stringify(record)) {
+    if (existing && sameTurnIdentity(existing, input)) {
+      // Turn files are immutable snapshots. Once a turn has been recorded,
+      // later workspace reconciliation must not rewrite it just because
+      // derived metadata (for example reused/status/result diagnostics) has
+      // evolved in the authoritative chat history. First write wins.
       return existing;
     }
-    throw new Error(`Immutable agent turn mismatch: ${input.agent}/${input.id}`);
+    throw new Error(`Immutable agent turn identity mismatch: ${input.agent}/${input.id}`);
   }
 
   const event: AgentEvent = {
