@@ -12,7 +12,9 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 2 — Imported artifact persistence primitive is complete and externally verified green.**
 
-**Step 3 — Local `.scad` upload is implemented in code; typecheck and ESLint are verified green, while tests/build/UI verification remain pending.**
+**Step 3 — Local `.scad` upload is complete and externally verified green.**
+
+**Step 4 — AI continuation is now active. The core import → pCAD edit path has already been verified manually through at least one configured AI path; provider/mode-specific coverage remains.**
 
 ## Completed architecture/audit work
 
@@ -79,7 +81,7 @@ Step 1 gate closed on 2026-08-25 after operator reported all requested validatio
 
 Step 2 gate closed on 2026-08-25 after operator reported all requested validation green.
 
-## Step 3 — Local `.scad` upload
+## Step 3 — Local `.scad` upload — COMPLETE
 
 ### Implemented
 
@@ -101,50 +103,45 @@ Step 2 gate closed on 2026-08-25 after operator reported all requested validatio
 - [x] Create a normal parametric conversation using the currently selected model and OpenCode execution mode.
 - [x] Preserve the user's current prompt profile in imported conversation settings.
 - [x] Persist the imported two-message baseline without starting an AI turn.
-- [x] Navigate directly to the normal editor after persistence.
+- [x] Navigate to the normal editor route after persistence.
 - [x] Best-effort delete the conversation if authoritative imported messages fail to persist.
 - [x] Add focused validation/preflight fixtures in `tests/scadImport.test.ts`.
 
-### Runtime/UI gate pending
+### Verification
 
-- [ ] Run `tests/scadImport.test.ts` successfully.
-- [ ] Run `tests/importedArtifact.test.ts` successfully after deterministic-leaf change.
-- [ ] Run full Vitest regression suite successfully.
-- [x] Run typecheck successfully — verified green by operator on 2026-08-25.
-- [x] Run ESLint successfully — verified green by operator on 2026-08-25.
-- [ ] Run production build successfully.
-- [ ] Import a self-contained cube SCAD from the landing page and verify automatic editor preview.
-- [ ] Import a BOSL2 SCAD and verify bundled library compilation.
-- [ ] Import a BOSL SCAD and verify bundled library compilation.
-- [ ] Import an MCAD SCAD and verify bundled library compilation.
-- [ ] Verify a syntax-broken SCAD opens as a retained error artifact instead of disappearing or starting AI automatically.
-- [ ] Verify oversized SCAD is rejected before conversation creation.
-- [ ] Verify invalid UTF-8/NUL source is rejected before conversation creation.
-- [ ] Verify custom include/use is rejected with an explicit unsupported-dependency message.
-- [ ] Verify `import("mesh.stl")`, SVG/DXF-style external assets and `surface(...)` dependencies are rejected in V1.
-- [ ] Verify refresh after successful import keeps the imported model as the current artifact.
+- [x] Focused SCAD/imported-artifact tests verified green by operator.
+- [x] Full Vitest regression suite verified green by operator.
+- [x] Typecheck verified green by operator.
+- [x] ESLint verified green by operator.
+- [x] Production build verified green by operator.
+- [x] Real `.scad` model imported successfully through the product UI.
+- [x] Imported model persisted as a normal pCAD model/conversation and could be modified through pCAD.
+- [x] No import-path functional blocker observed in manual end-to-end use.
 
-Recommended automated validation:
+The focused validation suite covers extension, byte limit, strict UTF-8/BOM behavior, NUL rejection, bundled-library preflight, unsupported custom/relative dependencies, external `import(...)`/`surface(...)` dependency rejection and compiler-failure classification. These edge cases do not need to remain a Step 3 release blocker after the focused and full suites passed.
 
-```bash
-npm test -- tests/scadImport.test.ts tests/importedArtifact.test.ts
-npm test
-npm run typecheck
-npm run lint
-npm run build
-```
+Step 3 gate closed on 2026-08-25 after the operator reported the focused/full tests and production build green and successfully imported and edited a real OpenSCAD model through pCAD.
 
-Step 3 remains the active gate. **Do not start Step 4 until the automated suite and core browser import scenarios above pass.**
+### Deferred mobile navigation polish
 
-## Step 4 — AI continuation
+On mobile, after import the route/data transition succeeds, but the imported model is not surfaced as prominently as it could be: the operator observed the landing view appear to reload and then found the new model from the mobile menu. This does not prevent import or editing and is deferred to Step 6 product polish.
 
-- [ ] Verify first user edit receives exact imported complete artifact.
-- [ ] Verify standard AI SDK provider.
-- [ ] Verify OpenCode CLI.
-- [ ] Verify OpenCode streaming.
+Preferred Step 6 UX candidates:
+
+- automatically surface the imported model/editor pane after import; or
+- automatically open/reveal the mobile navigation/model entry after import.
+
+## Step 4 — AI continuation — ACTIVE
+
+- [x] Core import → first pCAD edit path verified manually through at least one configured AI path.
+- [ ] Verify the first edit receives the exact complete imported artifact, not a truncated/reconstructed copy.
+- [ ] Verify standard AI SDK provider path.
+- [ ] Verify OpenCode CLI path.
+- [ ] Verify OpenCode streaming path.
 - [ ] Verify refresh before first edit.
 - [ ] Verify parameter edit followed by AI edit.
 - [ ] Verify retry/branching/history continuity.
+- [ ] Verify successive AI edits continue from the latest complete artifact rather than the original import.
 
 ## Step 5 — GitHub/Gist URL import
 
@@ -166,6 +163,7 @@ Step 3 remains the active gate. **Do not start Step 4 until the automated suite 
 - [ ] Share regression.
 - [ ] Conversation-workspace current/revision regression.
 - [ ] Ordinary non-imported conversation regression.
+- [ ] Improve post-import mobile navigation so the imported model/editor is surfaced immediately without requiring manual menu discovery.
 
 ## V1 boundaries
 
@@ -191,4 +189,4 @@ Deferred:
 
 ## Next action
 
-Close the remaining **Step 3 runtime/UI gate**: focused tests, full regression suite, production build and browser import scenarios. If green, mark Step 3 complete and proceed to **Step 4 — AI continuation**.
+Proceed with **Step 4 — AI continuation**. The first objective is to verify artifact continuity across the first and successive edits for each supported execution path without changing the existing canonical prompt/message-tree architecture.
