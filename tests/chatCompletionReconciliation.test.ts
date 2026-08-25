@@ -6,7 +6,7 @@ import {
 } from '../src/hooks/chatCompletionReconciliation';
 
 describe('chat completion reconciliation', () => {
-  it('does not treat a resolved build by itself as terminal', () => {
+  it('does not treat a normal resolved build by itself as terminal', () => {
     assert.equal(
       isTerminalAssistantMessage({
         id: 'assistant-1',
@@ -15,6 +15,40 @@ describe('chat completion reconciliation', () => {
           {
             type: 'tool-build_parametric_model',
             state: 'output-available',
+          },
+        ],
+      }),
+      false,
+    );
+  });
+
+  it('treats an imported synthetic build baseline as terminal', () => {
+    assert.equal(
+      isTerminalAssistantMessage({
+        id: 'assistant-import',
+        role: 'assistant',
+        metadata: { artifactOrigin: { type: 'import' } },
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'output-available',
+          },
+        ],
+      }),
+      true,
+    );
+  });
+
+  it('does not treat an unresolved imported tool as terminal', () => {
+    assert.equal(
+      isTerminalAssistantMessage({
+        id: 'assistant-import',
+        role: 'assistant',
+        metadata: { artifactOrigin: { type: 'import' } },
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'input-available',
           },
         ],
       }),
