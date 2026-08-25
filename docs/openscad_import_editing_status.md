@@ -14,7 +14,7 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 3 — Local `.scad` upload is complete and externally verified green.**
 
-**Step 4 — AI continuation is now active. The core import → pCAD edit path has already been verified manually through at least one configured AI path; provider/mode-specific coverage remains.**
+**Step 4 — AI continuation is active. OpenCode streaming import → edit has been verified manually; OpenCode CLI verification is in progress.**
 
 ## Completed architecture/audit work
 
@@ -133,11 +133,11 @@ Preferred Step 6 UX candidates:
 
 ## Step 4 — AI continuation — ACTIVE
 
-- [x] Core import → first pCAD edit path verified manually through at least one configured AI path.
+- [x] Core import → first pCAD edit path verified manually through OpenCode streaming.
 - [ ] Verify the first edit receives the exact complete imported artifact, not a truncated/reconstructed copy.
 - [ ] Verify standard AI SDK provider path.
-- [ ] Verify OpenCode CLI path.
-- [ ] Verify OpenCode streaming path.
+- [ ] Verify OpenCode CLI path — operator test in progress.
+- [x] Verify OpenCode streaming path — one imported-model iteration verified successfully by operator on 2026-08-25.
 - [ ] Verify refresh before first edit.
 - [ ] Verify parameter edit followed by AI edit.
 - [ ] Verify retry/branching/history continuity.
@@ -189,4 +189,4 @@ Deferred:
 
 ## Next action
 
-Proceed with **Step 4 — AI continuation**. The first objective is to verify artifact continuity across the first and successive edits for each supported execution path without changing the existing canonical prompt/message-tree architecture.
+Complete the **OpenCode CLI** continuation check, then verify artifact continuity across first/successive edits and the remaining supported execution paths without changing the canonical prompt/message-tree architecture.
