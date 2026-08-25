@@ -92,7 +92,7 @@ ${VALID_SOURCE}
     const source = `
 // include <parts/not-real.scad>
 /* use <other/not-real.scad> */
-echo("import(\\\"mesh.stl\\\")");
+echo("import(mesh.stl)");
 ${VALID_SOURCE}
 `;
     expect(findUnsupportedScadDependencies(source)).toEqual([]);
