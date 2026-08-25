@@ -12,7 +12,7 @@ Architecture audit is complete and the V1 architecture is approved.
 
 **Step 2 — Imported artifact persistence primitive is complete and externally verified green.**
 
-**Step 3 — Local `.scad` upload is implemented in code; runtime/UI verification is pending.**
+**Step 3 — Local `.scad` upload is implemented in code; typecheck and ESLint are verified green, while tests/build/UI verification remain pending.**
 
 ## Completed architecture/audit work
 
@@ -110,8 +110,8 @@ Step 2 gate closed on 2026-08-25 after operator reported all requested validatio
 - [ ] Run `tests/scadImport.test.ts` successfully.
 - [ ] Run `tests/importedArtifact.test.ts` successfully after deterministic-leaf change.
 - [ ] Run full Vitest regression suite successfully.
-- [ ] Run typecheck successfully.
-- [ ] Run ESLint successfully.
+- [x] Run typecheck successfully — verified green by operator on 2026-08-25.
+- [x] Run ESLint successfully — verified green by operator on 2026-08-25.
 - [ ] Run production build successfully.
 - [ ] Import a self-contained cube SCAD from the landing page and verify automatic editor preview.
 - [ ] Import a BOSL2 SCAD and verify bundled library compilation.
@@ -191,4 +191,4 @@ Deferred:
 
 ## Next action
 
-Close the **Step 3 runtime/UI gate**. If green, mark Step 3 complete and proceed to **Step 4 — AI continuation**.
+Close the remaining **Step 3 runtime/UI gate**: focused tests, full regression suite, production build and browser import scenarios. If green, mark Step 3 complete and proceed to **Step 4 — AI continuation**.
