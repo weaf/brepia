@@ -1,6 +1,7 @@
 import { Chat } from '@ai-sdk/react';
 import { useEffect, useMemo, useRef } from 'react';
 import type { AppUIMessage } from '@shared/chatAi';
+import { persistedCompletionCoversLiveTurn } from './chatCompletionReconciliation';
 
 const MAX_CACHE_SIZE = 10;
 
@@ -193,14 +194,28 @@ export function useCachedAiChat({
 
   // Android browsers can suspend a background tab and tear down its HTTP/SSE
   // connection. The server keeps consuming/persisting the AI stream, but the
-  // cached client Chat can remain stuck in `error` with an older in-memory
-  // branch. When React Query refreshes the DB branch on focus, adopt that
-  // persisted snapshot as long as we are not actively streaming. This also
-  // clears the transient network error once the authoritative branch arrives.
+  // cached client Chat can remain stuck with an older in-memory branch. When
+  // React Query receives a persisted terminal assistant for the SAME live
+  // turn, that DB state is authoritative even if the local SDK status is still
+  // submitted/streaming. Stop only that stale client stream and adopt the DB
+  // snapshot. A resolved build by itself is intentionally not terminal, so a
+  // healthy build -> inspect/revise auto-continuation is never interrupted.
   useEffect(() => {
-    if (chat.status === 'streaming' || chat.status === 'submitted') return;
+    const isLocallyInFlight =
+      chat.status === 'streaming' || chat.status === 'submitted';
+    const persistedCompletesLiveTurn =
+      isLocallyInFlight &&
+      Boolean(messages) &&
+      persistedCompletionCoversLiveTurn(chat.messages, messages);
 
-    if (
+    if (persistedCompletesLiveTurn && messages) {
+      void chat.stop();
+      if (messageSnapshot(chat.messages) !== messageSnapshot(messages)) {
+        chat.messages = messages;
+      }
+    } else if (isLocallyInFlight) {
+      return;
+    } else if (
       messages &&
       canReplaceWithPersistedMessages(chat.messages, messages) &&
       messageSnapshot(chat.messages) !== messageSnapshot(messages)
