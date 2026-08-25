@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   DANGLING_TOOL_ERROR_TEXT,
+  EMPTY_ASSISTANT_RESPONSE,
   decidePersistAction,
   hasPendingClientToolCall,
   hasPersistableMessageParts,
@@ -106,6 +107,10 @@ describe('resolveDanglingToolParts', () => {
 });
 
 describe('hasPendingClientToolCall', () => {
+  it('classifies an empty assistant response separately from a pending tool', () => {
+    assert.equal(hasPendingClientToolCall([]), EMPTY_ASSISTANT_RESPONSE);
+  });
+
   it('detects a terminal pending tool call', () => {
     assert.equal(
       hasPendingClientToolCall([
@@ -126,7 +131,7 @@ describe('hasPendingClientToolCall', () => {
     );
   });
 
-  it('is false for pure-text turns', () => {
+  it('is false for non-empty pure-text turns', () => {
     assert.equal(
       hasPendingClientToolCall([{ type: 'text', state: 'done' }]),
       false,
@@ -147,8 +152,25 @@ describe('hasPendingClientToolCall', () => {
   });
 });
 
-describe('decidePersistAction — the clobber guard', () => {
-  it('inserts a fresh assistant row (leaf was a user message)', () => {
+describe('decidePersistAction — the clobber and empty-response guards', () => {
+  it('skips an empty provider response whether fresh or continuation', () => {
+    assert.equal(
+      decidePersistAction({
+        isContinuation: false,
+        hasPendingToolCall: EMPTY_ASSISTANT_RESPONSE,
+      }),
+      'skip',
+    );
+    assert.equal(
+      decidePersistAction({
+        isContinuation: true,
+        hasPendingToolCall: EMPTY_ASSISTANT_RESPONSE,
+      }),
+      'skip',
+    );
+  });
+
+  it('still inserts a genuine fresh assistant row (leaf was a user message)', () => {
     assert.equal(
       decidePersistAction({ isContinuation: false, hasPendingToolCall: true }),
       'insert',
@@ -159,7 +181,7 @@ describe('decidePersistAction — the clobber guard', () => {
     );
   });
 
-  it('skips the terminal answer_user continuation (the actual bug)', () => {
+  it('skips the terminal answer_user continuation (the clobber bug)', () => {
     assert.equal(
       decidePersistAction({ isContinuation: true, hasPendingToolCall: true }),
       'skip',
