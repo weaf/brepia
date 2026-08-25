@@ -47,52 +47,75 @@ Expected architecture: parameter changes rewrite the canonical build tool input 
 
 Expected architecture: `conversations.current_message_leaf_id` is authoritative; `Tree.getPath()` rebuilds the selected branch and `ChatSession` selects the latest complete artifact on that path.
 
-## B. Fix with AI — CORE FLOW AND MODEL-SELECTION UX VERIFIED
-
-Implementation status:
+## B. Fix with AI — COMPLETE
 
 - [x] Add bounded compiler-diagnostic prompt builder.
 - [x] Do not duplicate the full SCAD source in the repair prompt; the active complete artifact remains authoritative.
 - [x] Route `Fix with AI` through the existing conversation submit path rather than creating a second transport/API path.
 - [x] Keep current model, execution mode, DB persistence and active leaf semantics identical to a normal user message.
 - [x] Preserve serialized `OpenSCADError` identity across the worker boundary so the button renders for real compile errors.
-- [x] Focused prompt/submit-bridge/import/worker-error regressions verified green by operator.
-- [x] Typecheck verified green by operator for the core repair wiring.
-- [x] ESLint verified green by operator for the core repair wiring.
-- [x] Production build verified green by operator for the core repair wiring.
-- [x] Manually trigger a real OpenSCAD compile error and verify the `Fix with AI` button renders.
-- [x] Pressing `Fix with AI` reaches the normal chat/model transport.
-- [x] Complete one successful AI repair turn with a deliberately misspelled OpenSCAD parameter and verify the repaired artifact becomes the active preview.
+- [x] Manually trigger a real OpenSCAD compile error and verify the button renders.
+- [x] Complete a successful repair turn and verify the repaired artifact becomes the active preview.
 - [x] Expose the normal conversation model selection directly in the compile-error state before `Fix with AI`.
-- [x] Keep the error-state selector bound to the same conversation model state rather than introducing a separate hidden repair model or automatic fallback.
+- [x] Keep that selector bound to the same conversation model state; no hidden repair model or automatic fallback.
 - [x] Manually verify the error-state model selector and successful repair UX.
-- [ ] Run the focused model-picker bridge test/typecheck/lint/build gate after the model-selection UX change.
+- [x] Focused model-picker/submit/fix/worker regression tests verified green by operator.
+- [x] Typecheck verified green by operator after model-selection UX.
+- [x] ESLint verified green by operator after model-selection UX.
+- [x] Production build verified green by operator after model-selection UX.
 
 Manual observations on 2026-08-25:
 
-- The deliberately broken source used `heiht` instead of `height`; OpenSCAD produced a real compile error and the `Fix with AI` action rendered.
-- An initial repair attempt used the conversation's saved/default `openai/gpt-5.6-sol` selection. pCAD routed that model through the built-in OpenRouter provider, which had no usable credential and correctly failed with `Missing Authentication header`.
-- After the operator selected a working model in the normal model picker and pressed `Fix with AI` again, the repair completed successfully.
-- The follow-up model-selection UX exposes the same authoritative conversation model selection in the compile-error state. The operator manually verified that this works as intended.
-- Model selection itself does not change OpenCode execution mode. The conversation keeps `settings.openCodeExecutionMode`; when absent, editor state defaults to `cli`. This setting only decides CLI vs streaming for transports that use the OpenCode execution mode; ordinary hosted/local provider transports remain normal provider calls.
+- The deliberately broken source used `heiht` instead of `height`; OpenSCAD produced a real compile error and `Fix with AI` rendered.
+- An initial repair attempt used `openai/gpt-5.6-sol`, routed through OpenRouter without a usable credential, and correctly failed with `Missing Authentication header`.
+- After selecting a working model, `Fix with AI` repaired the model successfully.
+- Model selection does not change OpenCode execution mode. The conversation keeps `settings.openCodeExecutionMode`; when absent, editor state defaults to `cli`. Hosted/local provider calls use their normal transport regardless of this setting.
 
-A secondary server-hardening issue was exposed by the failed provider call: when a provider fails before emitting any assistant payload, `aiChat.ts` currently attempts to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Track this separately and ensure empty provider responses are skipped rather than persisted. Do not conflate this with the OpenSCAD import or Fix-with-AI routing contract.
+A secondary server-hardening issue was exposed by the failed provider call: when a provider fails before emitting any assistant payload, `aiChat.ts` can attempt to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Track this separately; do not conflate it with the OpenSCAD repair contract.
 
-The repair bridge is conversation-id keyed and forwards into the already-mounted normal chat submit callback. It contains no AI transport, fetch or persistence implementation of its own.
+## C. Export, share and workspace regression — ACTIVE
 
-## C. Remaining Step 6 checks
+### C1 — STL / DXF / SCAD export
 
-- STL export
-- DXF export
-- share flow
-- conversation-workspace `models/current.scad`
-- immutable model revisions
-- ordinary non-imported parametric conversation
-- repeated mobile post-import navigation
+- [x] Desktop audit: STL uses the current preview output and mirrors the export best-effort into the conversation workspace.
+- [x] Desktop audit: DXF is generated from the current active SCAD source and mirrored best-effort into the conversation workspace.
+- [x] Desktop audit: SCAD download uses the current active source and intentionally does not create a duplicate `exports/` artifact because source history lives under `models/`.
+- [x] Identify mobile parity gap: mobile STL/DXF previously downloaded only to the browser and did not mirror workspace exports.
+- [x] Implement mobile STL/DXF workspace mirroring while keeping browser download primary and workspace persistence best-effort.
+- [ ] Run focused workspace/export tests, typecheck, lint and production build after the mobile parity fix.
+- [ ] Manually verify mobile STL download on an imported model.
+- [ ] Manually verify mobile DXF download on an imported model.
+
+### C2 — Share
+
+- [x] Audit public access boundary: conversation and message RLS only expose rows when `conversation.privacy = 'public'`.
+- [x] Audit ShareView branch semantics: initial local leaf comes from `conversation.current_message_leaf_id` and the visible branch is rebuilt with `Tree.getPath()`.
+- [x] Audit preview semantics: ShareView chooses the latest complete artifact/mesh on the selected branch rather than the latest chronological sibling globally.
+- [x] Verify imported synthetic `output-available` build artifacts satisfy the same ShareView preview contract as generated artifacts.
+- [x] Verify the editor share preview uses the current/persisted active-branch artifact rather than a separate canonical SCAD store.
+- [ ] Manually make an imported conversation public and open its share URL while logged out/incognito.
+- [ ] Verify the shared preview corresponds to the currently selected branch.
+
+### C3 — Conversation workspace current source and immutable revisions
+
+- [x] `collectSuccessfulParametricBuilds()` walks only the active parent chain.
+- [x] Imported successful synthetic build is explicitly covered as a normal workspace `build` revision in `tests/importedArtifact.test.ts`.
+- [x] Failed imported `output-error` artifact is explicitly excluded from successful workspace revisions.
+- [x] Existing workspace tests cover immutable numbered revisions, idempotency, branch switching and parameter-edit revisions.
+- [x] `models/current.scad` follows the latest successful source on the active branch.
+- [x] A normal chat request synchronizes model sources before generation.
+- [x] An STL/DXF export request synchronizes model sources before attaching export bytes to the matching revision.
+- [x] Workspace remains a best-effort mirror; Supabase message-tree state remains authoritative immediately after import.
+- [ ] Run focused imported-artifact + workspace revision/export tests after the mobile parity change.
+
+## D. Remaining Step 6 checks
+
+- [ ] Ordinary non-imported parametric conversation regression.
+- [ ] Repeated mobile post-import navigation regression.
 
 ### Deferred loading-state regression
 
-Observed manually on 2026-08-25: after an AI model has apparently completed the model generation, the editor can remain in the loading/spinner state for a long time. Reloading the page then immediately shows the completed model.
+Observed manually on 2026-08-25: after an AI model has apparently completed model generation, the editor can remain in the loading/spinner state for a long time. Reloading the page then immediately shows the completed model.
 
 This strongly suggests a client-side completion/loading-state synchronization problem rather than lost model output: the completed artifact survives reload and can be reconstructed from persisted state. Investigate later as a separate regression. Check at minimum:
 
