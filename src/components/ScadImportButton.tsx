@@ -75,7 +75,7 @@ export function ScadImportButton({
       <input
         ref={inputRef}
         type="file"
-        accept=".scad"
+        accept=".scad,.scad.txt"
         className="hidden"
         disabled={disabled || importMutation.isPending}
         onChange={(event) => {
