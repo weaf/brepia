@@ -73,7 +73,7 @@ Manual observations on 2026-08-25:
 
 A secondary server-hardening issue was exposed by the failed provider call: when a provider fails before emitting any assistant payload, `aiChat.ts` can attempt to persist an empty assistant message and PostgreSQL rejects it via `messages_payload_present`. Track this separately; do not conflate it with the OpenSCAD repair contract.
 
-## C. Export, share and workspace regression — ACTIVE
+## C. Export, share and workspace regression — COMPLETE
 
 ### C1 — STL / DXF / SCAD export
 
@@ -82,9 +82,9 @@ A secondary server-hardening issue was exposed by the failed provider call: when
 - [x] Desktop audit: SCAD download uses the current active source and intentionally does not create a duplicate `exports/` artifact because source history lives under `models/`.
 - [x] Identify mobile parity gap: mobile STL/DXF previously downloaded only to the browser and did not mirror workspace exports.
 - [x] Implement mobile STL/DXF workspace mirroring while keeping browser download primary and workspace persistence best-effort.
-- [ ] Run focused workspace/export tests, typecheck, lint and production build after the mobile parity fix.
-- [ ] Manually verify mobile STL download on an imported model.
-- [ ] Manually verify mobile DXF download on an imported model.
+- [x] Run focused imported-artifact regression, typecheck, lint and production build after the mobile parity fix; operator reported all green.
+- [x] Manually verify mobile STL download on an imported model.
+- [x] Manually verify mobile DXF download on an imported model.
 
 ### C2 — Share
 
@@ -93,8 +93,8 @@ A secondary server-hardening issue was exposed by the failed provider call: when
 - [x] Audit preview semantics: ShareView chooses the latest complete artifact/mesh on the selected branch rather than the latest chronological sibling globally.
 - [x] Verify imported synthetic `output-available` build artifacts satisfy the same ShareView preview contract as generated artifacts.
 - [x] Verify the editor share preview uses the current/persisted active-branch artifact rather than a separate canonical SCAD store.
-- [ ] Manually make an imported conversation public and open its share URL while logged out/incognito.
-- [ ] Verify the shared preview corresponds to the currently selected branch.
+- [x] Manually make an imported conversation public and open its share URL while logged out/incognito.
+- [x] Verify the shared preview corresponds to the currently selected branch.
 
 ### C3 — Conversation workspace current source and immutable revisions
 
@@ -106,7 +106,9 @@ A secondary server-hardening issue was exposed by the failed provider call: when
 - [x] A normal chat request synchronizes model sources before generation.
 - [x] An STL/DXF export request synchronizes model sources before attaching export bytes to the matching revision.
 - [x] Workspace remains a best-effort mirror; Supabase message-tree state remains authoritative immediately after import.
-- [ ] Run focused imported-artifact + workspace revision/export tests after the mobile parity change.
+- [x] Focused imported-artifact gate remained green after the mobile parity change; typecheck, lint and production build were also green.
+
+Operator reported the requested automated gate and the mobile export/share end-to-end checks working on 2026-08-25.
 
 ## D. Remaining Step 6 checks
 
@@ -115,7 +117,7 @@ A secondary server-hardening issue was exposed by the failed provider call: when
 
 ### Deferred loading-state regression
 
-Observed manually on 2026-08-25: after an AI model has apparently completed model generation, the editor can remain in the loading/spinner state for a long time. Reloading the page then immediately shows the completed model.
+Observed manually on 2026-08-25: after an AI model has apparently completed the model generation, the editor can remain in the loading/spinner state for a long time. Reloading the page then immediately shows the completed model.
 
 This strongly suggests a client-side completion/loading-state synchronization problem rather than lost model output: the completed artifact survives reload and can be reconstructed from persisted state. Investigate later as a separate regression. Check at minimum:
 
