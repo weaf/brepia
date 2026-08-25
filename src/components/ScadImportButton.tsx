@@ -16,6 +16,7 @@ import {
 } from '@/lib/scadImport';
 import { persistImportedArtifact } from '@/services/importedArtifactService';
 import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
+import type { ImportedArtifactBaseline } from '@shared/importedArtifact';
 import type { Model } from '@shared/types';
 
 export function ScadImportButton({
@@ -40,9 +41,7 @@ export function ScadImportButton({
       const code = await readScadImportFile(file);
       const title = scadImportTitle(file.name);
 
-      let baseline:
-        | { status: 'success' as const }
-        | { status: 'error' as const; errorText: string };
+      let baseline: ImportedArtifactBaseline;
       try {
         await previewScadColoredViaToolWorker(code);
         baseline = { status: 'success' };
