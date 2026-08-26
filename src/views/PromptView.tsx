@@ -12,7 +12,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { Model } from '@shared/types';
 import { conversationTitleFromText } from '@shared/conversationTitle';
 import { MessageItem } from '../types/misc.ts';
-import { NewProductBanner } from '@/components/NewProductBanner';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
 import { SelectedItemsContext } from '@/contexts/SelectedItemsContext';
@@ -440,7 +439,7 @@ export function PromptView() {
                       return;
                     }
                   }}
-                  placeholder="Start building with Adam..."
+                  placeholder="Start building with Brepia..."
                   type={type}
                   disabled={isGenerating}
                   model={model}
@@ -498,15 +497,6 @@ export function PromptView() {
                   to start generating
                 </p>
               )}
-            </div>
-          </div>
-
-          {/* Float the banner in the gap between the (vertically centered)
-              composer and the bottom edge: a band over the lower third, with
-              the card centered inside it, instead of glued to bottom-0. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[55%] flex items-center justify-center px-4 md:px-8">
-            <div className="pointer-events-auto w-full max-w-2xl">
-              <NewProductBanner />
             </div>
           </div>
         </main>
