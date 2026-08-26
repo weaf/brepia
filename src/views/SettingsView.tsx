@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { Switch } from '@/components/ui/switch';
@@ -15,6 +14,7 @@ import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
+import { ActivityIndicator } from '@/components/brand';
 
 export default function SettingsView() {
   const { user, resetPassword } = useAuth();
@@ -184,7 +184,7 @@ export default function SettingsView() {
                         className="rounded-full font-light"
                       >
                         {isUpdateLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <ActivityIndicator label="Saving name" size="sm" />
                         ) : (
                           'Save'
                         )}
@@ -237,7 +237,10 @@ export default function SettingsView() {
                       className="flex-shrink-0 rounded-full font-light"
                     >
                       {isResetLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <ActivityIndicator
+                          label="Sending password reset"
+                          size="sm"
+                        />
                       ) : (
                         'Reset Password'
                       )}
@@ -256,7 +259,7 @@ export default function SettingsView() {
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-adam-neutral-50">Responses</div>
                 <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
-                  Get notified when Adam finishes a long-running request.
+                  Get notified when Brepia finishes a long-running request.
                 </div>
               </div>
               <Switch
