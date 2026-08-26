@@ -18,6 +18,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { GoogleIcon } from '@/components/icons/CompanyIcons';
 import { validateRedirectUrl } from '@/lib/utils';
 import { getRegistrationSettings } from '@/services/accountAdminService';
+import { BrepiaBrand } from '@/components/brand';
 
 function getAppRedirectUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -257,11 +258,7 @@ export function SignInView() {
       <div className="w-full max-w-md">
         <div className="flex flex-col gap-4 rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
           <div className="mb-4 flex flex-col items-center justify-center">
-            <img
-              src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-              alt="CADAM Logo"
-              className="w-32"
-            />
+            <BrepiaBrand showByNoty />
           </div>
 
           <Button
