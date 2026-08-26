@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -11,6 +11,8 @@ import {
 
 const tempDirs: string[] = [];
 let previousRunner: string | undefined;
+let previousMaxConcurrent: string | undefined;
+let previousMarker: string | undefined;
 
 async function fakeRunner(body: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'pcad-step-test-runner-'));
@@ -22,6 +24,19 @@ async function fakeRunner(body: string): Promise<string> {
     { mode: 0o700 },
   );
   return runner;
+}
+
+async function waitForFile(file: string, timeoutMs = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await access(file);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Timed out waiting for test marker: ${file}`);
 }
 
 async function expectStepError(
@@ -37,7 +52,11 @@ async function expectStepError(
 describe('server STEP export boundary', () => {
   beforeEach(() => {
     previousRunner = process.env.PCAD_STEP_EXPORT_RUNNER;
+    previousMaxConcurrent = process.env.PCAD_STEP_EXPORT_MAX_CONCURRENT;
+    previousMarker = process.env.PCAD_STEP_TEST_MARKER;
     delete process.env.PCAD_STEP_EXPORT_RUNNER;
+    delete process.env.PCAD_STEP_EXPORT_MAX_CONCURRENT;
+    delete process.env.PCAD_STEP_TEST_MARKER;
   });
 
   afterEach(async () => {
@@ -45,6 +64,16 @@ describe('server STEP export boundary', () => {
       delete process.env.PCAD_STEP_EXPORT_RUNNER;
     } else {
       process.env.PCAD_STEP_EXPORT_RUNNER = previousRunner;
+    }
+    if (previousMaxConcurrent === undefined) {
+      delete process.env.PCAD_STEP_EXPORT_MAX_CONCURRENT;
+    } else {
+      process.env.PCAD_STEP_EXPORT_MAX_CONCURRENT = previousMaxConcurrent;
+    }
+    if (previousMarker === undefined) {
+      delete process.env.PCAD_STEP_TEST_MARKER;
+    } else {
+      process.env.PCAD_STEP_TEST_MARKER = previousMarker;
     }
     await Promise.all(
       tempDirs.splice(0).map((dir) =>
@@ -106,5 +135,29 @@ printf 'not a STEP file\\n' > "$3"
 `);
 
     await expectStepError(exportScadToStep('cube(1);'), 'output_invalid');
+  });
+
+  it('rejects excess concurrent conversions and releases capacity afterward', async () => {
+    const runner = await fakeRunner(`
+touch "$PCAD_STEP_TEST_MARKER"
+sleep 0.2
+printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$3"
+`);
+    const marker = path.join(path.dirname(runner), 'started');
+    process.env.PCAD_STEP_EXPORT_RUNNER = runner;
+    process.env.PCAD_STEP_EXPORT_MAX_CONCURRENT = '1';
+    process.env.PCAD_STEP_TEST_MARKER = marker;
+
+    const firstExport = exportScadToStep('cube(1);');
+    await waitForFile(marker);
+
+    await expectStepError(exportScadToStep('sphere(1);'), 'capacity_exceeded');
+    await expect(firstExport).resolves.toMatchObject({
+      provider: `scad123d@${STEP_EXPORT_PROVIDER_VERSION}`,
+    });
+
+    await expect(exportScadToStep('sphere(1);')).resolves.toMatchObject({
+      provider: `scad123d@${STEP_EXPORT_PROVIDER_VERSION}`,
+    });
   });
 });
