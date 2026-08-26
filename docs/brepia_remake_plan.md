@@ -187,23 +187,23 @@ No broad search-and-replace is needed; implementation should now follow the clas
 
 ### Phase 2 — Brand primitives
 
-- [ ] Implement the Brepia symbol as a maintainable vector/SVG/component.
-- [ ] Add wordmark/brand component suitable for header and auth screens.
-- [ ] Add monochrome-safe and light/dark-safe rendering.
-- [ ] Add favicon/app-icon assets at required sizes/formats.
-- [ ] Add compact activity indicator with reduced-motion support.
+- [x] Implement the Brepia symbol as a maintainable vector/SVG/component.
+- [x] Add wordmark/brand component suitable for header and auth screens.
+- [ ] Add monochrome-safe and light/dark-safe rendering — component supports monochrome mode, visual verification still required.
+- [ ] Add favicon/app-icon assets at required sizes/formats — SVG favicon is active; broader app-icon format coverage remains.
+- [x] Add compact activity indicator with reduced-motion support.
 
 ### Phase 3 — Primary product surfaces
 
-- [ ] Header/sidebar branding.
-- [ ] Root/home/start surface.
-- [ ] Sign-in/sign-up/password flows.
-- [ ] Browser title/meta/favicon.
+- [x] Header/sidebar branding.
+- [ ] Root/home/start surface — browser shell is rebranded; main start/workspace content still needs visual audit.
+- [x] Sign-in/sign-up/password flows.
+- [x] Browser title/meta/favicon.
 - [ ] About/legal-facing current-product references.
 
 ### Phase 4 — Activity and icon cleanup
 
-- [ ] Replace unnecessary large spinning indicators with the Brepia activity language.
+- [ ] Replace unnecessary large spinning indicators with the Brepia activity language — started with `Layout`, `AuthGuard`, and assistant loading.
 - [ ] Keep operation-specific text where possible.
 - [ ] Normalize obvious icon inconsistencies without redesigning every control.
 - [ ] Verify mobile and desktop variants independently.
