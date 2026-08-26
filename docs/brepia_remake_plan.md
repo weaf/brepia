@@ -28,6 +28,23 @@ by Noty
 - `noty.se` may act as the umbrella site.
 - A future deployment/marketing path such as `brepia.noty.se` fits the intended hierarchy, but DNS/domain changes are outside this branch unless explicitly requested.
 
+### Repository-name checkpoint
+
+The GitHub repository is still `weaf/pCAD`. A possible future rename to **`weaf/brepia`** must be decided explicitly rather than bundled into the cosmetic UI rename.
+
+Preferred timing: after the Brepia identity is visually stable and the branch has passed its regression gate.
+
+Before a repository rename, audit and update:
+
+- clone/remote URLs used by local developer and agent environments;
+- README badges and source links;
+- hard-coded GitHub links in the application;
+- CI/deployment integrations, webhooks and external services that refer to `weaf/pCAD`;
+- scripts/docs that assume the repository directory is named `pCAD`;
+- any external links that should rely on GitHub redirects versus being updated directly.
+
+A repository rename does **not** automatically imply renaming compatibility-sensitive `PCAD_*`, `pcad` database/storage identifiers, synthetic auth domains, or agent/tool IDs. Those remain separate technical decisions.
+
 ## Visual concept
 
 ### Primary symbol
@@ -196,6 +213,8 @@ No broad search-and-replace is needed; implementation should now follow the clas
 - [ ] Update current README/product documentation to Brepia where it represents the present product.
 - [ ] Preserve historical CADAM references where they explain origin/history.
 - [ ] Decide which `pCAD` internal names intentionally remain for compatibility.
+- [ ] Decide whether the repository should be renamed from `weaf/pCAD` to `weaf/brepia`.
+- [ ] If approved, perform the repository rename as a controlled follow-up and update integrations/links without conflating it with internal compatibility renames.
 - [ ] Add a short branding/asset maintenance note for future contributors/agents.
 
 ### Phase 6 — Visual and regression gate
