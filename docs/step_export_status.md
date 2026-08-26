@@ -75,7 +75,7 @@ Live acceptance on the real pCAD rootless-Podman host:
 - `scripts/step-export/smoke-test.sh` ended with `STEP sandbox smoke test PASS`;
 - the smoke test therefore confirmed a valid ISO 10303-21 STEP file and an analytic `CYLINDRICAL_SURFACE` for the cylindrical hole, guarding against a mesh-only result for this case.
 
-A non-blocking `ezdxf` warning was observed because its cache directory under `/tmp` could not be created. The conversion and analytic-surface smoke gate still passed. Treat this as log/cache cleanup unless it affects later representative exports.
+A non-blocking `ezdxf` warning was observed during early validation because its cache directory under `/tmp` could not be created. The inspection/sandbox tmpfs configuration was subsequently hardened so cache setup cannot affect CAD validation.
 
 Step 3 real-model evidence:
 
@@ -83,7 +83,18 @@ Step 3 real-model evidence:
 - the model contains multiple bodies/objects, a wall opening and distinct colors, making it materially stronger evidence than the primitive smoke fixture;
 - the exported STEP was opened in an independent online STEP viewer and visually matched the pCAD model;
 - inspected dimensions in the external viewer matched the expected model dimensions;
+- additional manual pCAD export checks succeeded for a cube, a sphere, and a cone model with a hole;
 - this counts as successful representative-model and external-viewer evidence, but not yet as the planned FreeCAD/Rhino receiving-CAD gate.
+
+Automated Step 3 corpus live evidence:
+
+- `scripts/step-export/corpus-test.sh` was run on the real pCAD Podman host;
+- final result: `STEP corpus: 16/16 PASS` and `STEP corpus PASS`;
+- exact-B-Rep cases passed for cube, cylinder, sphere, boolean hole, union, intersection, `linear_extrude`, `rotate_extrude`, polyhedral `hull`, spherical `minkowski`, BOSL, BOSL2, MCAD gear and colored multi-body geometry;
+- deterministic bounding-box, solid-count and analytic-surface expectations passed;
+- OpenCascade validity and closed-shell checks passed for the exact-B-Rep fixtures;
+- the sphere correctly remains a one-face analytic `SPHERE`; its edge-manifold diagnostic is allowed to be false because periodic seam topology is not equivalent to an open/invalid solid;
+- both intentional fallback fixtures passed while emitting the required mesh-fallback warning: `linear_extrude(twist=...)` and `hull()` of three spheres.
 
 Not claimed yet:
 
@@ -91,55 +102,32 @@ Not claimed yet:
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
-- live pass of the new automated STEP compatibility corpus
 - FreeCAD/Rhino receiving-CAD verification
 
-## Step 3 — Representative model compatibility gate: in progress
+## Step 3 — Representative model compatibility gate: functionally complete; receiving-CAD check remains
 
-Verified manually so far:
+Verified manually:
 
 - [x] Real parameterized multi-body pCAD model exports through the application.
 - [x] External online STEP viewer renders the representative model correctly.
 - [x] External viewer measurements match expected pCAD dimensions.
+- [x] Manual pCAD export checks for cube, sphere and cone-with-hole models.
 
-Automated corpus implementation:
+Automated corpus:
 
 - [x] Add `scripts/step-export/corpus-test.sh`.
 - [x] Add `scripts/step-export/inspect-step.py`, run inside the existing provider image with build123d/OpenCascade.
-- [x] Check STEP Part 21 output, OpenCascade validity/manifold status, solid/face counts, bounding-box dimensions and analytic surface types where deterministic.
+- [x] Check STEP Part 21 output, OpenCascade validity/closed-shell status, solid/face counts, bounding-box dimensions and analytic surface types where deterministic.
+- [x] Preserve edge-manifold status as diagnostics without treating valid periodic one-face solids as failures.
 - [x] Fail exact-B-Rep fixtures if scad123d emits a mesh-fallback warning.
 - [x] Require mesh-fallback warnings for deliberately unsupported fixtures.
 - [x] Cover cube, cylinder, sphere, boolean hole, union, intersection, `linear_extrude`, `rotate_extrude`, polyhedral `hull`, spherical `minkowski`, BOSL, BOSL2, MCAD gear and colored multi-body geometry.
 - [x] Cover two known fallback contracts: `linear_extrude(twist=...)` and `hull()` of three spheres.
-- [ ] Run `scripts/step-export/corpus-test.sh` on the real pCAD Podman host and reconcile any provider-specific expectation differences.
+- [x] Run `scripts/step-export/corpus-test.sh` on the real pCAD Podman host: 16/16 PASS.
 
 The automated corpus deliberately uses small deterministic SCAD fixtures rather than pCAD/AI-generated models. The already-verified complex room model remains the broad application-level manual acceptance case.
 
-### Step 3 live command
-
-From the pCAD checkout on `feature/step-export`:
-
-```bash
-git pull --ff-only
-export PCAD_STEP_EXPORT_RUNNER="$PWD/scripts/step-export/pcad-scad2step-sandbox"
-./scripts/step-export/corpus-test.sh
-```
-
-No provider-image rebuild is required for this test addition. The STEP inspector is bind-mounted read-only into the existing image and uses the build123d/OpenCascade stack already installed there.
-
-Set `PCAD_STEP_CORPUS_KEEP=1` if failed STEP files/logs should be retained for inspection:
-
-```bash
-PCAD_STEP_CORPUS_KEEP=1 ./scripts/step-export/corpus-test.sh
-```
-
-Expected final line when all fixtures match the pinned provider behavior:
-
-```text
-STEP corpus PASS
-```
-
-Initial receiving-CAD gate after the corpus: FreeCAD and/or Rhino. Follow with AutoCAD and MicroStation when available.
+Initial receiving-CAD gate: FreeCAD and/or Rhino. Follow with AutoCAD and MicroStation when available.
 
 ## Known boundary
 
@@ -156,4 +144,4 @@ npm run lint
 npm run build
 ```
 
-plus the now-passing sandbox smoke test, a passing automated STEP corpus, and representative STEP import verification in at least one external CAD application.
+plus the now-passing sandbox smoke test, the now-passing 16/16 automated STEP corpus, and representative STEP import verification in at least one external CAD application.
