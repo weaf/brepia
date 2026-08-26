@@ -8,18 +8,47 @@ export const HOME_PROMPT_MESSAGES = [
 
 export type HomePromptMessage = (typeof HOME_PROMPT_MESSAGES)[number];
 
+const LAST_HOME_PROMPT_KEY = 'brepia-home-prompt:last';
+
+function readLastHomePrompt(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(LAST_HOME_PROMPT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberHomePrompt(message: HomePromptMessage) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(LAST_HOME_PROMPT_KEY, message);
+  } catch {
+    // Storage can be unavailable in hardened/private browser contexts.
+  }
+}
+
 /**
  * Pick one piece of start-page prompt copy for the current visit.
  *
- * Keep this intentionally presentation-only: the selected text must never
- * affect the actual prompt, model, execution mode or conversation settings.
+ * In a browser session the previous line is excluded so a reload or return to
+ * the home page does not immediately repeat the same copy. The selection stays
+ * presentation-only and never affects the real prompt or conversation state.
  */
 export function pickHomePromptMessage(
   random: () => number = Math.random,
 ): HomePromptMessage {
-  const index = Math.min(
-    HOME_PROMPT_MESSAGES.length - 1,
-    Math.floor(random() * HOME_PROMPT_MESSAGES.length),
+  const previous = readLastHomePrompt();
+  const candidates = HOME_PROMPT_MESSAGES.filter(
+    (message) => message !== previous,
   );
-  return HOME_PROMPT_MESSAGES[index];
+  const pool = candidates.length > 0 ? candidates : HOME_PROMPT_MESSAGES;
+  const sample = random();
+  const boundedSample = Number.isFinite(sample)
+    ? Math.max(0, Math.min(0.999999999, sample))
+    : 0;
+  const message = pool[Math.floor(boundedSample * pool.length)];
+
+  rememberHomePrompt(message);
+  return message;
 }
