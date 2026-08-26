@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useContext, useRef } from 'react';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { BufferGeometry, Group } from 'three';
-import { CircleAlert, Loader2, Wrench } from 'lucide-react';
+import { CircleAlert, Wrench } from 'lucide-react';
 import {
   buildColoredGroupFromOff,
   disposeColoredGroup,
@@ -18,6 +18,7 @@ import { MeshFilesContext } from '@/contexts/MeshFilesContext';
 import { createDXFProjectionCode } from '@/utils/dxfUtils';
 import { DxfExporter } from '@/utils/downloadUtils';
 import { OpenSCADFixModelPicker } from '@/components/viewer/OpenSCADFixModelPicker';
+import { ActivityIndicator } from '@/components/brand';
 
 // Extract import() filenames from OpenSCAD code
 function extractImportFilenames(code: string): string[] {
@@ -291,7 +292,7 @@ export function OpenSCADPreview({
         )}
         {isCompiling && (
           <div className="absolute inset-0 flex items-center justify-center bg-adam-neutral-700/30 backdrop-blur-sm">
-            <Loader2 className="h-8 w-8 animate-spin text-adam-text-primary/70" />
+            <ActivityIndicator label="Compiling OpenSCAD model" size="lg" />
           </div>
         )}
       </div>
@@ -321,7 +322,7 @@ function FixWithAIButton({
             Error Compiling Model
           </p>
           <p className="mt-1 text-xs text-adam-text-primary/60">
-            Adam encountered an error while compiling
+            Brepia encountered an error while compiling
           </p>
         </div>
       </div>
