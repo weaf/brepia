@@ -17,9 +17,10 @@ Companion plan: `docs/brepia_remake_plan.md`
 - [x] Desktop/mobile sidebar primary branding switched to Brepia.
 - [x] Current repository link in the sidebar points to `weaf/pCAD` rather than upstream CADAM.
 - [x] Sign-in/sign-up/email-sign-up/reset-password/update-password visual branding switched to shared `BrepiaBrand`.
-- [ ] Chat/assistant identity rebranded.
-- [ ] Generated media watermark rebranded.
-- [ ] Activity indicator cleanup implemented across primary busy states.
+- [x] `AssistantLoading` switched from Adam artwork/ellipsis to Brepia mark + shared activity indicator.
+- [ ] Normal assistant avatar in `MessageBubble` switched to Brepia.
+- [x] Generated GIF/live preview watermark switched from Adam to Brepia.
+- [ ] Activity indicator cleanup complete across all primary busy states.
 - [ ] Legal/current-product pages resolved and rebranded.
 - [ ] README/current docs rebranded.
 - [ ] Visual regression review complete.
@@ -36,9 +37,10 @@ Added under `src/components/brand/`:
 - `ActivityIndicator` — small pulsing indeterminate dot with optional text and reduced-motion support;
 - shared exports through `src/components/brand/index.ts`.
 
-Standalone asset:
+Standalone assets:
 
-- `public/brepia-mark.svg`.
+- `public/brepia-mark.svg`;
+- `public/brepia-watermark.svg`.
 
 The current accent prototype reuses the existing Brepia-friendly blue (`#00A6FF`) and adds violet at the opposite end of the mark. Exact colour/spacing decisions remain intentionally open until visual review on the real application.
 
@@ -84,11 +86,45 @@ The internal synthetic username email mapping remains exactly:
 
 This is a compatibility identifier and was intentionally not renamed.
 
-Auth behavior, routes and provider logic were otherwise left unchanged. Existing `Loader2` spinners in auth were also left for the later activity-indicator cleanup so branding and behavior changes remain separately reviewable.
+Auth behavior, routes and provider logic remain unchanged. The former `Loader2` busy indicators on the edited auth surfaces now use the shared Brepia `ActivityIndicator`, including sign-in, OTP verification, password reset/update, registration-policy loading and account creation.
+
+### Global/simple activity states converted so far
+
+The following indeterminate states now use `ActivityIndicator` instead of a rotating `Loader2`:
+
+- global layout/auth bootstrap waits in `Layout.tsx` and `AuthGuard.tsx`;
+- sign-in and OTP verification;
+- sign-up/registration-policy waits;
+- email/admin account creation;
+- password reset/update;
+- local SCAD import;
+- GitHub SCAD import;
+- mesh/GIF preview while no model is available to draw;
+- `AssistantLoading`.
+
+Determinate percentage/progress behavior has deliberately not been replaced.
+
+### Generated GIF/live-preview branding
+
+`src/components/viewer/MeshGifPreview.tsx`
+
+- live overlay now uses `brepia-watermark.svg`;
+- the same Brepia watermark is baked into generated GIF frames;
+- placement remains bottom-right with the inherited 15% canvas-width sizing and margin;
+- GIF rendering, quantization, frame generation and `setProgress` behavior were not changed;
+- the empty-preview spinner is now the shared Brepia activity indicator.
+
+Commit-level inspection of the GIF change confirmed a minimal diff limited to the branding references, comments and indeterminate loader.
+
+### Assistant identity
+
+`src/components/chat/AssistantLoading.tsx` is already Brepia-branded.
+
+`src/components/chat/MessageBubble.tsx` still contains the inherited Adam assistant avatar and remains the next explicit chat-branding target. It is intentionally tracked separately because the component is large and should be edited as a narrow, reviewable change.
 
 ## Validation status for current implementation batch
 
-A local checkout/typecheck attempt from the assistant execution environment was blocked because that container could not resolve `github.com`; therefore **no new typecheck/lint/test/build result is claimed for this batch**.
+A local checkout/typecheck attempt from the assistant execution environment was blocked because that container could not resolve `github.com`; therefore **no new typecheck/lint/test/build result is claimed for this branch yet**.
 
 Validation still required on the real project environment:
 
@@ -106,6 +142,8 @@ npm run lint
 npm run build
 ```
 
+GitHub branch comparison after the current work remains a clean forward branch from the recorded master base (`behind 0`).
+
 ## Audit conclusions
 
 ### 1. Current product identity is spread across several generations
@@ -113,40 +151,23 @@ npm run build
 The inherited/current codebase mixes at least three identities:
 
 - `CADAM` — inherited browser/logo/auth/legal presentation;
-- `Adam` / `AdamCAD` — collapsed/assistant artwork, legal copy and older assets;
+- `Adam` / `AdamCAD` — assistant artwork, legal copy and older assets;
 - `pCAD` / `pcad` — local fork/project/internal integration identifiers.
 
 The Brepia remake therefore remains a classified rename, not a global replacement.
 
 ## Remaining user-facing surfaces to rename
 
-### Chat assistant identity
+### Normal chat assistant identity
 
-Confirmed old Adam artwork in:
+Remaining confirmed old Adam artwork:
 
-- `src/components/chat/AssistantLoading.tsx`
-- `src/components/chat/MessageBubble.tsx`
-
-`AssistantLoading` currently combines the Adam logo avatar with `AnimatedEllipsis`.
-
-Next action:
-
-- use the compact Brepia symbol for assistant identity;
-- evolve the loading treatment toward the shared Brepia activity language;
-- do not make the assistant avatar look like a generic robot/AI badge.
-
-### Generated GIF branding/watermark
-
-`src/components/viewer/MeshGifPreview.tsx`
-
-Current inherited behavior:
-
-- loads `adam-logo-full.svg` for generated preview/GIF branding.
+- `src/components/chat/MessageBubble.tsx`.
 
 Action:
 
-- replace with a Brepia-compatible watermark/wordmark asset;
-- ensure export/generation behavior is unchanged.
+- use the compact Brepia symbol for normal assistant messages;
+- keep the avatar quiet and geometric rather than introducing a generic robot/AI badge.
 
 ### Legal/current-product pages
 
@@ -185,6 +206,20 @@ Action:
 - keep clear upstream/origin attribution instead of erasing CADAM history;
 - current repository URL remains `weaf/pCAD` until a separate repository rename is deliberately performed.
 
+### New-product/upstream banner
+
+`src/components/NewProductBanner.tsx` is not simply legacy branding. It actively promotes the upstream Adam product at `adam.new` and names SolidWorks, Onshape and Fusion integrations.
+
+Do **not** mechanically replace Adam with Brepia in this component.
+
+Open product decision:
+
+1. remove the banner from Brepia;
+2. retain it but clearly present it as an external/upstream Adam product promotion; or
+3. replace it later with a genuine Brepia/Noty announcement surface.
+
+Until that choice is made, the existing component remains untouched.
+
 ## Asset audit
 
 The `public/` directory still contains the inherited identity set, including:
@@ -203,7 +238,8 @@ The `public/` directory still contains the inherited identity set, including:
 
 Brepia currently adds:
 
-- `brepia-mark.svg`.
+- `brepia-mark.svg`;
+- `brepia-watermark.svg`.
 
 Action sequence remains:
 
@@ -212,24 +248,17 @@ Action sequence remains:
 3. verify repository-wide references;
 4. only then delete legacy visual assets that have no remaining runtime/documentation use.
 
-Do not remove old assets prematurely: some remain used by chat, generated media, legal pages and documentation.
+Do not remove old assets prematurely: some remain used by the normal chat assistant, legal pages, upstream banner and documentation.
 
 ## Loading/activity audit
 
-The codebase has widespread `Loader2` + `animate-spin` usage across layout/auth/import/viewer/settings/parameter/chat surfaces.
+The codebase still has additional `Loader2` + `animate-spin` usage across viewer/settings/parameter/chat/media surfaces.
 
 ### Loading-state classification
 
-#### Replace first — global/obvious indeterminate spinners
+#### Continue replacing — simple indeterminate waits
 
-Examples:
-
-- full-screen auth/layout bootstrap spinner in `Layout.tsx`;
-- `AuthGuard` indeterminate wait;
-- auth submit button spinners;
-- simple import/export/save waits where the only information is “busy”.
-
-Preferred replacement: shared Brepia `ActivityIndicator` with a subtle pulsing dot and optional status text.
+Remaining examples include simple import/export/save/fetch waits where the only semantic information is “busy”. These should migrate in small batches after confirming that the state is genuinely indeterminate.
 
 #### Evaluate per context — tiny inline media placeholders
 
@@ -242,18 +271,13 @@ A tiny Brepia dot or skeleton may be visually better than adding text everywhere
 
 #### Preserve determinate progress
 
-Do not replace actual progress bars/percentages with a pulse. `MeshGifPreview` and other generation flows that expose meaningful progress should continue showing progress; only accompanying indeterminate spinner/branding should be simplified.
+Do not replace actual progress bars/percentages with a pulse. `MeshGifPreview` and other generation flows that expose meaningful progress must continue showing progress.
 
-### Existing useful component
+### Existing three-dot component
 
-`src/components/chat/AnimatedEllipsis.tsx` already implements a small three-dot pulsing activity language. It is conceptually close to the Brepia direction, but currently carries `adam-neutral` naming and injects its own keyframes.
+`src/components/chat/AnimatedEllipsis.tsx` still exists and carries `adam-neutral` naming. `AssistantLoading` no longer depends on it.
 
-Recommended implementation:
-
-- refactor or retire it behind the shared Brepia activity primitive where appropriate;
-- preserve compact three-dot behavior only if it remains useful in dense chat UI;
-- support `prefers-reduced-motion`;
-- avoid broad CSS-token renaming in the same step.
+Before deleting/refactoring it, verify all remaining consumers. Do not remove it merely because one Brepia surface migrated away from it.
 
 ## Icon-system audit
 
@@ -312,7 +336,7 @@ These are compatibility/ops identifiers. Keep them during the visual remake unle
 
 The repository itself is currently `weaf/pCAD`.
 
-A future rename to a Brepia-oriented repository name — most naturally `weaf/brepia` — is now an explicit project checkpoint, but it is **not bundled into the cosmetic branch automatically**.
+A future rename to a Brepia-oriented repository name — most naturally `weaf/brepia` — is an explicit project checkpoint, but it is **not bundled into the cosmetic branch automatically**.
 
 Before renaming the repository, verify and update:
 
@@ -340,16 +364,15 @@ For current docs such as README, present Brepia as the current product but retai
 
 ## Recommended next implementation order
 
-### Step 1 — chat + generated media identity
+### Step 1 — remaining runtime brand identity
 
-- assistant avatars/loading;
-- message assistant identity;
-- generated GIF watermark;
-- remaining runtime Adam artwork.
+- normal assistant avatar in `MessageBubble`;
+- audit remaining runtime Adam/CADAM artwork;
+- make an explicit decision about `NewProductBanner` rather than mechanically renaming it.
 
-### Step 2 — activity indicators
+### Step 2 — remaining activity indicators
 
-Migrate global/simple indeterminate spinners to the shared component in small batches, validating behavior after each batch.
+Migrate additional simple indeterminate spinners to the shared component in small batches, preserving determinate progress and compact media semantics.
 
 ### Step 3 — legal/current docs
 
@@ -376,6 +399,7 @@ These remain intentionally deferred until visual/product review:
 5. Legal contact name/email to replace `AdamCAD / hello@adamcad.com`.
 6. Future deployment path: keep `/cadam` for compatibility now; decide later whether to migrate to `/brepia`, `/`, or a Brepia subdomain.
 7. Future repository rename from `weaf/pCAD`, with `weaf/brepia` as the natural candidate.
+8. Whether the inherited `NewProductBanner` promoting Adam/adam.new belongs in Brepia at all.
 
 ## Audit outcome
 
