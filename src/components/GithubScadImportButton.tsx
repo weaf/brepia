@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Github, Loader2 } from 'lucide-react';
+import { Github } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import * as Sentry from '@sentry/react';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ActivityIndicator } from '@/components/brand';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiJson } from '@/services/api';
@@ -143,7 +144,7 @@ export function GithubScadImportButton({
               className="gap-2"
             >
               {importMutation.isPending && (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <ActivityIndicator label="Importing from GitHub" size="sm" />
               )}
               {importMutation.isPending ? 'Importing…' : 'Import'}
             </Button>
