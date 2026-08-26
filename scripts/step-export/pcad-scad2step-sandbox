@@ -75,7 +75,7 @@ timeout --signal=TERM --kill-after=5 "${RUNTIME_TIMEOUT}s" \
     --cpus="$CPUS" \
     --userns=keep-id \
     --user "$(id -u):$(id -g)" \
-    --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=${TMPFS_SIZE}" \
+    --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=${TMPFS_SIZE},mode=1777" \
     --volume "${INPUT}:/input/model.scad:ro" \
     --volume "${OUTPUT_DIR}:/output:rw" \
     --env HOME=/tmp \
