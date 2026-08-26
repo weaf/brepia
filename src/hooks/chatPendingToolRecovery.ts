@@ -17,24 +17,23 @@ type MessageLike = {
 };
 
 /**
- * Return unresolved pCAD client tools from the newest assistant turn only.
+ * Return unresolved pCAD client tools only when the persisted branch leaf is
+ * an assistant that is currently waiting for the browser to execute a tool.
  *
- * Historical dangling tool rows can remain in persisted conversation history
- * after the server-side branch sanitizer made a later turn usable. Replaying
- * one of those older tools would rebuild a stale artifact. Recovery therefore
- * belongs exclusively to the latest assistant turn, which is the only turn
- * that can legitimately be waiting for the current browser to execute a tool.
+ * Historical dangling rows can remain in conversation history after the
+ * server-side sanitizer made a later turn usable. Likewise, when a newer user
+ * row is already the leaf, the preceding assistant is no longer the turn the
+ * browser should resume. Requiring the actual leaf to be an assistant avoids
+ * rebuilding either kind of stale artifact.
  */
 export function pendingClientToolCalls(
   messages: readonly MessageLike[],
 ): PendingClientToolCall[] {
-  const latestAssistant = [...messages]
-    .reverse()
-    .find((message) => message.role === 'assistant');
-  if (!latestAssistant) return [];
+  const leaf = messages.at(-1);
+  if (!leaf || leaf.role !== 'assistant') return [];
 
   const pending: PendingClientToolCall[] = [];
-  for (const part of latestAssistant.parts) {
+  for (const part of leaf.parts) {
     if (
       (part.type === 'tool-build_parametric_model' ||
         part.type === 'tool-answer_user') &&
