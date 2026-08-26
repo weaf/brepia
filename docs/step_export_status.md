@@ -37,11 +37,16 @@ Add STEP as pCAD's 3D CAD interchange format while leaving existing STL and DXF 
 - [x] Default to one concurrent STEP conversion and fail fast with HTTP 429 when busy.
 - [x] Build image without runtime package/network access.
 - [x] Pin scad123d to immutable upstream commit `c5d126ac30e8f170e2082aa14ad4a44c6d70513e` (package version 0.5.0).
-- [x] Use OpenSCAD snapshot `2026.08.13`, matching upstream differential-CI generation when introduced.
+- [x] Replace AppImage packaging with a pinned OpenSCAD source build.
+- [x] Pin OpenSCAD to upstream commit `1ee676b0ea2e23a86553a931ff1d805fae7bbe7c` from 2026-08-13.
+- [x] Mirror upstream Linux CI with Qt6 and `HEADLESS=ON`.
+- [x] Build with `ENABLE_MANIFOLD=ON` for the server converter.
+- [x] Derive final Debian runtime packages from `ldd` on the exact built OpenSCAD binary instead of maintaining a guessed library list.
+- [x] Run final-image `ldd`, `openscad --version`, and a real headless CSG compile as image-build gates.
 - [x] Bake pCAD's bundled BOSL/BOSL2/MCAD ZIP contents into the sandbox image.
 - [x] Add focused server-boundary tests for fail-closed configuration, provider-unavailable mapping, valid Part 21 output, mesh warnings, symlink rejection, invalid output and concurrency release.
 - [x] Add sandbox smoke test requiring a true `CYLINDRICAL_SURFACE` in the STEP result.
-- [ ] Build the sandbox image on the real pCAD Podman host.
+- [ ] Build the source-based sandbox image on the real pCAD Podman host.
 - [ ] Run `scripts/step-export/smoke-test.sh` on the real host.
 
 ## Validation evidence so far
@@ -50,26 +55,33 @@ Completed in the implementation environment:
 
 - `bash -n` passes for the sandbox runner, image-build helper and smoke-test script.
 - New STEP server/test TypeScript sources parse successfully with the TypeScript compiler API.
+- OpenSCAD upstream commit/date and its Qt6/headless Linux CI path were verified before changing the provider image.
 - Branch comparison is based on the requested master and remains 0 commits behind it.
 
-Not claimed yet:
+Observed on the real pCAD host before the source-build refactor:
+
+- the initial AppImage-based provider image reached OpenSCAD startup but failed because the minimal Ubuntu image lacked `libharfbuzz.so.0`;
+- this exposed that AppImage host-runtime assumptions were the wrong packaging boundary for the sandbox;
+- the AppImage approach was replaced rather than continuing to add host-style desktop libraries manually.
+
+Not claimed yet for the new source-based image:
 
 - `npm test`
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
-- Podman image build
+- successful Podman source image build
 - real scad123d/OpenSCAD conversion
 
-The execution environment used for the GitHub implementation cannot resolve external Git hosts and does not provide the user's rootless Podman runtime, so these gates require the real pCAD host before Step 2 can be marked externally verified.
+The execution environment used for the GitHub implementation does not provide the user's rootless Podman runtime, so the source image and conversion gates require the real pCAD host before Step 2 can be marked externally verified.
 
 ## Step 2 live acceptance commands
 
 From the pCAD checkout on `feature/step-export`:
 
 ```bash
-git pull
 git switch feature/step-export
+git pull --ff-only
 
 ./scripts/step-export/build-image.sh
 
