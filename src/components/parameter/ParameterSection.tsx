@@ -35,11 +35,13 @@ import {
   downloadSTLFile,
   downloadOpenSCADFile,
   downloadDXFFile,
+  downloadSTEPFile,
 } from '@/utils/downloadUtils';
 import type { DxfExporter } from '@/utils/downloadUtils';
 import { useToast } from '@/hooks/use-toast';
 import { useConversation } from '@/contexts/ConversationContext';
 import { persistConversationExport } from '@/services/conversationExports';
+import { exportStep } from '@/services/stepExport';
 
 interface ParameterSectionProps {
   parameters: Parameter[];
@@ -49,7 +51,7 @@ interface ParameterSectionProps {
   code?: string;
 }
 
-type DownloadFormat = 'stl' | 'scad' | 'dxf';
+type DownloadFormat = 'stl' | 'scad' | 'dxf' | 'step';
 
 export function ParameterSection({
   parameters,
@@ -182,7 +184,6 @@ export function ParameterSection({
       persistExportBestEffort('dxf', dxfOutput);
     } catch (error) {
       console.error('[OpenSCAD] Failed to export DXF:', error);
-      // Optional user-facing feedback to surface the failure
       toast({
         title: 'DXF export failed',
         description:
@@ -196,16 +197,47 @@ export function ParameterSection({
     }
   };
 
+  const handleDownloadSTEP = async () => {
+    if (!code) return;
+
+    try {
+      setIsExporting(true);
+      const result = await exportStep(code);
+      downloadSTEPFile(result.file);
+      if (result.warningCount > 0) {
+        toast({
+          title: 'STEP exported with fallbacks',
+          description:
+            'Some OpenSCAD operations could not stay analytic and were converted using mesh fallback geometry.',
+        });
+      }
+    } catch (error) {
+      console.error('[STEP] Failed to export STEP:', error);
+      toast({
+        title: 'STEP export failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Adam could not export this model as STEP.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // Per-format dispatch tables — each supported format is a single line in each map.
   const downloadHandlers: Record<DownloadFormat, () => void | Promise<void>> = {
     stl: handleDownloadSTL,
     scad: handleDownloadOpenSCAD,
     dxf: handleDownloadDXF,
+    step: handleDownloadSTEP,
   };
   const formatAvailable: Record<DownloadFormat, boolean> = {
     stl: !!currentOutput,
     scad: !!code,
     dxf: !!dxfExporter && !isExporting,
+    step: !!code && !isExporting,
   };
 
   const handleDownload = async () => {
@@ -358,6 +390,16 @@ export function ParameterSection({
                   <span className="text-sm">.STL</span>
                   <span className="ml-3 text-xs text-adam-text-primary/60">
                     3D Printing
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSelectedFormat('step')}
+                  disabled={!formatAvailable.step}
+                  className="cursor-pointer text-adam-text-primary"
+                >
+                  <span className="text-sm">.STEP</span>
+                  <span className="ml-3 text-xs text-adam-text-primary/60">
+                    3D CAD Exchange
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
