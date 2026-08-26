@@ -75,18 +75,32 @@ Live acceptance on the real pCAD rootless-Podman host:
 
 A non-blocking `ezdxf` warning was observed because its cache directory under `/tmp` could not be created. The conversion and analytic-surface smoke gate still passed. Treat this as log/cache cleanup unless it affects later representative exports.
 
+Step 3 real-model evidence:
+
+- a substantially more complex, parameterized pCAD room model exported successfully through the real application STEP path;
+- the model contains multiple bodies/objects, a wall opening and distinct colors, making it materially stronger evidence than the primitive smoke fixture;
+- the exported STEP was opened in an independent online STEP viewer and visually matched the pCAD model;
+- inspected dimensions in the external viewer matched the expected model dimensions;
+- this counts as successful representative-model and external-viewer evidence, but not yet as the planned FreeCAD/Rhino receiving-CAD gate.
+
 Not claimed yet:
 
 - `npm test`
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
-- representative pCAD model corpus compatibility
-- external CAD import verification
+- complete representative pCAD model corpus compatibility
+- FreeCAD/Rhino receiving-CAD verification
 
-## Step 3 — Representative model compatibility gate: next
+## Step 3 — Representative model compatibility gate: in progress
 
-Test at minimum:
+Verified so far:
+
+- [x] Real parameterized multi-body pCAD model exports through the application.
+- [x] External online STEP viewer renders the representative model correctly.
+- [x] External viewer measurements match expected pCAD dimensions.
+
+Still test at minimum:
 
 - primitive cube;
 - cylinder/sphere and curved surfaces;
