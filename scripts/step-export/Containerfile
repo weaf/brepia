@@ -27,7 +27,18 @@ WORKDIR /src/openscad
 # in the STEP runtime image.
 RUN ./scripts/uni-get-dependencies.sh qt6
 
+# OpenSCAD added an unconditional OpenSSL dependency in June 2026, but the
+# dependency helper at this pinned August commit does not yet install libssl-dev.
+# GitHub's ubuntu-latest image happens to provide it already; a clean Debian
+# builder does not. Keep this explicit compatibility shim next to the upstream
+# dependency script so CMake configuration is reproducible outside CI.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libssl-dev \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN set -eux; \
+  test -f /usr/include/openssl/ssl.h; \
+  pkg-config --modversion openssl; \
   cmake -S . -B build -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/local \
