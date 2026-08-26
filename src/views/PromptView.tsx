@@ -29,6 +29,7 @@ import type { AppUIMessage } from '@shared/chatAi';
 import { ensureInputRecords } from '@/lib/aiMessages';
 import { persistUserMessage } from '@/services/messageService';
 import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
+import { pickHomePromptMessage } from '@/lib/homePromptCopy';
 import { getRegistrationSettings } from '@/services/accountAdminService';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
@@ -105,6 +106,7 @@ export function PromptView() {
   const [draftConversationId, setDraftConversationId] = useState(() =>
     crypto.randomUUID(),
   );
+  const [homePrompt] = useState(() => pickHomePromptMessage());
 
   // Trigger fade in on mount
   useEffect(() => {
@@ -439,7 +441,7 @@ export function PromptView() {
                       return;
                     }
                   }}
-                  placeholder="Start building with Brepia..."
+                  placeholder={homePrompt}
                   type={type}
                   disabled={isGenerating}
                   model={model}
