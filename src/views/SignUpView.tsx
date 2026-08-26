@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { validateRedirectUrl } from '@/lib/utils';
 import { getRegistrationSettings } from '@/services/accountAdminService';
+import { BrepiaBrand } from '@/components/brand';
 
 function getAppRedirectUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -96,7 +97,7 @@ export function SignUpView() {
             Registration unavailable
           </h1>
           <p className="mt-3 text-sm text-adam-text-secondary">
-            pCAD could not load the registration policy from the server.
+            Brepia could not load the registration policy from the server.
           </p>
           <div className="mt-6 flex flex-col gap-3">
             <Button
@@ -135,12 +136,8 @@ export function SignUpView() {
     <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
       <div className="w-full max-w-md">
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
-          <div className="mb-4 flex flex-col items-center justify-center gap-2">
-            <img
-              src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-              alt="CADAM Logo"
-              className="h-8 w-auto"
-            />
+          <div className="mb-4 flex flex-col items-center justify-center gap-3">
+            <BrepiaBrand showByNoty />
             <h1 className="text-xl font-semibold text-white">
               {bootstrap ? 'Create administrator account' : 'Create account'}
             </h1>
@@ -196,8 +193,8 @@ export function SignUpView() {
 
               {registration.requireAdminApproval && (
                 <p className="mt-4 text-center text-xs text-adam-text-secondary">
-                  New accounts require administrator approval before pCAD can be
-                  used.
+                  New accounts require administrator approval before Brepia can
+                  be used.
                 </p>
               )}
               <div className="pt-4 text-center text-sm">
