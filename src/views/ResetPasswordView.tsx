@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from '@tanstack/react-router';
-import { BrepiaBrand } from '@/components/brand';
+import { ActivityIndicator, BrepiaBrand } from '@/components/brand';
 
 export function ResetPasswordView() {
   const [email, setEmail] = useState('');
@@ -68,7 +68,11 @@ export function ResetPasswordView() {
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <ActivityIndicator
+                      label="Sending password reset instructions"
+                      size="sm"
+                      className="mr-2"
+                    />
                     Sending instructions...
                   </>
                 ) : (
