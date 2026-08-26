@@ -10,7 +10,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from build123d import import_step
+# build123d imports ezdxf, which otherwise tries to create this cache lazily and
+# emits a harmless warning in the read-only inspection container. /tmp is a
+# dedicated writable tmpfs for this process, so create the cache root first.
+Path("/tmp/.cache/ezdxf").mkdir(parents=True, exist_ok=True)
+
+from build123d import import_step  # noqa: E402
 
 
 def parse_triplet(value: str) -> tuple[float, float, float]:
@@ -45,6 +50,25 @@ def iter_tree(node):
         yield from iter_tree(child)
 
 
+def solid_shells_closed(solids) -> bool:
+    """Return whether every imported solid is bounded by closed shells.
+
+    build123d's Shape.is_manifold intentionally uses an edge-to-face ancestor
+    count (two faces per edge). That is useful diagnostics for many B-Reps but
+    reports False for valid periodic one-face solids such as a sphere, whose
+    seam edge belongs to the same face twice. For a STEP watertightness gate,
+    OCCT validity plus closed TopoDS shells is the appropriate invariant.
+    """
+
+    if not solids:
+        return False
+    for solid in solids:
+        shells = list(solid.shells())
+        if not shells or any(not shell.wrapped.Closed() for shell in shells):
+            return False
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("step", type=Path)
@@ -67,6 +91,9 @@ def main() -> int:
         metavar="TYPE",
     )
     parser.add_argument("--min-colored-nodes", type=int, default=0)
+    # Kept for corpus-test.sh compatibility. The default topology gate now
+    # means valid solids bounded by closed shells rather than build123d's
+    # stricter edge-ancestor manifold heuristic.
     parser.add_argument("--skip-manifold", action="store_true")
     args = parser.parse_args()
 
@@ -95,12 +122,16 @@ def main() -> int:
     )
 
     valid = bool(solids) and all(solid.is_valid for solid in solids)
-    manifold = bool(solids) and all(solid.is_manifold for solid in solids)
+    closed_shells = solid_shells_closed(solids)
+    # Preserve this as diagnostics only. It is expected to be False for some
+    # valid analytic periodic solids (notably a one-face sphere).
+    edge_manifold = bool(solids) and all(solid.is_manifold for solid in solids)
     bbox_size = [bbox.size.X, bbox.size.Y, bbox.size.Z]
 
     summary = {
         "valid": valid,
-        "manifold": manifold,
+        "closed_shells": closed_shells,
+        "edge_manifold": edge_manifold,
         "solids": len(solids),
         "faces": len(faces),
         "edges": len(edges),
@@ -115,8 +146,8 @@ def main() -> int:
     failures: list[str] = []
     if not valid:
         failures.append("OpenCascade reports an invalid solid")
-    if not args.skip_manifold and not manifold:
-        failures.append("OpenCascade reports a non-manifold solid")
+    if not args.skip_manifold and not closed_shells:
+        failures.append("OpenCascade reports an open solid shell")
     if args.expect_solids is not None and len(solids) != args.expect_solids:
         failures.append(f"expected {args.expect_solids} solids, got {len(solids)}")
     if len(solids) < args.min_solids:
