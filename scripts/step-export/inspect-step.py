@@ -10,10 +10,14 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# build123d imports ezdxf, which otherwise tries to create this cache lazily and
-# emits a harmless warning in the read-only inspection container. /tmp is a
-# dedicated writable tmpfs for this process, so create the cache root first.
-Path("/tmp/.cache/ezdxf").mkdir(parents=True, exist_ok=True)
+# build123d imports ezdxf, which otherwise tries to create this cache lazily.
+# The inspection container normally provides a writable /tmp tmpfs, but cache
+# setup is deliberately best-effort: an optional cache must never make CAD
+# validation fail if a runtime or Podman configuration changes permissions.
+try:
+    Path("/tmp/.cache/ezdxf").mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 from build123d import import_step  # noqa: E402
 
