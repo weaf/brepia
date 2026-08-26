@@ -11,6 +11,7 @@ import {
   bootstrapFirstAdmin,
   getRegistrationSettings,
 } from '@/services/accountAdminService';
+import { BrepiaBrand } from '@/components/brand';
 
 function passwordAuthEmail(identifier: string) {
   const normalized = identifier.trim().toLowerCase();
@@ -128,12 +129,8 @@ export function SignUpEmailView() {
     <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
       <div className="w-full max-w-md">
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
-          <div className="mb-6 flex flex-col items-center justify-center gap-2">
-            <img
-              src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-              alt="CADAM Logo"
-              className="h-8 w-auto"
-            />
+          <div className="mb-6 flex flex-col items-center justify-center gap-3">
+            <BrepiaBrand showByNoty />
             <h1 className="text-2xl font-semibold text-white">
               {bootstrap ? 'Create Administrator' : 'Create Account'}
             </h1>
@@ -171,8 +168,8 @@ export function SignUpEmailView() {
               />
               {bootstrap && (
                 <p className="text-xs text-adam-text-secondary">
-                  A username creates a local pCAD account. An email address creates
-                  a normal email/password account.
+                  A username creates a local Brepia account. An email address
+                  creates a normal email/password account.
                 </p>
               )}
             </div>
