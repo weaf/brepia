@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { LanguageModelV3Prompt } from '@ai-sdk/provider';
 import {
+  VISION_NOT_CONFIGURED_MESSAGE,
   modelSupportsDirectVision,
   rewritePromptForVisionFallback,
   selectVisionModelId,
@@ -144,6 +145,31 @@ describe('pCAD vision routing', () => {
         .map((part) => part.text)
         .join('\n'),
       /rounded exterior corners/,
+    );
+  });
+
+  it('propagates missing Vision configuration instead of silently removing the image', async () => {
+    const analyzer: VisionAnalyzer = async () => {
+      throw new Error(VISION_NOT_CONFIGURED_MESSAGE);
+    };
+    const prompt = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Use this reference.' },
+          {
+            type: 'file',
+            filename: 'reference.png',
+            mediaType: 'image/png',
+            data: 'AAAA',
+          },
+        ],
+      },
+    ] as unknown as LanguageModelV3Prompt;
+
+    await assert.rejects(
+      rewritePromptForVisionFallback(prompt, { analyzer }),
+      new RegExp(VISION_NOT_CONFIGURED_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
     );
   });
 

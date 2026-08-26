@@ -2,11 +2,29 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   DANGLING_TOOL_ERROR_TEXT,
+  EMPTY_ASSISTANT_RESPONSE,
   decidePersistAction,
   hasPendingClientToolCall,
+  hasPersistableMessageParts,
   isDanglingToolPart,
   resolveDanglingToolParts,
 } from './chatToolPersistence.ts';
+
+describe('hasPersistableMessageParts', () => {
+  it('rejects an empty provider response before DB persistence', () => {
+    assert.equal(hasPersistableMessageParts([]), false);
+  });
+
+  it('accepts any non-empty assistant payload', () => {
+    assert.equal(hasPersistableMessageParts([{ type: 'text', text: 'ok' }]), true);
+    assert.equal(
+      hasPersistableMessageParts([
+        { type: 'tool-build_parametric_model', state: 'input-available' },
+      ]),
+      true,
+    );
+  });
+});
 
 describe('isDanglingToolPart', () => {
   it('flags tool calls awaiting a result', () => {
@@ -68,11 +86,8 @@ describe('resolveDanglingToolParts', () => {
 
     const result = resolveDanglingToolParts(parts);
 
-    // text untouched (same reference)
     assert.equal(result[0], parts[0]);
-    // resolved build untouched (same reference)
     assert.equal(result[1], parts[1]);
-    // dangling answer_user rewritten
     assert.deepEqual(result[2], {
       type: 'tool-answer_user',
       state: 'output-error',
@@ -92,6 +107,10 @@ describe('resolveDanglingToolParts', () => {
 });
 
 describe('hasPendingClientToolCall', () => {
+  it('classifies an empty assistant response separately from a pending tool', () => {
+    assert.equal(hasPendingClientToolCall([]), EMPTY_ASSISTANT_RESPONSE);
+  });
+
   it('detects a terminal pending tool call', () => {
     assert.equal(
       hasPendingClientToolCall([
@@ -112,7 +131,7 @@ describe('hasPendingClientToolCall', () => {
     );
   });
 
-  it('is false for pure-text turns', () => {
+  it('is false for non-empty pure-text turns', () => {
     assert.equal(
       hasPendingClientToolCall([{ type: 'text', state: 'done' }]),
       false,
@@ -126,7 +145,6 @@ describe('hasPendingClientToolCall', () => {
       ]),
       true,
     );
-    // Symmetry guard: anything dangling that is a tool part is also pending.
     assert.equal(
       isDanglingToolPart({ type: 'dynamic-tool', state: 'input-available' }),
       true,
@@ -134,12 +152,25 @@ describe('hasPendingClientToolCall', () => {
   });
 });
 
-describe('decidePersistAction — the clobber guard', () => {
-  // The whole bug in one table: a continuation that still ends with a pending
-  // client tool must NOT be written by the server, or it clobbers the client's
-  // resolution and 500s the next send.
-  it('inserts a fresh assistant row (leaf was a user message)', () => {
-    // First parametric turn: build is pending, but we still must create the row.
+describe('decidePersistAction — the clobber and empty-response guards', () => {
+  it('skips an empty provider response whether fresh or continuation', () => {
+    assert.equal(
+      decidePersistAction({
+        isContinuation: false,
+        hasPendingToolCall: EMPTY_ASSISTANT_RESPONSE,
+      }),
+      'skip',
+    );
+    assert.equal(
+      decidePersistAction({
+        isContinuation: true,
+        hasPendingToolCall: EMPTY_ASSISTANT_RESPONSE,
+      }),
+      'skip',
+    );
+  });
+
+  it('still inserts a genuine fresh assistant row (leaf was a user message)', () => {
     assert.equal(
       decidePersistAction({ isContinuation: false, hasPendingToolCall: true }),
       'insert',
@@ -150,7 +181,7 @@ describe('decidePersistAction — the clobber guard', () => {
     );
   });
 
-  it('skips the terminal answer_user continuation (the actual bug)', () => {
+  it('skips the terminal answer_user continuation (the clobber bug)', () => {
     assert.equal(
       decidePersistAction({ isContinuation: true, hasPendingToolCall: true }),
       'skip',
@@ -166,9 +197,7 @@ describe('decidePersistAction — the clobber guard', () => {
 });
 
 describe('end-to-end: a normal first turn never persists a dangling tool call', () => {
-  // Walk the real sequence of onFinish decisions for: user → build → answer_user.
   it('insert(build pending) → skip(answer_user pending), so the row never gets clobbered', () => {
-    // Turn 1, step 0: leaf is the user message, model emits build (pending).
     const buildPending = [
       { type: 'tool-build_parametric_model', state: 'input-available' },
     ];
@@ -181,8 +210,6 @@ describe('end-to-end: a normal first turn never persists a dangling tool call', 
       'first build turn must create the row',
     );
 
-    // Client resolves the build and resubmits; server continues and emits
-    // answer_user (pending). This is the turn that used to clobber.
     const answerPending = [
       { type: 'tool-build_parametric_model', state: 'output-available' },
       { type: 'tool-answer_user', state: 'input-available' },
@@ -196,8 +223,6 @@ describe('end-to-end: a normal first turn never persists a dangling tool call', 
       'terminal answer_user turn must defer to the client',
     );
 
-    // The client persists the fully-resolved parts. On the NEXT send the
-    // server reads this branch — nothing dangles, so no MissingToolResultsError.
     const persistedByClient = [
       { type: 'tool-build_parametric_model', state: 'output-available' },
       { type: 'tool-answer_user', state: 'output-available' },

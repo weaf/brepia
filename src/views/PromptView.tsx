@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import TextAreaChat from '@/components/TextAreaChat';
+import { ScadImportButton } from '@/components/ScadImportButton';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useEffect } from 'react';
 import { Model } from '@shared/types';
@@ -452,6 +453,15 @@ export function PromptView() {
                   draftStorageKey={HOME_PROMPT_DRAFT_KEY}
                 />
               </SelectedItemsContext.Provider>
+              {user && type === 'parametric' && (
+                <div className="flex justify-end">
+                  <ScadImportButton
+                    model={model}
+                    executionMode={executionMode}
+                    disabled={isGenerating}
+                  />
+                </div>
+              )}
               {!user && (
                 <p className="text-center text-sm text-gray-500">
                   <Link

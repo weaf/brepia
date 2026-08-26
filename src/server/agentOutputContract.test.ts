@@ -20,10 +20,42 @@ describe('buildAgentOutputContract', () => {
     assert.ok(has('"message"'), 'contract must mention "message" key');
   });
 
-  it('requires complete runnable OpenSCAD for CAD requests', () => {
+  it('requires complete runnable OpenSCAD when proposing a CAD revision', () => {
     assert.ok(
       has('complete, runnable OpenSCAD program'),
-      'contract must require complete runnable OpenSCAD for CAD',
+      'contract must require complete runnable OpenSCAD for a CAD revision',
+    );
+    assert.ok(
+      has('new or revised CAD artifact'),
+      'contract must distinguish a CAD revision from terminal continuation',
+    );
+  });
+
+  it('requires non-empty code for a pCAD user request before the first build result', () => {
+    assert.ok(has('<user_request>'));
+    assert.ok(has('<pcad_build_result>'));
+    assert.ok(
+      has('code MUST be non-empty'),
+      'first CAD creation/revision step must not finish message-only',
+    );
+    assert.ok(
+      has('A message-only result is invalid'),
+      'contract must explicitly reject message-only pre-build completion',
+    );
+  });
+
+  it('allows a successful build continuation to finish with empty code', () => {
+    assert.ok(
+      has('After <pcad_build_result>'),
+      'contract must explicitly describe the post-build continuation case',
+    );
+    assert.ok(
+      has('code = ""'),
+      'a satisfied post-build continuation must be allowed to finish without another artifact',
+    );
+    assert.ok(
+      has('Do not re-emit unchanged code just to finish the turn'),
+      'contract must prevent an unchanged build loop',
     );
   });
 

@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import type { ToastActionElement, ToastProps } from '@/components/ui/toast';
 
-const TOAST_LIMIT = 1;
+const TOAST_LIMIT = 3;
 const TOAST_REMOVE_DELAY = 1000000;
 
 type ToasterToast = ToastProps & {
@@ -134,6 +134,12 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, 'id'>;
 
+export function shouldDismissToastFromPrimitiveOpenChange(
+  variant: ToastProps['variant'],
+): boolean {
+  return variant !== 'destructive';
+}
+
 function toast({ ...props }: Toast) {
   const id = genId();
 
@@ -151,7 +157,12 @@ function toast({ ...props }: Toast) {
       id,
       open: true,
       onOpenChange: (open) => {
-        if (!open) dismiss();
+        if (
+          !open &&
+          shouldDismissToastFromPrimitiveOpenChange(props.variant)
+        ) {
+          dismiss();
+        }
       },
     },
   });

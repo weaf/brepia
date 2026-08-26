@@ -1,4 +1,8 @@
 import OpenSCADError from '@/lib/OpenSCADError';
+import {
+  assertOpenScadOutputWithinLimit,
+  assertOpenScadSourceWithinLimit,
+} from '@/lib/openScadLimits';
 import OpenSCADWrapper from './openSCAD';
 import {
   FileSystemWorkerMessageData,
@@ -26,12 +30,20 @@ self.onmessage = async (
       | boolean
       | null = null;
     switch (type) {
-      case 'preview':
-        result = await openscad.preview(data as OpenSCADWorkerMessageData);
+      case 'preview': {
+        const openScadData = data as OpenSCADWorkerMessageData;
+        assertOpenScadSourceWithinLimit(openScadData.code);
+        result = await openscad.preview(openScadData);
+        assertOpenScadOutputWithinLimit(result);
         break;
-      case 'export':
-        result = await openscad.exportFile(data as OpenSCADWorkerMessageData);
+      }
+      case 'export': {
+        const openScadData = data as OpenSCADWorkerMessageData;
+        assertOpenScadSourceWithinLimit(openScadData.code);
+        result = await openscad.exportFile(openScadData);
+        assertOpenScadOutputWithinLimit(result);
         break;
+      }
       case 'fs.read':
         result = await openscad.readFile(data as FileSystemWorkerMessageData);
         break;

@@ -1,8 +1,13 @@
 import { Chat } from '@ai-sdk/react';
 import { useEffect, useMemo, useRef } from 'react';
 import type { AppUIMessage } from '@shared/chatAi';
+import { persistedCompletionCoversLiveTurn } from './chatCompletionReconciliation';
+import { userFacingChatError } from './chatErrorPresentation';
+import { pendingClientToolsNeedingRecovery } from './chatPendingToolRecovery';
 
 const MAX_CACHE_SIZE = 10;
+const TOOL_CALL_COMMIT_RETRY_MS = 16;
+const TOOL_CALL_COMMIT_MAX_ATTEMPTS = 8;
 
 const chatCache = new Map<string, Chat<AppUIMessage>>();
 type ReactChatInit = ConstructorParameters<typeof Chat<AppUIMessage>>[0];
@@ -22,6 +27,8 @@ type CallbackRefs = {
 
 const callbackRefs = new Map<string, CallbackRefs>();
 const handledToolCallIds = new Map<string, Set<string>>();
+const scheduledToolCallIds = new Map<string, Set<string>>();
+const cachedTransports = new Map<string, ReactChatInit['transport']>();
 
 function refsFor(id: string): CallbackRefs {
   let refs = callbackRefs.get(id);
@@ -47,6 +54,15 @@ function handledToolsFor(id: string): Set<string> {
   return handled;
 }
 
+function scheduledToolsFor(id: string): Set<string> {
+  let scheduled = scheduledToolCallIds.get(id);
+  if (!scheduled) {
+    scheduled = new Set<string>();
+    scheduledToolCallIds.set(id, scheduled);
+  }
+  return scheduled;
+}
+
 function touch(id: string) {
   const chat = chatCache.get(id);
   if (!chat) return;
@@ -64,6 +80,8 @@ function evictIfNeeded() {
     chatCache.delete(result.value);
     callbackRefs.delete(result.value);
     handledToolCallIds.delete(result.value);
+    scheduledToolCallIds.delete(result.value);
+    cachedTransports.delete(result.value);
   }
 }
 
@@ -99,37 +117,88 @@ function canReplaceWithPersistedMessages(
   return true;
 }
 
-function pendingClientToolCalls(messages: readonly AppUIMessage[]) {
-  const pending: Array<{
-    toolName: 'build_parametric_model' | 'answer_user';
-    toolCallId: string;
-    input: unknown;
-  }> = [];
+function chatContainsToolCall(
+  chat: Chat<AppUIMessage> | undefined,
+  toolCallId: string,
+): boolean {
+  return Boolean(
+    chat?.messages.some(
+      (message) =>
+        message.role === 'assistant' &&
+        message.parts.some(
+          (part) => 'toolCallId' in part && part.toolCallId === toolCallId,
+        ),
+    ),
+  );
+}
 
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
-    for (const part of message.parts) {
-      if (
-        (part.type === 'tool-build_parametric_model' ||
-          part.type === 'tool-answer_user') &&
-        part.state === 'input-available' &&
-        'toolCallId' in part &&
-        typeof part.toolCallId === 'string' &&
-        'input' in part
-      ) {
-        pending.push({
-          toolName:
-            part.type === 'tool-build_parametric_model'
-              ? 'build_parametric_model'
-              : 'answer_user',
-          toolCallId: part.toolCallId,
-          input: part.input,
-        });
-      }
-    }
-  }
+function dispatchToolCall(
+  refs: CallbackRefs,
+  handled: Set<string>,
+  ctx: ToolCallCallbackArg,
+): boolean {
+  const callback = refs.onToolCall.current;
+  if (!callback) return false;
+  handled.add(ctx.toolCall.toolCallId);
+  void Promise.resolve(callback(ctx)).catch((error) => {
+    refs.onError.current?.(userFacingChatError(error));
+  });
+  return true;
+}
 
-  return pending;
+/**
+ * AI SDK can invoke `onToolCall` in the same turn of the event loop in which
+ * it commits the assistant/tool part to Chat state. pCAD's tool callback must
+ * see that assistant because its message id is the key used to persist the
+ * client-executed tool result before auto-continuation.
+ *
+ * Defer dispatch until the emitted tool call is observable in the cached Chat.
+ * If React/SDK state takes more than one tick, retry briefly. We intentionally
+ * do NOT mark the call handled when it never becomes visible or when no pCAD
+ * callback is registered; the persisted-message recovery path may then replay
+ * the still-pending tool safely once the assistant row is available.
+ */
+function scheduleToolCallAfterMessageCommit({
+  id,
+  refs,
+  handled,
+  ctx,
+}: {
+  id: string;
+  refs: CallbackRefs;
+  handled: Set<string>;
+  ctx: ToolCallCallbackArg;
+}) {
+  const toolCallId = ctx.toolCall.toolCallId;
+  const scheduled = scheduledToolsFor(id);
+  if (handled.has(toolCallId) || scheduled.has(toolCallId)) return;
+  scheduled.add(toolCallId);
+
+  const attemptDispatch = (attempt: number) => {
+    setTimeout(
+      () => {
+        if (handled.has(toolCallId)) {
+          scheduled.delete(toolCallId);
+          return;
+        }
+
+        if (!chatContainsToolCall(chatCache.get(id), toolCallId)) {
+          if (attempt + 1 < TOOL_CALL_COMMIT_MAX_ATTEMPTS) {
+            attemptDispatch(attempt + 1);
+            return;
+          }
+          scheduled.delete(toolCallId);
+          return;
+        }
+
+        scheduled.delete(toolCallId);
+        dispatchToolCall(refs, handled, ctx);
+      },
+      attempt === 0 ? 0 : TOOL_CALL_COMMIT_RETRY_MS,
+    );
+  };
+
+  attemptDispatch(0);
 }
 
 export type CachedAiChatOptions = Omit<ReactChatInit, 'id'> & {
@@ -164,65 +233,122 @@ export function useCachedAiChat({
 
   const chat = useMemo(() => {
     const existing = chatCache.get(id);
-    if (existing) {
+    if (existing && cachedTransports.get(id) === transport) {
       touch(id);
       return existing;
     }
 
     const initial = initialConfigRef.current;
+    // A model / CLI-vs-Streaming change creates a new transport object in
+    // ChatSession. Rebuild the cached Chat for that conversation so the next
+    // send actually uses the selected model, while carrying the live message
+    // state forward. Previously the cache key was only conversation.id, which
+    // could silently keep using the model that was active on first mount.
+    const seedMessages = existing
+      ? ([...existing.messages] as AppUIMessage[])
+      : initial.messages;
     const created = new Chat<AppUIMessage>({
       ...initial.rest,
       id,
-      messages: initial.messages,
-      transport: initial.transport,
-      onError: (error) => refs.onError.current?.(error),
+      messages: seedMessages,
+      transport,
+      onError: (error) => refs.onError.current?.(userFacingChatError(error)),
       onFinish: (ctx) => refs.onFinish.current?.(ctx),
       onData: (ctx) => refs.onData.current?.(ctx),
       onToolCall: (ctx) => {
-        handled.add(ctx.toolCall.toolCallId);
-        return refs.onToolCall.current?.(ctx);
+        scheduleToolCallAfterMessageCommit({ id, refs, handled, ctx });
       },
       sendAutomaticallyWhen: (ctx) =>
         refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
     });
 
     chatCache.set(id, created);
+    cachedTransports.set(id, transport);
     evictIfNeeded();
     return created;
-  }, [handled, id, refs]);
+  }, [handled, id, refs, transport]);
 
   // Android browsers can suspend a background tab and tear down its HTTP/SSE
   // connection. The server keeps consuming/persisting the AI stream, but the
-  // cached client Chat can remain stuck in `error` with an older in-memory
-  // branch. When React Query refreshes the DB branch on focus, adopt that
-  // persisted snapshot as long as we are not actively streaming. This also
-  // clears the transient network error once the authoritative branch arrives.
+  // cached client Chat can remain stuck with an older in-memory branch.
+  //
+  // There are two authoritative DB recovery signals:
+  // 1. A terminal assistant for the same live turn: stop the stale local stream
+  //    and adopt the persisted branch.
+  // 2. A leaf assistant with an input-available pCAD client tool: the server
+  //    persisted the tool call but the browser missed/delayed the live SDK
+  //    callback. Replay that tool even while the local Chat still reports
+  //    streaming/submitted. This must happen BEFORE the in-flight early return
+  //    or the chat deadlocks forever at "Generated model" until reload.
   useEffect(() => {
-    if (chat.status === 'streaming' || chat.status === 'submitted') return;
+    const isLocallyInFlight =
+      chat.status === 'streaming' || chat.status === 'submitted';
+    const persistedCompletesLiveTurn =
+      isLocallyInFlight &&
+      messages !== undefined &&
+      persistedCompletionCoversLiveTurn(chat.messages, messages);
+    const persistedPendingTools = messages
+      ? pendingClientToolsNeedingRecovery(messages, handled)
+      : [];
+    let recoveredFromPersistence = false;
 
-    if (
+    if (messages && persistedPendingTools.length > 0) {
+      const liveIsMissingPendingTool = persistedPendingTools.some(
+        (toolCall) => !chatContainsToolCall(chat, toolCall.toolCallId),
+      );
+
+      // ChatSession resolves the assistant message id from chat.messages before
+      // persisting tool output. If the live stream missed that state commit,
+      // adopt the persisted assistant first so the callback has an authoritative
+      // message id and the DB output write can complete before auto-resubmit.
+      if (
+        liveIsMissingPendingTool &&
+        messageSnapshot(chat.messages) !== messageSnapshot(messages)
+      ) {
+        chat.messages = messages;
+        recoveredFromPersistence = true;
+      }
+
+      const scheduled = scheduledToolsFor(id);
+      for (const toolCall of persistedPendingTools) {
+        // A short live-dispatch timer may still be waiting for the same tool.
+        // Cancel its eligibility before replay; dispatchToolCall marks the id
+        // handled synchronously, so any already-queued timer becomes a no-op.
+        scheduled.delete(toolCall.toolCallId);
+        console.info('[chat-tool-recovery] replaying persisted pending client tool', {
+          conversationId: id,
+          toolName: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          localStatus: chat.status,
+        });
+        dispatchToolCall(refs, handled, { toolCall } as ToolCallCallbackArg);
+      }
+    }
+
+    if (persistedCompletesLiveTurn && messages) {
+      void chat.stop();
+      if (messageSnapshot(chat.messages) !== messageSnapshot(messages)) {
+        chat.messages = messages;
+      }
+      recoveredFromPersistence = true;
+    } else if (isLocallyInFlight) {
+      return;
+    } else if (
       messages &&
       canReplaceWithPersistedMessages(chat.messages, messages) &&
       messageSnapshot(chat.messages) !== messageSnapshot(messages)
     ) {
       chat.messages = messages;
+      recoveredFromPersistence = true;
     }
 
-    if (chat.status === 'error' && chat.messages.length > 0) {
+    // A genuine provider/model error must remain visible to the user. Clear a
+    // cached error only when a fresh persisted DB snapshot actually recovered
+    // the chat (for example after a mobile SSE disconnect).
+    if (chat.status === 'error' && recoveredFromPersistence) {
       chat.clearError();
     }
-
-    // A disconnect can happen after the server has emitted and persisted a
-    // client-executed CAD tool call but before the browser received it. Re-run
-    // only known idempotent client tools that are still input-available. The
-    // normal live onToolCall path records the same id first, preventing a
-    // duplicate execution when no disconnect occurred.
-    for (const toolCall of pendingClientToolCalls(chat.messages)) {
-      if (handled.has(toolCall.toolCallId)) continue;
-      handled.add(toolCall.toolCallId);
-      void refs.onToolCall.current?.({ toolCall } as ToolCallCallbackArg);
-    }
-  }, [chat, handled, messages, refs]);
+  }, [chat, handled, id, messages, refs]);
 
   return chat;
 }
@@ -235,25 +361,26 @@ export function createAndCacheAiChat(
     id: string;
   },
 ) {
-  const { id, sendAutomaticallyWhen, ...rest } = options;
+  const { id, sendAutomaticallyWhen, transport, ...rest } = options;
   const refs = refsFor(id);
   const handled = handledToolsFor(id);
   refs.sendAutomaticallyWhen.current = sendAutomaticallyWhen;
   const chat = new Chat<AppUIMessage>({
     ...rest,
     id,
-    onError: (error) => refs.onError.current?.(error),
+    transport,
+    onError: (error) => refs.onError.current?.(userFacingChatError(error)),
     onFinish: (ctx) => refs.onFinish.current?.(ctx),
     onData: (ctx) => refs.onData.current?.(ctx),
     onToolCall: (ctx) => {
-      handled.add(ctx.toolCall.toolCallId);
-      return refs.onToolCall.current?.(ctx);
+      scheduleToolCallAfterMessageCommit({ id, refs, handled, ctx });
     },
     sendAutomaticallyWhen: (ctx) =>
       refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
   });
 
   chatCache.set(id, chat);
+  cachedTransports.set(id, transport);
   evictIfNeeded();
   return chat;
 }

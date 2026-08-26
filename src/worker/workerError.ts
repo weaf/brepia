@@ -1,42 +1,55 @@
+import OpenSCADError from '@/lib/OpenSCADError';
+
 // Rebuild a useful Error from the `err` field of a worker response message.
 //
 // OpenSCAD compile failures cross the worker boundary as a serialized
 // OpenSCADError carrying `stdErr` — the compiler's actual diagnostics
 // ("Ignoring unknown module 'cuboid'", syntax errors with line numbers).
-// The promise-based callers (tool builds, thumbnail compiles, exports) used
-// to reject with `new Error(err.message)`, which reduced every failure to
-// "Adam did not exit correctly" — so the AI build loop had nothing to
-// self-correct against. Fold stderr into the message here so every consumer
-// of the rejection sees the real diagnostics.
+// Preserve that identity on the main thread so the preview can offer
+// `Fix with AI`, while keeping stderr folded into `message` for existing
+// promise-based callers that only inspect `error.message`.
 
 // Enough to include full BOSL2 assertion backtraces without letting a
 // runaway ECHO loop flood the model context.
 const MAX_STDERR_LINES = 100;
 
 type SerializedWorkerError = {
+  name?: string;
   message?: string;
+  code?: string;
   stdErr?: string[];
 };
 
-export function errorFromWorker(err: SerializedWorkerError): Error {
-  const message = err.message || 'Worker operation failed';
-  const stdErr = Array.isArray(err.stdErr)
-    ? err.stdErr.filter((line) => line.trim().length > 0)
+function boundedStdErr(stdErr: string[] | undefined): string[] {
+  const filtered = Array.isArray(stdErr)
+    ? stdErr.filter((line) => line.trim().length > 0)
     : [];
 
-  if (stdErr.length === 0) return new Error(message);
+  if (filtered.length <= MAX_STDERR_LINES) return filtered;
 
   // Diagnostics cluster at both ends: the first bad include/module up top,
   // the fatal assertion or "Can't parse" at the bottom. Keep both halves.
   const half = MAX_STDERR_LINES / 2;
-  const lines =
-    stdErr.length > MAX_STDERR_LINES
-      ? [
-          ...stdErr.slice(0, half),
-          `... ${stdErr.length - MAX_STDERR_LINES} more lines ...`,
-          ...stdErr.slice(-half),
-        ]
-      : stdErr;
+  return [
+    ...filtered.slice(0, half),
+    `... ${filtered.length - MAX_STDERR_LINES} more lines ...`,
+    ...filtered.slice(-half),
+  ];
+}
 
-  return new Error(`${message}\n${lines.join('\n')}`);
+export function errorFromWorker(err: SerializedWorkerError): Error {
+  const message = err.message || 'Worker operation failed';
+  const stdErr = boundedStdErr(err.stdErr);
+  const diagnosticMessage =
+    stdErr.length > 0 ? `${message}\n${stdErr.join('\n')}` : message;
+
+  if (err.name === 'OpenSCADError') {
+    return new OpenSCADError(
+      diagnosticMessage,
+      typeof err.code === 'string' ? err.code : '',
+      stdErr,
+    );
+  }
+
+  return new Error(diagnosticMessage);
 }

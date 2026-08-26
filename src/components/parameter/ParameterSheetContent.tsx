@@ -18,6 +18,8 @@ import {
   type DxfExporter,
 } from '@/utils/downloadUtils';
 import { useToast } from '@/hooks/use-toast';
+import { useConversation } from '@/contexts/ConversationContext';
+import { persistConversationExport } from '@/services/conversationExports';
 
 interface ParameterSheetContentProps {
   parameters: Parameter[];
@@ -37,6 +39,7 @@ export function ParameterSheetContent({
   code,
 }: ParameterSheetContentProps) {
   const { toast } = useToast();
+  const { conversation } = useConversation();
   const [selectedFormat, setSelectedFormat] = useState<DownloadFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,13 +103,37 @@ export function ParameterSheetContent({
     debouncedSubmit(updatedParameters);
   };
 
+  const persistExportBestEffort = useCallback(
+    (format: 'stl' | 'dxf', file: Blob) => {
+      if (!conversation.id || !code) return;
+      void persistConversationExport({
+        conversationId: conversation.id,
+        format,
+        sourceCode: code,
+        file,
+      }).catch((error) => {
+        // Browser download is the primary user action. Workspace mirroring is
+        // best-effort and must not turn a successful mobile download into a
+        // failed export.
+        console.warn(
+          `[conversation-workspace] Failed to persist mobile ${format.toUpperCase()} export:`,
+          error,
+        );
+      });
+    },
+    [code, conversation.id],
+  );
+
   const handleDownloadSTL = () => {
     if (!currentOutput) return;
     downloadSTLFile(currentOutput);
+    persistExportBestEffort('stl', currentOutput);
   };
 
   const handleDownloadOpenSCAD = () => {
     if (!code) return;
+    // Source revisions are mirrored under models/, matching desktop behavior;
+    // a .scad browser download does not create a duplicate exports/ artifact.
     downloadOpenSCADFile(code);
   };
 
@@ -117,6 +144,7 @@ export function ParameterSheetContent({
       setIsExporting(true);
       const dxfOutput = await dxfExporter();
       downloadDXFFile(dxfOutput);
+      persistExportBestEffort('dxf', dxfOutput);
     } catch (error) {
       console.error('[OpenSCAD] Failed to export DXF:', error);
       toast({

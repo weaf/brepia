@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { Model } from '@shared/types';
 import { ModelConfig } from '../types/misc.ts';
 import { useConversation } from '@/contexts/ConversationContext';
+import { registerConversationModelPicker } from '@/lib/modelPickerBridge';
 
 interface ModelSelectorProps {
   models: ModelConfig[];
@@ -21,6 +22,8 @@ interface ModelSelectorProps {
   className?: string;
   type?: 'parametric' | 'creative'; // Optional type prop that takes precedence over conversation context
   focused?: boolean; // New prop to indicate if text area is focused
+  /** Internal mirror selectors can opt out so the primary chat selector remains the bridge owner. */
+  registerBinding?: boolean;
 }
 
 export function ModelSelector({
@@ -31,12 +34,32 @@ export function ModelSelector({
   disabled,
   type,
   focused = false,
+  registerBinding = true,
 }: ModelSelectorProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { conversation } = useConversation();
 
   // Use provided type prop or fall back to conversation context
   const currentType = type || conversation.type;
+
+  useEffect(() => {
+    if (!registerBinding) return;
+    return registerConversationModelPicker(conversation.id, {
+      models,
+      selectedModel,
+      onModelChange,
+      disabled: !!disabled,
+      type: currentType,
+    });
+  }, [
+    conversation.id,
+    currentType,
+    disabled,
+    models,
+    onModelChange,
+    registerBinding,
+    selectedModel,
+  ]);
 
   // Track previous model name for slide animation
   const [prevModelName, setPrevModelName] = useState<string | null>(null);
