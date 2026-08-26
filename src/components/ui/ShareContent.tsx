@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { ClipboardCheck, CopyIcon, Loader2 } from 'lucide-react';
+import { ClipboardCheck, CopyIcon } from 'lucide-react';
 import { Suspense, useRef, useState } from 'react';
 import {
   FacebookIcon,
@@ -15,6 +15,7 @@ import { MeshGifPreview } from '../viewer/MeshGifPreview';
 import { OpenSCADGifPreview } from '../viewer/OpenSCADGifPreview';
 import { cn } from '@/lib/utils';
 import type React from 'react';
+import { ActivityIndicator } from '@/components/brand';
 
 type ShareContentProps = {
   conversationId: string;
@@ -169,8 +170,8 @@ export function ShareContent({
         >
           {isGenerating ? (
             <div className="flex items-center gap-2">
+              <ActivityIndicator label="Generating GIF" size="sm" />
               Generating...
-              <Loader2 className="h-4 w-4 animate-spin" />
             </div>
           ) : (
             'Download GIF'
