@@ -102,4 +102,4 @@ STEP V1 sends only the complete SCAD source into the sandbox. Custom relative pr
 
 ## Merge status
 
-Ready to merge `feature/step-export` into `master`.
+`feature/step-export` was fast-forward merged into `master` after the complete merge gate passed. FreeCAD/Rhino receiving-CAD validation is optional follow-up compatibility work and is not a blocker for this release.
