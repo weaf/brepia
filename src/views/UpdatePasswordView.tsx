@@ -4,10 +4,9 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { BrepiaBrand } from '@/components/brand';
+import { ActivityIndicator, BrepiaBrand } from '@/components/brand';
 
 export function UpdatePasswordView() {
   const [password, setPassword] = useState('');
@@ -96,7 +95,11 @@ export function UpdatePasswordView() {
             >
               {isUpdatingPassword ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <ActivityIndicator
+                    label="Updating password"
+                    size="sm"
+                    className="mr-2"
+                  />
                   Updating password...
                 </>
               ) : (
