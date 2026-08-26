@@ -6,8 +6,8 @@ import { Sidebar } from './Sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { Loader2 } from 'lucide-react';
 import { LayoutContext } from '@/contexts/LayoutContext';
+import { ActivityIndicator } from '@/components/brand';
 
 export function Layout() {
   const { user, isLoading } = useAuth();
@@ -36,7 +36,7 @@ export function Layout() {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-secondary-dark">
-        <Loader2 className="h-8 w-8 animate-spin text-adam-blue" />
+        <ActivityIndicator label="Loading Brepia" size="lg" />
       </div>
     );
   }
