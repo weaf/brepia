@@ -183,7 +183,7 @@ Historical accuracy is more important than global string replacement.
 - [x] Classify old-name occurrences as user-facing, internal-compatibility or historical.
 - [x] Record concrete files and recommended action in `docs/brepia_remake_status.md`.
 
-No broad search-and-replace is needed; implementation should now follow the classified map.
+No broad search-and-replace is needed; implementation follows the classified map.
 
 ### Phase 2 — Brand primitives
 
@@ -196,20 +196,22 @@ No broad search-and-replace is needed; implementation should now follow the clas
 ### Phase 3 — Primary product surfaces
 
 - [x] Header/sidebar branding.
-- [ ] Root/home/start surface — browser shell is rebranded; main start/workspace content still needs visual audit.
+- [x] Root/home/start surface — prompt copy is Brepia and the inherited Adam product banner has been removed; visual review remains in Phase 6.
 - [x] Sign-in/sign-up/password flows.
 - [x] Browser title/meta/favicon.
 - [ ] About/legal-facing current-product references.
 
-### Phase 4 — Activity and icon cleanup
+### Phase 4 — Activity and icon cleanup: in progress
 
-- [ ] Replace unnecessary large spinning indicators with the Brepia activity language — started with `Layout`, `AuthGuard`, and assistant loading.
-- [ ] Keep operation-specific text where possible.
+- [ ] Replace unnecessary large spinning indicators with the Brepia activity language — primary global/auth/import/viewer/settings/share/parameter surfaces are migrated; remaining large-file cases are tracked in status.
+- [x] Keep determinate progress where real progress is available, including GIF generation.
 - [ ] Normalize obvious icon inconsistencies without redesigning every control.
-- [ ] Verify mobile and desktop variants independently.
+- [ ] Replace temporary legacy assistant/prompt asset aliases with direct Brepia references after large-component cleanup.
+- [ ] Verify mobile and desktop variants independently in the running application.
 
 ### Phase 5 — Documentation and safe rename cleanup
 
+- [ ] Resolve the built-in prompt-profile display/lineage strategy for `CADAM Original` before renaming it.
 - [ ] Update current README/product documentation to Brepia where it represents the present product.
 - [ ] Preserve historical CADAM references where they explain origin/history.
 - [ ] Decide which `pCAD` internal names intentionally remain for compatibility.
