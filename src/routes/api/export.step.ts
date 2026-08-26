@@ -115,6 +115,19 @@ function errorResponse(error: unknown) {
     return json({ error: error.message, code: error.code }, error.status);
   }
   if (error instanceof StepExportError) {
+    if (error.code === 'capacity_exceeded') {
+      return Response.json(
+        { error: error.message, code: error.code },
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Cache-Control': 'no-store',
+            'Retry-After': '2',
+          },
+        },
+      );
+    }
     const status = error.code === 'provider_unavailable' ? 503 : 400;
     return json({ error: error.message, code: error.code }, status);
   }
@@ -147,8 +160,10 @@ export const Route = createFileRoute('/api/export/step')({
             status: 200,
             headers: {
               ...corsHeaders,
+              'Cache-Control': 'private, no-store',
               'Content-Type': 'model/step',
               'Content-Disposition': 'attachment; filename="model.step"',
+              'X-Content-Type-Options': 'nosniff',
               'X-PCAD-Step-Provider': result.provider,
               'X-PCAD-Step-Warning-Count': String(result.warnings.length),
             },
