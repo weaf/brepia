@@ -46,30 +46,26 @@ function parseWarnings(stderr: string): string[] {
     .slice(0, 20);
 }
 
-function providerExecutable(): string {
-  return process.env.PCAD_SCAD2STEP_BIN?.trim() || 'uvx';
-}
-
-function providerArgs(inputPath: string, outputPath: string): string[] {
-  const configured = process.env.PCAD_SCAD2STEP_BIN?.trim();
-  if (configured) return [inputPath, '-o', outputPath];
-
-  return [
-    '--from',
-    `scad123d==${STEP_EXPORT_PROVIDER_VERSION}`,
-    'scad2step',
-    inputPath,
-    '-o',
-    outputPath,
-  ];
+function sandboxRunner(): string {
+  const runner = process.env.PCAD_STEP_EXPORT_RUNNER?.trim();
+  if (!runner) {
+    throw new StepExportError(
+      'provider_unavailable',
+      'STEP export is not configured on this server.',
+    );
+  }
+  return runner;
 }
 
 /**
- * Convert complete OpenSCAD source to STEP using scad123d/build123d/OCCT.
+ * Convert complete OpenSCAD source to STEP using an explicitly configured,
+ * sandboxed scad2step runner.
  *
- * The provider is deliberately isolated behind this server function: the UI
- * and API contract do not depend on scad123d and can move to another B-Rep
- * implementation later without changing the browser export flow.
+ * IMPORTANT: scad123d invokes native OpenSCAD and upstream explicitly warns
+ * against running untrusted SCAD directly on a host. pCAD accepts imported
+ * user SCAD, so this module intentionally has no direct `uvx scad2step`
+ * fallback. PCAD_STEP_EXPORT_RUNNER must point at an operator-controlled
+ * sandbox wrapper (container/VM) that accepts `<input.scad> -o <output.step>`.
  */
 export async function exportScadToStep(sourceCode: string): Promise<StepExportResult> {
   const sourceBytes = byteLength(sourceCode);
@@ -90,21 +86,17 @@ export async function exportScadToStep(sourceCode: string): Promise<StepExportRe
     let stderr = '';
     try {
       const result = await execFileAsync(
-        providerExecutable(),
-        providerArgs(inputPath, outputPath),
+        sandboxRunner(),
+        [inputPath, '-o', outputPath],
         {
           timeout: STEP_EXPORT_TIMEOUT_MS,
           maxBuffer: 4 * 1024 * 1024,
-          env: {
-            ...process.env,
-            ...(process.env.PCAD_OPENSCAD_BIN
-              ? { SCAD123D_OPENSCAD: process.env.PCAD_OPENSCAD_BIN }
-              : {}),
-          },
+          env: process.env,
         },
       );
       stderr = result.stderr ?? '';
     } catch (error) {
+      if (error instanceof StepExportError) throw error;
       const record = error as NodeJS.ErrnoException & {
         killed?: boolean;
         signal?: string;
@@ -113,7 +105,7 @@ export async function exportScadToStep(sourceCode: string): Promise<StepExportRe
       if (record.code === 'ENOENT') {
         throw new StepExportError(
           'provider_unavailable',
-          'STEP export provider is not installed on the server.',
+          'Configured STEP export runner was not found on the server.',
         );
       }
       if (record.killed || record.signal === 'SIGTERM') {
