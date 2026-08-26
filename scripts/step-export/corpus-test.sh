@@ -50,7 +50,7 @@ inspect_step() {
     --cpus=1 \
     --userns=keep-id \
     --user "$(id -u):$(id -g)" \
-    --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=256m" \
+    --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=256m,mode=1777" \
     --volume "${SCRIPT_DIR}/inspect-step.py:/opt/pcad-step/inspect-step.py:ro" \
     --volume "${step_file}:/input/model.step:ro" \
     --env HOME=/tmp \
