@@ -118,3 +118,22 @@ export function downloadDXFFile(
     mimeType: 'application/dxf',
   });
 }
+
+/**
+ * Downloads STEP file returned by the server-side B-Rep exporter.
+ */
+export function downloadSTEPFile(
+  output: Blob,
+  currentMessage?: Message | null,
+): void {
+  const filename = generateDownloadFilename({
+    currentMessage,
+    extension: 'step',
+  });
+
+  downloadFile({
+    content: output,
+    filename,
+    mimeType: 'model/step',
+  });
+}
