@@ -1,4 +1,4 @@
-import { Download, ChevronUp, Loader2 } from 'lucide-react';
+import { Download, ChevronUp } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useConversation } from '@/contexts/ConversationContext';
 import { persistConversationExport } from '@/services/conversationExports';
 import { exportStep } from '@/services/stepExport';
+import { ActivityIndicator } from '@/components/brand';
 
 interface ParameterSheetContentProps {
   parameters: Parameter[];
@@ -154,7 +155,7 @@ export function ParameterSheetContent({
         description:
           error instanceof Error
             ? error.message
-            : 'Adam could not export this model as DXF.',
+            : 'Brepia could not export this model as DXF.',
         variant: 'destructive',
       });
     } finally {
@@ -183,7 +184,7 @@ export function ParameterSheetContent({
         description:
           error instanceof Error
             ? error.message
-            : 'Adam could not export this model as STEP.',
+            : 'Brepia could not export this model as STEP.',
         variant: 'destructive',
       });
     } finally {
@@ -232,7 +233,11 @@ export function ParameterSheetContent({
             className="flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900"
           >
             {isExporting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <ActivityIndicator
+                label={`Exporting ${selectedFormat.toUpperCase()}`}
+                size="sm"
+                dotClassName="mr-2 bg-adam-neutral-800"
+              />
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
