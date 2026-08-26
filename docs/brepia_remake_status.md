@@ -12,64 +12,61 @@ Companion plan: `docs/brepia_remake_plan.md`
 - [x] Brepia product/brand concept recorded in-repo.
 - [x] Rename strategy recorded: user-facing vs internal compatibility vs historical references.
 - [x] Initial branding/asset/loading audit completed far enough to define implementation boundaries.
-- [ ] Brand SVG/component implemented.
-- [ ] Primary UI surfaces rebranded.
-- [ ] Activity indicator cleanup implemented.
+- [x] Brand primitives implemented: `BrepiaMark`, `BrepiaBrand`, `ActivityIndicator`, standalone SVG mark.
+- [x] Browser title and SVG favicon switched to Brepia.
+- [x] Desktop/mobile sidebar primary branding switched to Brepia.
+- [x] Current repository link in the sidebar points to `weaf/pCAD` rather than upstream CADAM.
+- [x] Sign-in/sign-up/email-sign-up/reset-password/update-password visual branding switched to shared `BrepiaBrand`.
+- [ ] Chat/assistant identity rebranded.
+- [ ] Generated media watermark rebranded.
+- [ ] Activity indicator cleanup implemented across primary busy states.
+- [ ] Legal/current-product pages resolved and rebranded.
 - [ ] README/current docs rebranded.
 - [ ] Visual regression review complete.
 - [ ] Final test/typecheck/lint/build gate complete.
 
-## Audit conclusions
+## Current implementation notes
 
-### 1. Current product identity is spread across several generations
+### Brand primitives
 
-The UI currently mixes at least three identities:
+Added under `src/components/brand/`:
 
-- `CADAM` — current browser title, primary expanded logo and most auth/legal branding.
-- `Adam` / `AdamCAD` — collapsed logo, assistant avatar, legal copy, aria/mobile copy and multiple older assets.
-- `pCAD` / `pcad` — local fork/project/internal integration identifiers, environment variables, agent names and technical docs.
+- `BrepiaMark` — open node-based wireframe/B-Rep mark, with accent and monochrome modes;
+- `BrepiaBrand` — mark + BREPIA wordmark with optional `by Noty` secondary lockup;
+- `ActivityIndicator` — small pulsing indeterminate dot with optional text and reduced-motion support;
+- shared exports through `src/components/brand/index.ts`.
 
-The Brepia remake must therefore be a classified rename, not a global replacement.
+Standalone asset:
 
-## User-facing surfaces to rename
+- `public/brepia-mark.svg`.
 
-### Browser/app metadata
+The current accent prototype reuses the existing Brepia-friendly blue (`#00A6FF`) and adds violet at the opposite end of the mark. Exact colour/spacing decisions remain intentionally open until visual review on the real application.
+
+### Browser metadata
 
 `src/routes/__root.tsx`
 
-Current:
+- title is now `Brepia`;
+- primary favicon is `brepia-mark.svg`;
+- the old CADAM `.ico` fallback was removed rather than advertising the old mark.
 
-- document title is `CADAM`;
-- favicon uses `cadam-icon.svg` and `cadam-icon.ico`.
+The deployed router/base path remains `/cadam` intentionally. Browser branding and deployment compatibility are separate concerns.
 
-Action:
-
-- replace with Brepia title;
-- add/use Brepia favicon assets;
-- do not change the router/base path here as part of the visual rename.
-
-### Sidebar — desktop and mobile
+### Sidebar
 
 `src/components/Sidebar.tsx`
 
-Current:
+- expanded desktop/mobile sidebar uses `BrepiaBrand`;
+- collapsed sidebar uses `BrepiaMark`;
+- mobile accessibility title now says `Brepia`;
+- mobile description now says `AI-assisted parametric 3D design`;
+- GitHub source link now points to `https://github.com/weaf/pCAD`.
 
-- expanded sidebar uses `cadam-logo.svg`;
-- collapsed sidebar uses `adam-logo.svg`;
-- mobile sheet accessibility title says `AdamCAD`;
-- GitHub button points to `https://github.com/Adam-CAD/CADAM`;
-- Discord button points to the upstream CADAM community.
+The upstream CADAM Discord link is deliberately still present until the product/community decision is made. It must not be silently relabelled as a Brepia-owned community.
 
-Action:
+### Authentication surfaces
 
-- replace expanded/collapsed marks with shared Brepia brand components/assets;
-- change mobile accessibility copy to Brepia;
-- point source-code link at the current project repository unless/until the repository is renamed;
-- treat the upstream Discord link as a product decision rather than silently presenting it as the Brepia community. Default recommendation: remove it from primary product chrome unless Brepia intentionally participates in that upstream community.
-
-### Authentication and account surfaces
-
-Confirmed direct `cadam-logo.svg` use in:
+Shared `BrepiaBrand showByNoty` is now used on:
 
 - `src/views/SignInView.tsx`
 - `src/views/SignUpView.tsx`
@@ -77,19 +74,51 @@ Confirmed direct `cadam-logo.svg` use in:
 - `src/views/ResetPasswordView.tsx`
 - `src/views/UpdatePasswordView.tsx`
 
-Action:
+Visible pCAD wording in the edited sign-up surfaces was changed to Brepia where it described the product.
 
-- switch all five to the same Brepia brand component rather than duplicating raw `<img>` paths;
-- preserve auth behavior exactly;
-- use `Brepia` in alt/accessibility text.
-
-Important compatibility boundary in `SignInView.tsx`:
+The internal synthetic username email mapping remains exactly:
 
 ```text
 <username>@pcad.invalid
 ```
 
-This is an internal synthetic email compatibility mechanism and must **not** be renamed merely for cosmetics. Changing it could break existing username/password accounts.
+This is a compatibility identifier and was intentionally not renamed.
+
+Auth behavior, routes and provider logic were otherwise left unchanged. Existing `Loader2` spinners in auth were also left for the later activity-indicator cleanup so branding and behavior changes remain separately reviewable.
+
+## Validation status for current implementation batch
+
+A local checkout/typecheck attempt from the assistant execution environment was blocked because that container could not resolve `github.com`; therefore **no new typecheck/lint/test/build result is claimed for this batch**.
+
+Validation still required on the real project environment:
+
+```bash
+npm run typecheck
+npm run lint
+```
+
+The full merge gate remains:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+## Audit conclusions
+
+### 1. Current product identity is spread across several generations
+
+The inherited/current codebase mixes at least three identities:
+
+- `CADAM` — inherited browser/logo/auth/legal presentation;
+- `Adam` / `AdamCAD` — collapsed/assistant artwork, legal copy and older assets;
+- `pCAD` / `pcad` — local fork/project/internal integration identifiers.
+
+The Brepia remake therefore remains a classified rename, not a global replacement.
+
+## Remaining user-facing surfaces to rename
 
 ### Chat assistant identity
 
@@ -100,17 +129,17 @@ Confirmed old Adam artwork in:
 
 `AssistantLoading` currently combines the Adam logo avatar with `AnimatedEllipsis`.
 
-Action:
+Next action:
 
 - use the compact Brepia symbol for assistant identity;
-- keep or evolve the three-dot loading language into the shared Brepia activity component;
+- evolve the loading treatment toward the shared Brepia activity language;
 - do not make the assistant avatar look like a generic robot/AI badge.
 
 ### Generated GIF branding/watermark
 
 `src/components/viewer/MeshGifPreview.tsx`
 
-Current:
+Current inherited behavior:
 
 - loads `adam-logo-full.svg` for generated preview/GIF branding.
 
@@ -126,13 +155,13 @@ Confirmed current-product branding in:
 - `src/views/TermsOfServiceView.tsx`
 - `src/views/PrivacyPolicyView.tsx`
 
-Both pages use the CADAM logo but their prose identifies the service as `AdamCAD` and gives `hello@adamcad.com` as contact information.
+Both pages still use inherited CADAM/AdamCAD identity and `hello@adamcad.com` contact wording.
 
 Action:
 
 - visual logo can be changed to Brepia;
 - service-name copy should eventually describe Brepia;
-- **do not invent a new legal contact email or entity name**. Contact/ownership wording needs an explicit decision before these pages are treated as production-ready legal text;
+- **do not invent a new legal contact email or entity name**;
 - preserve the effective date until the legal text is intentionally revised.
 
 This is not merely an icon replacement: the old pages currently assert an AdamCAD legal/service identity.
@@ -158,7 +187,7 @@ Action:
 
 ## Asset audit
 
-The `public/` directory still contains a full legacy identity set, including:
+The `public/` directory still contains the inherited identity set, including:
 
 - `Adam-Logo.png`
 - `adam-icon.ico`
@@ -172,42 +201,22 @@ The `public/` directory still contains a full legacy identity set, including:
 - `Github-Banner-Dark.png`
 - `Github-Banner-Light.png`
 
-Known uses found during audit:
+Brepia currently adds:
 
-- `cadam-logo.svg` — sidebar and auth/legal views;
-- `adam-logo.svg` — collapsed sidebar and assistant/chat identity;
-- `adam-logo-full.svg` — `MeshGifPreview` watermark;
-- `adam-logo-pink.svg` — `NewProductBanner`;
-- `Adam-Logo.png` — still referenced by application code including auth/chat-related code;
-- `cadam-launch.gif` — README hero;
-- `cadam-icon.svg/.ico` — browser favicon.
+- `brepia-mark.svg`.
 
-Action sequence:
+Action sequence remains:
 
-1. add Brepia assets/components first;
-2. migrate runtime consumers;
-3. migrate current README presentation;
+1. migrate runtime consumers;
+2. migrate current README presentation;
+3. verify repository-wide references;
 4. only then delete legacy visual assets that have no remaining runtime/documentation use.
 
-Do not remove old assets prematurely: some are still referenced outside the obvious sidebar/auth paths.
+Do not remove old assets prematurely: some remain used by chat, generated media, legal pages and documentation.
 
 ## Loading/activity audit
 
-The codebase has widespread `Loader2` + `animate-spin` usage. Search identified roughly two dozen affected files/surfaces, including:
-
-- `src/components/Layout.tsx`
-- `src/components/auth/AuthGuard.tsx`
-- auth views (`SignIn`, `SignUp`, `SignUpEmail`, `ResetPassword`, `UpdatePassword`)
-- `src/components/ScadImportButton.tsx`
-- `src/components/GithubScadImportButton.tsx`
-- `src/components/ImageViewer.tsx`
-- `src/views/EditorView.tsx`
-- `src/components/viewer/OpenSCADViewer.tsx`
-- `src/components/viewer/DownloadMenu.tsx`
-- `src/components/viewer/MeshGifPreview.tsx`
-- settings/provider components
-- parameter desktop/mobile components
-- chat/message components.
+The codebase has widespread `Loader2` + `animate-spin` usage across layout/auth/import/viewer/settings/parameter/chat surfaces.
 
 ### Loading-state classification
 
@@ -220,7 +229,7 @@ Examples:
 - auth submit button spinners;
 - simple import/export/save waits where the only information is “busy”.
 
-Preferred replacement: a shared Brepia `ActivityIndicator` with a subtle pulsing dot and optional status text.
+Preferred replacement: shared Brepia `ActivityIndicator` with a subtle pulsing dot and optional status text.
 
 #### Evaluate per context — tiny inline media placeholders
 
@@ -233,7 +242,7 @@ A tiny Brepia dot or skeleton may be visually better than adding text everywhere
 
 #### Preserve determinate progress
 
-Do not replace actual progress bars/percentages with a pulse. `MeshGifPreview` and other generation flows that expose meaningful progress should continue showing progress; only their accompanying indeterminate spinner/branding should be simplified.
+Do not replace actual progress bars/percentages with a pulse. `MeshGifPreview` and other generation flows that expose meaningful progress should continue showing progress; only accompanying indeterminate spinner/branding should be simplified.
 
 ### Existing useful component
 
@@ -241,8 +250,8 @@ Do not replace actual progress bars/percentages with a pulse. `MeshGifPreview` a
 
 Recommended implementation:
 
-- introduce a generic/shared Brepia activity primitive;
-- optionally refactor `AnimatedEllipsis` to use it rather than duplicate animation semantics;
+- refactor or retire it behind the shared Brepia activity primitive where appropriate;
+- preserve compact three-dot behavior only if it remains useful in dense chat UI;
 - support `prefers-reduced-motion`;
 - avoid broad CSS-token renaming in the same step.
 
@@ -257,17 +266,15 @@ Conclusion:
 - focus icon cleanup on visible action semantics and old Adam/CADAM artwork;
 - `Plus`, `LayoutGrid`, `Settings`, `LogOut`, `PanelLeft`, `Download`, etc. already fit the desired simple outline direction.
 
-This means the remake does **not** need an icon-library migration.
+The remake does **not** need an icon-library migration.
 
 ## Internal names to preserve during the cosmetic branch
-
-The following are deliberately **not** part of the first visual rename unless a separate migration is approved:
 
 ### Routing/deployment
 
 `vite.config.ts` and `src/router.tsx` currently use `/cadam` as the deployed base path, and Vite emits client assets under `dist/cadam`.
 
-Changing this would alter deployed URLs such as the current `/cadam/...` application path and is not required to make the UI Brepia.
+Changing this would alter deployed URLs and is not required to make the UI Brepia.
 
 Recommendation: keep `/cadam` during the cosmetic remake. A later deployment migration can move to `/brepia` or a root/subdomain with redirects once hosting is coordinated.
 
@@ -301,6 +308,24 @@ Examples include:
 
 These are compatibility/ops identifiers. Keep them during the visual remake unless there is a concrete external reason to migrate them.
 
+## Repository rename checkpoint
+
+The repository itself is currently `weaf/pCAD`.
+
+A future rename to a Brepia-oriented repository name — most naturally `weaf/brepia` — is now an explicit project checkpoint, but it is **not bundled into the cosmetic branch automatically**.
+
+Before renaming the repository, verify and update:
+
+- clone URLs in README/docs/scripts;
+- current sidebar/source links;
+- deployment/build integrations that reference `weaf/pCAD`;
+- badges and external links;
+- local git remotes on development machines;
+- any GitHub Actions, webhooks or external services tied to the old repository name;
+- whether GitHub's automatic old-name redirect is sufficient for existing public links.
+
+The repository name and internal compatibility identifiers are separate decisions: renaming the repo does not imply immediately renaming `PCAD_*`, `pcad.invalid`, agent names or historical docs.
+
 ## Historical references to preserve
 
 Do not blindly replace CADAM/pCAD in:
@@ -313,45 +338,27 @@ Do not blindly replace CADAM/pCAD in:
 
 For current docs such as README, present Brepia as the current product but retain a short, explicit origin/upstream acknowledgement where appropriate.
 
-## Recommended implementation order from audit
+## Recommended next implementation order
 
-### Step 1 — shared brand primitives
-
-Create maintainable components/assets first:
-
-- `BrepiaMark` — open node-based geometric cube SVG/component;
-- `BrepiaBrand` — mark + BREPIA wordmark, with compact/full variants;
-- `ActivityIndicator` — pulsing dot, optional label, reduced-motion-safe.
-
-This prevents repeatedly hard-coding new image paths across every page.
-
-### Step 2 — browser + sidebar + auth
-
-These are the highest-visibility and most repeated CADAM surfaces:
-
-- root title/favicon;
-- expanded/collapsed/mobile sidebar;
-- auth/password views.
-
-### Step 3 — chat + generated media
+### Step 1 — chat + generated media identity
 
 - assistant avatars/loading;
 - message assistant identity;
 - generated GIF watermark;
-- any old Adam artwork in chat/input/auth provider defaults.
+- remaining runtime Adam artwork.
 
-### Step 4 — activity indicators
+### Step 2 — activity indicators
 
 Migrate global/simple indeterminate spinners to the shared component in small batches, validating behavior after each batch.
 
-### Step 5 — legal/current docs
+### Step 3 — legal/current docs
 
 - rebrand visual legal headers;
 - update product service name only with explicit contact/entity decision;
 - rewrite README current presentation;
 - preserve upstream attribution.
 
-### Step 6 — unused legacy assets + regression gate
+### Step 4 — unused legacy assets + regression gate
 
 - verify repository-wide references before deleting old visual assets;
 - desktop/mobile visual checks;
@@ -360,7 +367,7 @@ Migrate global/simple indeterminate spinners to the shared component in small ba
 
 ## Open decisions
 
-These should be resolved before the relevant implementation step, but none block starting the brand primitives:
+These remain intentionally deferred until visual/product review:
 
 1. Exact final Brepia mark geometry and wordmark spacing.
 2. Exact accent values/gradient policy after testing against the current dark UI.
@@ -368,10 +375,10 @@ These should be resolved before the relevant implementation step, but none block
 4. Whether the upstream CADAM Discord link remains anywhere in the Brepia UI.
 5. Legal contact name/email to replace `AdamCAD / hello@adamcad.com`.
 6. Future deployment path: keep `/cadam` for compatibility now; decide later whether to migrate to `/brepia`, `/`, or a Brepia subdomain.
-7. Future repository rename from `weaf/pCAD` is separate from this visual branch.
+7. Future repository rename from `weaf/pCAD`, with `weaf/brepia` as the natural candidate.
 
 ## Audit outcome
 
-The remake can be done safely without touching the major runtime architecture.
+The remake can continue safely without touching the major runtime architecture.
 
-The most important boundary is to **rebrand presentation while deliberately preserving compatibility identifiers**. The highest-value first implementation is therefore a shared Brepia brand component and activity component, followed by sidebar/auth/browser surfaces.
+The key boundary remains: **rebrand presentation while deliberately preserving compatibility identifiers**.
