@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useFullParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { apiJson } from '@/services/api';
 import type { CatalogEntry } from '@/server/modelCatalog';
+import { ActivityIndicator } from '@/components/brand';
 
 const NONE_VALUE = '__none__';
 const SAME_AS_FAST_VALUE = '__same_as_fast__';
@@ -131,7 +132,11 @@ export function VisionSettings() {
   if (isLoading) {
     return (
       <div className="py-6 text-sm text-adam-neutral-400">
-        Loading vision models…
+        <ActivityIndicator
+          label="Loading vision models…"
+          showLabel
+          size="sm"
+        />
       </div>
     );
   }
