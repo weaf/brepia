@@ -1,5 +1,5 @@
 import { useMeshData } from '@/hooks/useMeshData';
-import { Loader2 } from 'lucide-react';
+import { ActivityIndicator } from '@/components/brand';
 import {
   useCallback,
   useEffect,
@@ -49,7 +49,7 @@ export function MeshGifPreview({
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const logoImage = useMemo(() => {
     const img = new Image();
-    img.src = `${import.meta.env.BASE_URL}/adam-logo-full.svg`; // served from public folder root
+    img.src = `${import.meta.env.BASE_URL}/brepia-watermark.svg`; // served from public folder root
     return img;
   }, []);
   const isGeneratingRef = useRef(false);
@@ -483,7 +483,7 @@ export function MeshGifPreview({
         return;
       }
 
-      // Ensure the logo image is fully loaded before starting generation
+      // Ensure the watermark image is fully loaded before starting generation
       if (!logoImage.complete) {
         await new Promise<void>((resolve) => {
           logoImage.onload = () => resolve();
@@ -518,7 +518,7 @@ export function MeshGifPreview({
 
         context.drawImage(canvas, 0, 0);
 
-        // Draw logo in the bottom-right corner
+        // Draw Brepia watermark in the bottom-right corner
         const margin = 12;
         const logoWidth = newCanvas.width * 0.15; // 15% of canvas width
         const aspectRatio =
@@ -673,8 +673,8 @@ export function MeshGifPreview({
     });
   }, [gltf, renderer]);
 
-  // Show a spinner whenever we don't yet have anything to draw — the
-  // meshId fetch path covers Tripo GLB downloads, and `!gltf` covers the
+  // Show an activity indicator whenever we don't yet have anything to draw —
+  // the meshId fetch path covers Tripo GLB downloads, and `!gltf` covers the
   // OpenSCAD compile path where render() stays a no-op until the caller
   // hands us a gltf via externalGltf. Without this the canvas just sits
   // there as a transparent rectangle showing the dark wrapper through.
@@ -690,13 +690,13 @@ export function MeshGifPreview({
           ref={canvasRefCallback}
         />
         <img
-          src={`${import.meta.env.BASE_URL}/adam-logo-full.svg`}
-          alt="ADAM logo"
+          src={`${import.meta.env.BASE_URL}/brepia-watermark.svg`}
+          alt="Brepia watermark"
           className="pointer-events-none absolute bottom-3 right-3 w-[15%] select-none"
         />
         {showLoader ? (
           <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="h-10 w-10 animate-spin" />
+            <ActivityIndicator label="Loading model preview" size="lg" />
           </div>
         ) : null}
       </div>
