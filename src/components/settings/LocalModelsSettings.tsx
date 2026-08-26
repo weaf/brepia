@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, RefreshCw, Server } from 'lucide-react';
+import { RefreshCw, Server } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { apiJson } from '@/services/api';
+import { ActivityIndicator } from '@/components/brand';
 
 type LocalModel = {
   id: string;
@@ -223,7 +224,7 @@ export function LocalModelsSettings() {
           <p className="mt-1 max-w-2xl text-xs text-adam-neutral-300">
             Models are discovered live from the built-in Local OpenAI / llama-swap
             provider via /v1/models. Only capability and display metadata is saved;
-            model IDs are never hardcoded in pCAD.
+            model IDs are never hardcoded in Brepia.
           </p>
         </div>
         <Button
@@ -234,7 +235,7 @@ export function LocalModelsSettings() {
           className="h-8 rounded-full px-3 text-xs"
         >
           {query.isFetching ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            <ActivityIndicator label="Refreshing model discovery" size="sm" />
           ) : (
             <RefreshCw className="mr-1 h-3 w-3" />
           )}
@@ -252,7 +253,7 @@ export function LocalModelsSettings() {
 
       {query.isLoading ? (
         <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-400" />
+          <ActivityIndicator label="Discovering local models" />
         </div>
       ) : query.isError ? (
         <div className="rounded-lg border border-adam-red-400/30 px-3 py-3 text-xs text-adam-red-300">
