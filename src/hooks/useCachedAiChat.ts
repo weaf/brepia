@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { AppUIMessage } from '@shared/chatAi';
 import { persistedCompletionCoversLiveTurn } from './chatCompletionReconciliation';
 import { userFacingChatError } from './chatErrorPresentation';
+import { pendingClientToolsNeedingRecovery } from './chatPendingToolRecovery';
 
 const MAX_CACHE_SIZE = 10;
 const TOOL_CALL_COMMIT_RETRY_MS = 16;
@@ -116,39 +117,6 @@ function canReplaceWithPersistedMessages(
   return true;
 }
 
-function pendingClientToolCalls(messages: readonly AppUIMessage[]) {
-  const pending: Array<{
-    toolName: 'build_parametric_model' | 'answer_user';
-    toolCallId: string;
-    input: unknown;
-  }> = [];
-
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
-    for (const part of message.parts) {
-      if (
-        (part.type === 'tool-build_parametric_model' ||
-          part.type === 'tool-answer_user') &&
-        part.state === 'input-available' &&
-        'toolCallId' in part &&
-        typeof part.toolCallId === 'string' &&
-        'input' in part
-      ) {
-        pending.push({
-          toolName:
-            part.type === 'tool-build_parametric_model'
-              ? 'build_parametric_model'
-              : 'answer_user',
-          toolCallId: part.toolCallId,
-          input: part.input,
-        });
-      }
-    }
-  }
-
-  return pending;
-}
-
 function chatContainsToolCall(
   chat: Chat<AppUIMessage> | undefined,
   toolCallId: string,
@@ -158,8 +126,7 @@ function chatContainsToolCall(
       (message) =>
         message.role === 'assistant' &&
         message.parts.some(
-          (part) =>
-            'toolCallId' in part && part.toolCallId === toolCallId,
+          (part) => 'toolCallId' in part && part.toolCallId === toolCallId,
         ),
     ),
   );
@@ -303,12 +270,16 @@ export function useCachedAiChat({
 
   // Android browsers can suspend a background tab and tear down its HTTP/SSE
   // connection. The server keeps consuming/persisting the AI stream, but the
-  // cached client Chat can remain stuck with an older in-memory branch. When
-  // React Query receives a persisted terminal assistant for the SAME live
-  // turn, that DB state is authoritative even if the local SDK status is still
-  // submitted/streaming. Stop only that stale client stream and adopt the DB
-  // snapshot. A resolved build by itself is intentionally not terminal, so a
-  // healthy build -> inspect/revise auto-continuation is never interrupted.
+  // cached client Chat can remain stuck with an older in-memory branch.
+  //
+  // There are two authoritative DB recovery signals:
+  // 1. A terminal assistant for the same live turn: stop the stale local stream
+  //    and adopt the persisted branch.
+  // 2. A leaf assistant with an input-available pCAD client tool: the server
+  //    persisted the tool call but the browser missed/delayed the live SDK
+  //    callback. Replay that tool even while the local Chat still reports
+  //    streaming/submitted. This must happen BEFORE the in-flight early return
+  //    or the chat deadlocks forever at "Generated model" until reload.
   useEffect(() => {
     const isLocallyInFlight =
       chat.status === 'streaming' || chat.status === 'submitted';
@@ -316,7 +287,43 @@ export function useCachedAiChat({
       isLocallyInFlight &&
       messages !== undefined &&
       persistedCompletionCoversLiveTurn(chat.messages, messages);
+    const persistedPendingTools = messages
+      ? pendingClientToolsNeedingRecovery(messages, handled)
+      : [];
     let recoveredFromPersistence = false;
+
+    if (messages && persistedPendingTools.length > 0) {
+      const liveIsMissingPendingTool = persistedPendingTools.some(
+        (toolCall) => !chatContainsToolCall(chat, toolCall.toolCallId),
+      );
+
+      // ChatSession resolves the assistant message id from chat.messages before
+      // persisting tool output. If the live stream missed that state commit,
+      // adopt the persisted assistant first so the callback has an authoritative
+      // message id and the DB output write can complete before auto-resubmit.
+      if (
+        liveIsMissingPendingTool &&
+        messageSnapshot(chat.messages) !== messageSnapshot(messages)
+      ) {
+        chat.messages = messages;
+        recoveredFromPersistence = true;
+      }
+
+      const scheduled = scheduledToolsFor(id);
+      for (const toolCall of persistedPendingTools) {
+        // A short live-dispatch timer may still be waiting for the same tool.
+        // Cancel its eligibility before replay; dispatchToolCall marks the id
+        // handled synchronously, so any already-queued timer becomes a no-op.
+        scheduled.delete(toolCall.toolCallId);
+        console.info('[chat-tool-recovery] replaying persisted pending client tool', {
+          conversationId: id,
+          toolName: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          localStatus: chat.status,
+        });
+        dispatchToolCall(refs, handled, { toolCall } as ToolCallCallbackArg);
+      }
+    }
 
     if (persistedCompletesLiveTurn && messages) {
       void chat.stop();
@@ -341,17 +348,7 @@ export function useCachedAiChat({
     if (chat.status === 'error' && recoveredFromPersistence) {
       chat.clearError();
     }
-
-    // A disconnect can happen after the server has emitted and persisted a
-    // client-executed CAD tool call but before the browser received it. Re-run
-    // only known idempotent client tools that are still input-available. The
-    // normal live onToolCall path records the same id first, preventing a
-    // duplicate execution when no disconnect occurred.
-    for (const toolCall of pendingClientToolCalls(chat.messages)) {
-      if (handled.has(toolCall.toolCallId)) continue;
-      dispatchToolCall(refs, handled, { toolCall } as ToolCallCallbackArg);
-    }
-  }, [chat, handled, messages, refs]);
+  }, [chat, handled, id, messages, refs]);
 
   return chat;
 }
