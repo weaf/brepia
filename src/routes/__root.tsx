@@ -7,7 +7,7 @@ const assetUrl = (path: string) =>
 
 export const Route = createRootRoute({
   head: () => ({
-    meta: [{ title: 'CADAM' }],
+    meta: [{ title: 'Brepia' }],
     links: [{ rel: 'stylesheet', href: appCss }],
   }),
   component: RootComponent,
@@ -38,12 +38,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <link
           rel="icon"
           type="image/svg+xml"
-          href={assetUrl('cadam-icon.svg')}
-        />
-        <link
-          rel="icon"
-          type="image/x-icon"
-          href={assetUrl('cadam-icon.ico')}
+          href={assetUrl('brepia-mark.svg')}
         />
         <HeadContent />
       </head>
