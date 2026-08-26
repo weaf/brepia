@@ -1,0 +1,68 @@
+FROM ubuntu:24.04
+
+ARG SCAD123D_VERSION=0.5.0
+ARG SCAD123D_COMMIT=c5d126ac30e8f170e2082aa14ad4a44c6d70513e
+ARG OPENSCAD_SNAPSHOT=OpenSCAD-2026.08.13-x86_64.AppImage
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV VIRTUAL_ENV=/opt/pcad-step-venv
+ENV PATH="/opt/pcad-step-venv/bin:/usr/local/bin:/usr/bin:/bin"
+ENV OPENSCADPATH=/opt/openscad-libraries
+ENV HOME=/tmp
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    libegl1 \
+    libopengl0 \
+    python3 \
+    python3-pip \
+    python3-venv \
+    unzip \
+  && rm -rf /var/lib/apt/lists/*
+
+# Match the native OpenSCAD generation used by scad123d's current differential
+# CI instead of relying on Ubuntu's older packaged OpenSCAD. Extract the
+# AppImage during image build so runtime needs neither FUSE nor network access.
+RUN set -eux; \
+  curl -fsSL \
+    "https://files.openscad.org/snapshots/${OPENSCAD_SNAPSHOT}" \
+    -o /tmp/openscad.AppImage; \
+  chmod +x /tmp/openscad.AppImage; \
+  cd /tmp; \
+  ./openscad.AppImage --appimage-extract >/dev/null; \
+  mv /tmp/squashfs-root /opt/openscad; \
+  ln -s /opt/openscad/AppRun /usr/local/bin/openscad; \
+  rm /tmp/openscad.AppImage; \
+  openscad --version
+
+# Pin scad123d to an immutable upstream commit whose package metadata reports
+# 0.5.0. This avoids a floating Git branch and does not depend on the exact
+# release timing of the scad123d wheel on PyPI. Its normal dependencies remain
+# resolved during image build; runtime package downloads are impossible because
+# the sandbox has no network.
+RUN python3 -m venv "${VIRTUAL_ENV}" \
+  && "${VIRTUAL_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
+  && "${VIRTUAL_ENV}/bin/pip" install --no-cache-dir \
+    "https://github.com/etjones/scad123d/archive/${SCAD123D_COMMIT}.tar.gz" \
+  && "${VIRTUAL_ENV}/bin/python" -c \
+    "import importlib.metadata as m; assert m.version('scad123d') == '${SCAD123D_VERSION}', m.version('scad123d')"
+
+# Use exactly the OpenSCAD libraries bundled with pCAD so browser preview and
+# server-side STEP conversion resolve BOSL/BOSL2/MCAD against the same inputs.
+COPY public/libraries/BOSL.zip /tmp/pcad-libraries/BOSL.zip
+COPY public/libraries/BOSL2.zip /tmp/pcad-libraries/BOSL2.zip
+COPY public/libraries/MCAD.zip /tmp/pcad-libraries/MCAD.zip
+RUN set -eux; \
+  mkdir -p \
+    /opt/openscad-libraries/BOSL \
+    /opt/openscad-libraries/BOSL2 \
+    /opt/openscad-libraries/MCAD; \
+  unzip -q /tmp/pcad-libraries/BOSL.zip -d /opt/openscad-libraries/BOSL; \
+  unzip -q /tmp/pcad-libraries/BOSL2.zip -d /opt/openscad-libraries/BOSL2; \
+  unzip -q /tmp/pcad-libraries/MCAD.zip -d /opt/openscad-libraries/MCAD; \
+  rm -rf /tmp/pcad-libraries
+
+WORKDIR /output
+ENTRYPOINT ["/opt/pcad-step-venv/bin/scad2step"]

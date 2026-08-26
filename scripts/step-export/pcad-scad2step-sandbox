@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: $0 <input.scad> -o <output.step>" >&2
+  exit 64
+}
+
+[ "$#" -eq 3 ] || usage
+INPUT="$1"
+[ "$2" = "-o" ] || usage
+OUTPUT="$3"
+
+if [ ! -f "$INPUT" ] || [ -L "$INPUT" ]; then
+  echo "STEP sandbox input must be a regular SCAD file" >&2
+  exit 65
+fi
+
+INPUT="$(realpath "$INPUT")"
+OUTPUT_DIR="$(dirname "$OUTPUT")"
+mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd -P)"
+OUTPUT_NAME="$(basename "$OUTPUT")"
+
+case "$OUTPUT_NAME" in
+  ""|"."|".."|*/*) usage ;;
+esac
+
+PODMAN_BIN="${PCAD_PODMAN_BIN:-podman}"
+IMAGE="${PCAD_STEP_EXPORT_IMAGE:-localhost/pcad-step-export:scad123d-0.5.0}"
+MEMORY="${PCAD_STEP_EXPORT_MEMORY:-4g}"
+CPUS="${PCAD_STEP_EXPORT_CPUS:-2}"
+PIDS_LIMIT="${PCAD_STEP_EXPORT_PIDS_LIMIT:-256}"
+RUNTIME_TIMEOUT="${PCAD_STEP_EXPORT_CONTAINER_TIMEOUT_SECONDS:-40}"
+TMPFS_SIZE="${PCAD_STEP_EXPORT_TMPFS_SIZE:-512m}"
+
+if ! command -v "$PODMAN_BIN" >/dev/null 2>&1; then
+  echo "STEP_SANDBOX_UNAVAILABLE: Podman executable not found: $PODMAN_BIN" >&2
+  exit 69
+fi
+
+if ! "$PODMAN_BIN" image exists "$IMAGE" >/dev/null 2>&1; then
+  echo "STEP_SANDBOX_UNAVAILABLE: sandbox image is not built: $IMAGE" >&2
+  exit 69
+fi
+
+# Keep the cidfile outside every directory mounted into the untrusted
+# container. Otherwise compromised SCAD/OpenSCAD code could overwrite it and
+# trick cleanup into targeting a different user container.
+CIDFILE="$(mktemp "${TMPDIR:-/tmp}/pcad-step-cid.XXXXXX")"
+rm -f "$CIDFILE"
+cleanup() {
+  if [ -s "$CIDFILE" ]; then
+    CID="$(cat "$CIDFILE" 2>/dev/null || true)"
+    if [ -n "$CID" ]; then
+      "$PODMAN_BIN" rm -f "$CID" >/dev/null 2>&1 || true
+    fi
+  fi
+  rm -f "$CIDFILE"
+}
+trap cleanup EXIT INT TERM
+
+set +e
+timeout --signal=TERM --kill-after=5 "${RUNTIME_TIMEOUT}s" \
+  "$PODMAN_BIN" run \
+    --rm \
+    --pull=never \
+    --cidfile "$CIDFILE" \
+    --network=none \
+    --read-only \
+    --security-opt=no-new-privileges \
+    --cap-drop=all \
+    --pids-limit="$PIDS_LIMIT" \
+    --memory="$MEMORY" \
+    --cpus="$CPUS" \
+    --userns=keep-id \
+    --user "$(id -u):$(id -g)" \
+    --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=${TMPFS_SIZE}" \
+    --volume "${INPUT}:/input/model.scad:ro" \
+    --volume "${OUTPUT_DIR}:/output:rw" \
+    --env HOME=/tmp \
+    --env OPENSCADPATH=/opt/openscad-libraries \
+    "$IMAGE" \
+    /input/model.scad -o "/output/${OUTPUT_NAME}"
+STATUS=$?
+set -e
+
+if [ "$STATUS" -eq 124 ] || [ "$STATUS" -eq 137 ]; then
+  echo "STEP_SANDBOX_TIMEOUT: conversion exceeded ${RUNTIME_TIMEOUT}s" >&2
+  exit 124
+fi
+
+exit "$STATUS"

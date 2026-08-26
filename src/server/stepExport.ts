@@ -1,5 +1,12 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -26,6 +33,7 @@ export class StepExportError extends Error {
       | 'conversion_failed'
       | 'conversion_timeout'
       | 'output_missing'
+      | 'output_invalid'
       | 'output_too_large',
     message: string,
   ) {
@@ -57,6 +65,17 @@ function sandboxRunner(): string {
   return runner;
 }
 
+function stderrText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (Buffer.isBuffer(value)) return value.toString('utf8').trim();
+  return '';
+}
+
+function providerUnavailableMessage(detail: string): string {
+  const normalized = detail.replace(/^STEP_SANDBOX_UNAVAILABLE:\s*/i, '').trim();
+  return normalized || 'STEP export sandbox is unavailable on this server.';
+}
+
 /**
  * Convert complete OpenSCAD source to STEP using an explicitly configured,
  * sandboxed scad2step runner.
@@ -67,7 +86,9 @@ function sandboxRunner(): string {
  * fallback. PCAD_STEP_EXPORT_RUNNER must point at an operator-controlled
  * sandbox wrapper (container/VM) that accepts `<input.scad> -o <output.step>`.
  */
-export async function exportScadToStep(sourceCode: string): Promise<StepExportResult> {
+export async function exportScadToStep(
+  sourceCode: string,
+): Promise<StepExportResult> {
   const sourceBytes = byteLength(sourceCode);
   if (sourceBytes > STEP_EXPORT_SOURCE_LIMIT_BYTES) {
     throw new StepExportError(
@@ -77,10 +98,14 @@ export async function exportScadToStep(sourceCode: string): Promise<StepExportRe
   }
 
   const workspace = await mkdtemp(path.join(tmpdir(), 'pcad-step-'));
-  const inputPath = path.join(workspace, 'model.scad');
-  const outputPath = path.join(workspace, 'model.step');
+  const inputDir = path.join(workspace, 'input');
+  const outputDir = path.join(workspace, 'output');
+  const inputPath = path.join(inputDir, 'model.scad');
+  const outputPath = path.join(outputDir, 'model.step');
 
   try {
+    await mkdir(inputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     await writeFile(inputPath, sourceCode, 'utf8');
 
     let stderr = '';
@@ -97,33 +122,46 @@ export async function exportScadToStep(sourceCode: string): Promise<StepExportRe
       stderr = result.stderr ?? '';
     } catch (error) {
       if (error instanceof StepExportError) throw error;
-      const record = error as NodeJS.ErrnoException & {
+
+      const record = error as {
+        code?: string | number;
         killed?: boolean;
         signal?: string;
-        stderr?: string;
+        stderr?: string | Buffer;
       };
-      if (record.code === 'ENOENT') {
+      const detail = stderrText(record.stderr);
+
+      if (record.code === 'ENOENT' || record.code === 69) {
         throw new StepExportError(
           'provider_unavailable',
-          'Configured STEP export runner was not found on the server.',
+          record.code === 'ENOENT'
+            ? 'Configured STEP export runner was not found on the server.'
+            : providerUnavailableMessage(detail),
         );
       }
-      if (record.killed || record.signal === 'SIGTERM') {
+
+      if (
+        record.code === 124 ||
+        record.killed ||
+        record.signal === 'SIGTERM'
+      ) {
         throw new StepExportError(
           'conversion_timeout',
           'STEP conversion exceeded the server time limit.',
         );
       }
-      const detail = typeof record.stderr === 'string' ? record.stderr.trim() : '';
+
       throw new StepExportError(
         'conversion_failed',
-        detail ? `STEP conversion failed: ${detail.slice(0, 1200)}` : 'STEP conversion failed.',
+        detail
+          ? `STEP conversion failed: ${detail.slice(0, 1200)}`
+          : 'STEP conversion failed.',
       );
     }
 
-    let output: Buffer;
+    let outputStat;
     try {
-      output = await readFile(outputPath);
+      outputStat = await lstat(outputPath);
     } catch {
       throw new StepExportError(
         'output_missing',
@@ -131,10 +169,33 @@ export async function exportScadToStep(sourceCode: string): Promise<StepExportRe
       );
     }
 
+    if (outputStat.isSymbolicLink() || !outputStat.isFile()) {
+      throw new StepExportError(
+        'output_invalid',
+        'STEP converter produced an invalid output object.',
+      );
+    }
+
+    if (outputStat.size > STEP_EXPORT_OUTPUT_LIMIT_BYTES) {
+      throw new StepExportError(
+        'output_too_large',
+        `STEP output exceeds the ${STEP_EXPORT_OUTPUT_LIMIT_BYTES}-byte server limit.`,
+      );
+    }
+
+    const output = await readFile(outputPath);
     if (output.byteLength > STEP_EXPORT_OUTPUT_LIMIT_BYTES) {
       throw new StepExportError(
         'output_too_large',
         `STEP output exceeds the ${STEP_EXPORT_OUTPUT_LIMIT_BYTES}-byte server limit.`,
+      );
+    }
+
+    const header = output.subarray(0, 128).toString('ascii');
+    if (!header.includes('ISO-10303-21')) {
+      throw new StepExportError(
+        'output_invalid',
+        'STEP converter output is not an ISO 10303-21 Part 21 file.',
       );
     }
 
