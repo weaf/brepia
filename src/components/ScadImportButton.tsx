@@ -1,11 +1,12 @@
 import { useRef } from 'react';
-import { FileUp, Loader2 } from 'lucide-react';
+import { FileUp } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import * as Sentry from '@sentry/react';
 import posthog from 'posthog-js';
 import { Button } from '@/components/ui/button';
 import { GithubScadImportButton } from '@/components/GithubScadImportButton';
+import { ActivityIndicator } from '@/components/brand';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { readScadImportFile } from '@/lib/scadImport';
@@ -92,7 +93,7 @@ export function ScadImportButton({
         className="gap-2 border-adam-neutral-700 bg-adam-background-2 text-adam-text-secondary hover:bg-adam-bg-secondary-dark"
       >
         {importMutation.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <ActivityIndicator label="Importing SCAD" size="sm" />
         ) : (
           <FileUp className="h-4 w-4" />
         )}
