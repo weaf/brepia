@@ -5,6 +5,8 @@ import { persistedCompletionCoversLiveTurn } from './chatCompletionReconciliatio
 import { userFacingChatError } from './chatErrorPresentation';
 
 const MAX_CACHE_SIZE = 10;
+const TOOL_CALL_COMMIT_RETRY_MS = 16;
+const TOOL_CALL_COMMIT_MAX_ATTEMPTS = 8;
 
 const chatCache = new Map<string, Chat<AppUIMessage>>();
 type ReactChatInit = ConstructorParameters<typeof Chat<AppUIMessage>>[0];
@@ -24,6 +26,7 @@ type CallbackRefs = {
 
 const callbackRefs = new Map<string, CallbackRefs>();
 const handledToolCallIds = new Map<string, Set<string>>();
+const scheduledToolCallIds = new Map<string, Set<string>>();
 const cachedTransports = new Map<string, ReactChatInit['transport']>();
 
 function refsFor(id: string): CallbackRefs {
@@ -50,6 +53,15 @@ function handledToolsFor(id: string): Set<string> {
   return handled;
 }
 
+function scheduledToolsFor(id: string): Set<string> {
+  let scheduled = scheduledToolCallIds.get(id);
+  if (!scheduled) {
+    scheduled = new Set<string>();
+    scheduledToolCallIds.set(id, scheduled);
+  }
+  return scheduled;
+}
+
 function touch(id: string) {
   const chat = chatCache.get(id);
   if (!chat) return;
@@ -67,6 +79,7 @@ function evictIfNeeded() {
     chatCache.delete(result.value);
     callbackRefs.delete(result.value);
     handledToolCallIds.delete(result.value);
+    scheduledToolCallIds.delete(result.value);
     cachedTransports.delete(result.value);
   }
 }
@@ -136,6 +149,91 @@ function pendingClientToolCalls(messages: readonly AppUIMessage[]) {
   return pending;
 }
 
+function chatContainsToolCall(
+  chat: Chat<AppUIMessage> | undefined,
+  toolCallId: string,
+): boolean {
+  return Boolean(
+    chat?.messages.some(
+      (message) =>
+        message.role === 'assistant' &&
+        message.parts.some(
+          (part) =>
+            'toolCallId' in part && part.toolCallId === toolCallId,
+        ),
+    ),
+  );
+}
+
+function dispatchToolCall(
+  refs: CallbackRefs,
+  handled: Set<string>,
+  ctx: ToolCallCallbackArg,
+): boolean {
+  const callback = refs.onToolCall.current;
+  if (!callback) return false;
+  handled.add(ctx.toolCall.toolCallId);
+  void Promise.resolve(callback(ctx)).catch((error) => {
+    refs.onError.current?.(userFacingChatError(error));
+  });
+  return true;
+}
+
+/**
+ * AI SDK can invoke `onToolCall` in the same turn of the event loop in which
+ * it commits the assistant/tool part to Chat state. pCAD's tool callback must
+ * see that assistant because its message id is the key used to persist the
+ * client-executed tool result before auto-continuation.
+ *
+ * Defer dispatch until the emitted tool call is observable in the cached Chat.
+ * If React/SDK state takes more than one tick, retry briefly. We intentionally
+ * do NOT mark the call handled when it never becomes visible or when no pCAD
+ * callback is registered; the persisted-message recovery path may then replay
+ * the still-pending tool safely once the assistant row is available.
+ */
+function scheduleToolCallAfterMessageCommit({
+  id,
+  refs,
+  handled,
+  ctx,
+}: {
+  id: string;
+  refs: CallbackRefs;
+  handled: Set<string>;
+  ctx: ToolCallCallbackArg;
+}) {
+  const toolCallId = ctx.toolCall.toolCallId;
+  const scheduled = scheduledToolsFor(id);
+  if (handled.has(toolCallId) || scheduled.has(toolCallId)) return;
+  scheduled.add(toolCallId);
+
+  const attemptDispatch = (attempt: number) => {
+    setTimeout(
+      () => {
+        if (handled.has(toolCallId)) {
+          scheduled.delete(toolCallId);
+          return;
+        }
+
+        if (!chatContainsToolCall(chatCache.get(id), toolCallId)) {
+          if (attempt + 1 < TOOL_CALL_COMMIT_MAX_ATTEMPTS) {
+            attemptDispatch(attempt + 1);
+            return;
+          }
+          scheduled.delete(toolCallId);
+          return;
+        }
+
+        scheduled.delete(toolCallId);
+        dispatchToolCall(refs, handled, ctx);
+      },
+      attempt === 0 ? 0 : TOOL_CALL_COMMIT_RETRY_MS,
+    );
+  };
+
+  attemptDispatch(0);
+}
+
 export type CachedAiChatOptions = Omit<ReactChatInit, 'id'> & {
   id: string;
 };
@@ -191,8 +289,7 @@ export function useCachedAiChat({
       onFinish: (ctx) => refs.onFinish.current?.(ctx),
       onData: (ctx) => refs.onData.current?.(ctx),
       onToolCall: (ctx) => {
-        handled.add(ctx.toolCall.toolCallId);
-        return refs.onToolCall.current?.(ctx);
+        scheduleToolCallAfterMessageCommit({ id, refs, handled, ctx });
       },
       sendAutomaticallyWhen: (ctx) =>
         refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
@@ -252,8 +349,7 @@ export function useCachedAiChat({
     // duplicate execution when no disconnect occurred.
     for (const toolCall of pendingClientToolCalls(chat.messages)) {
       if (handled.has(toolCall.toolCallId)) continue;
-      handled.add(toolCall.toolCallId);
-      void refs.onToolCall.current?.({ toolCall } as ToolCallCallbackArg);
+      dispatchToolCall(refs, handled, { toolCall } as ToolCallCallbackArg);
     }
   }, [chat, handled, messages, refs]);
 
@@ -280,8 +376,7 @@ export function createAndCacheAiChat(
     onFinish: (ctx) => refs.onFinish.current?.(ctx),
     onData: (ctx) => refs.onData.current?.(ctx),
     onToolCall: (ctx) => {
-      handled.add(ctx.toolCall.toolCallId);
-      return refs.onToolCall.current?.(ctx);
+      scheduleToolCallAfterMessageCommit({ id, refs, handled, ctx });
     },
     sendAutomaticallyWhen: (ctx) =>
       refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
