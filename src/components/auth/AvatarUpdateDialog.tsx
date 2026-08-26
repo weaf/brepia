@@ -7,12 +7,13 @@ import {
 } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { Camera, Loader2 } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import { useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
 import { useUploadAvatar } from '@/services/profileService';
 import { useToast } from '@/hooks/use-toast';
 import { UserAvatar } from '@/components/chat/UserAvatar';
+import { ActivityIndicator } from '@/components/brand';
 
 export const AvatarUpdateDialog = () => {
   const { mutate: uploadAvatar, isPending: isUploadingAvatar } =
@@ -162,7 +163,11 @@ export const AvatarUpdateDialog = () => {
           <UserAvatar className="h-9 w-9 border border-adam-neutral-700 bg-adam-neutral-950 p-0" />
           <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
             {isUploadingAvatar ? (
-              <Loader2 className="h-4 w-4 animate-spin text-white" />
+              <ActivityIndicator
+                label="Uploading profile picture"
+                size="sm"
+                dotClassName="bg-white"
+              />
             ) : (
               <Camera className="h-4 w-4 text-white" />
             )}
@@ -222,7 +227,7 @@ export const AvatarUpdateDialog = () => {
             >
               {isUploadingAvatar ? (
                 <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <ActivityIndicator label="Saving profile picture" size="sm" />
                   Saving...
                 </div>
               ) : (
