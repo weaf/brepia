@@ -20,7 +20,7 @@ Add STEP as pCAD's 3D CAD interchange format while leaving existing STL and DXF 
 - [x] Surface provider mesh/fallback warnings to the UI.
 - [x] Keep STEP generation lazy/on-click so normal editing and preview pay no B-Rep cost.
 
-### Step 2 — Native-converter sandbox: implementation complete, live gate pending
+### Step 2 — Native-converter sandbox: complete and live-verified
 
 - [x] No direct native OpenSCAD/scad123d fallback exists in the Nitro process.
 - [x] Add a dedicated rootless-Podman runner.
@@ -46,8 +46,8 @@ Add STEP as pCAD's 3D CAD interchange format while leaving existing STL and DXF 
 - [x] Bake pCAD's bundled BOSL/BOSL2/MCAD ZIP contents into the sandbox image.
 - [x] Add focused server-boundary tests for fail-closed configuration, provider-unavailable mapping, valid Part 21 output, mesh warnings, symlink rejection, invalid output and concurrency release.
 - [x] Add sandbox smoke test requiring a true `CYLINDRICAL_SURFACE` in the STEP result.
-- [ ] Build the source-based sandbox image on the real pCAD Podman host.
-- [ ] Run `scripts/step-export/smoke-test.sh` on the real host.
+- [x] Build the source-based sandbox image on the real pCAD Podman host.
+- [x] Run `scripts/step-export/smoke-test.sh` successfully on the real host.
 
 ## Validation evidence so far
 
@@ -58,46 +58,33 @@ Completed in the implementation environment:
 - OpenSCAD upstream commit/date and its Qt6/headless Linux CI path were verified before changing the provider image.
 - Branch comparison is based on the requested master and remains 0 commits behind it.
 
-Observed on the real pCAD host before the source-build refactor:
+Observed on the real pCAD host during image bring-up:
 
 - the initial AppImage-based provider image reached OpenSCAD startup but failed because the minimal Ubuntu image lacked `libharfbuzz.so.0`;
-- this exposed that AppImage host-runtime assumptions were the wrong packaging boundary for the sandbox;
-- the AppImage approach was replaced rather than continuing to add host-style desktop libraries manually.
+- the AppImage approach was replaced with a pinned OpenSCAD source build instead of continuing to add host-style desktop libraries manually;
+- the first source-build configure exposed OpenSCAD's June-2026 OpenSSL requirement not yet covered by its dependency helper, fixed with explicit `libssl-dev`;
+- the first runtime-package extraction exposed `dpkg-query -S` diversion diagnostics being misparsed as package names, fixed by accepting only canonical `package[:arch]: /path` ownership records.
 
-Not claimed yet for the new source-based image:
+Live acceptance on the real pCAD rootless-Podman host:
+
+- image build succeeded for `localhost/pcad-step-export:scad123d-0.5.0`;
+- resulting image ID: `beda3c5348537ba00d0d3b52867ec5798ebc773f9cd180d37c2d4a0d45b61236`;
+- `scad2step` converted `/input/model.scad` to `/output/model.step` inside the sandbox;
+- `scripts/step-export/smoke-test.sh` ended with `STEP sandbox smoke test PASS`;
+- the smoke test therefore confirmed a valid ISO 10303-21 STEP file and an analytic `CYLINDRICAL_SURFACE` for the cylindrical hole, guarding against a mesh-only result for this case.
+
+A non-blocking `ezdxf` warning was observed because its cache directory under `/tmp` could not be created. The conversion and analytic-surface smoke gate still passed. Treat this as log/cache cleanup unless it affects later representative exports.
+
+Not claimed yet:
 
 - `npm test`
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
-- successful Podman source image build
-- real scad123d/OpenSCAD conversion
+- representative pCAD model corpus compatibility
+- external CAD import verification
 
-The execution environment used for the GitHub implementation does not provide the user's rootless Podman runtime, so the source image and conversion gates require the real pCAD host before Step 2 can be marked externally verified.
-
-## Step 2 live acceptance commands
-
-From the pCAD checkout on `feature/step-export`:
-
-```bash
-git switch feature/step-export
-git pull --ff-only
-
-./scripts/step-export/build-image.sh
-
-export PCAD_STEP_EXPORT_RUNNER="$PWD/scripts/step-export/pcad-scad2step-sandbox"
-./scripts/step-export/smoke-test.sh
-```
-
-Expected final line:
-
-```text
-STEP sandbox smoke test PASS
-```
-
-Then keep `PCAD_STEP_EXPORT_RUNNER` exported in the shell that starts pCAD and run the normal app.
-
-## Step 3 — Representative model compatibility gate: next after smoke test
+## Step 3 — Representative model compatibility gate: next
 
 Test at minimum:
 
@@ -142,4 +129,4 @@ npm run lint
 npm run build
 ```
 
-plus successful sandbox smoke test and representative STEP import verification in at least one external CAD application.
+plus the now-passing sandbox smoke test and representative STEP import verification in at least one external CAD application.
