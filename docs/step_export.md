@@ -38,6 +38,9 @@ rootless Podman sandbox
   - empty output directory mounted read-write
         |
         v
+pinned OpenSCAD source build
+        |
+        v
 scad123d 0.5.0 + build123d/OCCT
         |
         v
@@ -73,11 +76,41 @@ The image pins scad123d to upstream commit:
 c5d126ac30e8f170e2082aa14ad4a44c6d70513e
 ```
 
-That immutable commit reports package version 0.5.0 and adopted `solid123d 0.5.0`. The image uses the OpenSCAD `2026.08.13` x86_64 AppImage snapshot, matching the OpenSCAD generation used by scad123d's differential CI when this feature was introduced. The AppImage is extracted during image build; runtime has no network and does not require FUSE.
+That immutable commit reports package version 0.5.0 and adopted `solid123d 0.5.0`.
 
-The OpenSCAD snapshot service retains a rolling set of development builds. If the pinned snapshot eventually disappears, deliberately update the pin and rerun the smoke and CAD compatibility gates rather than adding a floating "latest" fallback to the production image build.
+OpenSCAD is built from source instead of installing a distro package, Flatpak, or extracting an AppImage. The current OpenSCAD source pin is:
+
+```text
+1ee676b0ea2e23a86553a931ff1d805fae7bbe7c
+```
+
+This is the latest upstream OpenSCAD commit from 2026-08-13, the same source-generation date as the snapshot initially used during the STEP spike. The pin is immutable; it is intentionally not a floating branch or `latest` build.
+
+The builder mirrors upstream's Linux CI for this source generation:
+
+- Qt6 dependencies from OpenSCAD's own `scripts/uni-get-dependencies.sh qt6`;
+- CMake/Ninja build;
+- `HEADLESS=ON`;
+- `ENABLE_MANIFOLD=ON`;
+- tests disabled inside the provider image build because pCAD has its own smoke/compatibility gates.
+
+The build is multi-stage. Compiler and development packages remain in the discarded builder stage. After OpenSCAD is built, the builder resolves the Debian packages owning the shared libraries reported by `ldd` for the exact resulting binary. The final runtime image installs that derived package set rather than maintaining a hand-written Qt/Harfbuzz/Boost runtime list. The final stage reruns `ldd`, `openscad --version`, and a real headless CSG compile before installing scad123d.
 
 The image also bakes in the exact `public/libraries/BOSL.zip`, `BOSL2.zip`, and `MCAD.zip` files from pCAD so server conversion resolves the same bundled libraries as browser OpenSCAD.
+
+Runtime remains networkless. Source checkout and package installation happen only while the operator builds the image.
+
+## Updating OpenSCAD
+
+Do not replace the source pin with a floating branch. To update OpenSCAD:
+
+1. choose and record an upstream commit SHA;
+2. update `OPENSCAD_COMMIT` in both stages of `scripts/step-export/Containerfile`;
+3. rebuild the image;
+4. run the sandbox smoke test;
+5. rerun the representative pCAD model compatibility gate before merging the version change.
+
+A new OpenSCAD source pin is a converter-version change even when the scad123d version remains unchanged.
 
 ## Server configuration
 
