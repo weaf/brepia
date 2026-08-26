@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from '@tanstack/react-router';
-import { ArrowLeft, Loader2, Mail } from 'lucide-react';
+import { ArrowLeft, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { GoogleIcon } from '@/components/icons/CompanyIcons';
 import { validateRedirectUrl } from '@/lib/utils';
 import { getRegistrationSettings } from '@/services/accountAdminService';
-import { BrepiaBrand } from '@/components/brand';
+import { ActivityIndicator, BrepiaBrand } from '@/components/brand';
 
 function getAppRedirectUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -117,7 +117,11 @@ export function SignInView() {
     if (!identifier.includes('@')) {
       const message = 'Enter an email address to use email sign-in.';
       setError(message);
-      toast({ title: 'Email required', description: message, variant: 'destructive' });
+      toast({
+        title: 'Email required',
+        description: message,
+        variant: 'destructive',
+      });
       return;
     }
     setIsLoading(true);
@@ -178,7 +182,9 @@ export function SignInView() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-adam-blue/20">
                 <Mail className="h-6 w-6 text-adam-blue" />
               </div>
-              <h3 className="text-lg font-semibold text-white">Check your email</h3>
+              <h3 className="text-lg font-semibold text-white">
+                Check your email
+              </h3>
               <p className="text-center text-sm text-gray-400">
                 We sent a sign-in email to{' '}
                 <span className="font-medium text-white">{identifier}</span>
@@ -191,7 +197,9 @@ export function SignInView() {
             )}
             <div className="relative flex items-center gap-3 py-2">
               <div className="h-px flex-1 bg-gray-700" />
-              <span className="text-xs text-gray-500">or enter code manually</span>
+              <span className="text-xs text-gray-500">
+                or enter code manually
+              </span>
               <div className="h-px flex-1 bg-gray-700" />
             </div>
             <form
@@ -237,7 +245,14 @@ export function SignInView() {
                 disabled={otp.length !== 6 || isVerifying}
               >
                 {isVerifying ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
+                  <>
+                    <ActivityIndicator
+                      label="Verifying sign-in code"
+                      size="sm"
+                      className="mr-2"
+                    />
+                    Verifying...
+                  </>
                 ) : (
                   'Verify Code'
                 )}
@@ -266,8 +281,16 @@ export function SignInView() {
             className="flex w-full items-center gap-2 hover:bg-adam-blue/10"
             disabled={isSigningInWithGoogle}
           >
-            <GoogleIcon className="w-4" />
-            <span>Continue with Google</span>
+            {isSigningInWithGoogle ? (
+              <ActivityIndicator label="Starting Google sign in" size="sm" />
+            ) : (
+              <GoogleIcon className="w-4" />
+            )}
+            <span>
+              {isSigningInWithGoogle
+                ? 'Connecting to Google...'
+                : 'Continue with Google'}
+            </span>
           </Button>
 
           <form
@@ -288,7 +311,9 @@ export function SignInView() {
                 id="identifier"
                 type={mode === 'password' ? 'text' : 'email'}
                 placeholder={
-                  mode === 'password' ? 'Enter username or email' : 'Enter your email'
+                  mode === 'password'
+                    ? 'Enter username or email'
+                    : 'Enter your email'
                 }
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
@@ -301,7 +326,9 @@ export function SignInView() {
             {mode === 'password' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-white">Password</Label>
+                  <Label htmlFor="password" className="text-white">
+                    Password
+                  </Label>
                   {identifier.includes('@') && (
                     <Link
                       to="/reset-password"
@@ -341,7 +368,14 @@ export function SignInView() {
 
             <Button type="submit" className="w-full p-6" disabled={isLoading}>
               {isLoading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'password' ? 'Signing in...' : 'Sending...'}</>
+                <>
+                  <ActivityIndicator
+                    label={mode === 'password' ? 'Signing in' : 'Sending sign-in email'}
+                    size="sm"
+                    className="mr-2"
+                  />
+                  {mode === 'password' ? 'Signing in...' : 'Sending...'}
+                </>
               ) : mode === 'password' ? (
                 'Sign In'
               ) : (
