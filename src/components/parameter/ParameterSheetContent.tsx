@@ -15,11 +15,13 @@ import {
   downloadSTLFile,
   downloadOpenSCADFile,
   downloadDXFFile,
+  downloadSTEPFile,
   type DxfExporter,
 } from '@/utils/downloadUtils';
 import { useToast } from '@/hooks/use-toast';
 import { useConversation } from '@/contexts/ConversationContext';
 import { persistConversationExport } from '@/services/conversationExports';
+import { exportStep } from '@/services/stepExport';
 
 interface ParameterSheetContentProps {
   parameters: Parameter[];
@@ -29,7 +31,7 @@ interface ParameterSheetContentProps {
   code?: string;
 }
 
-type DownloadFormat = 'stl' | 'scad' | 'dxf';
+type DownloadFormat = 'stl' | 'scad' | 'dxf' | 'step';
 
 export function ParameterSheetContent({
   parameters,
@@ -160,15 +162,46 @@ export function ParameterSheetContent({
     }
   };
 
+  const handleDownloadSTEP = async () => {
+    if (!code) return;
+
+    try {
+      setIsExporting(true);
+      const result = await exportStep(code);
+      downloadSTEPFile(result.file);
+      if (result.warningCount > 0) {
+        toast({
+          title: 'STEP exported with fallbacks',
+          description:
+            'Some OpenSCAD operations could not stay analytic and were converted using mesh fallback geometry.',
+        });
+      }
+    } catch (error) {
+      console.error('[STEP] Failed to export STEP:', error);
+      toast({
+        title: 'STEP export failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Adam could not export this model as STEP.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const downloadHandlers: Record<DownloadFormat, () => void | Promise<void>> = {
     stl: handleDownloadSTL,
     scad: handleDownloadOpenSCAD,
     dxf: handleDownloadDXF,
+    step: handleDownloadSTEP,
   };
   const formatAvailable: Record<DownloadFormat, boolean> = {
     stl: !!currentOutput,
     scad: !!code,
     dxf: !!dxfExporter && !isExporting,
+    step: !!code && !isExporting,
   };
 
   const handleDownload = async () => {
@@ -224,6 +257,16 @@ export function ParameterSheetContent({
                 <span className="text-sm">.STL</span>
                 <span className="col-span-2 text-xs text-adam-text-primary/60">
                   3D Printing
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setSelectedFormat('step')}
+                disabled={!formatAvailable.step}
+                className="grid cursor-pointer grid-cols-3 text-adam-text-primary"
+              >
+                <span className="text-sm">.STEP</span>
+                <span className="col-span-2 text-xs text-adam-text-primary/60">
+                  3D CAD Exchange
                 </span>
               </DropdownMenuItem>
               <DropdownMenuItem
