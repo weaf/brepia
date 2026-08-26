@@ -7,6 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { BrepiaBrand } from '@/components/brand';
 
 export function UpdatePasswordView() {
   const [password, setPassword] = useState('');
@@ -51,12 +52,8 @@ export function UpdatePasswordView() {
     <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
       <div className="w-full max-w-md">
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
-          <div className="mb-4 flex flex-col items-center justify-center gap-2">
-            <img
-              src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-              alt="CADAM Logo"
-              className="h-8 w-auto"
-            />
+          <div className="mb-4 flex flex-col items-center justify-center gap-3">
+            <BrepiaBrand showByNoty />
             <h1 className="text-2xl font-semibold text-white">
               Update Password
             </h1>
