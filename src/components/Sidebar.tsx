@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { Conversation, ConversationSettings } from '@shared/types';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { useProfile } from '@/services/profileService';
+import { BrepiaBrand, BrepiaMark } from '@/components/brand';
 
 interface SidebarProps {
   isSidebarOpen: boolean;
@@ -137,21 +138,21 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
         >
           <button
             type="button"
+            aria-label="Brepia home"
             className="flex w-full cursor-pointer items-center space-x-2"
             onClick={() => sidebarNavigate('/')}
           >
             {isSidebarOpen ? (
-              <div className="flex w-full">
-                <img
-                  className="mx-auto h-8 w-full"
-                  src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-                  alt="Logo"
+              <div className="flex w-full justify-center">
+                <BrepiaBrand
+                  className="py-0.5"
+                  markClassName="h-8 w-8"
+                  wordmarkClassName="text-[15px]"
                 />
               </div>
             ) : (
-              <img
-                src={`${import.meta.env.BASE_URL}/adam-logo.svg`}
-                alt="Logo"
+              <BrepiaMark
+                title="Brepia"
                 className="h-8 w-8 min-w-8"
               />
             )}
@@ -281,7 +282,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a
-                    href="https://github.com/Adam-CAD/CADAM"
+                    href="https://github.com/weaf/pCAD"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -305,7 +306,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
             {/* GitHub Button - Expanded state */}
             {isSidebarOpen && (
               <a
-                href="https://github.com/Adam-CAD/CADAM"
+                href="https://github.com/weaf/pCAD"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -431,9 +432,9 @@ function MobileSidebar({
       >
         {/* For aria stuff */}
         <SheetHeader className="hidden">
-          <SheetTitle className="text-adam-text-primary">AdamCAD</SheetTitle>
+          <SheetTitle className="text-adam-text-primary">Brepia</SheetTitle>
           <SheetDescription>
-            AI-powered CAD software for everyone
+            AI-assisted parametric 3D design
           </SheetDescription>
         </SheetHeader>
         <DesktopSidebar isSidebarOpen={true} setIsSidebarOpen={setOpen} />
