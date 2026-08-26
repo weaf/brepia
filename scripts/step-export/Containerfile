@@ -1,90 +1,113 @@
-FROM ubuntu:24.04
+FROM debian:trixie-slim AS openscad-builder
 
+ARG OPENSCAD_COMMIT=1ee676b0ea2e23a86553a931ff1d805fae7bbe7c
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Bootstrap only what is needed to fetch the pinned source. OpenSCAD's own
+# dependency script below remains the source of truth for build dependencies.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+RUN set -eux; \
+  git clone https://github.com/openscad/openscad.git /src/openscad; \
+  cd /src/openscad; \
+  git checkout "${OPENSCAD_COMMIT}"; \
+  git submodule update --init --recursive; \
+  test "$(git rev-parse HEAD)" = "${OPENSCAD_COMMIT}"
+
+WORKDIR /src/openscad
+
+# Mirror OpenSCAD's Linux CI for this source generation: Qt6 with a headless
+# build. The builder stage is discarded, so compiler/dev packages do not ship
+# in the STEP runtime image.
+RUN ./scripts/uni-get-dependencies.sh qt6
+
+RUN set -eux; \
+  cmake -S . -B build -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DHEADLESS=ON \
+    -DENABLE_MANIFOLD=ON \
+    -DENABLE_TESTS=OFF; \
+  cmake --build build --parallel 2; \
+  cmake --install build; \
+  /usr/local/bin/openscad --version
+
+# Derive the Debian runtime package set from the exact binary we just built.
+# This avoids maintaining a guessed list of Qt/Harfbuzz/Boost/etc. libraries.
+RUN set -eux; \
+  ldd /usr/local/bin/openscad | tee /tmp/openscad-ldd.txt; \
+  ! grep -q 'not found' /tmp/openscad-ldd.txt; \
+  awk '($2 == "=>" && $3 ~ /^\//) { print $3 } ($1 ~ /^\//) { print $1 }' \
+    /tmp/openscad-ldd.txt | sort -u > /tmp/openscad-runtime-libs.txt; \
+  : > /tmp/openscad-runtime-packages.unsorted; \
+  while IFS= read -r lib; do \
+    resolved="$(readlink -f "$lib" 2>/dev/null || printf '%s' "$lib")"; \
+    owner="$(dpkg-query -S "$lib" 2>/dev/null | head -n 1 || true)"; \
+    if [ -z "$owner" ] && [ "$resolved" != "$lib" ]; then \
+      owner="$(dpkg-query -S "$resolved" 2>/dev/null | head -n 1 || true)"; \
+    fi; \
+    if [ -n "$owner" ]; then \
+      printf '%s\n' "${owner%%:*}" >> /tmp/openscad-runtime-packages.unsorted; \
+    fi; \
+  done < /tmp/openscad-runtime-libs.txt; \
+  sort -u /tmp/openscad-runtime-packages.unsorted > /tmp/openscad-runtime-packages.txt; \
+  test -s /tmp/openscad-runtime-packages.txt; \
+  cat /tmp/openscad-runtime-packages.txt
+
+
+FROM debian:trixie-slim
+
+ARG OPENSCAD_COMMIT=1ee676b0ea2e23a86553a931ff1d805fae7bbe7c
 ARG SCAD123D_VERSION=0.5.0
 ARG SCAD123D_COMMIT=c5d126ac30e8f170e2082aa14ad4a44c6d70513e
-ARG OPENSCAD_SNAPSHOT=OpenSCAD-2026.08.13-x86_64.AppImage
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VIRTUAL_ENV=/opt/pcad-step-venv
 ENV PATH="/opt/pcad-step-venv/bin:/usr/local/bin:/usr/bin:/bin"
 ENV OPENSCADPATH=/opt/openscad-libraries
 ENV HOME=/tmp
+ENV PCAD_OPENSCAD_COMMIT=${OPENSCAD_COMMIT}
 
-# The OpenSCAD AppImage deliberately leaves a number of common Linux desktop
-# runtime libraries to the host. GitHub's Ubuntu runners already contain most
-# of them, but a clean ubuntu:24.04 image does not (notably HarfBuzz). Install
-# the Noble OpenSCAD runtime closure explicitly so the pinned AppImage behaves
-# the same way in this minimal container. Qt/QScintilla packages are included
-# intentionally: they pull the host-side X11/font/DBus closure expected by the
-# AppImage and make the runtime contract reproducible instead of depending on
-# whatever a CI runner happens to have preinstalled.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
+COPY --from=openscad-builder /usr/local/ /usr/local/
+COPY --from=openscad-builder /tmp/openscad-runtime-packages.txt /tmp/openscad-runtime-packages.txt
+
+# Install only the runtime packages required by the pinned OpenSCAD binary,
+# plus Python/scad123d prerequisites and a small deterministic font baseline
+# for OpenSCAD text() models.
+RUN set -eux; \
+  apt-get update; \
+  xargs -r apt-get install -y --no-install-recommends \
+    < /tmp/openscad-runtime-packages.txt; \
+  apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
-    lib3mf1t64 \
-    libboost-filesystem1.83.0 \
-    libboost-program-options1.83.0 \
-    libcairo2 \
-    libdouble-conversion3 \
-    libegl1 \
-    libfontconfig1 \
-    libfreetype6 \
-    libgcc-s1 \
-    libgl1 \
-    libglew2.2 \
-    libglib2.0-0t64 \
-    libglu1-mesa \
-    libgmp10 \
-    libharfbuzz0b \
-    libmpfr6 \
-    libopencsg1 \
-    libopengl0 \
-    libqscintilla2-qt5-15 \
-    libqt5core5t64 \
-    libqt5dbus5t64 \
-    libqt5gamepad5 \
-    libqt5gui5t64 \
-    libqt5multimedia5 \
-    libqt5network5t64 \
-    libqt5widgets5t64 \
-    libspnav0 \
-    libstdc++6 \
-    libx11-6 \
-    libxml2 \
-    libzip4t64 \
+    fontconfig \
+    fonts-dejavu-core \
     python3 \
     python3-pip \
     python3-venv \
-    unzip \
-  && rm -rf /var/lib/apt/lists/*
-
-# Match the native OpenSCAD generation used by scad123d's current differential
-# CI instead of relying on Ubuntu's older packaged OpenSCAD. Extract the
-# AppImage during image build so runtime needs neither FUSE nor network access.
-# Verify both process startup and a real headless CSG export here; --version by
-# itself would not catch a library/plugin that is loaded only during conversion.
-RUN set -eux; \
-  curl -fsSL \
-    "https://files.openscad.org/snapshots/${OPENSCAD_SNAPSHOT}" \
-    -o /tmp/openscad.AppImage; \
-  chmod +x /tmp/openscad.AppImage; \
-  cd /tmp; \
-  ./openscad.AppImage --appimage-extract >/dev/null; \
-  mv /tmp/squashfs-root /opt/openscad; \
-  ln -s /opt/openscad/AppRun /usr/local/bin/openscad; \
-  rm /tmp/openscad.AppImage; \
+    unzip; \
+  rm -rf /var/lib/apt/lists/* /tmp/openscad-runtime-packages.txt; \
+  ldd /usr/local/bin/openscad | tee /tmp/openscad-final-ldd.txt; \
+  ! grep -q 'not found' /tmp/openscad-final-ldd.txt; \
   openscad --version; \
-  printf '%s\n' 'difference() { cube([10,10,10]); translate([5,5,-1]) cylinder(h=12, r=2, $fn=32); }' > /tmp/openscad-runtime-smoke.scad; \
-  openscad -o /tmp/openscad-runtime-smoke.csg /tmp/openscad-runtime-smoke.scad; \
-  test -s /tmp/openscad-runtime-smoke.csg; \
-  rm -f /tmp/openscad-runtime-smoke.scad /tmp/openscad-runtime-smoke.csg
+  printf '%s\n' \
+    'difference() {' \
+    '  cube([10, 10, 10]);' \
+    '  translate([5, 5, -1]) cylinder(h=12, r=2, $fn=32);' \
+    '}' > /tmp/openscad-build-smoke.scad; \
+  openscad -o /tmp/openscad-build-smoke.csg /tmp/openscad-build-smoke.scad; \
+  test -s /tmp/openscad-build-smoke.csg; \
+  rm -f /tmp/openscad-final-ldd.txt /tmp/openscad-build-smoke.scad /tmp/openscad-build-smoke.csg
 
 # Pin scad123d to an immutable upstream commit whose package metadata reports
-# 0.5.0. This avoids a floating Git branch and does not depend on the exact
-# release timing of the scad123d wheel on PyPI. Its normal dependencies remain
-# resolved during image build; runtime package downloads are impossible because
-# the sandbox has no network.
+# 0.5.0. Runtime package downloads remain impossible because the Podman runner
+# starts this image with --network=none.
 RUN python3 -m venv "${VIRTUAL_ENV}" \
   && "${VIRTUAL_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
   && "${VIRTUAL_ENV}/bin/pip" install --no-cache-dir \
