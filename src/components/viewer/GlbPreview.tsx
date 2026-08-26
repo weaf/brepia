@@ -4,14 +4,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import vertexShader from '@/utils/points.vert?raw';
 import fragmentShader from '@/utils/points.frag?raw';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { adamLogoVertices } from '@/utils/adamLogoVertices';
+import { brepiaLogoVertices } from '@/utils/brepiaLogoVertices';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 interface GlbPreviewProps {
   /**
    * GLB blob (typically the Hunyuan turbo preview returned during mesh generation).
-   * While undefined, the Adam-logo particle cloud holds. As soon as the blob arrives
-   * the logo dissolves and the mesh point cloud diffuses into place.
+   * While undefined, the Brepia-mark particle cloud holds. As soon as the blob
+   * arrives the mark dissolves and the mesh point cloud diffuses into place.
    */
   glbBlob?: Blob;
 }
@@ -203,24 +203,24 @@ export function GlbPreview({ glbBlob }: GlbPreviewProps) {
     meshLoadedRef.current = false;
     pendingMeshVerticesRef.current = null;
 
-    const createAdamLogoPoints = () => {
+    const createBrepiaMarkPoints = () => {
       const scene = sceneRef.current;
       if (!scene) {
         return;
       }
 
-      const vertices: number[] = adamLogoVertices;
+      const vertices: number[] = brepiaLogoVertices;
 
       createPoints(vertices, scene, 1);
     };
 
-    // Create Adam-logo points immediately (scene is ready now)
-    createAdamLogoPoints();
+    // Create Brepia-mark points immediately (scene is ready now)
+    createBrepiaMarkPoints();
     logoDissolveStartTimeRef.current = null;
     logoDissolveCompletedRef.current = false;
     diffusionStartTimeRef.current = null;
 
-    // If no glbBlob, just keep the Adam logo indefinitely
+    // If no glbBlob, just keep the Brepia mark indefinitely
     if (!glbBlob) {
       return () => {
         if (pointsRef.current) {
@@ -314,7 +314,7 @@ export function GlbPreview({ glbBlob }: GlbPreviewProps) {
 
         let progress: number;
 
-        // 1. Run the Adam-logo dissolve (triggered only when glbBlob exists)
+        // 1. Run the Brepia-mark dissolve (triggered only when glbBlob exists)
         if (
           !logoDissolveCompletedRef.current &&
           logoDissolveStartTimeRef.current
@@ -326,7 +326,7 @@ export function GlbPreview({ glbBlob }: GlbPreviewProps) {
           );
           progress = 1 - dissolveProgress; // Reverse: 1 → 0
 
-          // Before dissolve starts, show adam logo
+          // Before dissolve starts, show the Brepia mark
           if (!pendingMeshVerticesRef.current) {
             progress = 1;
           }
@@ -349,7 +349,7 @@ export function GlbPreview({ glbBlob }: GlbPreviewProps) {
         } else {
           // 2. After dissolve, handle mesh diffusion (if available)
           if (!glbBlob) {
-            progress = 1; // keep logo if nothing to load
+            progress = 1; // keep mark if nothing to load
           } else if (!meshLoadedRef.current || !diffusionStartTimeRef.current) {
             // Mesh not ready yet: stay random cloud
             progress = 0;
