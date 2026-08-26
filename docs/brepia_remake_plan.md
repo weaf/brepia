@@ -157,16 +157,16 @@ Historical accuracy is more important than global string replacement.
 
 ## Implementation phases
 
-### Phase 1 — Audit and rename map
+### Phase 1 — Audit and rename map: complete
 
-- [ ] Inventory every user-visible CADAM/pCAD occurrence.
-- [ ] Inventory metadata, favicon, logo and image assets.
-- [ ] Inventory loading/spinner components and distinguish cosmetic indeterminate states from meaningful progress.
-- [ ] Inventory current icon library/use and obvious inconsistent legacy icons.
-- [ ] Classify old-name occurrences as user-facing, internal-compatibility or historical.
-- [ ] Record concrete files and recommended action in `docs/brepia_remake_status.md`.
+- [x] Inventory user-visible CADAM/pCAD occurrences and the major Adam/AdamCAD legacy surfaces.
+- [x] Inventory metadata, favicon, logo and image assets.
+- [x] Inventory loading/spinner components and distinguish cosmetic indeterminate states from meaningful progress.
+- [x] Inventory current icon library/use and obvious inconsistent legacy icons.
+- [x] Classify old-name occurrences as user-facing, internal-compatibility or historical.
+- [x] Record concrete files and recommended action in `docs/brepia_remake_status.md`.
 
-No broad search-and-replace before this phase is complete.
+No broad search-and-replace is needed; implementation should now follow the classified map.
 
 ### Phase 2 — Brand primitives
 
