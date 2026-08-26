@@ -5,11 +5,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { GoogleIcon } from '@/components/icons/CompanyIcons';
-import { Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { validateRedirectUrl } from '@/lib/utils';
 import { getRegistrationSettings } from '@/services/accountAdminService';
-import { BrepiaBrand } from '@/components/brand';
+import { ActivityIndicator, BrepiaBrand } from '@/components/brand';
 
 function getAppRedirectUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -84,7 +83,7 @@ export function SignUpView() {
   if (policyLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
-        <Loader2 className="h-5 w-5 animate-spin text-white" />
+        <ActivityIndicator label="Loading registration policy" size="lg" />
       </div>
     );
   }
@@ -108,7 +107,11 @@ export function SignUpView() {
             >
               {policyFetching ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <ActivityIndicator
+                    label="Retrying registration policy"
+                    size="sm"
+                    className="mr-2"
+                  />
                   Retrying...
                 </>
               ) : (
@@ -127,7 +130,7 @@ export function SignUpView() {
   if (!registration.bootstrapAvailable && !registration.allowRegistration) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
-        <Loader2 className="h-5 w-5 animate-spin text-white" />
+        <ActivityIndicator label="Checking registration access" size="lg" />
       </div>
     );
   }
