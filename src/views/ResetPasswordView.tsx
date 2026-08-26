@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from '@tanstack/react-router';
+import { BrepiaBrand } from '@/components/brand';
 
 export function ResetPasswordView() {
   const [email, setEmail] = useState('');
@@ -41,12 +42,8 @@ export function ResetPasswordView() {
     <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
       <div className="w-full max-w-md">
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
-          <div className="mb-4 flex flex-col items-center justify-center gap-2">
-            <img
-              src={`${import.meta.env.BASE_URL}/cadam-logo.svg`}
-              alt="CADAM Logo"
-              className="h-8 w-auto"
-            />
+          <div className="mb-4 flex flex-col items-center justify-center gap-3">
+            <BrepiaBrand showByNoty />
             <h1 className="text-2xl font-semibold text-white">
               Reset Password
             </h1>
