@@ -47,7 +47,8 @@ export function pickHomePromptMessage(
   const boundedSample = Number.isFinite(sample)
     ? Math.max(0, Math.min(0.999999999, sample))
     : 0;
-  const message = pool[Math.floor(boundedSample * pool.length)];
+  const index = Math.floor(boundedSample * pool.length);
+  const message = pool[index] ?? HOME_PROMPT_MESSAGES[0];
 
   rememberHomePrompt(message);
   return message;
