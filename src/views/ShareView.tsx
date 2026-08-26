@@ -5,6 +5,7 @@ import { ParameterSheetContent } from '@/components/parameter/ParameterSheetCont
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MeshPreview } from '@/components/viewer/MeshPreview';
 import { OpenSCADPreview } from '@/components/viewer/OpenSCADViewer';
+import { ActivityIndicator } from '@/components/brand';
 import { ConversationContext } from '@/contexts/ConversationContext';
 import { messageRowToChatMessage } from '@/lib/aiMessages';
 import { supabase } from '@/lib/supabase';
@@ -21,7 +22,6 @@ import type {
 } from '@shared/types';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
-import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConversationView } from './ConversationView';
 
@@ -79,7 +79,7 @@ export default function ShareView() {
   if (isConversationLoading || areMessagesLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-adam-bg-secondary-dark text-adam-text-primary">
-        <Loader2 className="h-10 w-10 animate-spin" />
+        <ActivityIndicator label="Loading shared conversation" size="lg" />
       </div>
     );
   }
