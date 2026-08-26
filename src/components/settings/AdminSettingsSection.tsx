@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { ActivityIndicator } from '@/components/brand';
 import {
   createLocalUser,
   deleteAdminUser,
@@ -80,7 +81,7 @@ export function AdminSettingsSection() {
             <RegistrationTab initial={registration} toast={toast} />
           ) : (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <ActivityIndicator label="Loading registration settings" />
             </div>
           )}
         </TabsContent>
@@ -217,7 +218,7 @@ function UsersTab({
         </div>
         <Button type="submit" disabled={createMutation.isPending}>
           {createMutation.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <ActivityIndicator label="Creating user" size="sm" />
           ) : (
             <Plus className="mr-2 h-4 w-4" />
           )}
@@ -229,7 +230,7 @@ function UsersTab({
         <div className="text-sm font-medium text-adam-neutral-50">Users</div>
         {loading ? (
           <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <ActivityIndicator label="Loading users" />
           </div>
         ) : (
           users.map((user) => (
@@ -432,7 +433,7 @@ function UserEditor({
       <div className="sm:col-span-2">
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <ActivityIndicator label="Saving user changes" size="sm" />
           )}
           Save changes
         </Button>
@@ -550,7 +551,7 @@ function RegistrationTab({
 
       <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
         {mutation.isPending && (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          <ActivityIndicator label="Saving registration policy" size="sm" />
         )}
         Save registration policy
       </Button>
