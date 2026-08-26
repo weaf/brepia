@@ -1,221 +1,136 @@
 # OpenSCAD import branch — pre-merge regression hardening
 
-Date: 2026-08-25
+Date: 2026-08-26
 Branch: `feature/openscad-import-editing`
 Import Step 6: complete
-Merge: blocked pending this hardening gate and explicit operator approval
+Hardening gate: COMPLETE
+Merge state: approved by operator; final merge preparation in progress
 
 ## Purpose
 
-The OpenSCAD import feature itself completed Steps 1–6. Before merging the feature branch, the operator explicitly chose to resolve three previously separate product regressions that were discovered during Step 6 but are not part of the import contract:
+The OpenSCAD import feature itself completed Steps 1–6. Before merge, three previously separate regressions plus several adjacent provider/transport issues were hardened and re-validated:
 
 1. empty assistant persistence after an early provider failure;
-2. loading/spinner state remaining active after the completed model is already persisted;
-3. intermittent third/later OpenCode turn across both CLI and streaming.
+2. loading/spinner state remaining active after a completed model is already persisted;
+3. intermittent third/later OpenCode turn across CLI/streaming;
+4. provider/rate-limit errors that were not presented clearly;
+5. missing Vision configuration silently degrading;
+6. stale cached transport after model/mode changes;
+7. immutable workspace-agent replay mismatch;
+8. client-tool persistence races that left `build_parametric_model` as `input-available` until reload;
+9. destructive/error toast persistence.
 
-Keep these fixes conceptually separate from OpenSCAD import behavior. Do not reopen or redesign the import architecture to address them.
+These fixes remain conceptually separate from the OpenSCAD import contract.
 
-## Current branch head
+## Final validated implementation state
 
-Implementation head before operator validation:
+The implementation through commit `6eef8599417562244877e86de94c9aa12c9d9ea3` was validated by the operator. Documentation-only closing commits may follow this SHA before merge.
 
-`445929e35e2ad81eecc009e5339291ce37f66ea5`
+## A — Empty assistant persistence
 
-Always re-check branch head and current file versions before further changes.
+Status: COMPLETE
 
-## A — Empty assistant persistence after early provider failure
+The persistence boundary now distinguishes an empty assistant response from a real assistant payload. Empty provider responses are skipped rather than inserted into `messages`, preserving the `messages_payload_present` database invariant.
 
-Status: IMPLEMENTED — validation pending
+Verified outcome:
 
-### Root cause
+- early provider errors surface without creating an empty assistant row;
+- conversations remain usable for retry/model switch;
+- no persistence-constraint regression was observed.
 
-The `messages_payload_present` database constraint rejects a message row with an empty `parts` array unless legacy `content` is present. AI SDK can still complete its UI-message callback with `responseMessage.parts = []` when a provider fails before emitting any assistant payload. The previous persistence classifier treated that as a normal fresh assistant response and attempted an INSERT.
+## B — Loading/spinner and persisted completion reconciliation
 
-### Fix
+Status: COMPLETE
 
-`src/server/chatToolPersistence.ts` now distinguishes three states at the persistence boundary:
+The cached chat can now reconcile against authoritative persisted completion for the same turn instead of depending solely on a possibly stale AI-SDK `submitted`/`streaming` state. Polling continues through non-terminal intermediate assistant/tool states.
 
-- a real pending client tool call;
-- a normal non-pending assistant payload;
-- the explicit `EMPTY_ASSISTANT_RESPONSE` sentinel.
+A later OpenCode-specific race was also found: the browser could miss or delay the client-tool callback while the DB already contained an `input-available` `build_parametric_model`. Recovery now runs before the old in-flight early return, adopts the persisted assistant snapshot when necessary, and replays only the pending tool on the current assistant leaf. Historical dangling tools and tools behind a newer user leaf are never replayed.
 
-An empty assistant response maps to persistence action `skip` for both fresh and continuation callbacks. This preserves the database invariant instead of weakening it. Genuine first-turn build tool calls still map to `insert`, because the assistant row must exist before the browser persists the tool result.
+Verified outcome:
 
-The sentinel is intentionally truthy at the existing `aiChat.ts` call site, which also prevents post-response suggestion generation from running against a nonexistent assistant payload.
+- generated models update live without requiring reload;
+- multi-turn edits update the preview immediately;
+- the previously observed repeated dangling-tool recovery no longer reproduces in the validated flow.
 
-### Regression coverage
+## C — OpenCode multi-turn reliability
 
-`src/server/chatToolPersistence.test.ts` covers:
+Status: COMPLETE
 
-- empty payload classification;
-- empty fresh response -> `skip`;
-- empty continuation -> `skip`;
-- genuine fresh pending build -> `insert`;
-- genuine fresh resolved response -> `insert`;
-- pending continuation -> `skip`;
-- resolved continuation -> `update`;
-- existing dangling-tool recovery invariants.
+The common OpenCode/Codex result contract now has unambiguous first-step and post-build semantics:
 
-### Manual acceptance
+- a new CAD request without a build result requires non-empty complete OpenSCAD code;
+- after a successful build, corrected code is emitted only when another geometry revision is needed;
+- if the current artifact already satisfies the task, the agent may finish with `code = ""` and a final message rather than re-emitting unchanged code.
 
-Use a provider/model that fails before emitting output, for example a deliberately missing/invalid provider credential.
+Persistent-session regression coverage includes fourth-turn continuity for both OpenCode Streaming and CLI. The client-tool recovery hardening additionally fixed the live build-result persistence race that manifested most clearly in OpenCode Streaming.
 
-Expected:
+Verified outcome:
 
-- the provider error is surfaced normally;
-- no `messages_payload_present` persistence error is produced;
-- no empty assistant row is created;
-- the conversation remains usable for model switch/retry.
+- new OpenCode Streaming conversations build successfully;
+- subsequent edits remain on the same external session;
+- several sequential edits use the immediately preceding artifact;
+- artifacts appear live without reload;
+- direct llama-swap multi-turn behavior remains good.
 
-## B — Loading/spinner completion synchronization
+## D — Provider errors, model switching, and Vision
 
-Status: IMPLEMENTED — validation pending
+Status: COMPLETE
 
-### Root cause
+Provider errors now receive product-level presentation, including explicit model/rate-limit messaging for HTTP 429 / `FreeUsageLimitError` / rate-limit conditions. Genuine provider errors are not cleared merely because old chat messages exist.
 
-`ChatSession` derives preview loading state from AI SDK status (`submitted` / `streaming`). The server independently tee-consumes and persists generation output, so a browser/SSE lifecycle loss can leave the cached client `Chat` in an in-flight state after authoritative terminal output already exists in the database.
+Cached chat transport identity now tracks the actual transport object. Changing model or CLI/Streaming mode rebuilds the cached Chat with the newly selected transport while retaining message history, avoiding requests through a stale previously selected model.
 
-Previously `useCachedAiChat` explicitly refused to adopt persisted messages while local status remained submitted/streaming. In addition, `useMessagesQuery` stopped polling as soon as any assistant row existed, even if that row represented an intermediate build/tool state.
+Vision analysis now stops with a clear Settings -> Vision configuration message when a text-only/OpenCode/Codex flow requires vision but no applicable Vision model is configured.
 
-### Fix
+Operator verification:
 
-A pure completion classifier was added in `src/hooks/chatCompletionReconciliation.ts`.
+- model-usage-limit message displayed correctly;
+- missing-Vision message displayed correctly;
+- llama-swap/OpenCode model switching worked;
+- no further unexpected GPT-Sol fallback was reported in the validated path.
 
-A normal parametric build by itself is not terminal because it can legitimately require the browser -> server build-inspection continuation. A turn is terminal when authoritative persisted state proves completion, including:
+## E — Conversation workspace immutable agent history
 
-- resolved `answer_user` after the last build;
-- completed adapter text after the last build;
-- completed non-build text/tool responses;
-- an imported synthetic baseline, which is explicitly terminal without an AI continuation once its tool state is resolved.
+Status: COMPLETE
 
-`persistedCompletionCoversLiveTurn()` additionally proves that the persisted terminal assistant completes the same live turn. An older completed assistant cannot cancel a genuinely newer user request.
+Historical agent-turn sync no longer treats harmless evolution of derived metadata as an immutable-record mutation. The existing immutable snapshot wins when the same agent turn is rediscovered; true identity corruption remains an error.
 
-`useCachedAiChat` now:
+The previously repeated `Immutable agent turn mismatch` diagnostic stopped being a merge blocker.
 
-- keeps normal in-flight behavior while persistence does not prove terminality;
-- when persistence proves the same turn terminal, stops only the stale local client stream and adopts the authoritative persisted snapshot;
-- does not use an arbitrary timeout.
+## F — Error toast persistence
 
-`useMessagesQuery` now polls every 2.5 seconds while the newest recent row represents a non-terminal turn, up to the existing 10-minute maximum age. Imported synthetic baselines are classified terminal and therefore do not cause unnecessary polling.
+Status: COMPLETE BY CODE/TEST; LIVE VERIFICATION OPPORTUNISTIC
 
-### Regression coverage
+Destructive/error toasts must remain visible until explicitly dismissed by the user. The original attempt using `duration={0}` was incorrect for Radix Toast and was replaced with controlled behavior:
 
-`tests/chatCompletionReconciliation.test.ts` covers:
+- destructive toasts ignore primitive auto-close `onOpenChange(false)`;
+- the X button explicitly dismisses the toast;
+- ordinary non-destructive toasts retain normal auto-close behavior;
+- up to three toasts may coexist.
 
-- normal resolved build-only remains non-terminal;
-- imported resolved build-only is terminal;
-- unresolved imported build remains non-terminal;
-- build + resolved `answer_user` is terminal;
-- build + completed adapter text is terminal;
-- old terminal assistant cannot override a newer live user turn;
-- persisted terminal assistant can complete the current live user turn;
-- the same live assistant ID can reconcile when persistence advances it to terminal.
+`tests/toastPersistence.test.ts` locks the destructive-vs-normal dismissal rule.
 
-### Manual acceptance
+A naturally occurring `Network error` is difficult to reproduce deterministically, so the final live confirmation of that specific toast will be performed opportunistically the next time a real network/provider error occurs. This is not considered a merge blocker because the behavior is isolated and regression-tested.
 
-With a working model:
+## Automated validation
 
-- generate or edit a model through to completion;
-- verify the preview loading/spinner state clears without reload;
-- repeat several times;
-- if practical, background/suspend the browser tab during a generation and return after server completion;
-- verify the persisted completed turn is adopted and the spinner clears without a page reload.
+Final operator report: all green on the current implementation.
 
-If this still reproduces specifically on OpenCode after the completed model is already persisted, inspect the remaining OpenCode terminal-text persistence path before making any broader change to `aiChat.ts`.
-
-## C — Intermittent third/later OpenCode turn
-
-Status: IMPLEMENTED HARDENING + REGRESSION COVERAGE — live validation pending
-
-### Architecture findings
-
-The failure has been observed in both OpenCode CLI and streaming. Those transports use different external session mechanisms, so the shared pCAD lifecycle/persistence boundary is a stronger common candidate than one transport-specific session implementation.
-
-Streaming OpenCode already uses one deterministic OpenCode session per pCAD conversation and sends the authoritative latest complete artifact on every turn.
-
-CLI OpenCode persists the external session ID inside the build tool-call ID and recovers the latest matching session by walking the prompt backward. Each emitted build tool-call ID remains unique because a random UUID suffix is appended even when the same external session is resumed.
-
-### Shared contract defect fixed
-
-The common OpenCode/Codex result contract previously contradicted the post-build continuation prompt:
-
-- continuation instructions allowed the agent to return only the final message when the current artifact already satisfied the task;
-- the shared final-result contract simultaneously required non-empty `code` for every CAD request.
-
-Different models could therefore either finish or repeatedly re-emit unchanged SCAD after a successful build.
-
-`src/server/opencodeAgentResult.ts` now defines one unambiguous contract for OpenCode CLI and streaming:
-
-- when proposing a new/revised CAD artifact, return complete runnable OpenSCAD in `code`;
-- after `<pcad_build_result>`, return corrected complete code only if another geometry revision is actually required;
-- if the authoritative current artifact already satisfies the task, return `code = ""` plus the concise final message;
-- do not re-emit unchanged code merely to finish the turn.
-
-No OpenCode transport/session implementation was changed speculatively.
-
-### Four-turn regression coverage
-
-`tests/opencodePersistentSession.test.ts` now explicitly checks a fourth streaming edit:
-
-- turn 4 starts from turn 3's complete artifact, not turn 1/2;
-- turn 4 includes the current user request;
-- the post-build continuation sees turn 4's complete artifact and turn 4 build result;
-- an ordinary reused-session build continuation does not replay the user request as a new request.
-
-`tests/cliAgentPersistentSession.test.ts` now explicitly checks a fourth OpenCode CLI edit:
-
-- the same resumable OpenCode session is still recovered after multiple build/result cycles;
-- turn 4 starts from turn 3's complete artifact, not older revisions;
-- turn 4 carries the current request;
-- the turn 4 continuation sees the turn 4 artifact and build result while retaining the original task context.
-
-### Manual acceptance
-
-Run at least five sequential CAD edits in the same conversation in each mode.
-
-CLI example sequence:
-
-1. create a box;
-2. make it wider;
-3. make it taller;
-4. add a hole;
-5. modify another visible feature.
-
-Repeat the same class of sequence in Streaming mode.
-
-For every turn verify:
-
-- the turn starts from the immediately preceding complete model;
-- the requested edit appears in the resulting model;
-- the turn finishes rather than remaining stuck/rebuilding unchanged code;
-- the next turn remains usable.
-
-## Automated validation gate
-
-Before closing this hardening gate, run at minimum:
+Validated gate includes:
 
 ```bash
-npm test -- tests/chatCompletionReconciliation.test.ts tests/opencodePersistentSession.test.ts tests/cliAgentPersistentSession.test.ts
+npm test
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-Also run the full Vitest suite before merge:
+Focused regression suites for chat completion, pending-tool recovery, OpenCode persistent sessions, CLI persistent sessions, provider error presentation, Vision, workspace agents, persistence boundaries, and toast persistence were also exercised during hardening.
 
-```bash
-npm test
-```
+## Final assessment
 
-The server-side persistence tests in `src/server/chatToolPersistence.test.ts` and `src/server/agentOutputContract.test.ts` must remain green as part of the repository test suite.
+Pre-merge hardening is COMPLETE.
 
-## Current assessment
+Known merge blockers: none.
 
-Implementation is complete enough for validation, but none of these three regressions should be marked operator-verified yet.
-
-Do not merge `feature/openscad-import-editing` into `master` until:
-
-- the automated gate is green;
-- the three manual acceptance checks above are green;
-- the final branch/master diff is reviewed again;
-- the operator explicitly approves the merge.
+The operator has explicitly approved merge after the final green validation. Before creating the merge commit, re-check both `feature/openscad-import-editing` and `master` heads and verify that `master` remains the merge base / the feature is not behind.
