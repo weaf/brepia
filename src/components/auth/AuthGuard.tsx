@@ -3,11 +3,11 @@ import { useNavigate, useLocation } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import { getAccountAccess } from '@/services/accountAdminService';
+import { ActivityIndicator } from '@/components/brand';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -62,7 +62,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   if (isLoading || (session && user && isAccessLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <ActivityIndicator label="Loading Brepia" size="lg" />
       </div>
     );
   }
@@ -71,7 +71,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
     if (ssoProvider) {
       return (
         <div className="flex min-h-screen items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          <ActivityIndicator label="Redirecting to sign in" size="lg" />
         </div>
       );
     }
@@ -88,7 +88,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-adam-neutral-200">
             {pending
-              ? 'An administrator must approve this account before pCAD can be used.'
+              ? 'An administrator must approve this account before Brepia can be used.'
               : 'This account has been disabled by an administrator.'}
           </p>
           <Button
@@ -113,7 +113,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
             Account access unavailable
           </h1>
           <p className="mt-3 text-sm text-adam-neutral-200">
-            pCAD could not verify the account status. Check the local Supabase
+            Brepia could not verify the account status. Check the local Supabase
             service and try again.
           </p>
           <Button
