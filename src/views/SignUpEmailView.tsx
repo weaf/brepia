@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from '@tanstack/react-router';
-import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +10,7 @@ import {
   bootstrapFirstAdmin,
   getRegistrationSettings,
 } from '@/services/accountAdminService';
-import { BrepiaBrand } from '@/components/brand';
+import { ActivityIndicator, BrepiaBrand } from '@/components/brand';
 
 function passwordAuthEmail(identifier: string) {
   const normalized = identifier.trim().toLowerCase();
@@ -109,7 +108,9 @@ export function SignUpEmailView() {
       toast({
         title: bootstrap ? 'Could not create administrator' : 'Whoopsies',
         description:
-          error instanceof Error ? error.message.replace(/_/g, ' ') : 'Something went wrong',
+          error instanceof Error
+            ? error.message.replace(/_/g, ' ')
+            : 'Something went wrong',
         variant: 'destructive',
       });
     } finally {
@@ -120,7 +121,7 @@ export function SignUpEmailView() {
   if (policyLoading || !registrationAllowed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark">
-        <Loader2 className="h-6 w-6 animate-spin text-white" />
+        <ActivityIndicator label="Loading registration policy" size="lg" />
       </div>
     );
   }
@@ -215,8 +216,18 @@ export function SignUpEmailView() {
             <Button type="submit" className="w-full p-6" disabled={isLoading}>
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {bootstrap ? 'Creating administrator...' : 'Creating account...'}
+                  <ActivityIndicator
+                    label={
+                      bootstrap
+                        ? 'Creating administrator account'
+                        : 'Creating account'
+                    }
+                    size="sm"
+                    className="mr-2"
+                  />
+                  {bootstrap
+                    ? 'Creating administrator...'
+                    : 'Creating account...'}
                 </>
               ) : bootstrap ? (
                 'Create Administrator'
