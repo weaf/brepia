@@ -19,6 +19,7 @@ Add STEP as pCAD's 3D CAD interchange format while leaving existing STL and DXF 
 - [x] Pin the provider contract to `scad123d 0.5.0`.
 - [x] Surface provider mesh/fallback warnings to the UI.
 - [x] Keep STEP generation lazy/on-click so normal editing and preview pay no B-Rep cost.
+- [x] Expose STEP in both desktop and mobile export menus.
 
 ### Step 2 — Native-converter sandbox: complete and live-verified
 
@@ -53,7 +54,8 @@ Add STEP as pCAD's 3D CAD interchange format while leaving existing STL and DXF 
 
 Completed in the implementation environment:
 
-- `bash -n` passes for the sandbox runner, image-build helper and smoke-test script.
+- `bash -n` passes for the sandbox runner, image-build helper, smoke-test script and the new corpus runner.
+- `scripts/step-export/inspect-step.py` passes Python syntax compilation.
 - New STEP server/test TypeScript sources parse successfully with the TypeScript compiler API.
 - OpenSCAD upstream commit/date and its Qt6/headless Linux CI path were verified before changing the provider image.
 - Branch comparison is based on the requested master and remains 0 commits behind it.
@@ -89,44 +91,55 @@ Not claimed yet:
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
-- complete representative pCAD model corpus compatibility
+- live pass of the new automated STEP compatibility corpus
 - FreeCAD/Rhino receiving-CAD verification
 
 ## Step 3 — Representative model compatibility gate: in progress
 
-Verified so far:
+Verified manually so far:
 
 - [x] Real parameterized multi-body pCAD model exports through the application.
 - [x] External online STEP viewer renders the representative model correctly.
 - [x] External viewer measurements match expected pCAD dimensions.
 
-Still test at minimum:
+Automated corpus implementation:
 
-- primitive cube;
-- cylinder/sphere and curved surfaces;
-- boolean hole/difference;
-- union/intersection;
-- `linear_extrude`;
-- `rotate_extrude`;
-- `hull`;
-- `minkowski`;
-- BOSL model;
-- BOSL2 model;
-- MCAD model;
-- imported single-file SCAD;
-- colored/multi-body model;
-- an intentionally unsupported construct that triggers mesh fallback.
+- [x] Add `scripts/step-export/corpus-test.sh`.
+- [x] Add `scripts/step-export/inspect-step.py`, run inside the existing provider image with build123d/OpenCascade.
+- [x] Check STEP Part 21 output, OpenCascade validity/manifold status, solid/face counts, bounding-box dimensions and analytic surface types where deterministic.
+- [x] Fail exact-B-Rep fixtures if scad123d emits a mesh-fallback warning.
+- [x] Require mesh-fallback warnings for deliberately unsupported fixtures.
+- [x] Cover cube, cylinder, sphere, boolean hole, union, intersection, `linear_extrude`, `rotate_extrude`, polyhedral `hull`, spherical `minkowski`, BOSL, BOSL2, MCAD gear and colored multi-body geometry.
+- [x] Cover two known fallback contracts: `linear_extrude(twist=...)` and `hull()` of three spheres.
+- [ ] Run `scripts/step-export/corpus-test.sh` on the real pCAD Podman host and reconcile any provider-specific expectation differences.
 
-For successful models verify:
+The automated corpus deliberately uses small deterministic SCAD fixtures rather than pCAD/AI-generated models. The already-verified complex room model remains the broad application-level manual acceptance case.
 
-- dimensions/units;
-- holes and topology;
-- number of solids/bodies;
-- analytic curved surfaces where expected;
-- absence of unintended tessellation;
-- useful fallback warning when exact B-Rep is impossible.
+### Step 3 live command
 
-Initial receiving-CAD gate: FreeCAD and/or Rhino. Follow with AutoCAD and MicroStation when available.
+From the pCAD checkout on `feature/step-export`:
+
+```bash
+git pull --ff-only
+export PCAD_STEP_EXPORT_RUNNER="$PWD/scripts/step-export/pcad-scad2step-sandbox"
+./scripts/step-export/corpus-test.sh
+```
+
+No provider-image rebuild is required for this test addition. The STEP inspector is bind-mounted read-only into the existing image and uses the build123d/OpenCascade stack already installed there.
+
+Set `PCAD_STEP_CORPUS_KEEP=1` if failed STEP files/logs should be retained for inspection:
+
+```bash
+PCAD_STEP_CORPUS_KEEP=1 ./scripts/step-export/corpus-test.sh
+```
+
+Expected final line when all fixtures match the pinned provider behavior:
+
+```text
+STEP corpus PASS
+```
+
+Initial receiving-CAD gate after the corpus: FreeCAD and/or Rhino. Follow with AutoCAD and MicroStation when available.
 
 ## Known boundary
 
@@ -143,4 +156,4 @@ npm run lint
 npm run build
 ```
 
-plus the now-passing sandbox smoke test and representative STEP import verification in at least one external CAD application.
+plus the now-passing sandbox smoke test, a passing automated STEP corpus, and representative STEP import verification in at least one external CAD application.
