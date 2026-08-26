@@ -14,8 +14,12 @@ import {
   exportScadToStep,
 } from '@/server/stepExport';
 
+// JSON.stringify can expand one source byte to six ASCII bytes for control
+// characters (for example `\u0001`). Keep the transport limit bounded while
+// guaranteeing that every source accepted by the 256 kB source limit still
+// fits even under worst-case JSON escaping, plus a little envelope overhead.
 const STEP_EXPORT_REQUEST_LIMIT_BYTES =
-  STEP_EXPORT_SOURCE_LIMIT_BYTES * 3 + 4_096;
+  STEP_EXPORT_SOURCE_LIMIT_BYTES * 6 + 4_096;
 
 class StepExportRequestError extends Error {
   constructor(
