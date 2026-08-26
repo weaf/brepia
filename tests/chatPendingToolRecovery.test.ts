@@ -6,7 +6,7 @@ import {
 } from '../src/hooks/chatPendingToolRecovery';
 
 describe('persisted pending client tool recovery', () => {
-  it('recovers input-available pCAD tools from the latest assistant turn', () => {
+  it('recovers input-available pCAD tools when the branch leaf is the waiting assistant', () => {
     const messages = [
       { role: 'user', parts: [{ type: 'text', text: 'Create a sphere' }] },
       {
@@ -62,6 +62,25 @@ describe('persisted pending client tool recovery', () => {
       pendingClientToolCalls(messages).map((tool) => tool.toolCallId),
       ['build-current'],
     );
+  });
+
+  it('does not replay a pending assistant after a newer user row became the leaf', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'input-available',
+            toolCallId: 'build-stale',
+            input: { code: 'cube(1);' },
+          },
+        ],
+      },
+      { role: 'user', parts: [{ type: 'text', text: 'Start a new edit' }] },
+    ];
+
+    assert.deepEqual(pendingClientToolCalls(messages), []);
   });
 
   it('does not recover resolved or already handled tools', () => {
