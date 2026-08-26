@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/toast';
 
 export function Toaster() {
-  const { toasts } = useToast();
+  const { toasts, dismiss } = useToast();
 
   return (
     <ToastProvider>
@@ -26,7 +26,7 @@ export function Toaster() {
           <Toast
             key={id}
             variant={variant}
-            duration={variant === 'destructive' ? 0 : duration}
+            duration={duration}
             {...props}
           >
             <div className="grid gap-1">
@@ -36,7 +36,7 @@ export function Toaster() {
               )}
             </div>
             {action}
-            <ToastClose />
+            <ToastClose onClick={() => dismiss(id)} />
           </Toast>
         );
       })}
