@@ -1,10 +1,11 @@
-import { Check, DownloadIcon, Frown, Loader2, PlusIcon } from 'lucide-react';
+import { Check, DownloadIcon, Frown, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useItemSelection } from '@/hooks/useItemSelection';
 import { cn } from '@/lib/utils';
 import { useImageData } from '@/hooks/useImageData';
 import { useConversation } from '@/contexts/ConversationContext';
 import { getSafeFilename } from '@/utils/file-utils';
+import { ActivityIndicator } from '@/components/brand';
 
 export function ImageViewer({
   image,
@@ -72,7 +73,7 @@ export function ImageViewer({
           className,
         )}
       >
-        <Loader2 className="h-10 w-10 animate-spin" />
+        <ActivityIndicator label="Loading image" size="lg" />
       </div>
     );
   }
@@ -107,7 +108,7 @@ export function ImageViewer({
         />
         {!loaded && (
           <div className="absolute inset-0 flex items-center justify-center bg-adam-neutral-800/50 text-adam-text-primary">
-            <Loader2 className="h-10 w-10 animate-spin" />
+            <ActivityIndicator label="Loading image" size="lg" />
           </div>
         )}
         {clickable && (
