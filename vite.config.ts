@@ -62,9 +62,6 @@ function supabaseProxyPlugin(): Plugin {
             res.end('Supabase proxy timeout');
           });
           proxyReq.on('error', (err) => {
-            // Backgrounding a browser can abort an in-flight request. That is a
-            // normal client-lifecycle event and must not cascade into another
-            // write on a response socket that is already gone.
             if (res.destroyed || res.writableEnded) return;
             console.error(
               '[supabase-proxy]',
@@ -114,89 +111,9 @@ function serveOpenScadWasmInDev(): Plugin {
   };
 }
 
-const stableViteClient = String.raw`
-const styleSheets = new Map();
-
-export function updateStyle(id, content) {
-  let style = styleSheets.get(id);
-  if (!style) {
-    style = document.createElement('style');
-    style.setAttribute('type', 'text/css');
-    style.setAttribute('data-vite-dev-id', id);
-    document.head.appendChild(style);
-    styleSheets.set(id, style);
-  }
-  style.textContent = content;
-}
-
-export function removeStyle(id) {
-  const style = styleSheets.get(id);
-  if (!style) return;
-  style.remove();
-  styleSheets.delete(id);
-}
-
-export function createHotContext() {
-  const data = {};
-  return {
-    get data() {
-      return data;
-    },
-    accept() {},
-    acceptExports() {},
-    dispose() {},
-    prune() {},
-    decline() {},
-    invalidate() {},
-    on() {},
-    off() {},
-    send() {},
-  };
-}
-
-export function injectQuery(url, queryToInject) {
-  if (url[0] !== '.' && url[0] !== '/') return url;
-  const pathname = url.replace(/[?#].*$/, '');
-  const parsed = new URL(url, 'http://vite.dev');
-  return pathname + '?' + queryToInject +
-    (parsed.search ? '&' + parsed.search.slice(1) : '') + parsed.hash;
-}
-
-export class ErrorOverlay extends HTMLElement {}
-`;
-
-// Vite injects @vite/client even when server.hmr=false. The real client opens a
-// dev WebSocket, renders the full-screen error overlay, and deliberately calls
-// location.reload() after a lost server connection becomes reachable again.
-// Mobile/desktop app switching can briefly suspend networking, which makes that
-// behavior hostile to long-running CAD/AI sessions. Stable mode intercepts the
-// client module itself and serves only the small compatibility surface required
-// by Vite's dev CSS/module transforms, with no WebSocket, overlay, or reload.
-function stableViteClientPlugin(): Plugin {
-  return {
-    name: 'stable-vite-client',
-    apply: 'serve',
-    configureServer(server) {
-      if (!disableHmr) return;
-
-      server.middlewares.use((req, res, next) => {
-        if (!req.url) return next();
-        const pathname = new URL(req.url, 'http://localhost').pathname;
-        if (!pathname.endsWith('/@vite/client')) return next();
-
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-store');
-        res.end(stableViteClient);
-      });
-    },
-  };
-}
-
 export default defineConfig({
   base: appBase,
   plugins: [
-    stableViteClientPlugin(),
     serveOpenScadWasmInDev(),
     supabaseProxyPlugin(),
     tanstackStart({
