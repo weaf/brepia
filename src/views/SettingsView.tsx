@@ -12,6 +12,7 @@ import { AvatarUpdateDialog } from '@/components/auth/AvatarUpdateDialog';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
+import { DebugSettingsSection } from '@/components/settings/DebugSettingsSection';
 import { InstanceIdentitySettingsSection } from '@/components/settings/InstanceIdentitySettingsSection';
 import { InstanceLegalLinks } from '@/components/settings/InstanceLegalLinks';
 import { ActivityIndicator } from '@/components/brand';
@@ -300,6 +301,7 @@ export default function SettingsView() {
           <AdminSettingsSection />
           <InstanceIdentitySettingsSection />
           <AiSettingsSection />
+          <DebugSettingsSection />
           <InstanceLegalLinks />
         </div>
       </div>
