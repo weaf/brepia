@@ -1,6 +1,7 @@
 import { User } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoClaims } from '@/lib/supabase';
+import type { Database } from '@shared/database';
 import { Profile } from '@shared/types';
 import {
   isAvatarPresetId,
@@ -9,6 +10,10 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export type ProfileWithAvatarPreset = Profile & {
+  avatar_preset?: AvatarPresetId | null;
+};
+
+type ProfileUpdate = Database['public']['Tables']['profiles']['Update'] & {
   avatar_preset?: AvatarPresetId | null;
 };
 
@@ -121,14 +126,13 @@ export function useSetAvatarPreset() {
     mutationFn: async (avatarPreset: AvatarPresetId | null) => {
       if (!user) throw new Error('User not authenticated');
 
+      const update: ProfileUpdate = {
+        avatar_preset: avatarPreset,
+        updated_at: new Date().toISOString(),
+      };
       const { data, error } = await supabase
         .from('profiles')
-        // Generated DB types are regenerated after the migration is applied.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({
-          avatar_preset: avatarPreset,
-          updated_at: new Date().toISOString(),
-        } as any)
+        .update(update)
         .eq('user_id', user.id)
         .select()
         .single();
@@ -180,15 +184,14 @@ export function useUploadAvatar() {
 
       // Update profile with avatar path. Uploading a photo intentionally clears
       // any selected preset so the newly uploaded image becomes visible.
+      const update: ProfileUpdate = {
+        avatar_path: filePath,
+        avatar_preset: null,
+        updated_at: new Date().toISOString(),
+      };
       const { data, error: updateError } = await supabase
         .from('profiles')
-        // Generated DB types are regenerated after the migration is applied.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({
-          avatar_path: filePath,
-          avatar_preset: null,
-          updated_at: new Date().toISOString(),
-        } as any)
+        .update(update)
         .eq('user_id', user.id)
         .select()
         .single();
