@@ -61,6 +61,7 @@ export const Route = createFileRoute('/api/settings/instanceIdentity')({
             typeof body.communityLabel === 'string'
               ? body.communityLabel
               : undefined;
+          const discordUrl = nullableString(body, 'discordUrl');
           const termsUrl = nullableString(body, 'termsUrl');
           const privacyUrl = nullableString(body, 'privacyUrl');
 
@@ -69,6 +70,7 @@ export const Route = createFileRoute('/api/settings/instanceIdentity')({
             contactEmail === undefined ||
             communityUrl === undefined ||
             communityLabel === undefined ||
+            discordUrl === undefined ||
             termsUrl === undefined ||
             privacyUrl === undefined ||
             typeof body.showCommunityLink !== 'boolean' ||
@@ -83,6 +85,7 @@ export const Route = createFileRoute('/api/settings/instanceIdentity')({
             communityUrl,
             communityLabel,
             showCommunityLink: body.showCommunityLink,
+            discordUrl,
             legalPagesEnabled: body.legalPagesEnabled,
             termsUrl,
             privacyUrl,
