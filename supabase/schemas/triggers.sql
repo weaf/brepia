@@ -56,6 +56,11 @@ CREATE OR REPLACE TRIGGER update_registration_settings_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+CREATE OR REPLACE TRIGGER update_instance_settings_updated_at
+    BEFORE UPDATE ON "public"."instance_settings"
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Create the public profile + pCAD account row as soon as Supabase inserts the
 -- auth user. First-admin authorization is deliberately not decided here:
 -- GoTrue applies custom app_metadata later in the same admin-create transaction.
