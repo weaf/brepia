@@ -8,7 +8,7 @@ import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScadImportButton } from '@/components/ScadImportButton';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Model } from '@shared/types';
 import { conversationTitleFromText } from '@shared/conversationTitle';
 import { MessageItem } from '../types/misc.ts';
@@ -31,6 +31,13 @@ import { persistUserMessage } from '@/services/messageService';
 import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
 import { pickHomePromptMessage } from '@/lib/homePromptCopy';
 import { getRegistrationSettings } from '@/services/accountAdminService';
+import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
+import { getAiPreferences } from '@/services/aiPreferencesService';
+import {
+  FALLBACK_PARAMETRIC_MODEL_ID,
+  resolveCreativeDefaultModel,
+  resolveParametricDefaultModel,
+} from '@/lib/defaultModels';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -59,6 +66,16 @@ export function PromptView() {
     staleTime: 30_000,
     enabled: !user && !ssoProvider,
   });
+  const {
+    models: parametricModels,
+    isLoading: isParametricCatalogLoading,
+  } = useParametricModelCatalog();
+  const { data: aiPreferences } = useQuery({
+    queryKey: ['ai-preferences', 'defaults'],
+    queryFn: getAiPreferences,
+    staleTime: 0,
+    enabled: Boolean(user),
+  });
 
   const signupAvailable =
     Boolean(ssoProvider) ||
@@ -79,7 +96,44 @@ export function PromptView() {
 
   const [type, setType] = useState<'parametric' | 'creative'>('parametric');
 
-  const [model, setModel] = useState<Model>('openai/gpt-5.6-sol');
+  const parametricDefaultModel = useMemo(
+    () =>
+      resolveParametricDefaultModel(
+        aiPreferences?.defaultParametricModelId,
+        parametricModels,
+      ),
+    [aiPreferences?.defaultParametricModelId, parametricModels],
+  );
+  const creativeDefaultModel = useMemo(
+    () => resolveCreativeDefaultModel(aiPreferences?.defaultCreativeModelId),
+    [aiPreferences?.defaultCreativeModelId],
+  );
+
+  const [model, setModel] = useState<Model>(FALLBACK_PARAMETRIC_MODEL_ID);
+  const initialDefaultAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !user ||
+      !aiPreferences ||
+      isParametricCatalogLoading ||
+      initialDefaultAppliedRef.current
+    ) {
+      return;
+    }
+
+    setModel(
+      type === 'creative' ? creativeDefaultModel : parametricDefaultModel,
+    );
+    initialDefaultAppliedRef.current = true;
+  }, [
+    aiPreferences,
+    creativeDefaultModel,
+    isParametricCatalogLoading,
+    parametricDefaultModel,
+    type,
+    user,
+  ]);
 
   // I09B — draft execution mode: owned locally so the transport selector
   // is interactive. Persisted into new conversation settings (I09C done).
@@ -90,12 +144,9 @@ export function PromptView() {
 
   const handleTypeChange = (newType: 'parametric' | 'creative') => {
     setType(newType);
-    // Reset model to the default for the new type
-    if (newType === 'creative') {
-      setModel('quality');
-    } else {
-      setModel('openai/gpt-5.6-sol');
-    }
+    setModel(
+      newType === 'creative' ? creativeDefaultModel : parametricDefaultModel,
+    );
   };
 
   const [isLoaded, setIsLoaded] = useState(false);
