@@ -9,6 +9,7 @@ import { defineConfig, type Plugin } from 'vite';
 
 const appBase = '/cadam';
 const normalizedAppBase = appBase.replace(/\/$/, '');
+const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
 
 function supabaseProxyPlugin(): Plugin {
   return {
@@ -181,6 +182,7 @@ export default defineConfig({
     port: 3000,
     open: false,
     host: true,
+    hmr: disableHmr ? false : undefined,
     allowedHosts: ['alpine.0r4cl3.se', 'db.noty.se'],
   },
   optimizeDeps: {
