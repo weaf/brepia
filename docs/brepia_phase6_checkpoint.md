@@ -30,11 +30,11 @@ npx supabase gen types typescript --local > shared/database.ts
 
 Follow `.cursor/rules/database-workflow.mdc`: declarative schema first, generated migration second, never `db push`/`db pull`, and never hand-edit `shared/database.ts`.
 
-## Phase 6 technical gate — GREEN
+## Phase 6 original technical gate — GREEN
 
-The technical Phase 6 gate has been completed in the real local development environment.
+The original Phase 6 technical gate was completed in the real local development environment before the runtime-review follow-ups were added.
 
-Verified:
+Verified at that checkpoint:
 
 - Instance identity migration applied.
 - Discord social-link migration applied.
@@ -46,21 +46,34 @@ Verified:
 - `npm run lint` PASS.
 - `npm run build` PASS.
 
-If any of the runtime-review follow-ups below change application code, rerun the normal gate before calling the branch ready to merge.
+The default-model implementation below changes application code and adds a new migration, so the local migration/type-generation/test gate must be rerun before the branch is called ready to merge.
 
 ## Runtime visual review — desktop/mobile PASS
 
-The application has now been manually reviewed in the real running environment on both desktop and mobile.
+The application has been manually reviewed in the real running environment on both desktop and mobile.
 
 User result:
 
 - desktop presentation looks good;
 - mobile presentation looks good;
-- no Brepia branding/layout issue was identified that requires visual rework.
+- no Brepia branding/layout issue was identified that requires broad visual rework.
 
 This satisfies the requirement that the main desktop/mobile visual gate be checked in the real application rather than by static code review alone.
 
 Do not infer from this general pass that every specialized generated-media state was exercised unless explicitly recorded separately. GIF watermark, GLB transition, reduced-motion and uncommon error states can still be checked opportunistically when those workflows are exercised.
+
+### Collapsed account-menu visual follow-up — implemented
+
+The orange circular fallback avatar in the collapsed desktop sidebar was identified as visually out of place.
+
+Implementation:
+
+- the expanded sidebar still shows the real user avatar/name;
+- the collapsed account trigger now uses the existing Lucide `Menu` icon;
+- the trigger still opens the same account dropdown with Settings and Sign out;
+- the mobile sidebar already used the same `Menu` icon language.
+
+This is intentionally a small presentation correction, not a redesign of the account menu.
 
 ## Discord social link
 
@@ -121,44 +134,61 @@ Where not already exercised during the manual runtime pass, verify:
 
 ## Runtime-review follow-ups discovered 2026-08-27
 
-Three product-level follow-ups were discovered during the desktop/mobile review. They should be handled before the intentionally deferred `CADAM Original` decision.
+Three product-level follow-ups were discovered during the desktop/mobile review. They must be handled before the intentionally deferred `CADAM Original` decision.
 
-### 1. Per-user default model selection
+### 1. Per-user default model selection — IMPLEMENTED, LOCAL VALIDATION PENDING
 
-Current behavior is hardcoded on the new-conversation surface:
+The implementation now stores two independent per-user defaults:
 
-- Parametric starts with `openai/gpt-5.6-sol`;
-- Creative starts with `quality`;
-- switching between Parametric and Creative resets to those hardcoded values.
+- `default_parametric_model_id`;
+- `default_creative_model_id`.
 
-Desired behavior:
+Implementation details:
 
-- user can choose default model(s) in Settings;
-- a new conversation starts with the configured default already selected;
-- switching mode selects that mode's configured default;
-- existing conversations keep their pinned model and are not rewritten.
+- declarative schema updated in `supabase/schemas/user_ai_preferences.sql`;
+- migration added: `supabase/migrations/20260827095000_default_model_preferences.sql`;
+- `AiPreferencesDto` exposes:
+  - `defaultParametricModelId`;
+  - `defaultCreativeModelId`;
+- existing `/api/ai-settings/preferences` GET/PUT carries both fields;
+- Parametric defaults are validated against the current selectable catalog;
+- Creative defaults are validated against the Creative mesh model IDs;
+- new `Default models` settings UI is shown under AI Settings -> Models;
+- users can independently choose Parametric and Creative defaults;
+- `Automatic fallback` resets either preference to `null`;
+- a saved Parametric model that becomes hidden/unavailable is not blindly used; the new-conversation resolver selects the normal fallback or the first currently selectable model;
+- new conversations use the configured default;
+- switching Parametric/Creative on the new-conversation surface switches to that mode's configured default;
+- existing conversations remain pinned to their existing model settings and are not rewritten;
+- focused resolver tests were added in `tests/defaultModels.test.ts`.
 
-Recommended implementation:
+Important: `shared/database.ts` has **not** been hand-edited. Apply the new migration to the NOx-managed local Supabase instance and regenerate types from the real database before running the final gate.
 
-- extend `user_ai_preferences` rather than using localStorage;
-- store two mode-specific preferences because Parametric and Creative use different model catalogs:
-  - `default_parametric_model_id`;
-  - `default_creative_model_id`;
-- expose both through the existing AI preferences API/DTO;
-- add selectors or a clear “Set as default” affordance in Settings;
-- validate Parametric defaults against the effective visible/available parametric catalog;
-- validate Creative defaults against the Creative mesh model catalog;
-- on startup/mode switch, use the saved default only when it is currently usable;
-- if a configured default is hidden or temporarily unavailable, fall back safely to a usable model instead of blocking conversation creation;
-- do not mutate old conversations when the user's default changes.
+Required local verification:
 
-The preference should be deployment/user data, not an administrator-wide Instance identity setting.
+```bash
+npx supabase migration up
+npx supabase gen types typescript --local > shared/database.ts
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
 
-### 2. Remove the standalone `Generate prompt` feature
+Functional checks after the migration:
+
+1. Settings -> AI Settings -> Models shows both default selectors.
+2. Choose a non-fallback Parametric model, return to New Creation, verify it is preselected.
+3. Choose a Creative default, switch to Creative, verify it is preselected.
+4. Change the defaults again and verify an existing conversation keeps its pinned model.
+5. Hide the saved Parametric default and verify New Creation falls back to another selectable Parametric model rather than blocking.
+6. Reset either selector to `Automatic fallback` and verify the corresponding mode uses its normal fallback behavior.
+
+### 2. Remove the standalone `Generate prompt` feature — NEXT IMPLEMENTATION
 
 Runtime observation: `Generate prompt` does not work in the current installation and is not considered necessary for the Brepia workflow.
 
-Recommendation: remove it rather than repairing it.
+Recommendation remains to remove it rather than repair it.
 
 Reasoning:
 
@@ -166,7 +196,7 @@ Reasoning:
 - users can already write/edit the request directly;
 - the selected conversation agent/model can interpret or refine normal user intent as part of the actual modelling turn;
 - the current `/api/prompt-generator` implementation bypasses the configurable model/provider architecture and hardcodes `claude-haiku-4-5-20251001` through the Anthropic helper;
-- that hidden Anthropic dependency is especially inappropriate for local/self-hosted installations where the user may intentionally have no Anthropic credential configured.
+- that hidden Anthropic dependency is inappropriate for local/self-hosted installations where the user may intentionally have no Anthropic credential configured.
 
 Removal scope:
 
@@ -211,26 +241,20 @@ A future enhancement could add a text-to-image pre-step in front of image-only l
 
 ## Recommended next sequence
 
-1. Finish any remaining functional Instance identity checks that were not already covered by the manual review.
-2. Implement per-user default Parametric/Creative model preferences.
-3. Remove the standalone `Generate prompt` feature and regenerate the route tree.
-4. Verify TRELLIS text-only Creative generation end-to-end and improve capability messaging/guardrails.
-5. Rerun:
-
-```bash
-npm test
-npm run typecheck
-npm run lint
-npm run build
-```
-
-6. Perform npm-generated cleanup of dead `lottie-react` and package metadata if still desired, with the lockfile regenerated by npm.
-7. Resolve the built-in prompt-profile `CADAM Original` display/lineage strategy **last**.
-8. Repository/deployment renames remain a separate later decision.
+1. Apply `20260827095000_default_model_preferences.sql` in the NOx-managed local database.
+2. Regenerate `shared/database.ts` from the local database.
+3. Run the focused/full validation gate and exercise the default-model functional checks above.
+4. If green, remove the standalone `Generate prompt` feature and regenerate the route tree.
+5. Verify TRELLIS text-only Creative generation end-to-end and improve capability messaging/guardrails.
+6. Rerun the full validation gate after those code changes.
+7. Perform npm-generated cleanup of dead `lottie-react` and package metadata if still desired, with the lockfile regenerated by npm.
+8. Resolve the built-in prompt-profile `CADAM Original` display/lineage strategy **last**.
+9. Repository/deployment renames remain a separate later decision.
 
 ## Important constraints
 
 - The main desktop/mobile visual gate has been manually reviewed and passed; do not reopen broad redesign without a concrete finding.
 - Do not rename compatibility-sensitive `PCAD_*`, `/cadam`, storage/database/local-state identifiers or external integration IDs merely for presentation cleanup.
+- Do not hand-edit `shared/database.ts`; regenerate it from the NOx-managed local Supabase instance after applying the new migration.
 - Do not confuse removal of the standalone prompt-generator button with removal/change of the prompt-profile architecture.
 - Do not touch `CADAM Original` until the Brepia regression, remaining functional follow-ups and resulting validation gate are complete.
