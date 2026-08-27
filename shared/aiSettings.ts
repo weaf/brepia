@@ -55,6 +55,8 @@ export const AiPreferencesSchema = z.object({
   userId: z.string().uuid(),
   hiddenModelIds: z.array(z.string().min(1).max(256)).default([]),
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]).default(null),
+  defaultParametricModelId: nullableModelIdSchema.default(null),
+  defaultCreativeModelId: nullableModelIdSchema.default(null),
   visionFastModelId: nullableModelIdSchema.default(null),
   visionDeepModelId: nullableModelIdSchema.default(null),
   createdAt: z.string().datetime().optional(),
@@ -270,6 +272,11 @@ export const SetDefaultPromptSchema = z.object({
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]),
 });
 
+export const UpdateDefaultModelsSchema = z.object({
+  defaultParametricModelId: nullableModelIdSchema.optional(),
+  defaultCreativeModelId: nullableModelIdSchema.optional(),
+});
+
 export const UpdateVisionModelsSchema = z.object({
   visionFastModelId: nullableModelIdSchema,
   visionDeepModelId: nullableModelIdSchema,
@@ -300,4 +307,5 @@ export type UpdateProviderModelInput = z.infer<
 >;
 export type UpdateHiddenModelsInput = z.infer<typeof UpdateHiddenModelsSchema>;
 export type SetDefaultPromptInput = z.infer<typeof SetDefaultPromptSchema>;
+export type UpdateDefaultModelsInput = z.infer<typeof UpdateDefaultModelsSchema>;
 export type UpdateVisionModelsInput = z.infer<typeof UpdateVisionModelsSchema>;
