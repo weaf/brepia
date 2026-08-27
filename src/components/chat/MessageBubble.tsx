@@ -363,7 +363,7 @@ function UserBubble({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 rounded-lg p-0 hover:bg-adam-neutral-800"
+                        className="h-6 w-6 rounded-sm p-0 hover:bg-adam-neutral-800"
                         onClick={handleCopy}
                       >
                         {copied ? (
