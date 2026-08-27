@@ -108,6 +108,27 @@ function serveOpenScadWasmInDev(): Plugin {
   };
 }
 
+// Vite's development HTML always injects @vite/client. That client deliberately
+// reloads the page after a lost dev-server connection becomes reachable again.
+// Mobile/desktop app switching can briefly suspend DNS/networking, so the
+// reconnect reload is hostile to long-running CAD/AI sessions. Stable mode
+// removes the dev client entirely rather than merely disabling the HMR server.
+function disableViteDevClient(): Plugin {
+  return {
+    name: 'disable-vite-dev-client',
+    apply: 'serve',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        if (!disableHmr) return html;
+        const viteClientScript = `<script type="module" src="${normalizedAppBase}/@vite/client"></script>`;
+        return html.replace(viteClientScript, '');
+      },
+    },
+  };
+}
+
 export default defineConfig({
   base: appBase,
   plugins: [
@@ -132,6 +153,7 @@ export default defineConfig({
       org: 'adamcad',
       project: 'adamcad',
     }),
+    disableViteDevClient(),
   ],
   resolve: {
     alias: {
