@@ -147,8 +147,8 @@ OPENCODE_CHILD_PID=""
 OPENCODE_LOG=""
 
 # Ask the OS for an available loopback port. The tiny race between releasing
-# the probe socket and starting OpenCode is handled by checking whether the
-# child survives and becomes healthy; an explicit port instead fails loudly.
+# the probe socket and starting a child process is handled by checking whether
+# that child survives and becomes healthy; an explicit port instead fails loudly.
 choose_free_port() {
   node --input-type=module <<'NODE'
 import net from 'node:net';
@@ -259,6 +259,12 @@ else
   echo "=== Building production-like stable runtime ==="
   export VITE_ENABLE_LIFECYCLE_DEBUG="${VITE_ENABLE_LIFECYCLE_DEBUG:-1}"
   npm run build
+
+  if [ -z "${PCAD_STABLE_APP_PORT:-}" ]; then
+    PCAD_STABLE_APP_PORT="$(choose_free_port)"
+    export PCAD_STABLE_APP_PORT
+  fi
+  echo "Stable runtime internal app port: ${PCAD_STABLE_APP_PORT}"
 
   echo "=== Starting stable runtime (production preview, no Vite dev client) ==="
   node scripts/stable-runtime-proxy.mjs
