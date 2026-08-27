@@ -130,10 +130,11 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
 
     return (
       <Button
-        variant="adam_dark_collapsed_avatar"
-        className="group ml-[1px] h-[46px] w-[46px] px-0 py-6"
+        variant="adam_dark_collapsed"
+        aria-label="Open account menu"
+        className="ml-[1px] h-[46px] w-[46px] p-0"
       >
-        <UserAvatar className="h-[30px] w-[30px] transition-all duration-200 ease-in-out group-hover:h-[26px] group-hover:w-[26px] group-hover:ring-2 group-hover:ring-adam-neutral-500" />
+        <Menu className="h-[22px] w-[22px] text-adam-neutral-300" />
       </Button>
     );
   };
