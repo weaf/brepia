@@ -166,6 +166,10 @@ function waitForPort(host, port, timeoutMs = 20000) {
   });
 }
 
+let server;
+let shuttingDown = false;
+let nitroExited = false;
+
 const nitro = spawn(process.execPath, ['.output/server/index.mjs'], {
   stdio: 'inherit',
   env: {
@@ -175,9 +179,6 @@ const nitro = spawn(process.execPath, ['.output/server/index.mjs'], {
   },
 });
 
-let shuttingDown = false;
-let nitroExited = false;
-
 nitro.once('exit', (code, signal) => {
   nitroExited = true;
   if (shuttingDown) return;
@@ -185,7 +186,11 @@ nitro.once('exit', (code, signal) => {
     `[stable-runtime] Nitro exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'none'})`,
   );
   process.exitCode = code || 1;
-  server.close(() => process.exit(process.exitCode || 1));
+  if (server) {
+    server.close(() => process.exit(process.exitCode || 1));
+  } else {
+    process.exit(process.exitCode || 1);
+  }
 });
 
 try {
@@ -196,7 +201,7 @@ try {
   process.exit(1);
 }
 
-const server = http.createServer(handleHttp);
+server = http.createServer(handleHttp);
 server.on('upgrade', handleUpgrade);
 server.on('clientError', (error, socket) => {
   if (error.code !== 'ECONNRESET') {
@@ -222,7 +227,11 @@ function shutdown(signal) {
   console.log(`[stable-runtime] ${signal}, shutting down`);
 
   if (!nitroExited) nitro.kill('SIGTERM');
-  server.close(() => process.exit(0));
+  if (server) {
+    server.close(() => process.exit(0));
+  } else {
+    process.exit(0);
+  }
 
   setTimeout(() => {
     if (!nitroExited) nitro.kill('SIGKILL');
