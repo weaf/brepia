@@ -7,7 +7,11 @@ const assetUrl = (path: string) =>
 
 export const Route = createRootRoute({
   head: () => ({
-    meta: [{ title: 'Brepia' }],
+    meta: [
+      { title: 'Brepia' },
+      { name: 'theme-color', content: '#151515' },
+      { name: 'description', content: 'AI-assisted parametric 3D design' },
+    ],
     links: [{ rel: 'stylesheet', href: appCss }],
   }),
   component: RootComponent,
@@ -40,6 +44,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           type="image/svg+xml"
           href={assetUrl('brepia-mark.svg')}
         />
+        <link rel="manifest" href={assetUrl('site.webmanifest')} />
         <HeadContent />
       </head>
       <body>
