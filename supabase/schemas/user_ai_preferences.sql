@@ -1,17 +1,24 @@
 -- P01B: user_ai_preferences final declarative schema
 -- Base: 20260816135107_user_ai_preferences.sql
 -- Vision preferences: 20260820210000_vision_model_preferences.sql
+-- Default model preferences: 20260827095000_default_model_preferences.sql
 
 CREATE TABLE IF NOT EXISTS "public"."user_ai_preferences" (
     "user_id" "uuid" NOT NULL,
     "hidden_model_ids" "text"[] NOT NULL DEFAULT '{}',
     "default_prompt_profile_id" "uuid" NULL,
+    "default_parametric_model_id" "text" NULL,
+    "default_creative_model_id" "text" NULL,
     "vision_fast_model_id" "text" NULL,
     "vision_deep_model_id" "text" NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
+COMMENT ON COLUMN "public"."user_ai_preferences"."default_parametric_model_id" IS
+    'Model catalog id preselected for new Parametric conversations.';
+COMMENT ON COLUMN "public"."user_ai_preferences"."default_creative_model_id" IS
+    'Creative mesh backend id preselected for new Creative conversations.';
 COMMENT ON COLUMN "public"."user_ai_preferences"."vision_fast_model_id" IS
     'Model catalog id used for normal pCAD vision fallback analysis.';
 COMMENT ON COLUMN "public"."user_ai_preferences"."vision_deep_model_id" IS
