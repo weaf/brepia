@@ -10,6 +10,8 @@ import type { AiPreferencesDto } from '@shared/aiSettings';
 const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   hiddenModelIds: [],
   defaultPromptProfileId: null,
+  defaultParametricModelId: null,
+  defaultCreativeModelId: null,
   visionFastModelId: null,
   visionDeepModelId: null,
 };
@@ -18,6 +20,8 @@ type PreferenceRow = {
   user_id: string;
   hidden_model_ids: string[];
   default_prompt_profile_id: string | null;
+  default_parametric_model_id?: string | null;
+  default_creative_model_id?: string | null;
   vision_fast_model_id?: string | null;
   vision_deep_model_id?: string | null;
   created_at: string;
@@ -29,6 +33,8 @@ function toDto(row: PreferenceRow): AiPreferencesDto {
     userId: row.user_id,
     hiddenModelIds: row.hidden_model_ids,
     defaultPromptProfileId: row.default_prompt_profile_id,
+    defaultParametricModelId: row.default_parametric_model_id ?? null,
+    defaultCreativeModelId: row.default_creative_model_id ?? null,
     visionFastModelId: row.vision_fast_model_id ?? null,
     visionDeepModelId: row.vision_deep_model_id ?? null,
     createdAt: row.created_at,
