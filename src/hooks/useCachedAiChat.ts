@@ -96,6 +96,28 @@ function messageSnapshot(messages: readonly AppUIMessage[]): string {
   );
 }
 
+/**
+ * Creative mesh generation is a server-executed tool. A backend/runtime error
+ * is not something another automatic LLM turn can repair, so resubmitting the
+ * completed error tool result only encourages the model to call create_mesh
+ * again and can produce an unbounded retry loop. Parametric compile errors are
+ * intentionally excluded because that workflow uses auto-continuation for
+ * model-authored OpenSCAD self-correction.
+ */
+export function lastAssistantHasTerminalMeshError(
+  messages: readonly AppUIMessage[],
+): boolean {
+  const message = messages.at(-1);
+  if (!message || message.role !== 'assistant') return false;
+
+  return message.parts.some(
+    (part) =>
+      part.type === 'tool-create_mesh' &&
+      'state' in part &&
+      part.state === 'output-error',
+  );
+}
+
 function canReplaceWithPersistedMessages(
   liveMessages: readonly AppUIMessage[],
   persistedMessages: readonly AppUIMessage[],
@@ -258,8 +280,10 @@ export function useCachedAiChat({
       onToolCall: (ctx) => {
         scheduleToolCallAfterMessageCommit({ id, refs, handled, ctx });
       },
-      sendAutomaticallyWhen: (ctx) =>
-        refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
+      sendAutomaticallyWhen: (ctx) => {
+        if (lastAssistantHasTerminalMeshError(ctx.messages)) return false;
+        return refs.sendAutomaticallyWhen.current?.(ctx) ?? false;
+      },
     });
 
     chatCache.set(id, created);
@@ -375,8 +399,10 @@ export function createAndCacheAiChat(
     onToolCall: (ctx) => {
       scheduleToolCallAfterMessageCommit({ id, refs, handled, ctx });
     },
-    sendAutomaticallyWhen: (ctx) =>
-      refs.sendAutomaticallyWhen.current?.(ctx) ?? false,
+    sendAutomaticallyWhen: (ctx) => {
+      if (lastAssistantHasTerminalMeshError(ctx.messages)) return false;
+      return refs.sendAutomaticallyWhen.current?.(ctx) ?? false;
+    },
   });
 
   chatCache.set(id, chat);
