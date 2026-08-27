@@ -37,4 +37,17 @@ describe('in-flight request deduper', () => {
     assert.equal(await third.promise, 7);
     assert.equal(calls, 2);
   });
+
+  it('cleans up after a task throws synchronously', async () => {
+    const deduper = createInFlightRequestDeduper<number>();
+    const first = deduper.getOrRun('sync-error', () => {
+      throw new Error('boom');
+    });
+
+    await assert.rejects(first.promise, /boom/);
+
+    const second = deduper.getOrRun('sync-error', async () => 7);
+    assert.equal(second.reused, false);
+    assert.equal(await second.promise, 7);
+  });
 });
