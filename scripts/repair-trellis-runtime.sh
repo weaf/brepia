@@ -35,31 +35,36 @@ say "Installing xformers for torch 2.4 / cu121"
 
 say "Installing NVIDIA Kaolin for torch 2.4 / cu121"
 "$PYTHON" -m pip install --no-deps \
-  kaolin \
+  kaolin==0.18.0 \
   -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
 
-# TRELLIS postprocessing_utils.to_glb imports pygltflib at export time. The
-# upstream setup does not reliably pull it into an existing environment, so a
-# text/image inference can succeed all the way through generation and then fail
-# while producing the GLB. Keep it explicit in the managed runtime repair.
-say "Installing TRELLIS GLB export dependency"
-"$PYTHON" -m pip install pygltflib
+# Kaolin 0.18.0 declares warp-lang, usd-core and pygltflib as normal runtime
+# dependencies. We install Kaolin itself with --no-deps to protect the pinned
+# torch/CUDA environment, so add the runtime pieces TRELLIS actually reaches
+# explicitly. The Jupyter visualization requirements are intentionally omitted.
+say "Installing Kaolin/TRELLIS runtime dependencies"
+"$PYTHON" -m pip install \
+  warp-lang==1.8.1 \
+  usd-core \
+  pygltflib
 
-say "Verifying TRELLIS runtime packages"
-"$PYTHON" - <<'PY'
+say "Verifying TRELLIS runtime imports"
+PYTHONWARNINGS=ignore "$PYTHON" - <<'PY'
 import importlib.metadata as metadata
 import torch
 import xformers
+import warp
 import pygltflib
+from pxr import Usd
+import kaolin
 
 assert torch.version.cuda == "12.1", torch.version.cuda
 print("torch:", torch.__version__)
 print("torch CUDA:", torch.version.cuda)
 print("xformers:", metadata.version("xformers"))
-# Do not import the top-level kaolin package here. Its optional physics/Jupyter
-# modules pull in warp/ipyevents even though pCAD's TRELLIS inference/export
-# path does not use them. Package metadata is sufficient for this repair check.
 print("kaolin:", metadata.version("kaolin"))
+print("warp-lang:", metadata.version("warp-lang"))
+print("usd-core:", metadata.version("usd-core"))
 print("pygltflib:", metadata.version("pygltflib"))
 print("TRELLIS runtime dependencies: OK")
 PY
