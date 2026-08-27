@@ -7,6 +7,7 @@ export type InstanceIdentity = {
   communityUrl: string | null;
   communityLabel: string;
   showCommunityLink: boolean;
+  discordUrl: string | null;
   legalPagesEnabled: boolean;
   termsUrl: string | null;
   privacyUrl: string | null;
@@ -21,6 +22,7 @@ type InstanceSettingsRow = {
   community_url: string | null;
   community_label: string;
   show_community_link: boolean;
+  discord_url: string | null;
   legal_pages_enabled: boolean;
   terms_url: string | null;
   privacy_url: string | null;
@@ -51,6 +53,7 @@ export const DEFAULT_INSTANCE_IDENTITY: InstanceIdentity = {
   communityUrl: null,
   communityLabel: 'Community',
   showCommunityLink: false,
+  discordUrl: null,
   legalPagesEnabled: false,
   termsUrl: null,
   privacyUrl: null,
@@ -67,8 +70,8 @@ export class InstanceIdentityError extends Error {
 }
 
 function instanceSettingsClient() {
-  // shared/database.ts is generated from Supabase. Keep this feature isolated
-  // from generated-file churn until the next real schema type regeneration.
+  // Keep the feature isolated from generated database-type churn while schema
+  // changes are being regenerated and verified in the real local environment.
   return getServiceRoleSupabaseClient() as unknown as SupabaseJsClient<InstanceSettingsDatabase>;
 }
 
@@ -117,6 +120,7 @@ export function normalizeInstanceIdentity(
   const communityLabel =
     nullableText(input.communityLabel, 40, 'invalid_community_label') ??
     'Community';
+  const discordUrl = nullableUrl(input.discordUrl, 'invalid_discord_url');
   const termsUrl = nullableUrl(input.termsUrl, 'invalid_terms_url');
   const privacyUrl = nullableUrl(input.privacyUrl, 'invalid_privacy_url');
 
@@ -126,6 +130,7 @@ export function normalizeInstanceIdentity(
     communityUrl,
     communityLabel,
     showCommunityLink: Boolean(input.showCommunityLink && communityUrl),
+    discordUrl,
     legalPagesEnabled: Boolean(input.legalPagesEnabled),
     termsUrl,
     privacyUrl,
@@ -139,6 +144,7 @@ function fromRow(row: InstanceSettingsRow): InstanceIdentity {
     communityUrl: row.community_url,
     communityLabel: row.community_label || 'Community',
     showCommunityLink: Boolean(row.show_community_link && row.community_url),
+    discordUrl: row.discord_url,
     legalPagesEnabled: row.legal_pages_enabled,
     termsUrl: row.terms_url,
     privacyUrl: row.privacy_url,
@@ -150,7 +156,7 @@ export async function getInstanceIdentity(): Promise<InstanceIdentity> {
   const { data, error } = await supabase
     .from('instance_settings')
     .select(
-      'id,operator_name,contact_email,community_url,community_label,show_community_link,legal_pages_enabled,terms_url,privacy_url,created_at,updated_at',
+      'id,operator_name,contact_email,community_url,community_label,show_community_link,discord_url,legal_pages_enabled,terms_url,privacy_url,created_at,updated_at',
     )
     .eq('id', 1)
     .maybeSingle();
@@ -174,6 +180,7 @@ export async function updateInstanceIdentity(
       community_url: normalized.communityUrl,
       community_label: normalized.communityLabel,
       show_community_link: normalized.showCommunityLink,
+      discord_url: normalized.discordUrl,
       legal_pages_enabled: normalized.legalPagesEnabled,
       terms_url: normalized.termsUrl,
       privacy_url: normalized.privacyUrl,
