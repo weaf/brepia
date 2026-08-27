@@ -88,6 +88,13 @@ export function isTerminalAssistantMessage(
  * streaming Chat only when it demonstrably completes the SAME live turn.
  * This prevents an older completed assistant from cancelling a genuinely new
  * request that has not reached the DB yet.
+ *
+ * Parametric auto-continuation can append more than one assistant row for a
+ * single user turn: the browser may still be streaming the build/tool assistant
+ * while persistence already contains a later assistant with the final answer.
+ * Treat that later terminal assistant as covering the live turn only when the
+ * live assistant is present in the persisted branch and no newer user message
+ * appears after it.
  */
 export function persistedCompletionCoversLiveTurn(
   liveMessages: readonly ChatCompletionMessageLike[],
@@ -98,7 +105,18 @@ export function persistedCompletionCoversLiveTurn(
   if (!liveLast || !isTerminalAssistantMessage(persistedLast)) return false;
 
   if (liveLast.role === 'assistant') {
-    return liveLast.id === persistedLast?.id;
+    if (liveLast.id === persistedLast?.id) return true;
+
+    const assistantIndex = persistedMessages.findIndex(
+      (message) => message.id === liveLast.id,
+    );
+    if (assistantIndex < 0 || assistantIndex >= persistedMessages.length - 1) {
+      return false;
+    }
+
+    return !persistedMessages
+      .slice(assistantIndex + 1)
+      .some((message) => message.role === 'user');
   }
 
   if (liveLast.role === 'user') {
