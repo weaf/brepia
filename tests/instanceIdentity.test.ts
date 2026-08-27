@@ -13,6 +13,7 @@ describe('instance identity', () => {
       communityUrl: null,
       communityLabel: 'Community',
       showCommunityLink: false,
+      discordUrl: null,
       legalPagesEnabled: false,
       termsUrl: null,
       privacyUrl: null,
@@ -27,6 +28,7 @@ describe('instance identity', () => {
         communityUrl: 'https://community.example.com',
         communityLabel: '  Forum  ',
         showCommunityLink: true,
+        discordUrl: 'https://discord.gg/example',
         legalPagesEnabled: true,
         termsUrl: 'https://example.com/terms',
         privacyUrl: 'https://example.com/privacy',
@@ -37,6 +39,7 @@ describe('instance identity', () => {
       communityUrl: 'https://community.example.com/',
       communityLabel: 'Forum',
       showCommunityLink: true,
+      discordUrl: 'https://discord.gg/example',
       legalPagesEnabled: true,
       termsUrl: 'https://example.com/terms',
       privacyUrl: 'https://example.com/privacy',
@@ -58,6 +61,15 @@ describe('instance identity', () => {
         ...DEFAULT_INSTANCE_IDENTITY,
         communityUrl: 'javascript:alert(1)',
         showCommunityLink: true,
+      }),
+    ).toThrow(InstanceIdentityError);
+  });
+
+  it('rejects non-http Discord URLs', () => {
+    expect(() =>
+      normalizeInstanceIdentity({
+        ...DEFAULT_INSTANCE_IDENTITY,
+        discordUrl: 'javascript:alert(1)',
       }),
     ).toThrow(InstanceIdentityError);
   });
