@@ -263,6 +263,7 @@ export type Database = {
           community_url: string | null;
           contact_email: string | null;
           created_at: string;
+          discord_url: string | null;
           id: number;
           legal_pages_enabled: boolean;
           operator_name: string | null;
@@ -276,6 +277,7 @@ export type Database = {
           community_url?: string | null;
           contact_email?: string | null;
           created_at?: string;
+          discord_url?: string | null;
           id?: number;
           legal_pages_enabled?: boolean;
           operator_name?: string | null;
@@ -289,6 +291,7 @@ export type Database = {
           community_url?: string | null;
           contact_email?: string | null;
           created_at?: string;
+          discord_url?: string | null;
           id?: number;
           legal_pages_enabled?: boolean;
           operator_name?: string | null;
