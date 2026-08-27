@@ -57,7 +57,10 @@ export const Route = createFileRoute('/api/settings/instanceIdentity')({
           const operatorName = nullableString(body, 'operatorName');
           const contactEmail = nullableString(body, 'contactEmail');
           const communityUrl = nullableString(body, 'communityUrl');
-          const communityLabel = nullableString(body, 'communityLabel');
+          const communityLabel =
+            typeof body.communityLabel === 'string'
+              ? body.communityLabel
+              : undefined;
           const termsUrl = nullableString(body, 'termsUrl');
           const privacyUrl = nullableString(body, 'privacyUrl');
 
