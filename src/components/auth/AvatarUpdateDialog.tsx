@@ -7,18 +7,31 @@ import {
 } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { Camera } from 'lucide-react';
+import { Camera, Check, ImagePlus, RotateCcw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { useUploadAvatar } from '@/services/profileService';
+import {
+  useProfile,
+  useSetAvatarPreset,
+  useUploadAvatar,
+} from '@/services/profileService';
 import { useToast } from '@/hooks/use-toast';
 import { UserAvatar } from '@/components/chat/UserAvatar';
+import { AvatarPresetIcon } from '@/components/avatar/AvatarPresetIcon';
 import { ActivityIndicator } from '@/components/brand';
+import { AVATAR_PRESETS, type AvatarPresetId } from '@shared/avatarPresets';
+import { cn } from '@/lib/utils';
+import { ssoManaged } from '@/lib/supabase';
 
-export const AvatarUpdateDialog = () => {
+export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
+  const { data: profile } = useProfile();
   const { mutate: uploadAvatar, isPending: isUploadingAvatar } =
     useUploadAvatar();
+  const { mutate: setAvatarPreset, isPending: isSettingPreset } =
+    useSetAvatarPreset();
   const { toast } = useToast();
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
   // Avatar crop state
   const [isCropOpen, setIsCropOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
@@ -32,12 +45,16 @@ export const AvatarUpdateDialog = () => {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isBusy = isUploadingAvatar || isSettingPreset;
+  const selectedPreset = profile?.avatar_preset ?? null;
+
   const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const objectUrl = URL.createObjectURL(file);
     setSelectedImageUrl(objectUrl);
+    setIsPickerOpen(false);
     setIsCropOpen(true);
   };
 
@@ -98,6 +115,9 @@ export const AvatarUpdateDialog = () => {
     if (selectedImageUrl) URL.revokeObjectURL(selectedImageUrl);
     setSelectedImageUrl(null);
     setIsCropOpen(false);
+    setZoom(1);
+    setCrop({ x: 0, y: 0 });
+    setCroppedAreaPixels(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -115,7 +135,7 @@ export const AvatarUpdateDialog = () => {
         onSuccess: () => {
           toast({
             title: 'Profile picture updated',
-            description: 'Your profile picture has been successfully updated.',
+            description: 'Your uploaded picture is now your active avatar.',
           });
         },
         onError: (error) => {
@@ -129,12 +149,7 @@ export const AvatarUpdateDialog = () => {
             variant: 'destructive',
           });
         },
-        onSettled: () => {
-          if (selectedImageUrl) URL.revokeObjectURL(selectedImageUrl);
-          setSelectedImageUrl(null);
-          setIsCropOpen(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        },
+        onSettled: handleCropCancel,
       });
     } catch (e) {
       console.error(e);
@@ -146,9 +161,33 @@ export const AvatarUpdateDialog = () => {
     }
   };
 
+  const choosePreset = (preset: AvatarPresetId | null) => {
+    setAvatarPreset(preset, {
+      onSuccess: () => {
+        setIsPickerOpen(false);
+        toast({
+          title: preset ? 'Avatar icon selected' : 'Profile photo selected',
+          description: preset
+            ? 'Your selected Brepia avatar icon is now active.'
+            : ssoManaged
+              ? 'Brepia will use your account or social profile photo.'
+              : 'Brepia will use your uploaded photo or initials.',
+        });
+      },
+      onError: (error) => {
+        toast({
+          title: 'Avatar update failed',
+          description:
+            error instanceof Error ? error.message : 'Failed to update avatar.',
+          variant: 'destructive',
+        });
+      },
+    });
+  };
+
   return (
     <>
-      <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <div className="relative" onClick={(event) => event.stopPropagation()}>
         <input
           ref={fileInputRef}
           type="file"
@@ -156,24 +195,133 @@ export const AvatarUpdateDialog = () => {
           onChange={handleAvatarUpload}
           className="hidden"
         />
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="group relative cursor-pointer"
+        <button
+          type="button"
+          aria-label="Change avatar"
+          onClick={() => setIsPickerOpen(true)}
+          className="group relative block rounded-full"
         >
-          <UserAvatar className="h-9 w-9 border border-adam-neutral-700 bg-adam-neutral-950 p-0" />
-          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
-            {isUploadingAvatar ? (
+          <UserAvatar
+            className={cn(
+              'h-9 w-9 border border-adam-neutral-700 bg-adam-neutral-950 p-0',
+              className,
+            )}
+          />
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+            {isBusy ? (
               <ActivityIndicator
-                label="Uploading profile picture"
+                label="Updating avatar"
                 size="sm"
                 dotClassName="bg-white"
               />
             ) : (
               <Camera className="h-4 w-4 text-white" />
             )}
-          </div>
-        </div>
+          </span>
+        </button>
       </div>
+
+      <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+        <DialogContent className="border-adam-neutral-800 sm:max-w-[520px] sm:rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-adam-neutral-50">
+              Choose avatar
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div>
+              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-adam-neutral-300">
+                Profile photo
+              </div>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => choosePreset(null)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
+                  selectedPreset === null
+                    ? 'border-adam-blue bg-adam-blue/10'
+                    : 'border-adam-neutral-800 hover:bg-adam-neutral-800/50',
+                )}
+              >
+                <UserAvatar className="h-10 w-10" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-adam-neutral-50">
+                    {ssoManaged ? 'Account / social photo' : 'Uploaded photo / initials'}
+                  </div>
+                  <div className="mt-0.5 text-xs text-adam-neutral-400">
+                    {ssoManaged
+                      ? 'Use the picture supplied by your sign-in provider.'
+                      : profile?.avatar_path
+                        ? 'Use your currently uploaded profile picture.'
+                        : 'Use the standard initials avatar.'}
+                  </div>
+                </div>
+                {selectedPreset === null ? (
+                  <Check className="h-5 w-5 text-adam-blue" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 text-adam-neutral-400" />
+                )}
+              </button>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-adam-neutral-300">
+                Brepia icons
+              </div>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+                {AVATAR_PRESETS.map((preset) => {
+                  const selected = selectedPreset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      title={preset.label}
+                      aria-label={`Use ${preset.label} avatar`}
+                      aria-pressed={selected}
+                      disabled={isBusy}
+                      onClick={() => choosePreset(preset.id)}
+                      className={cn(
+                        'relative flex aspect-square items-center justify-center rounded-full border transition-all',
+                        selected
+                          ? 'border-adam-blue bg-adam-blue/15 text-adam-blue ring-2 ring-adam-blue/30'
+                          : 'border-adam-neutral-700 bg-adam-neutral-800 text-adam-neutral-100 hover:border-adam-neutral-500 hover:bg-adam-neutral-700',
+                      )}
+                    >
+                      <AvatarPresetIcon
+                        preset={preset.id}
+                        className="h-5 w-5 stroke-[1.8]"
+                      />
+                      {selected ? (
+                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-adam-blue text-white">
+                          <Check className="h-3 w-3" />
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {!ssoManaged ? (
+              <div className="border-t border-adam-neutral-800 pt-4">
+                <Button
+                  type="button"
+                  variant="dark"
+                  disabled={isBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full rounded-full"
+                >
+                  <ImagePlus className="mr-2 h-4 w-4" />
+                  Upload custom picture
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={isCropOpen}
         onOpenChange={(open) =>
@@ -208,7 +356,7 @@ export const AvatarUpdateDialog = () => {
               min={1}
               max={3}
               step={0.1}
-              onValueChange={(v) => setZoom(v[0] ?? 1)}
+              onValueChange={(value) => setZoom(value[0] ?? 1)}
             />
           </div>
           <DialogFooter className="grid w-full grid-cols-2 gap-5 sm:space-x-0">
