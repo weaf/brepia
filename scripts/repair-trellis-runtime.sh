@@ -38,17 +38,26 @@ say "Installing NVIDIA Kaolin for torch 2.4 / cu121"
   kaolin \
   -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
 
+# TRELLIS postprocessing_utils.to_glb imports pygltflib at export time. The
+# upstream setup does not reliably pull it into an existing environment, so a
+# text/image inference can succeed all the way through generation and then fail
+# while producing the GLB. Keep it explicit in the managed runtime repair.
+say "Installing TRELLIS GLB export dependency"
+"$PYTHON" -m pip install pygltflib
+
 say "Verifying TRELLIS runtime imports"
 "$PYTHON" - <<'PY'
 import importlib.metadata as metadata
 import torch
 import xformers
 import kaolin
+import pygltflib
 
 assert torch.version.cuda == "12.1", torch.version.cuda
 print("torch:", torch.__version__)
 print("torch CUDA:", torch.version.cuda)
 print("xformers:", metadata.version("xformers"))
 print("kaolin:", metadata.version("kaolin"))
+print("pygltflib:", metadata.version("pygltflib"))
 print("TRELLIS runtime dependencies: OK")
 PY
