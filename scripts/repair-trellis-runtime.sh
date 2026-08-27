@@ -4,11 +4,16 @@ set -euo pipefail
 PCAD_MESH_HOME="${PCAD_MESH_HOME:-$HOME/.local/share/pcad-mesh}"
 TRELLIS_ENV="$PCAD_MESH_HOME/envs/trellis"
 PYTHON="$TRELLIS_ENV/bin/python"
+TRELLIS_CC="$TRELLIS_ENV/bin/x86_64-conda-linux-gnu-cc"
+TRELLIS_CXX="$TRELLIS_ENV/bin/x86_64-conda-linux-gnu-c++"
 
 say() { printf '\n\033[1;34m[pCAD TRELLIS]\033[0m %s\n' "$*"; }
 die() { printf '\n\033[1;31m[pCAD TRELLIS error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ -x "$PYTHON" ]] || die "TRELLIS environment not found at $TRELLIS_ENV"
+[[ -x "$TRELLIS_ENV/bin/nvcc" ]] || die "TRELLIS CUDA compiler not found at $TRELLIS_ENV/bin/nvcc"
+[[ -x "$TRELLIS_CC" ]] || die "TRELLIS C compiler not found at $TRELLIS_CC"
+[[ -x "$TRELLIS_CXX" ]] || die "TRELLIS C++ compiler not found at $TRELLIS_CXX"
 
 read -r TORCH_VERSION TORCH_CUDA < <(
   "$PYTHON" - <<'PY'
@@ -48,6 +53,21 @@ say "Installing Kaolin/TRELLIS runtime dependencies"
   usd-core \
   pygltflib
 
+# TRELLIS post-processing imports nvdiffrast while converting generated output
+# to GLB. Upstream installs it from source. Build it explicitly in the managed
+# CUDA 12.1/GCC 12 environment so a partially successful upstream setup cannot
+# leave text/image inference working but GLB export broken at runtime.
+say "Installing nvdiffrast for TRELLIS GLB post-processing"
+"$PYTHON" -m pip install -U setuptools wheel ninja
+CUDA_HOME="$TRELLIS_ENV" \
+CUDACXX="$TRELLIS_ENV/bin/nvcc" \
+CUDAHOSTCXX="$TRELLIS_CXX" \
+CC="$TRELLIS_CC" \
+CXX="$TRELLIS_CXX" \
+PATH="$TRELLIS_ENV/bin:$PATH" \
+  "$PYTHON" -m pip install --no-build-isolation \
+  git+https://github.com/NVlabs/nvdiffrast.git
+
 say "Verifying TRELLIS runtime imports"
 PYTHONWARNINGS=ignore "$PYTHON" - <<'PY'
 import importlib.metadata as metadata
@@ -55,10 +75,12 @@ import torch
 import xformers
 import warp
 import pygltflib
+import nvdiffrast.torch as dr
 from pxr import Usd
 import kaolin
 
 assert torch.version.cuda == "12.1", torch.version.cuda
+assert dr is not None
 print("torch:", torch.__version__)
 print("torch CUDA:", torch.version.cuda)
 print("xformers:", metadata.version("xformers"))
@@ -66,5 +88,6 @@ print("kaolin:", metadata.version("kaolin"))
 print("warp-lang:", metadata.version("warp-lang"))
 print("usd-core:", metadata.version("usd-core"))
 print("pygltflib:", metadata.version("pygltflib"))
+print("nvdiffrast: import OK")
 print("TRELLIS runtime dependencies: OK")
 PY
