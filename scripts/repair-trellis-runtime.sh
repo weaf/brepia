@@ -11,6 +11,7 @@ TRELLIS_CXX="$TRELLIS_ENV/bin/x86_64-conda-linux-gnu-c++"
 RUNTIME_WORKER="$PCAD_MESH_HOME/runtime/worker.py"
 ENV_FILE="$PCAD_MESH_HOME/config/env"
 TRELLIS_TRANSFORMERS_VERSION="4.57.6"
+MIP_SPLATTING_COMMIT="dda02ab5ecf45d6edb8c540d9bb65c7e451345a9"
 
 say() { printf '\n\033[1;34m[pCAD TRELLIS]\033[0m %s\n' "$*"; }
 die() { printf '\n\033[1;31m[pCAD TRELLIS error]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -96,6 +97,22 @@ PATH="$TRELLIS_ENV/bin:$PATH" \
   "$PYTHON" -m pip install --no-build-isolation \
   git+https://github.com/NVlabs/nvdiffrast.git
 
+# TRELLIS imports diff_gaussian_rasterization when its Gaussian renderer is
+# loaded. Upstream's --mipgaussian branch builds this extension from the
+# mip-splatting source tree, but setup.sh is not fail-fast: a failed CUDA build
+# can be followed by later successful steps and the overall bootstrap still
+# exits successfully. Build the exact source explicitly and pin the repository
+# revision so a repair remains reproducible.
+say "Installing diff_gaussian_rasterization for TRELLIS Gaussian rendering"
+CUDA_HOME="$TRELLIS_ENV" \
+CUDACXX="$TRELLIS_ENV/bin/nvcc" \
+CUDAHOSTCXX="$TRELLIS_CXX" \
+CC="$TRELLIS_CC" \
+CXX="$TRELLIS_CXX" \
+PATH="$TRELLIS_ENV/bin:$PATH" \
+  "$PYTHON" -m pip install --no-deps --no-build-isolation \
+  "git+https://github.com/autonomousvision/mip-splatting.git@$MIP_SPLATTING_COMMIT#subdirectory=submodules/diff-gaussian-rasterization"
+
 # Keep the installed runtime worker in sync with the repository copy. The
 # gateway executes this detached copy rather than scripts/local-mesh/worker.py.
 if [[ -d "$(dirname "$RUNTIME_WORKER")" ]]; then
@@ -111,6 +128,7 @@ import xformers
 import warp
 import pygltflib
 import nvdiffrast.torch as dr
+import diff_gaussian_rasterization
 from pxr import Usd
 import kaolin
 from transformers import CLIPTextModel
@@ -120,6 +138,7 @@ assert torch.version.cuda == "12.1", torch.version.cuda
 assert is_torch_available(), "Transformers does not see PyTorch"
 assert CLIPTextModel is not None
 assert dr is not None
+assert diff_gaussian_rasterization is not None
 print("torch:", torch.__version__)
 print("torch CUDA:", torch.version.cuda)
 print("transformers:", transformers.__version__)
@@ -130,5 +149,6 @@ print("warp-lang:", metadata.version("warp-lang"))
 print("usd-core:", metadata.version("usd-core"))
 print("pygltflib:", metadata.version("pygltflib"))
 print("nvdiffrast: import OK")
+print("diff_gaussian_rasterization: import OK")
 print("TRELLIS runtime dependencies: OK")
 PY
