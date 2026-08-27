@@ -5,8 +5,12 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "user_id" "uuid" NOT NULL,
     "full_name" "text" NOT NULL,
     "notifications_enabled" boolean DEFAULT false NOT NULL,
-    "avatar_path" "text" DEFAULT NULL
+    "avatar_path" "text" DEFAULT NULL,
+    "avatar_preset" "text" DEFAULT NULL
 );
+
+COMMENT ON COLUMN "public"."profiles"."avatar_preset" IS
+    'Optional Brepia avatar preset id. When set it takes precedence over provider/uploaded profile images in the application UI.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_pkey ON "public"."profiles" USING btree (id);
 
