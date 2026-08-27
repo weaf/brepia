@@ -1,10 +1,6 @@
-# CADAM Benchmarks
+# Brepia Benchmarks
 
-A showcase of what [CADAM](https://adam.new/cadam) builds from a single plain-language
-description. Each benchmark starts from the prompt shown and comes out as fully parametric
-OpenSCAD — adjustable dimensions and colours, ready to export as `.STL`, `.SCAD`, or `.DXF`.
-The `.scad` source for each model is included here, so they double as a record of how well
-CADAM turns plain language into real, printable, fully parametric CAD.
+A showcase of parametric models produced through Brepia from a single plain-language description. Each benchmark starts from the prompt shown and comes out as fully parametric OpenSCAD — adjustable dimensions and colours, ready for the application's CAD/export workflow. The `.scad` source for each model is included here, so the benchmark set also records how well the generation path turns plain language into printable, editable parametric geometry.
 
 ### Complex machines & assemblies
 
@@ -31,9 +27,7 @@ CADAM turns plain language into real, printable, fully parametric CAD.
 
 ## Regenerating the GIFs
 
-`render.sh` turns any `.scad` into a clean orbiting GIF (and, with `--sheet`, a
-4-view contact sheet). It mirrors CADAM's own preview: BOSL2 on the library path,
-`color()` parts preserved, a clean orbit around the vertical axis.
+`render.sh` turns any `.scad` into a clean orbiting GIF (and, with `--sheet`, a 4-view contact sheet). It mirrors Brepia's OpenSCAD preview conventions: BOSL2 on the library path, `color()` parts preserved, and a clean orbit around the vertical axis.
 
 Prerequisites (macOS shown; any OpenSCAD ≥ 2021.01 with BOSL2 support works):
 
@@ -55,5 +49,4 @@ Then:
 ./render.sh --sheet 09-herringbone-planetary-gearbox.scad   # -> *.sheet.png (inspection)
 ```
 
-Knobs (env vars): `FRAMES` (default 36), `SIZE` (520), `ELEV` (62°), `FPS` (24),
-`COLORSCHEME` (Tomorrow), `OPENSCADPATH` (`/tmp/oscad-libs`), `OPENSCAD_BIN`.
+Knobs (env vars): `FRAMES` (default 36), `SIZE` (520), `ELEV` (62°), `FPS` (24), `COLORSCHEME` (Tomorrow), `OPENSCADPATH` (`/tmp/oscad-libs`), `OPENSCAD_BIN`.
