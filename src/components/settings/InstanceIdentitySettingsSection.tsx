@@ -176,7 +176,7 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
         </div>
         <Field
           label="Discord URL"
-          description="Optional Discord server or invite URL. This replaces the old hardcoded Discord invite."
+          description="Optional Discord server or invite URL."
         >
           <Input
             type="url"
