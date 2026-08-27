@@ -10,10 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { ActivityIndicator } from '@/components/brand';
 import {
   ChevronDown,
   EyeOff,
-  Loader2,
   RotateCcw,
   Search,
   SquareCheck,
@@ -692,7 +692,7 @@ export function AiModelsSettings() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-500" />
+          <ActivityIndicator label="Loading model settings" />
         </div>
       ) : groups.length === 0 ? (
         <div className="rounded-lg border border-dashed border-adam-neutral-800 py-8 text-center text-sm text-adam-neutral-300">
