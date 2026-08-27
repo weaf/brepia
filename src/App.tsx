@@ -7,6 +7,8 @@ import { MeshFilesProvider } from '@/contexts/MeshFilesContext';
 import { PostHogProvider } from '@/contexts/PostHogProvider';
 import { ErrorView } from '@/views/ErrorView';
 import { isSupabaseConfigMissing } from '@/lib/supabase';
+import { startLifecycleDiagnostics } from '@/lib/lifecycleDiagnostics';
+import { useEffect } from 'react';
 
 const queryClient = new QueryClient();
 
@@ -22,6 +24,11 @@ function MissingConfig() {
 }
 
 function App({ error }: { error?: unknown }) {
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    return startLifecycleDiagnostics();
+  }, []);
+
   if (isSupabaseConfigMissing) {
     return <MissingConfig />;
   }
