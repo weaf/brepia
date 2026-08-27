@@ -1,4 +1,4 @@
--- Brepia instance identity and optional public contact/community/legal links.
+-- Brepia instance identity and optional public contact/community/social/legal links.
 -- The table is server-managed. Public clients read a whitelisted DTO from the
 -- application API instead of receiving direct database access.
 
@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS "public"."instance_settings" (
     "community_url" text DEFAULT NULL,
     "community_label" text DEFAULT 'Community'::text NOT NULL,
     "show_community_link" boolean DEFAULT false NOT NULL,
+    "discord_url" text DEFAULT NULL,
     "legal_pages_enabled" boolean DEFAULT false NOT NULL,
     "terms_url" text DEFAULT NULL,
     "privacy_url" text DEFAULT NULL,
