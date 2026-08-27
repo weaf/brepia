@@ -2,6 +2,7 @@ import { MeshImagePreview } from '@/components/viewer/MeshImagePreview';
 import { StreamingCodeBlock } from '@/components/chat/StreamingCodeBlock';
 import { ChatReasoning } from '@/components/chat/ChatReasoning';
 import { UserAvatar } from '@/components/chat/UserAvatar';
+import { BrepiaMark } from '@/components/brand';
 import { ProviderLogo } from '@/components/ProviderLogo';
 import {
   DropdownMenu,
@@ -11,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { CREATIVE_MODELS } from '@/lib/utils';
 import { useSelectableParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
-import { Avatar, AvatarImage } from '@/components/ui/avatar';
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -495,13 +496,8 @@ function AssistantBubble({
   return (
     <div className="flex min-w-0 max-w-full justify-start overflow-hidden">
       <div className="mr-2 mt-1 shrink-0">
-        <Avatar className="h-9 w-9 border border-adam-neutral-700 bg-adam-neutral-950">
-          <div style={{ padding: '0.6rem 0.5rem 0.5rem 0.55rem' }}>
-            <AvatarImage
-              src={`${import.meta.env.BASE_URL}/adam-logo.svg`}
-              alt="Adam"
-            />
-          </div>
+        <Avatar className="flex h-9 w-9 items-center justify-center border border-adam-neutral-700 bg-adam-neutral-950 p-1.5">
+          <BrepiaMark title="Brepia" className="h-full w-full" />
         </Avatar>
       </div>
       <div className="flex min-w-0 max-w-[calc(100%-3rem)] flex-1 flex-col gap-2">
@@ -529,7 +525,7 @@ function AssistantBubble({
 
           if (part.type === 'reasoning') {
             if (!part.text) return null;
-            // CADAM-tailored wrapper around ai-elements' Reasoning primitive
+            // Brepia-tailored wrapper around ai-elements' Reasoning primitive
             // — adds a capped-height scroll body with auto-pin-to-bottom
             // while the model is still streaming reasoning tokens.
             return (
