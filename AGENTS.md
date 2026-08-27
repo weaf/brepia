@@ -28,6 +28,7 @@ When working on `feature/brepia-remake`, read these before making broad changes:
 - `docs/brepia_remake_plan.md`
 - `docs/brepia_remake_status.md`
 - `docs/brepia_branding.md`
+- `docs/brepia_phase6_checkpoint.md` — current execution checkpoint and next steps
 
 The `CADAM Original` built-in prompt-profile decision is intentionally deferred until the end of the Brepia regression and visual-review gate. Do not rename or migrate that profile early.
 
