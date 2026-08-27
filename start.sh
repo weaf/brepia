@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Raise file descriptor limit (Vite watcher needs it)
+# Raise file descriptor limit (Vite watcher needs it in explicit HMR mode)
 ulimit -n 65536 2>/dev/null || true
 
 # Warn if inotify instance limit is too low (Vite watch + podman containers)
@@ -32,12 +32,16 @@ fi
 curl -sf -m 2 "${LLAMA_HEALTH}" > /dev/null 2>&1 && echo "llama-swap: up" || echo "llama-swap: WARNING - not healthy"
 
 # podman <5 cannot parse {{.Label "key"}} in ps --format templates, which the
-# Supabase CLI relies on to find project containers. Prepend a shim that
-# rewrites it to {{index .Labels "key"}} for the supabase step only.
+# Supabase CLI relies on to find project containers. Prepend a shim for local
+# status/credential reads. NOx owns the Supabase container lifecycle.
 export PATH="${SCRIPT_DIR}/scripts/podman:${PATH}"
 
-echo "=== Starting Supabase ==="
-npx supabase start
+echo "=== Checking Supabase (NOx-managed) ==="
+if ! npx supabase status > /dev/null 2>&1; then
+  echo "Supabase: ERROR - local stack is not running. Start it via NOx, then rerun ./start.sh."
+  exit 1
+fi
+echo "Supabase: up (NOx-managed)"
 
 # Make the running local Supabase credentials available to the TanStack/Vite
 # server process. Recent Supabase CLI pretty output shows publishable/secret
@@ -78,7 +82,7 @@ fi
 
 # Read one server-only value from Vite development env files without broadly
 # exporting every .env entry into the shell. This keeps the earlier narrow env
-# behavior while allowing persistent provider credentials to work in local dev.
+# behavior while allowing persistent provider credentials to work locally.
 vite_env_value() {
   node --input-type=module - "$1" <<'NODE'
 import { loadEnv } from 'vite';
@@ -249,9 +253,13 @@ else
 fi
 
 if [ "${PCAD_ENABLE_HMR:-0}" = "1" ]; then
-  echo "=== Starting dev server (HMR enabled) ==="
+  echo "=== Starting development server (Vite/HMR enabled) ==="
   npm run dev
 else
-  echo "=== Starting dev server (stable session mode) ==="
-  npm run dev:stable
+  echo "=== Building production-like stable runtime ==="
+  export VITE_ENABLE_LIFECYCLE_DEBUG="${VITE_ENABLE_LIFECYCLE_DEBUG:-1}"
+  npm run build
+
+  echo "=== Starting stable runtime (Nitro, no Vite client) ==="
+  node scripts/stable-runtime-proxy.mjs
 fi
