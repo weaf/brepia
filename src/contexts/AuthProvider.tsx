@@ -7,9 +7,8 @@ import posthog from 'posthog-js';
 import { AuthContext } from './AuthContext';
 
 // Build an absolute, same-frontend redirect URL for Supabase auth emails / OAuth.
-// Uses the current origin + Vite base path so links return to whichever frontend
-// initiated them (adam.new/cadam, app.adamcad.com, Vercel previews) rather than
-// falling back to the project's Site URL (which points at the workspace app).
+// Uses the current origin + Vite base path so links return to whichever Brepia
+// frontend initiated them rather than falling back to a project-level Site URL.
 function getAppRedirectUrl(path: string) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
