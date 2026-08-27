@@ -165,4 +165,62 @@ describe('chat completion reconciliation', () => {
 
     assert.equal(persistedCompletionCoversLiveTurn(live, persisted), true);
   });
+
+  it('reconciles a later terminal assistant in the same auto-continuation chain', () => {
+    const live = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Create' }] },
+      {
+        id: 'assistant-build',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'output-available',
+          },
+        ],
+      },
+    ];
+    const persisted = [
+      ...live,
+      {
+        id: 'assistant-final',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-answer_user',
+            state: 'output-available',
+          },
+        ],
+      },
+    ];
+
+    assert.equal(persistedCompletionCoversLiveTurn(live, persisted), true);
+  });
+
+  it('does not reconcile through a newer user turn after the live assistant', () => {
+    const live = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Create' }] },
+      {
+        id: 'assistant-old',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'output-available',
+          },
+        ],
+      },
+    ];
+    const persisted = [
+      ...live,
+      { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'Change it' }] },
+      {
+        id: 'assistant-new',
+        role: 'assistant',
+        parts: [{ type: 'text', state: 'done', text: 'Changed.' }],
+      },
+    ];
+
+    assert.equal(persistedCompletionCoversLiveTurn(live, persisted), false);
+  });
 });
