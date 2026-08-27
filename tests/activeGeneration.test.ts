@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'vitest';
+import { afterEach, describe, it, vi } from 'vitest';
 import {
   beginActiveGeneration,
   cancelActiveGeneration,
+  scheduleActiveGenerationCancellation,
 } from '../src/server/activeGeneration';
 
 describe('detached active generation lifecycle', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('continues independently until an explicit cancel arrives', () => {
     const request = new AbortController();
     const generation = beginActiveGeneration('user-a', 'conversation-a');
@@ -34,5 +39,27 @@ describe('detached active generation lifecycle', () => {
 
     assert.equal(cancelActiveGeneration('user-a', 'conversation-c'), true);
     assert.equal(newer.signal.aborted, true);
+  });
+
+  it('cancels the matching conversation on the next macrotask', () => {
+    vi.useFakeTimers();
+    const generation = beginActiveGeneration('user-a', 'conversation-d');
+
+    scheduleActiveGenerationCancellation('conversation-d');
+    assert.equal(generation.signal.aborted, false);
+
+    vi.runAllTimers();
+    assert.equal(generation.signal.aborted, true);
+  });
+
+  it('does not cancel another conversation when cancellation is scheduled', () => {
+    vi.useFakeTimers();
+    const generation = beginActiveGeneration('user-a', 'conversation-e');
+
+    scheduleActiveGenerationCancellation('conversation-f');
+    vi.runAllTimers();
+
+    assert.equal(generation.signal.aborted, false);
+    assert.equal(cancelActiveGeneration('user-a', 'conversation-e'), true);
   });
 });
