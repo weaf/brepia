@@ -1,63 +1,155 @@
-#!/usr/bin/env bash
-set -euo pipefail
+import { tool, type InferUITools, type UIMessage } from 'ai';
+import { z } from 'zod';
+import type { MeshFileType, Model } from './types.ts';
 
-PCAD_MESH_HOME="${PCAD_MESH_HOME:-$HOME/.local/share/pcad-mesh}"
-TRELLIS_ENV="$PCAD_MESH_HOME/envs/trellis"
-PYTHON="$TRELLIS_ENV/bin/python"
+export const createMeshInputSchema = z.object({
+  text: z.string().optional(),
+  imageIds: z.array(z.string()).optional(),
+  meshId: z.string().optional(),
+  // Reserved compatibility field. The selected Creative mesh backend belongs
+  // to pCAD's conversation/UI state, not to the LLM. Keeping an optional
+  // never-field preserves the existing execute typing while preventing an
+  // agent from silently overriding Hunyuan/TRELLIS/SF3D/fal selection.
+  model: z.never().optional(),
+  meshTopology: z.enum(['quads', 'polys']).optional(),
+  polygonCount: z.number().optional(),
+});
 
-say() { printf '\n\033[1;34m[pCAD TRELLIS]\033[0m %s\n' "$*"; }
-die() { printf '\n\033[1;31m[pCAD TRELLIS error]\033[0m %s\n' "$*" >&2; exit 1; }
+export const createMeshOutputSchema = z.object({
+  id: z.string(),
+  fileType: z.enum(['glb', 'stl', 'obj', 'fbx']),
+});
 
-[[ -x "$PYTHON" ]] || die "TRELLIS environment not found at $TRELLIS_ENV"
+export const parametricArtifactSchema = z.object({
+  title: z.string().min(1),
+  version: z.string().default('v1'),
+  code: z.string().min(20),
+});
 
-read -r TORCH_VERSION TORCH_CUDA < <(
-  "$PYTHON" - <<'PY'
-import torch
-print(torch.__version__, torch.version.cuda or "")
-PY
-)
+export const parametricCompileOutputSchema = z.object({
+  status: z.literal('success'),
+  message: z.string(),
+  inspection: z
+    .object({
+      views: z.array(
+        z.enum(['ISO', 'FRONT', 'BACK', 'LEFT', 'RIGHT', 'TOP', 'BOTTOM']),
+      ),
+      imageAttached: z.boolean(),
+    })
+    .optional(),
+});
 
-[[ "$TORCH_CUDA" == "12.1" ]] || \
-  die "Expected TRELLIS PyTorch CUDA 12.1, got torch=$TORCH_VERSION cuda=$TORCH_CUDA"
+export const answerUserSchema = z.object({
+  message: z.string().min(1),
+});
 
-say "TRELLIS PyTorch: $TORCH_VERSION (CUDA $TORCH_CUDA)"
+export const chatTools = {
+  build_parametric_model: tool({
+    description:
+      'Create or update the complete OpenSCAD CAD artifact. After the browser compiles it, inspect the returned multi-view preview sheet and call this tool again if the model needs another revision.',
+    inputSchema: parametricArtifactSchema,
+    outputSchema: parametricCompileOutputSchema,
+  }),
+  answer_user: tool({
+    description:
+      'Send the final user-facing chat message. Use this for normal non-CAD replies, and after a CAD build when the multi-view preview satisfies the user request.',
+    inputSchema: answerUserSchema,
+    outputSchema: answerUserSchema,
+  }),
+  create_mesh: tool({
+    description:
+      'Create a 3D mesh from text and/or reference images. The mesh backend is already selected by pCAD and must not be changed. Local Creative backends currently support generation only; follow-up editing of an existing locally generated mesh is deferred, so do not pass meshId for local backends or claim that a local mesh was edited. A tool error means the mesh was not created or changed: never claim success unless this tool returns an output with id and fileType. IMPORTANT: if create_mesh returns a tool error, do not call create_mesh again automatically in the same user turn. Treat the backend failure as terminal for that turn, explain the failure concisely to the user, and wait for the user to retry after the runtime/configuration problem has been fixed.',
+    inputSchema: createMeshInputSchema,
+    outputSchema: createMeshOutputSchema,
+  }),
+};
 
-# TRELLIS upstream setup.sh compares torch.__version__ to bare values such as
-# 2.4.0. Official PyTorch CUDA wheels report 2.4.0+cu121, so the upstream
-# --xformers/--kaolin branches can silently print 'unsupported' and continue
-# successfully without installing either package. Install their matching
-# wheels explicitly and use --no-deps so our pinned torch/cu121 stack cannot be
-# replaced by pip dependency resolution.
-say "Installing xformers for torch 2.4 / cu121"
-"$PYTHON" -m pip install --no-deps \
-  xformers==0.0.27.post2 \
-  --index-url https://download.pytorch.org/whl/cu121
+export type AppTools = InferUITools<typeof chatTools>;
 
-say "Installing NVIDIA Kaolin for torch 2.4 / cu121"
-"$PYTHON" -m pip install --no-deps \
-  kaolin \
-  -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
+export type MeshContextData = {
+  meshId: string;
+  fileType: MeshFileType;
+  filename?: string;
+  boundingBox?: { x: number; y: number; z: number };
+};
 
-# TRELLIS postprocessing_utils.to_glb imports pygltflib at export time. The
-# upstream setup does not reliably pull it into an existing environment, so a
-# text/image inference can succeed all the way through generation and then fail
-# while producing the GLB. Keep it explicit in the managed runtime repair.
-say "Installing TRELLIS GLB export dependency"
-"$PYTHON" -m pip install pygltflib
+export type MeshPreferencesData = {
+  topology: 'quads' | 'polys';
+  polygonCount: number;
+};
 
-say "Verifying TRELLIS runtime imports"
-"$PYTHON" - <<'PY'
-import importlib.metadata as metadata
-import torch
-import xformers
-import kaolin
-import pygltflib
+export type ImportedArtifactOrigin = {
+  type: 'import';
+  source: 'upload' | 'github';
+  filename: string;
+  importedAt: string;
+  canonicalUrl?: string;
+};
 
-assert torch.version.cuda == "12.1", torch.version.cuda
-print("torch:", torch.__version__)
-print("torch CUDA:", torch.version.cuda)
-print("xformers:", metadata.version("xformers"))
-print("kaolin:", metadata.version("kaolin"))
-print("pygltflib:", metadata.version("pygltflib"))
-print("TRELLIS runtime dependencies: OK")
-PY
+/**
+ * Conversation-level signals the server emits as transient stream parts
+ * (`writer.write({ transient: true, type: 'data-X', data })`). Transient
+ * parts never land in `messages.parts` — they're side-channel updates the
+ * client folds straight into the conversation query cache.
+ *
+ *  * `title-update`    fires once when the server generates a title for
+ *    a fresh conversation; client updates `conversations.title`.
+ *  * `suggestions-update` fires after each assistant turn finishes;
+ *    client updates `conversations.settings.suggestions` so the pills
+ *    below the input refresh in lock-step with the response.
+ */
+export type ConversationTitleUpdate = {
+  conversationId: string;
+  title: string;
+};
+export type ConversationSuggestionsUpdate = {
+  conversationId: string;
+  suggestions: string[];
+};
+
+export type AppDataTypes = {
+  'mesh-context': MeshContextData;
+  'mesh-preferences': MeshPreferencesData;
+  'title-update': ConversationTitleUpdate;
+  'suggestions-update': ConversationSuggestionsUpdate;
+};
+
+export const meshContextDataSchema = z.object({
+  meshId: z.string(),
+  fileType: z.enum(['glb', 'stl', 'obj', 'fbx']),
+  filename: z.string().optional(),
+  boundingBox: z
+    .object({ x: z.number(), y: z.number(), z: z.number() })
+    .optional(),
+});
+
+export const meshPreferencesDataSchema = z.object({
+  topology: z.enum(['quads', 'polys']),
+  polygonCount: z.number(),
+});
+
+export type AppUIMessage = UIMessage<
+  {
+    model?: Model;
+    /** Actual LLM/agent used by a Creative turn. `model` remains the mesh
+     * backend ID in Creative mode so retry/UI behavior stays compatible. */
+    agentModel?: Model;
+    /** Provenance for a SCAD artifact that entered pCAD through import.
+     * UI-only metadata: the complete source remains solely in the normal
+     * build_parametric_model tool input and is not duplicated here. */
+    artifactOrigin?: ImportedArtifactOrigin;
+    // The model's original OpenSCAD for this message's artifact, captured
+    // lazily on the FIRST parameter edit (see `persistParameterEdit`).
+    // Parameter edits rewrite the live `tool-build_parametric_model` input
+    // code in place, which would otherwise move the derived `defaultValue`
+    // to the edited value on every reload. Stashing the original here —
+    // message metadata is UI-only and NOT sent to the model by
+    // `convertToModelMessages` — lets the client re-derive stable defaults
+    // (Reset / slider home / auto range) with no second code copy in the
+    // model's context, no migration, and no storage cost on the (common)
+    // never-edited artifacts.
+    originalCode?: string;
+  },
+  AppDataTypes,
+  AppTools
+>;
