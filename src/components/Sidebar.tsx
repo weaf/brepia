@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Menu, Plus, LogOut, Settings, LayoutGrid } from 'lucide-react';
+import {
+  LayoutGrid,
+  LogOut,
+  Menu,
+  MessageCircle,
+  Plus,
+  Settings,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -28,11 +35,12 @@ import {
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useQuery } from '@tanstack/react-query';
 import { ConditionalWrapper } from './ConditionalWrapper';
-import { DiscordIcon, GitHubIcon } from './icons/CompanyIcons';
+import { GitHubIcon } from './icons/CompanyIcons';
 import { cn } from '@/lib/utils';
 import { Conversation, ConversationSettings } from '@shared/types';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { useProfile } from '@/services/profileService';
+import { getInstanceIdentity } from '@/services/instanceIdentityService';
 import { BrepiaBrand, BrepiaMark } from '@/components/brand';
 
 interface SidebarProps {
@@ -47,6 +55,16 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
   const { user, signOut } = useAuth();
   const isMobile = useIsMobile();
   const { data: profile } = useProfile();
+  const { data: instanceIdentity } = useQuery({
+    queryKey: ['instance-identity'],
+    queryFn: getInstanceIdentity,
+    staleTime: 60_000,
+  });
+  const communityUrl =
+    instanceIdentity?.showCommunityLink && instanceIdentity.communityUrl
+      ? instanceIdentity.communityUrl
+      : null;
+  const communityLabel = instanceIdentity?.communityLabel || 'Community';
 
   // Get 10 most recent conversations
   const { data: recentConversations } = useQuery<Conversation[]>({
@@ -320,36 +338,35 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
               </a>
             )}
 
-            {/* Discord Button - Collapsed state */}
-            {!isSidebarOpen && (
+            {communityUrl && !isSidebarOpen && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a
-                    href="https://discord.com/invite/HKdXDqAHCs"
+                    href={communityUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
                     <Button
                       variant="adam_dark_collapsed"
                       className="mb-0 ml-[1px] h-[46px] w-[46px] p-0"
+                      aria-label={communityLabel}
                     >
-                      <DiscordIcon className="h-[22px] w-[22px]" />
+                      <MessageCircle className="h-[22px] w-[22px]" />
                     </Button>
                   </a>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="flex flex-col">
-                  <span className="font-semibold">Discord</span>
+                  <span className="font-semibold">{communityLabel}</span>
                   <span className="text-xs text-muted-foreground">
-                    Join our community
+                    Open community
                   </span>
                 </TooltipContent>
               </Tooltip>
             )}
 
-            {/* Discord Button - Expanded state */}
-            {isSidebarOpen && (
+            {communityUrl && isSidebarOpen && (
               <a
-                href="https://discord.com/invite/HKdXDqAHCs"
+                href={communityUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -357,8 +374,8 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                   variant="adam_dark"
                   className="flex h-10 w-full items-center justify-start gap-2"
                 >
-                  <DiscordIcon className="h-[22px] w-[22px] min-w-[22px]" />
-                  Discord
+                  <MessageCircle className="h-[22px] w-[22px] min-w-[22px]" />
+                  {communityLabel}
                 </Button>
               </a>
             )}
