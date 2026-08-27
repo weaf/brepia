@@ -115,8 +115,8 @@ export default function SettingsView() {
   const isAdmin = access?.role === 'admin';
 
   return (
-    <div className="flex min-h-full w-full items-center justify-center bg-adam-background-1 px-4 py-8 sm:px-6 sm:py-10">
-      <div className="w-full max-w-xl">
+    <div className="flex min-h-full w-full min-w-0 items-center justify-center overflow-x-hidden bg-adam-background-1 px-4 py-8 sm:px-6 sm:py-10">
+      <div className="w-full min-w-0 max-w-xl">
         <header className="mb-6 sm:mb-8">
           <h1 className="text-2xl font-medium tracking-tight text-adam-neutral-50">
             Settings
@@ -126,9 +126,9 @@ export default function SettingsView() {
           </p>
         </header>
 
-        <Tabs defaultValue="account" className="w-full">
-          <div className="sticky top-0 z-20 -mx-2 mb-4 bg-adam-background-1/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
-            <div className="hide-scrollbar overflow-x-auto">
+        <Tabs defaultValue="account" className="w-full min-w-0">
+          <div className="sticky top-0 z-20 -mx-2 mb-4 min-w-0 bg-adam-background-1/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
+            <div className="hide-scrollbar w-full min-w-0 max-w-full overflow-x-auto">
               <TabsList className="h-auto w-max min-w-full justify-start gap-1">
                 <TabsTrigger value="account">Account</TabsTrigger>
                 <TabsTrigger value="ai">AI</TabsTrigger>
@@ -144,7 +144,10 @@ export default function SettingsView() {
             </div>
           </div>
 
-          <TabsContent value="account" className="mt-0 flex flex-col gap-4">
+          <TabsContent
+            value="account"
+            className="mt-0 flex min-w-0 flex-col gap-4"
+          >
             <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
               <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
                 Account
@@ -339,14 +342,14 @@ export default function SettingsView() {
             <InstanceLegalLinks />
           </TabsContent>
 
-          <TabsContent value="ai" className="mt-0">
+          <TabsContent value="ai" className="mt-0 min-w-0">
             <AiSettingsSection />
           </TabsContent>
 
           {isAdmin && (
             <TabsContent
               value="administration"
-              className="mt-0 flex flex-col gap-4"
+              className="mt-0 flex min-w-0 flex-col gap-4"
             >
               <AdminSettingsSection />
               <InstanceIdentitySettingsSection />
@@ -354,7 +357,7 @@ export default function SettingsView() {
           )}
 
           {lifecycleDiagnosticsEnabled && (
-            <TabsContent value="debug" className="mt-0">
+            <TabsContent value="debug" className="mt-0 min-w-0">
               <DebugSettingsSection />
             </TabsContent>
           )}
