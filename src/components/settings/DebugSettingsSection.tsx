@@ -51,9 +51,13 @@ export function DebugSettingsSection() {
 
   const copyLog = async () => {
     const payload = JSON.stringify(entries, null, 2);
-    await navigator.clipboard.writeText(payload);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
   };
 
   const clearLog = () => {
@@ -111,11 +115,11 @@ export function DebugSettingsSection() {
                   />
                   <DiagnosticValue
                     label="Visibility"
-                    value={latest?.visibilityState ?? document.visibilityState}
+                    value={latest?.visibilityState ?? 'unknown'}
                   />
                   <DiagnosticValue
                     label="Online"
-                    value={valueLabel(latest?.online ?? navigator.onLine)}
+                    value={valueLabel(latest?.online)}
                   />
                   <DiagnosticValue
                     label="Document"
