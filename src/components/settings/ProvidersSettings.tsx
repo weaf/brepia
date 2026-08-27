@@ -5,7 +5,6 @@ import {
   Code2,
   Edit2,
   Key,
-  Loader2,
   MessageSquare,
   Network,
   Plug,
@@ -19,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useCallback, useState, type FormEvent } from 'react';
+import { ActivityIndicator } from '@/components/brand';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -749,7 +749,11 @@ function BuiltinProviderForm({
           className="h-8 rounded-full px-3 text-xs"
         >
           {busy ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            <ActivityIndicator
+              className="mr-1"
+              label="Saving provider settings"
+              size="sm"
+            />
           ) : (
             <Check className="mr-1 h-3 w-3" />
           )}
@@ -925,7 +929,11 @@ function ProviderForm({
           className="h-8 rounded-full px-3 text-xs"
         >
           {busy ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            <ActivityIndicator
+              className="mr-1"
+              label={mode === 'create' ? 'Creating provider' : 'Saving provider settings'}
+              size="sm"
+            />
           ) : (
             <Check className="mr-1 h-3 w-3" />
           )}
@@ -957,7 +965,8 @@ function CustomProviderCard({
   if (!detail) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-adam-neutral-700 px-4 py-4 text-xs text-adam-neutral-300">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading {summary.name}…
+        <ActivityIndicator label={`Loading ${summary.name}`} size="sm" /> Loading{' '}
+        {summary.name}…
       </div>
     );
   }
@@ -1039,7 +1048,11 @@ function CustomProviderCard({
           className="h-7 rounded-full px-2 text-xs text-adam-neutral-200"
         >
           {testMutation.isPending ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            <ActivityIndicator
+              className="mr-1"
+              label="Testing provider connection"
+              size="sm"
+            />
           ) : (
             <TestTubes className="mr-1 h-3 w-3" />
           )}
@@ -1285,7 +1298,13 @@ function ProviderModelForm({
             disabled={busy || !displayName.trim() || (mode === 'create' && !modelId.trim())}
             className="h-7 rounded-full px-2 text-xs"
           >
-            {busy && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+            {busy && (
+              <ActivityIndicator
+                className="mr-1"
+                label="Saving provider model"
+                size="sm"
+              />
+            )}
             Save
           </Button>
         </div>
@@ -1371,7 +1390,7 @@ function ProviderModelsPanel({
 
       {modelsQuery.isLoading ? (
         <div className="flex justify-center py-4">
-          <Loader2 className="h-4 w-4 animate-spin text-adam-neutral-300" />
+          <ActivityIndicator label="Loading provider models" size="sm" />
         </div>
       ) : (
         <div className="space-y-2">
@@ -1495,7 +1514,7 @@ export function ProvidersSettings() {
       <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
         <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">Providers</h2>
         <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-300" />
+          <ActivityIndicator label="Loading providers" />
         </div>
       </section>
     );
@@ -1576,7 +1595,8 @@ export function ProvidersSettings() {
         </div>
         {runtimeQuery.isLoading ? (
           <div className="flex items-center gap-2 py-3 text-xs text-adam-neutral-300">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Discovering runtimes…
+            <ActivityIndicator label="Discovering runtimes" size="sm" />
+            Discovering runtimes…
           </div>
         ) : runtimeQuery.isError ? (
           <div className="rounded-md border border-adam-amber/30 bg-adam-amber/5 px-3 py-2 text-xs text-adam-amber">
