@@ -7,7 +7,7 @@ import {
   preflight,
   requireUser,
 } from '@/server/api';
-import { requireAdmin } from '@/server/accountAdmin';
+import { AccountAdminError, requireAdmin } from '@/server/accountAdmin';
 import {
   getInstanceIdentity,
   InstanceIdentityError,
@@ -22,6 +22,9 @@ function nullableString(record: Record<string, unknown>, key: string) {
 
 function instanceError(error: unknown) {
   if (error instanceof InstanceIdentityError) {
+    return json({ error: error.code }, error.status);
+  }
+  if (error instanceof AccountAdminError) {
     return json({ error: error.code }, error.status);
   }
   if (isUnauthorizedError(error)) {
