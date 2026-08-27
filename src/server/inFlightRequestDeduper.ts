@@ -18,14 +18,19 @@ export function createInFlightRequestDeduper<T>() {
       const existing = inFlight.get(key);
       if (existing) return { promise: existing, reused: true };
 
-      // Defer task invocation to a promise turn so the const binding is fully
-      // initialized before the cleanup callback can ever reference it, even
-      // when task throws synchronously.
-      const promise = Promise.resolve()
-        .then(task)
-        .finally(() => {
-          if (inFlight.get(key) === promise) inFlight.delete(key);
-        });
+      // Invoke the task immediately so callers observe that the work has
+      // started before getOrRun returns. Convert a synchronous throw into a
+      // rejected promise so cleanup still follows the same path.
+      const taskPromise = (() => {
+        try {
+          return task();
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      })();
+      const promise = taskPromise.finally(() => {
+        if (inFlight.get(key) === promise) inFlight.delete(key);
+      });
       inFlight.set(key, promise);
       return { promise, reused: false };
     },
