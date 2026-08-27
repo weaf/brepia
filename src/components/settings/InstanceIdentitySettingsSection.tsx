@@ -35,8 +35,8 @@ export function InstanceIdentitySettingsSection() {
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-adam-neutral-200">
           Optional public identity for this Brepia installation. A fresh
-          open-source installation exposes no operator, contact, community or
-          legal-service links until an administrator configures them.
+          open-source installation exposes no operator, contact, community,
+          social or legal-service links until an administrator configures them.
         </p>
       </div>
 
@@ -126,7 +126,7 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
       <div className="space-y-4 border-t border-adam-neutral-800 pt-5">
         <SettingSwitch
           title="Show community link"
-          description="Expose a community/forum link in Brepia navigation. No link is shown by default."
+          description="Expose a generic community/forum link in Brepia navigation. No link is shown by default."
           checked={settings.showCommunityLink}
           onCheckedChange={(showCommunityLink) =>
             setSettings((current) => ({ ...current, showCommunityLink }))
@@ -135,7 +135,7 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Community label"
-            description="For example Community, Discord or Forum."
+            description="For example Community, Forum or Matrix."
           >
             <Input
               value={settings.communityLabel}
@@ -164,6 +164,32 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
             />
           </Field>
         </div>
+      </div>
+
+      <div className="space-y-4 border-t border-adam-neutral-800 pt-5">
+        <div>
+          <div className="text-sm text-adam-neutral-50">Social links</div>
+          <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
+            Optional deployment-owned social links. A configured link appears in
+            Brepia navigation; leaving it blank keeps it hidden.
+          </div>
+        </div>
+        <Field
+          label="Discord URL"
+          description="Optional Discord server or invite URL. This replaces the old hardcoded Discord invite."
+        >
+          <Input
+            type="url"
+            value={settings.discordUrl ?? ''}
+            placeholder="https://discord.gg/..."
+            onChange={(event) =>
+              setSettings((current) => ({
+                ...current,
+                discordUrl: event.target.value || null,
+              }))
+            }
+          />
+        </Field>
       </div>
 
       <div className="space-y-4 border-t border-adam-neutral-800 pt-5">
