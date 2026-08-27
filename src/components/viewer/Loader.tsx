@@ -3,10 +3,12 @@ import { useSharedSpinnerVerb } from '@/hooks/useSharedSpinnerVerb';
 
 type Props = {
   showLoadingText?: boolean;
+  label?: string;
 };
 
-const Loader = ({ showLoadingText = false }: Props) => {
+const Loader = ({ showLoadingText = false, label }: Props) => {
   const sharedVerb = useSharedSpinnerVerb(showLoadingText);
+  const loadingLabel = label ?? `${sharedVerb}…`;
 
   return (
     <div className="flex flex-col items-center justify-center">
@@ -16,7 +18,7 @@ const Loader = ({ showLoadingText = false }: Props) => {
       {showLoadingText && (
         <ActivityIndicator
           className="mt-4 text-base text-adam-text-primary"
-          label={`${sharedVerb}…`}
+          label={loadingLabel}
           showLabel
           size="sm"
         />
