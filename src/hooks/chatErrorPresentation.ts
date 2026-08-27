@@ -12,6 +12,9 @@ export const VISION_CONFIGURATION_MESSAGE =
 export const PROVIDER_AUTH_MESSAGE =
   'The selected model provider is not authenticated. Open Settings → Providers and configure the required credential.';
 
+export const CONNECTION_INTERRUPTED_MESSAGE =
+  'Connection interrupted. Brepia keeps server-side generation running and will refresh this conversation when the saved result becomes available.';
+
 /**
  * Convert raw provider/transport failures into concise product-level messages.
  * Keep unknown errors unchanged so diagnostics are not hidden accidentally.
@@ -37,6 +40,14 @@ export function userFacingChatError(error: unknown): Error {
     )
   ) {
     return new Error(PROVIDER_AUTH_MESSAGE);
+  }
+
+  if (
+    /\bnetwork error\b|failed to fetch|network request failed|load failed|fetch failed|connection (?:was )?(?:lost|closed|reset)/i.test(
+      message,
+    )
+  ) {
+    return new Error(CONNECTION_INTERRUPTED_MESSAGE);
   }
 
   if (error instanceof Error) return error;
