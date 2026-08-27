@@ -2,7 +2,15 @@ import { User } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoClaims } from '@/lib/supabase';
 import { Profile } from '@shared/types';
+import {
+  isAvatarPresetId,
+  type AvatarPresetId,
+} from '@shared/avatarPresets';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+export type ProfileWithAvatarPreset = Profile & {
+  avatar_preset?: AvatarPresetId | null;
+};
 
 // Under SSO the display name is owned by the identity provider (Adam): the live
 // `name` claim from ssoClaims (GoTrue refreshes it every sign-in). NOT the
@@ -35,9 +43,17 @@ export function useProfile() {
     enabled: !!user?.id,
     // Every name read flows through here, so resolve it in one place: under SSO
     // the provider's name wins over the local mirror (which is display-only).
-    select: (profile) => {
+    select: (profile): ProfileWithAvatarPreset => {
       const name = ssoDisplayName(user);
-      return name ? { ...profile, full_name: name } : profile;
+      const rawPreset = (
+        profile as unknown as { avatar_preset?: unknown }
+      ).avatar_preset;
+      const avatarPreset = isAvatarPresetId(rawPreset) ? rawPreset : null;
+      return {
+        ...profile,
+        ...(name ? { full_name: name } : {}),
+        avatar_preset: avatarPreset,
+      };
     },
   });
 }
@@ -97,6 +113,36 @@ export function useUpdateProfile() {
   });
 }
 
+export function useSetAvatarPreset() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (avatarPreset: AvatarPresetId | null) => {
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('profiles')
+        // Generated DB types are regenerated after the migration is applied.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update({
+          avatar_preset: avatarPreset,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data) queryClient.setQueryData(['profile', user?.id], data);
+      queryClient.invalidateQueries({ queryKey: ['profile', user?.id] });
+    },
+  });
+}
+
 export function useUploadAvatar() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -132,13 +178,17 @@ export function useUploadAvatar() {
 
       if (uploadError) throw uploadError;
 
-      // Update profile with avatar path
+      // Update profile with avatar path. Uploading a photo intentionally clears
+      // any selected preset so the newly uploaded image becomes visible.
       const { data, error: updateError } = await supabase
         .from('profiles')
+        // Generated DB types are regenerated after the migration is applied.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({
           avatar_path: filePath,
+          avatar_preset: null,
           updated_at: new Date().toISOString(),
-        })
+        } as any)
         .eq('user_id', user.id)
         .select()
         .single();
@@ -151,6 +201,7 @@ export function useUploadAvatar() {
       if (data) {
         // Update profile cache
         queryClient.setQueryData(['profile', user?.id], data);
+        queryClient.invalidateQueries({ queryKey: ['profile', user?.id] });
         // Invalidate avatar URL cache to fetch new image
         queryClient.invalidateQueries({
           queryKey: ['avatar-url', data.avatar_path],
