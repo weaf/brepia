@@ -10,7 +10,6 @@ import * as Sentry from '@sentry/react';
 import { useProfile, useUpdateProfile } from '@/services/profileService';
 import { AvatarUpdateDialog } from '@/components/auth/AvatarUpdateDialog';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
-import { UserAvatar } from '@/components/chat/UserAvatar';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
 import { InstanceIdentitySettingsSection } from '@/components/settings/InstanceIdentitySettingsSection';
@@ -120,7 +119,7 @@ export default function SettingsView() {
             {ssoManaged ? (
               <div className="flex flex-col gap-5">
                 <div className="flex items-center gap-3">
-                  <UserAvatar className="h-10 w-10" />
+                  <AvatarUpdateDialog className="h-10 w-10" />
                   <div className="min-w-0">
                     <div className="truncate text-sm text-adam-neutral-50">
                       {profile?.full_name || user?.email}
@@ -137,7 +136,8 @@ export default function SettingsView() {
                     </div>
                     <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
                       Update your name, email, password, and account details in
-                      your account.
+                      your account. Brepia avatar icons remain local to this
+                      application.
                     </div>
                   </div>
                   <a
