@@ -11,6 +11,8 @@ import { startLifecycleDiagnostics } from '@/lib/lifecycleDiagnostics';
 import { useEffect } from 'react';
 
 const queryClient = new QueryClient();
+const lifecycleDiagnosticsEnabled =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_LIFECYCLE_DEBUG === '1';
 
 function MissingConfig() {
   return (
@@ -25,7 +27,7 @@ function MissingConfig() {
 
 function App({ error }: { error?: unknown }) {
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!lifecycleDiagnosticsEnabled) return;
     return startLifecycleDiagnostics();
   }, []);
 
