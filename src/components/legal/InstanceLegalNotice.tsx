@@ -55,7 +55,11 @@ export function InstanceLegalNotice({ kind }: { kind: LegalKind }) {
                   The operator of this installation has configured an external
                   document for this purpose.
                 </p>
-                <a href={publishedUrl} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={publishedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <Button>{copy.documentLabel}</Button>
                 </a>
               </div>
@@ -71,8 +75,8 @@ export function InstanceLegalNotice({ kind }: { kind: LegalKind }) {
                 <h2 className="mb-2 font-medium text-white">
                   Instance contact
                 </h2>
-                {data.operatorName && <p>{data.operatorName}</p>}
-                {data.contactEmail && (
+                {data?.operatorName && <p>{data.operatorName}</p>}
+                {data?.contactEmail && (
                   <p>
                     <a
                       href={`mailto:${data.contactEmail}`}
