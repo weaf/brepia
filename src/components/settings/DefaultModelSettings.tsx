@@ -69,7 +69,7 @@ export function DefaultModelSettings() {
       : AUTOMATIC_VALUE;
 
   const creativeIds = useMemo(
-    () => new Set(CREATIVE_MESH_MODELS.map((model) => model.id)),
+    () => new Set<string>(CREATIVE_MESH_MODELS.map((model) => model.id)),
     [],
   );
   const savedCreativeId = preferences?.defaultCreativeModelId ?? null;
