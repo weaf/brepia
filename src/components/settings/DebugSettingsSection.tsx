@@ -102,7 +102,7 @@ export function DebugSettingsSection() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-5 py-4">
                 <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
                   <DiagnosticValue
                     label="Navigation"
@@ -140,7 +140,7 @@ export function DebugSettingsSection() {
                       No lifecycle events recorded yet.
                     </div>
                   ) : (
-                    <div className="max-h-[42dvh] overflow-auto font-mono text-[11px] leading-5">
+                    <div className="font-mono text-[11px] leading-5">
                       {entries
                         .slice()
                         .reverse()
