@@ -21,16 +21,20 @@ Brand maintenance note: `docs/brepia_branding.md`
 - [x] Assistant loading, normal assistant avatar and prompt avatar directly use Brepia components.
 - [x] Generated GIF/live-preview watermark switched to Brepia.
 - [x] GLB generation preview now morphs from a Brepia point-cloud mark instead of the Adam logo.
+- [x] Download/export menus use Brepia activity states and exported MTL metadata now names Brepia.
 - [x] Primary global/auth/import/viewer/settings/share/export busy states migrated to the Brepia activity language.
+- [x] Legacy large editor Lottie loader replaced with Brepia mark + activity state.
 - [x] README rewritten as the current Brepia product presentation with explicit CADAM upstream attribution.
 - [x] Brepia brand-maintenance documentation added.
-- [x] First large batch of now-unused Adam/CADAM public artwork removed.
+- [x] First large batch of now-unused Adam/CADAM artwork removed.
 - [ ] Remaining large-file spinner/copy cleanup complete.
 - [ ] Prompt-profile `CADAM Original` migration decision resolved — intentionally deferred until the end.
 - [ ] Legal/current-product pages resolved and rebranded.
 - [ ] All remaining legacy visual assets removed.
 - [ ] Desktop/mobile visual regression review complete.
 - [ ] Final test/typecheck/lint/build gate complete.
+
+Current branch checkpoint after the latest cleanup: `84` commits ahead of `master`, `0` behind.
 
 ## Brand system
 
@@ -121,13 +125,13 @@ This is a compatibility identifier, not presentation branding.
 
 ### Normal assistant messages
 
-`src/components/chat/MessageBubble.tsx` now directly renders `BrepiaMark` in the assistant avatar. The migration commit was inspected and confirmed as a narrow avatar/import change plus a branding comment update.
+`src/components/chat/MessageBubble.tsx` directly renders `BrepiaMark` in the assistant avatar. The former `public/adam-logo.svg` compatibility alias has been deleted.
 
-The temporary `public/adam-logo.svg` Brepia compatibility alias has therefore been deleted.
+Residual `Loader2` uses in this component are still limited to simple image/tool/preview waits and remain a targeted later cleanup; streaming, retry, rating, branch and artifact behavior must remain untouched.
 
 ### Prompt surface
 
-`src/components/TextAreaChat.tsx` now directly uses:
+`src/components/TextAreaChat.tsx` directly uses:
 
 - `BrepiaMark` for the prompt avatar;
 - `ActivityIndicator` for image upload, mesh upload and prompt-generation waits;
@@ -140,7 +144,7 @@ Compatibility-sensitive local-storage keys remain unchanged:
 - `adam-mesh-topology`
 - `adam-polygon-overrides`
 
-The temporary `public/Adam-Logo.png` Brepia compatibility alias has been deleted.
+The former `public/Adam-Logo.png` compatibility alias has been deleted.
 
 The TextAreaChat whole-file migration was immediately inspected through the commit diff. Runtime changes were limited to the intended branding/loading paths and fallback copy; a few explanatory JSX comments were dropped as harmless diff noise. No upload/model/transport/localStorage behavior was intentionally changed.
 
@@ -166,13 +170,25 @@ The TextAreaChat whole-file migration was immediately inspected through the comm
 
 `src/utils/brepiaLogoVertices.ts` now owns the Brepia point geometry. The former `src/utils/adamLogoVertices.ts` was removed after its only runtime consumer migrated.
 
+### Editor streaming preview loader
+
+`src/components/viewer/Loader.tsx` no longer uses `lottie-react` or `src/assets/adam-loading.json`.
+
+It now renders:
+
+- `BrepiaMark` as the primary waiting identity;
+- `ActivityIndicator` for the active pulse;
+- the existing rotating `useSharedSpinnerVerb` text when `showLoadingText` is enabled.
+
+The old manual animated ellipsis timers were removed with the Lottie implementation. `src/assets/adam-loading.json` was deleted after its only indexed consumer migrated.
+
 ### Desktop notifications
 
 `src/contexts/AuthProvider.tsx` uses `brepia-mark.svg` for model-completion notifications.
 
 ## Activity/loading migration
 
-`ActivityIndicator` now replaces rotating `Loader2` indicators on primary simple/indeterminate waits including:
+`ActivityIndicator` now replaces rotating `Loader2`/legacy activity indicators on primary simple/indeterminate waits including:
 
 - application and auth bootstrap;
 - sign-in/password/magic-link/OTP flows;
@@ -186,12 +202,23 @@ The TextAreaChat whole-file migration was immediately inspected through the comm
 - avatar upload/save;
 - OpenSCAD compilation overlay;
 - settings/admin/local-model/Vision waits;
+- AI model settings initial load;
 - public shared-conversation loading;
-- desktop/mobile parametric DXF/STEP export.
+- desktop/mobile parametric DXF/STEP export;
+- creative mesh STL/OBJ/GLB/FBX/GIF/texture download waits;
+- Mandarin3D print-order preparation;
+- editor streaming preview wait.
 
 Actual determinate progress remains determinate. In particular GIF percentage/progress behavior was preserved.
 
-Remaining large files such as `ProvidersSettings.tsx`, `AiModelsSettings.tsx`, `DownloadMenu.tsx`, `EditorView.tsx` and parts of `MessageBubble.tsx` still need targeted review for simple residual spinners. Do not broadly rewrite them just for cosmetics.
+Remaining targeted large-file cleanup:
+
+- `ProvidersSettings.tsx` — audited: eight simple create/save/test/detail/list/runtime waits, all safe candidates for `ActivityIndicator`;
+- `EditorView.tsx` — audited: two remaining `Loader2` uses, both initial conversation/message-tree loads; the separate streaming preview loader is already migrated;
+- `MessageBubble.tsx` — residual image/tool/preview waits only;
+- `PromptProfilesSettings.tsx` — intentionally last because its branding is tied to built-in profile lineage/semantics.
+
+Do not broadly rewrite these files beyond the classified presentation paths.
 
 ## Viewer/export product copy
 
@@ -207,7 +234,18 @@ Remaining large files such as `ProvidersSettings.tsx`, `AiModelsSettings.tsx`, `
 - fallback DXF/STEP errors name Brepia;
 - STL/SCAD/DXF/STEP dispatch, STEP service calls and workspace persistence remain unchanged.
 
-`src/components/viewer/DownloadMenu.tsx` still requires a targeted final pass. In addition to remaining spinners, exported OBJ/MTL content still contains an inherited `Generated by Adam` metadata comment. That output-file branding must become Brepia without changing export algorithms.
+`src/components/viewer/DownloadMenu.tsx`
+
+- STL/OBJ/GLB/FBX/GIF/texture and print-order waits use `ActivityIndicator`;
+- generated `.mtl` files now contain `Generated by Brepia` instead of inherited Adam branding;
+- OBJ/MTL/GLB/FBX/STL/GIF algorithms, material handling, texture extraction, scaling and Mandarin3D request behavior were not intentionally changed;
+- the Mandarin3D `external_source` value remains `adam-${meshData.id}` because it is treated as an existing integration identifier rather than display branding.
+
+## Settings product cleanup
+
+`src/components/settings/AiModelsSettings.tsx` now uses `ActivityIndicator` for its sole initial model/preferences loading state. Filtering, grouping, source detection, visibility toggles and persistence are unchanged.
+
+`src/components/settings/ProvidersSettings.tsx` has been audited but not yet changed. Its eight `Loader2` sites are all simple indeterminate waits and are the next larger settings cleanup target.
 
 ## README/current public presentation
 
@@ -228,7 +266,7 @@ It now covers the current product, including:
 
 A dedicated origin section explicitly attributes the upstream Adam-CAD/CADAM project instead of erasing project history.
 
-## Public asset cleanup
+## Public/legacy asset cleanup
 
 Removed after their consumers migrated:
 
@@ -242,6 +280,7 @@ Removed after their consumers migrated:
 - `public/cadam-icon.svg`
 - `public/adam-logo.svg`
 - `public/Adam-Logo.png`
+- `src/assets/adam-loading.json`
 
 `public/cadam-logo.svg` remains because legal pages still consume it. Do not delete it until Terms/Privacy are deliberately migrated.
 
@@ -315,7 +354,7 @@ Repository naming and internal compatibility identifiers remain separate decisio
 
 No full test/typecheck/lint/build success is claimed yet for this branch.
 
-A previous checkout/typecheck attempt from the assistant execution environment was blocked by that environment's GitHub/DNS access. The new focused `homePromptCopy` test is present but not yet run in the real development environment.
+The assistant execution environment still cannot resolve `github.com` through its shell/container network, so a fresh local clone/test run again failed at DNS resolution on 2026-08-27. GitHub connector reads/writes continue to work normally. The focused `homePromptCopy` test is present but has not yet run in the real development environment.
 
 Required final gate:
 
@@ -330,14 +369,15 @@ Also perform real visual checks on desktop/mobile and relevant light/dark surfac
 
 ## Recommended next implementation order
 
-1. Target `DownloadMenu.tsx`: exported `Generated by Adam` metadata + simple download/print spinners only.
-2. Finish remaining small/simple indeterminate waits in `AiModelsSettings`, `ProvidersSettings`, `EditorView` and `MessageBubble` without touching provider/editor/chat behavior.
-3. Audit remaining live Adam/CADAM artwork/copy on the Brepia branch.
-4. Resolve actual legal/contact wording and migrate Terms/Privacy; then remove `cadam-logo.svg` if no consumer remains.
-5. Perform desktop/mobile visual review and adjust mark spacing/accent details.
-6. Run full regression gate.
-7. At the end, resolve `CADAM Original` prompt-profile lineage/display migration.
-8. After the branch is stable, decide whether to rename `weaf/pCAD` to `weaf/brepia` and whether `/cadam` later gets a deployment-path migration.
+1. Migrate the eight audited simple waits in `ProvidersSettings.tsx` only; do not alter provider/runtime/model behavior.
+2. Replace the two audited initial-data waits in `EditorView.tsx`; keep streaming/editor state logic unchanged.
+3. Replace the residual image/tool/preview waits in `MessageBubble.tsx`; keep streaming/retry/rating/branch/artifact behavior unchanged.
+4. Audit remaining live Adam/CADAM artwork/copy on the Brepia branch.
+5. Resolve actual legal/contact wording and migrate Terms/Privacy; then remove `cadam-logo.svg` if no consumer remains.
+6. Perform desktop/mobile visual review and adjust mark spacing/accent details.
+7. Run full regression gate.
+8. At the end, resolve `CADAM Original` prompt-profile lineage/display migration.
+9. After the branch is stable, decide whether to rename `weaf/pCAD` to `weaf/brepia` and whether `/cadam` later gets a deployment-path migration.
 
 ## Open decisions
 
