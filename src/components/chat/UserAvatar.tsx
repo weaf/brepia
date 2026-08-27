@@ -1,6 +1,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile, useAvatarUrl } from '@/services/profileService';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AvatarPresetIcon } from '@/components/avatar/AvatarPresetIcon';
 import { getInitials } from '@/lib/utils';
 import { ssoClaims, ssoManaged } from '@/lib/supabase';
 
@@ -8,6 +9,10 @@ export function UserAvatar({ className }: { className?: string }) {
   const { user } = useAuth();
   const { data: profile } = useProfile();
   const { data: avatarUrl } = useAvatarUrl(profile?.avatar_path);
+
+  // A Brepia preset is an explicit app-level choice and therefore wins over
+  // provider/uploaded images until the user switches back to their profile photo.
+  const avatarPreset = profile?.avatar_preset ?? null;
 
   // The provider photo. Under SSO read it from the fresh identity claims (the
   // same source as the name) — NOT user_metadata, which GoTrue leaves stale. In
@@ -21,16 +26,28 @@ export function UserAvatar({ className }: { className?: string }) {
     : metadata?.avatar_url || metadata?.picture;
 
   // When the account is externally SSO-managed, the provider photo is the
-  // single source of truth and wins so a stale local upload cannot diverge from
-  // the identity-provider photo. In self-host mode the self-uploaded avatar wins.
-  const src = ssoManaged
-    ? providerAvatar || avatarUrl || undefined
-    : avatarUrl || providerAvatar || undefined;
+  // normal image source. In self-host mode the self-uploaded avatar wins.
+  const src = avatarPreset
+    ? undefined
+    : ssoManaged
+      ? providerAvatar || avatarUrl || undefined
+      : avatarUrl || providerAvatar || undefined;
 
   return (
     <Avatar className={className}>
-      <AvatarImage src={src} />
-      <AvatarFallback>{getInitials(profile?.full_name || null)}</AvatarFallback>
+      {avatarPreset ? (
+        <div className="flex h-full w-full items-center justify-center rounded-full bg-adam-neutral-800 text-adam-blue">
+          <AvatarPresetIcon
+            preset={avatarPreset}
+            className="h-[55%] w-[55%] stroke-[1.8]"
+          />
+        </div>
+      ) : (
+        <>
+          <AvatarImage src={src} />
+          <AvatarFallback>{getInitials(profile?.full_name || null)}</AvatarFallback>
+        </>
+      )}
     </Avatar>
   );
 }
