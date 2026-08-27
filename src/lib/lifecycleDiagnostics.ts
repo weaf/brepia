@@ -1,4 +1,4 @@
-type LifecycleEntry = {
+export type LifecycleEntry = {
   at: string;
   event: string;
   documentId: string;
@@ -67,8 +67,6 @@ export function startLifecycleDiagnostics(): () => void {
   const onVisibilityChange = () => log(`visibility:${document.visibilityState}`);
   const onFocus = () => log('focus');
   const onBlur = () => log('blur');
-  const onFreeze = () => log('freeze');
-  const onResume = () => log('resume');
   const onOnline = () => log('online');
   const onOffline = () => log('offline');
   const onBeforeUnload = () => log('beforeunload');
@@ -76,10 +74,10 @@ export function startLifecycleDiagnostics(): () => void {
     log('pageshow', { persisted: event.persisted });
   const onPageHide = (event: PageTransitionEvent) =>
     log('pagehide', { persisted: event.persisted });
+  const onFreeze = () => log('freeze');
+  const onResume = () => log('resume');
 
   document.addEventListener('visibilitychange', onVisibilityChange);
-  document.addEventListener('freeze', onFreeze);
-  document.addEventListener('resume', onResume);
   window.addEventListener('focus', onFocus);
   window.addEventListener('blur', onBlur);
   window.addEventListener('online', onOnline);
@@ -87,11 +85,11 @@ export function startLifecycleDiagnostics(): () => void {
   window.addEventListener('beforeunload', onBeforeUnload);
   window.addEventListener('pageshow', onPageShow);
   window.addEventListener('pagehide', onPageHide);
+  document.addEventListener('freeze', onFreeze);
+  document.addEventListener('resume', onResume);
 
   return () => {
     document.removeEventListener('visibilitychange', onVisibilityChange);
-    document.removeEventListener('freeze', onFreeze);
-    document.removeEventListener('resume', onResume);
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('online', onOnline);
@@ -99,9 +97,19 @@ export function startLifecycleDiagnostics(): () => void {
     window.removeEventListener('beforeunload', onBeforeUnload);
     window.removeEventListener('pageshow', onPageShow);
     window.removeEventListener('pagehide', onPageHide);
+    document.removeEventListener('freeze', onFreeze);
+    document.removeEventListener('resume', onResume);
   };
 }
 
 export function getLifecycleDiagnostics(): LifecycleEntry[] {
   return readEntries();
+}
+
+export function clearLifecycleDiagnostics(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Diagnostics must never affect application behavior.
+  }
 }
