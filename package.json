@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:stable": "PCAD_DISABLE_HMR=1 vite",
     "build": "tsc -b && vite build",
     "lint": "eslint . --ignore-pattern 'supabase/**'",
     "typecheck": "tsc -b --noEmit",
