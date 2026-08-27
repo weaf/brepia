@@ -1,15 +1,15 @@
 # Brepia remake — concept and implementation plan
 
-Branch: `feature/brepia-remake`
+Branch: `feature/brepia-remake`  
 Base: `967f744976d3ae2fb64f3681745c8c046345499a`
 
 ## Product identity
 
 Working product name: **Brepia**.
 
-Brepia is the new product identity for the application previously presented as CADAM/pCAD. The application has evolved beyond the original CADAM framing into an AI-assisted, parametric 3D design environment with OpenSCAD semantics, editable parameters, local/remote agent workflows, and professional CAD exchange through STEP.
+Brepia is the product identity for the application previously presented as CADAM/pCAD. It has evolved into an AI-assisted parametric 3D design environment with OpenSCAD semantics, editable parameters, local/remote agent workflows and professional CAD exchange through STEP.
 
-The name is inspired by **B-Rep (Boundary Representation)**, the CAD representation used for solid geometry. The name should feel technical and precise without requiring users to know the B-Rep acronym.
+The name is inspired by **B-Rep (Boundary Representation)**. It should feel technical and precise without requiring users to know the acronym.
 
 Preferred brand lockup:
 
@@ -18,25 +18,50 @@ BREPIA
 by Noty
 ```
 
-`by Noty` is secondary and should normally appear on product/about/marketing surfaces rather than competing with the Brepia wordmark in dense application chrome.
+`by Noty` is secondary and should normally appear on product/about/auth/documentation surfaces rather than competing with Brepia in dense application chrome.
 
 ### Brand hierarchy
 
 - **Brepia** — product name.
 - **Noty** — creator / umbrella brand.
-- **Noty Design** — optional formal studio/identity name for About, documentation, copyright or external presentation.
-- `noty.se` may act as the umbrella site.
-- A future deployment/marketing path such as `brepia.noty.se` fits the intended hierarchy, but DNS/domain changes are outside this branch unless explicitly requested.
+- **Noty Design** — optional studio/identity wording for external presentation if deliberately chosen later.
+- Repository/deployment names are separate migrations from display identity.
+
+### Open-source instance model
+
+Brepia is currently treated as **open-source software, not as one centrally operated hosted service**.
+
+A clean installation therefore must not claim a legal operator, support address, community or hosted-service legal terms by default.
+
+Instance-specific public identity is controlled by an administrator through **Instance identity** settings:
+
+- operator / organization name;
+- public contact email;
+- optional community label + URL;
+- optional Terms URL;
+- optional Privacy URL;
+- explicit toggles controlling whether community/legal links are exposed.
+
+Fresh-install defaults are deliberately unclaimed:
+
+```text
+Operator: unset
+Contact: unset
+Community: hidden
+Legal links: hidden
+```
+
+Public clients consume only a whitelisted DTO from the application API. The underlying settings table is server/service-role managed and is not directly exposed to browser roles.
 
 ### Repository-name checkpoint
 
-The GitHub repository is still `weaf/pCAD`. A possible future rename to **`weaf/brepia`** must be decided explicitly rather than bundled into the cosmetic UI rename.
+The GitHub repository is still `weaf/pCAD`. A future rename to **`weaf/brepia`** must be decided explicitly rather than bundled into cosmetic changes.
 
-Preferred timing: after the Brepia identity is visually stable and the branch has passed its regression gate.
+Preferred timing: after Brepia is visually stable and the branch has passed its regression gate.
 
-Before a repository rename, audit and update clone/remotes, README/source links, CI/deployment integrations, webhooks/services, scripts/docs, local developer/agent environments and reliance on GitHub redirects.
+Before a repository rename, audit clone/remotes, README/source links, CI/deployment integrations, webhooks/services, scripts/docs, local developer/agent environments and reliance on GitHub redirects.
 
-A repository rename does **not** automatically imply renaming compatibility-sensitive `PCAD_*`, database/storage/local-state identifiers, `@pcad.invalid`, deployment paths, or agent/tool IDs.
+A repository rename does **not** automatically imply renaming compatibility-sensitive `PCAD_*`, DB/storage/local-state identifiers, `@pcad.invalid`, deployment paths or agent/tool IDs.
 
 ## Visual concept
 
@@ -44,87 +69,57 @@ A repository rename does **not** automatically imply renaming compatibility-sens
 
 Use a minimal **open geometric B-Rep / wireframe cube** with visible node points.
 
-The symbol should communicate:
-
-- 3D geometry;
-- construction and editable structure;
-- parametric relationships;
-- a model that is intentionally open/changeable rather than a static finished object.
-
-The symbol should not depend on generic AI imagery.
+It should communicate 3D geometry, construction/editability and parametric relationships. It must not depend on generic AI imagery.
 
 ### Avoid
 
-Do not make the identity depend on robot heads, brains, generic AI sparkle clusters, gears as the primary mark, visually heavy spinners, or CADAM legacy artwork.
-
-A small sparkle/wand may remain when it describes a specific AI action; it is not the Brepia identity.
+Do not make the identity depend on robot heads, brains, generic sparkle clusters, gears as the primary mark, visually heavy spinners or CADAM legacy artwork.
 
 ### Wordmark and colour
 
 Preferred direction:
 
 - `BREPIA` in a clean geometric sans-serif;
-- generous but practical spacing;
-- symbol and wordmark work independently;
 - app/favicons use the symbol without requiring text;
 - restrained blue-to-violet technical accent on neutral UI;
-- mark remains usable in monochrome.
-
-Exact final colours and spacing remain open until visual review in the real application.
+- mark remains usable in monochrome;
+- exact final colour/spacing waits for visual review in the real application.
 
 ## Activity/loading language
 
-Replace decorative spinning/loading graphics where practical with a quiet Brepia activity signal.
-
-Preferred pattern:
-
-```text
-● Generating model…
-● Rendering…
-● Exporting STEP…
-```
+Use a quiet Brepia activity signal instead of decorative rotating artwork when the state is indeterminate.
 
 Rules:
 
-1. Loading state must communicate work, not decorate.
-2. Prefer descriptive status text when the operation is known.
+1. Loading communicates work, not decoration.
+2. Prefer descriptive status text when known.
 3. Preserve accessibility semantics.
-4. Never replace meaningful determinate percentages/progress with an indeterminate pulse.
+4. Never replace meaningful determinate progress with an indeterminate pulse.
 5. Respect reduced-motion preferences.
 
 The GLB generation preview may use the Brepia point-cloud mark because it is a purposeful brand-to-model transition rather than a generic spinner.
 
 ## Icon language
 
-Keep the existing Lucide outline language for normal actions. Do not introduce a second application icon library merely for the remake.
-
-Examples:
-
-- New model — `Plus`
-- Chat — `MessageSquare`
-- Parameters — `SlidersHorizontal`
-- Code/OpenSCAD — `Code2`
-- 3D/model view — `Box` / `Cuboid`
-- Import — `Upload`
-- Export — `Download`
-- Settings — `Settings`
-- Indeterminate work — Brepia activity pulse
-
-Do not change a working icon solely for novelty.
+Keep the existing Lucide outline language for normal actions. Do not add a second general UI icon library solely for the remake.
 
 ## Rename strategy
 
 ### A. User-facing identity — Brepia
 
-Rename current product presentation such as title, sidebar/header, auth, browser metadata, visible current-product copy, favicon/app mark, README and media branding.
+Rename current product presentation: title, sidebar/header, auth, browser metadata, visible current-product copy, favicon/app mark, README and generated-media branding.
 
-### B. Internal identifiers — evaluate before renaming
+### B. Instance identity — deployment-owned
+
+Operator/contact/community/legal information belongs to the deployment administrator and must not be hardcoded as Brepia project identity.
+
+### C. Internal identifiers — evaluate before renaming
 
 Environment variables, database/storage/local-state keys, API IDs, package/tool IDs, file paths, Sentry IDs and agent names are migration-sensitive. Do not rename them solely for cosmetics.
 
-### C. Historical/upstream references — preserve where accurate
+### D. Historical/upstream references — preserve where accurate
 
-Keep CADAM/Adam/pCAD where it records actual project history, source URLs, old evidence, migration notes or upstream attribution.
+Keep CADAM/Adam/pCAD where it records actual project history, source URLs, evidence, migration notes or upstream attribution.
 
 ## Implementation phases
 
@@ -132,69 +127,82 @@ Keep CADAM/Adam/pCAD where it records actual project history, source URLs, old e
 
 - [x] Inventory user-visible CADAM/pCAD/Adam legacy surfaces.
 - [x] Inventory metadata, favicon, logo and image assets.
-- [x] Inventory loading/spinner components and separate indeterminate work from real progress.
+- [x] Inventory loading/spinner components and distinguish indeterminate work from real progress.
 - [x] Inventory current icon system.
 - [x] Classify old-name occurrences as presentation, compatibility or history.
 - [x] Record findings in `docs/brepia_remake_status.md`.
 
 ### Phase 2 — Brand primitives: implementation complete, visual verification pending
 
-- [x] Implement reusable Brepia symbol component.
-- [x] Implement Brepia wordmark/brand lockup component.
-- [x] Add standalone `brepia-mark.svg`.
-- [x] Add standalone `brepia-logo.svg` lockup.
-- [x] Add `brepia-watermark.svg`.
-- [x] Add web-app manifest using Brepia identity.
-- [x] Add compact activity indicator with reduced-motion support.
-- [x] Support monochrome rendering in the component.
+- [x] `BrepiaMark`.
+- [x] `BrepiaBrand`.
+- [x] `ActivityIndicator` with reduced-motion support.
+- [x] `brepia-mark.svg`.
+- [x] `brepia-logo.svg`.
+- [x] `brepia-watermark.svg`.
+- [x] Brepia web-app manifest.
+- [x] Monochrome-capable mark component.
 - [ ] Verify final light/dark/monochrome appearance in the running application.
-- [ ] Decide whether additional raster/app-store/icon sizes are actually required by the deployment target.
+- [ ] Decide whether additional raster/app-store icon sizes are required by deployment targets.
 
-### Phase 3 — Primary product surfaces: complete except legal
+### Phase 3 — Primary product surfaces: complete
 
 - [x] Header/sidebar branding.
 - [x] Root/home/start surface.
 - [x] Rotating Brepia-specific home prompt copy.
-- [x] Remove inherited Adam/upstream product banner from Brepia chrome.
+- [x] Remove inherited Adam product banner.
 - [x] Sign-in/sign-up/password flows.
 - [x] Browser title/meta/favicon/manifest.
-- [x] Assistant-loading identity.
-- [x] Normal assistant avatar directly uses Brepia.
-- [x] Prompt-field avatar directly uses Brepia.
-- [x] Remove temporary Adam logo compatibility aliases after direct migration.
-- [ ] About/legal-facing current-product references.
+- [x] Assistant loading and normal assistant identity.
+- [x] Prompt-field identity.
+- [x] Remove temporary Adam logo compatibility aliases.
+- [x] Replace inherited AdamCAD Terms/Privacy presentation with neutral open-source instance notices.
 
-### Phase 4 — Activity, generated media and icon cleanup: mostly complete
+### Phase 4 — Activity, generated media and icon cleanup: implementation complete, visual verification pending
 
-- [x] Migrate primary global/auth/import/viewer/settings/share/parameter busy states to `ActivityIndicator`.
-- [x] Migrate TextAreaChat upload and prompt-generation waits.
-- [x] Preserve actual determinate GIF progress.
-- [x] Brand GIF live overlay and baked output watermark.
-- [x] Replace Adam GLB point-cloud artwork with Brepia point geometry while preserving the dissolve-to-model behavior.
-- [x] Remove obsolete `AnimatedEllipsis` after its consumer migrated.
-- [ ] Finish residual simple spinners in large files (`DownloadMenu`, `ProvidersSettings`, `AiModelsSettings`, `EditorView`, selected `MessageBubble` waits).
-- [ ] Normalize only genuinely inconsistent action icons.
+- [x] Migrate global/auth/import/viewer/settings/share/parameter busy states to `ActivityIndicator`.
+- [x] Migrate TextAreaChat waits.
+- [x] Migrate Providers/AiModels/Editor/MessageBubble/DownloadMenu residual simple waits.
+- [x] Replace inherited Lottie editor loader with Brepia mark + activity state.
+- [x] Preserve determinate GIF progress.
+- [x] Brand GIF overlay and baked output watermark.
+- [x] Replace Adam GLB point-cloud artwork with Brepia point geometry.
+- [x] Remove obsolete `AnimatedEllipsis` and Adam Lottie asset.
+- [x] Remove unused hardcoded Discord-specific icon after community became generic.
 - [ ] Verify mobile and desktop variants independently in the running application.
 
-### Phase 5 — Documentation and safe rename cleanup: mostly complete
+### Phase 5 — Documentation, instance identity and safe rename cleanup: implementation substantially complete
 
-- [x] Rewrite README around the current Brepia product.
+- [x] Rewrite README around Brepia.
 - [x] Preserve explicit Adam-CAD/CADAM upstream attribution.
-- [x] Update README clone/source instructions to current `weaf/pCAD` repository.
-- [x] Add `docs/brepia_branding.md` maintenance guidance.
-- [x] Remove large inherited README/promo assets once unused.
-- [x] Remove old Adam/CADAM favicon/watermark/promo assets once their consumers migrated.
-- [ ] Finish repository-wide live-reference audit and remove any remaining unused visual assets.
-- [ ] Resolve actual legal/contact identity and update Terms/Privacy.
-- [ ] Resolve the built-in prompt-profile display/lineage strategy for `CADAM Original` **at the end of the remake**.
-- [ ] Decide whether the repository should later be renamed `weaf/pCAD` → `weaf/brepia`.
-- [ ] If approved, perform repository rename as a controlled follow-up rather than conflating it with internal compatibility renames.
+- [x] Update contributor/benchmark current-product presentation.
+- [x] Add `docs/brepia_branding.md`.
+- [x] Remove inherited README/promo/favicon/logo assets after consumers migrated.
+- [x] Remove obsolete legacy screenshots and banner-only CAD vendor assets.
+- [x] Add server-managed `instance_settings` singleton with migration + declarative schema.
+- [x] Add public whitelist GET + admin-only PUT API for instance identity.
+- [x] Add admin Instance identity UI.
+- [x] Make community navigation instance-configurable; default hidden.
+- [x] Make legal links instance-configurable; default hidden.
+- [x] Replace inherited AdamCAD legal text with neutral OSS instance notices.
+- [x] Remove inherited Adam/CADAM contact/community ownership claims.
+- [x] Remove final `cadam-logo.svg` consumer/asset.
+- [x] Add focused instance-identity normalization tests.
+- [ ] Regenerate/check Supabase TypeScript schema types in a real project environment; current server implementation intentionally isolates the new table behind a local typed adapter.
+- [ ] Clean package metadata/dead dependencies through npm-generated lockfile changes.
+- [ ] Resolve built-in prompt-profile `CADAM Original` strategy **at the end**.
+- [ ] Decide future repository rename `weaf/pCAD` → `weaf/brepia`.
 
 ### Phase 6 — Visual and regression gate
 
+- [ ] Apply migration `20260827062000_instance_identity_settings.sql` to the real development database.
+- [ ] Verify fresh/default Instance identity exposes no operator/contact/community/legal links.
+- [ ] Verify admin can save operator/contact/community/legal configuration.
+- [ ] Verify non-admin cannot update Instance identity.
+- [ ] Verify configured community link on desktop/mobile sidebar.
+- [ ] Verify legal notice pages and optional external legal links.
 - [ ] Review screenshots on desktop and mobile.
 - [ ] Review light/dark/monochrome behavior where supported.
-- [ ] Check auth pages, home, editor/workspace, history/share and settings.
 - [ ] Exercise real agent/OpenSCAD/import/export loading states.
 - [ ] Verify GIF watermark and Brepia GLB point-cloud transition visually.
 - [ ] Verify no functionality changed as a side effect of cosmetic work.
@@ -205,23 +213,22 @@ Keep CADAM/Adam/pCAD where it records actual project history, source URLs, old e
 
 ## Immediate next sequence
 
-1. `DownloadMenu.tsx`: change exported MTL `Generated by Adam` metadata to Brepia and migrate its simple download/print spinners without altering export algorithms.
-2. Finish remaining low-risk indeterminate loaders in `ProvidersSettings`, `AiModelsSettings`, `EditorView` and selected `MessageBubble` placeholders.
-3. Audit remaining live Adam/CADAM artwork/copy on the feature branch.
-4. Resolve legal/contact wording and migrate Terms/Privacy; remove `cadam-logo.svg` only when it truly becomes unused.
-5. Perform the visual pass and make final spacing/accent adjustments.
-6. Run the full regression gate.
-7. **Last:** resolve the `CADAM Original` prompt-profile strategy and any required display/lineage migration.
-8. After the remake is stable, decide repo/deployment renames separately.
+1. Apply the new Instance identity migration in the real pCAD development environment.
+2. Run the focused/full validation gate and fix any compile/type/lint issues discovered by the real toolchain.
+3. Perform desktop/mobile visual review and make only small geometry/spacing/accent adjustments.
+4. Perform npm-generated cleanup (`lottie-react`, package name if desired) only with a verified lockfile regeneration.
+5. **Last:** audit the actual built-in prompt and resolve `CADAM Original` display/lineage strategy.
+6. After the remake is stable, decide repository/deployment renames separately.
 
 ## Product constraints
 
-- This branch is a presentation/product-identity remake, not an architecture rewrite.
+- Presentation/product identity should not rewrite unrelated architecture.
 - STEP/STL/DXF/OpenSCAD behavior must remain unchanged.
-- Existing auth behavior must remain unchanged.
+- Existing auth behavior must remain unchanged except for the intentionally added admin Instance identity configuration surface.
 - Agent/provider behavior must remain unchanged.
-- Avoid migrations solely to rename internal implementation keys.
-- Desktop and mobile can use different components; both must be reviewed.
+- Avoid migrations solely to rename existing implementation keys.
+- New instance identity fields are configuration, not a hardcoded Brepia company identity.
+- Desktop and mobile must both be reviewed.
 - Keep the brand quiet enough that modelling remains the primary visual focus.
 
 ## Current preferred direction
@@ -229,4 +236,4 @@ Keep CADAM/Adam/pCAD where it records actual project history, source URLs, old e
 > **BREPIA**  
 > *by Noty*
 
-with an open node-based geometric cube, restrained blue/violet accent, rotating but stable-per-visit start-page inspiration, and quiet pulsing activity states instead of decorative spinners.
+with an open node-based geometric cube, restrained blue/violet accent, rotating but stable-per-visit start-page inspiration, quiet pulsing activity states and deployment-owned instance identity.
