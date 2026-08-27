@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import net from 'node:net';
 
@@ -43,8 +44,16 @@ function forwardedHeaders(req, target) {
     headers['x-forwarded-host'] = originalHost;
   }
   headers['x-forwarded-proto'] =
-    req.headers['x-forwarded-proto'] || 'https';
-  headers['x-forwarded-for'] = req.socket.remoteAddress || '';
+    req.headers['x-forwarded-proto'] ||
+    (req.socket.encrypted ? 'https' : 'http');
+
+  const remoteAddress = req.socket.remoteAddress;
+  if (remoteAddress) {
+    const existing = req.headers['x-forwarded-for'];
+    headers['x-forwarded-for'] = existing
+      ? `${existing}, ${remoteAddress}`
+      : remoteAddress;
+  }
 
   return headers;
 }
@@ -95,9 +104,9 @@ function handleHttp(req, res) {
 function handleUpgrade(req, socket, head) {
   const target = proxyTarget(req.url);
 
-  // The stable app itself has no Vite/HMR websocket. Supabase Realtime is the
-  // expected websocket path, but forwarding any future app websocket here is
-  // harmless and keeps this proxy transport-agnostic.
+  // Stable mode has no Vite/HMR websocket. Supabase Realtime is the expected
+  // upgrade path, while forwarding any future app websocket keeps the proxy
+  // transport-agnostic.
   const upstream = net.connect(target.port, target.host, () => {
     const headers = forwardedHeaders(req, target);
     const requestLine = `${req.method || 'GET'} ${req.url || '/'} HTTP/${req.httpVersion}\r\n`;
@@ -121,12 +130,70 @@ function handleUpgrade(req, socket, head) {
   };
 
   upstream.on('error', (error) => {
-    console.error(
-      `[stable-proxy] websocket ${req.url || '/'} -> ${target.host}:${target.port}: ${error.message}`,
-    );
+    if (error.code !== 'ECONNRESET') {
+      console.warn(
+        `[stable-proxy] websocket ${req.url || '/'} -> ${target.host}:${target.port}: ${error.message}`,
+      );
+    }
     closeBoth();
   });
   socket.on('error', closeBoth);
+}
+
+function waitForPort(host, port, timeoutMs = 20000) {
+  const startedAt = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const attempt = () => {
+      const socket = net.connect(port, host);
+      socket.once('connect', () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.once('error', () => {
+        socket.destroy();
+        if (Date.now() - startedAt >= timeoutMs) {
+          reject(
+            new Error(`Nitro did not listen on ${host}:${port} within ${timeoutMs}ms`),
+          );
+          return;
+        }
+        setTimeout(attempt, 250);
+      });
+    };
+
+    attempt();
+  });
+}
+
+const nitro = spawn(process.execPath, ['.output/server/index.mjs'], {
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    HOST: appHost,
+    PORT: String(appPort),
+  },
+});
+
+let shuttingDown = false;
+let nitroExited = false;
+
+nitro.once('exit', (code, signal) => {
+  nitroExited = true;
+  if (shuttingDown) return;
+  console.error(
+    `[stable-runtime] Nitro exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'none'})`,
+  );
+  process.exitCode = code || 1;
+  server.close(() => process.exit(process.exitCode || 1));
+});
+
+try {
+  await waitForPort(appHost, appPort);
+} catch (error) {
+  console.error(`[stable-runtime] ${error.message}`);
+  if (!nitroExited) nitro.kill('SIGTERM');
+  process.exit(1);
 }
 
 const server = http.createServer(handleHttp);
@@ -137,17 +204,30 @@ server.on('clientError', (error, socket) => {
   }
   if (!socket.destroyed) socket.destroy();
 });
+server.on('error', (error) => {
+  console.error(`[stable-proxy] failed to listen: ${error.message}`);
+  if (!nitroExited) nitro.kill('SIGTERM');
+  process.exit(1);
+});
 
 server.listen(publicPort, publicHost, () => {
   console.log(
-    `[stable-proxy] http://${publicHost}:${publicPort} -> app http://${appHost}:${appPort}, supabase http://${supabaseHost}:${supabasePort}`,
+    `[stable-runtime] http://${publicHost}:${publicPort} -> Nitro http://${appHost}:${appPort}, Supabase http://${supabaseHost}:${supabasePort}`,
   );
 });
 
 function shutdown(signal) {
-  console.log(`[stable-proxy] ${signal}, shutting down`);
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[stable-runtime] ${signal}, shutting down`);
+
+  if (!nitroExited) nitro.kill('SIGTERM');
   server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 2000).unref();
+
+  setTimeout(() => {
+    if (!nitroExited) nitro.kill('SIGKILL');
+    process.exit(0);
+  }, 2500).unref();
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));
