@@ -222,14 +222,14 @@ export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
       </div>
 
       <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-        <DialogContent className="border-adam-neutral-800 sm:max-w-[520px] sm:rounded-3xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[420px] overflow-y-auto border-adam-neutral-800 p-5 sm:rounded-2xl sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-adam-neutral-50">
               Choose avatar
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div>
               <div className="mb-2 text-xs font-medium uppercase tracking-wider text-adam-neutral-300">
                 Profile photo
@@ -239,16 +239,18 @@ export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
                 disabled={isBusy}
                 onClick={() => choosePreset(null)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
+                  'flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
                   selectedPreset === null
                     ? 'border-adam-blue bg-adam-blue/10'
                     : 'border-adam-neutral-800 hover:bg-adam-neutral-800/50',
                 )}
               >
-                <UserAvatar className="h-10 w-10" />
+                <UserAvatar className="h-9 w-9" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm text-adam-neutral-50">
-                    {ssoManaged ? 'Account / social photo' : 'Uploaded photo / initials'}
+                    {ssoManaged
+                      ? 'Account / social photo'
+                      : 'Uploaded photo / initials'}
                   </div>
                   <div className="mt-0.5 text-xs text-adam-neutral-400">
                     {ssoManaged
@@ -259,9 +261,9 @@ export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
                   </div>
                 </div>
                 {selectedPreset === null ? (
-                  <Check className="h-5 w-5 text-adam-blue" />
+                  <Check className="h-5 w-5 shrink-0 text-adam-blue" />
                 ) : (
-                  <RotateCcw className="h-4 w-4 text-adam-neutral-400" />
+                  <RotateCcw className="h-4 w-4 shrink-0 text-adam-neutral-400" />
                 )}
               </button>
             </div>
@@ -270,7 +272,7 @@ export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
               <div className="mb-2 text-xs font-medium uppercase tracking-wider text-adam-neutral-300">
                 Brepia icons
               </div>
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+              <div className="grid grid-cols-4 gap-2">
                 {AVATAR_PRESETS.map((preset) => {
                   const selected = selectedPreset === preset.id;
                   return (
@@ -283,7 +285,8 @@ export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
                       disabled={isBusy}
                       onClick={() => choosePreset(preset.id)}
                       className={cn(
-                        'relative flex aspect-square items-center justify-center rounded-full border transition-all',
+                        'relative h-12 w-12 justify-self-center rounded-full border transition-all',
+                        'flex shrink-0 items-center justify-center',
                         selected
                           ? 'border-adam-blue bg-adam-blue/15 text-adam-blue ring-2 ring-adam-blue/30'
                           : 'border-adam-neutral-700 bg-adam-neutral-800 text-adam-neutral-100 hover:border-adam-neutral-500 hover:bg-adam-neutral-700',
@@ -328,7 +331,7 @@ export const AvatarUpdateDialog = ({ className }: { className?: string }) => {
           open ? setIsCropOpen(true) : handleCropCancel()
         }
       >
-        <DialogContent className="border-adam-neutral-800 sm:max-w-[480px] sm:rounded-3xl">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-[480px] border-adam-neutral-800 sm:rounded-3xl">
           <DialogHeader>
             <DialogTitle className="text-adam-neutral-50">
               Crop profile picture
