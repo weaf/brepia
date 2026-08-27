@@ -15,6 +15,22 @@ The Brepia presentation implementation is now substantially complete. The previo
 
 Remaining work is primarily real-environment migration/validation, visual review, npm-generated cleanup, and the intentionally deferred `CADAM Original` prompt-profile decision.
 
+## Local environment note — NOx owns Supabase lifecycle
+
+On the current pCAD/Brepia development workstation, the local Supabase services are started/stopped through **NOx**.
+
+- Do not assume a global `supabase` executable exists.
+- Do not use `supabase start`, `supabase stop`, `npx supabase start` or `npx supabase stop` as the normal lifecycle.
+- Start the local Supabase stack through NOx first.
+- Once NOx has started the stack, repository-local Supabase CLI operations may be run through `npx`, for example:
+
+```bash
+npx supabase migration up
+npx supabase gen types typescript --local > shared/database.ts
+```
+
+Repository-level agent guidance is recorded in `AGENTS.md` so future chats/coding agents do not replace the NOx-managed environment with a standalone Supabase lifecycle.
+
 ## Completed product work
 
 - [x] Brepia product/brand concept and rename boundaries recorded.
@@ -319,6 +335,8 @@ First apply the new migration to the real development database:
 supabase/migrations/20260827062000_instance_identity_settings.sql
 ```
 
+On the current workstation, start Supabase through NOx first; then use `npx supabase migration up` rather than trying to own the service lifecycle from the Supabase CLI.
+
 Then verify:
 
 - default GET is neutral;
@@ -343,12 +361,14 @@ The assistant shell/container previously could not resolve GitHub DNS, so no loc
 
 ## Recommended next order
 
-1. Apply the Instance identity migration in the real development environment.
-2. Run focused/full tests, typecheck, lint and build; fix toolchain issues if any.
-3. Perform desktop/mobile visual review and make small mark/spacing/accent adjustments.
-4. Use npm to remove dead `lottie-react` and optionally rename private package metadata with a generated lockfile diff.
-5. Resolve `CADAM Original` prompt-profile lineage/display **last**.
-6. After the remake is stable, separately decide `weaf/pCAD` → `weaf/brepia` and any deployment path migration away from `/cadam`.
+1. Start the local Supabase stack through NOx and apply the Instance identity migration with the repository-local CLI.
+2. Regenerate local Supabase types with `npx supabase gen types typescript --local > shared/database.ts`.
+3. Run the Vite/TanStack generator so `src/routeTree.gen.ts` includes the Instance identity route.
+4. Run focused/full tests, typecheck, lint and build; fix toolchain issues if any.
+5. Perform desktop/mobile visual review and make small mark/spacing/accent adjustments.
+6. Use npm to remove dead `lottie-react` and optionally rename private package metadata with a generated lockfile diff.
+7. Resolve `CADAM Original` prompt-profile lineage/display **last**.
+8. After the remake is stable, separately decide `weaf/pCAD` → `weaf/brepia` and any deployment path migration away from `/cadam`.
 
 ## Governing rule
 
