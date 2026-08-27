@@ -15,6 +15,9 @@ import {
   type LifecycleEntry,
 } from '@/lib/lifecycleDiagnostics';
 
+const lifecycleDiagnosticsEnabled =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_LIFECYCLE_DEBUG === '1';
+
 function formatTime(value: string) {
   try {
     return new Date(value).toLocaleTimeString();
@@ -65,7 +68,7 @@ export function DebugSettingsSection() {
     setEntries([]);
   };
 
-  if (!import.meta.env.DEV) return null;
+  if (!lifecycleDiagnosticsEnabled) return null;
 
   return (
     <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
