@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { Link } from '@tanstack/react-router';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +13,8 @@ import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
+import { InstanceIdentitySettingsSection } from '@/components/settings/InstanceIdentitySettingsSection';
+import { InstanceLegalLinks } from '@/components/settings/InstanceLegalLinks';
 import { ActivityIndicator } from '@/components/brand';
 
 export default function SettingsView() {
@@ -223,7 +224,7 @@ export default function SettingsView() {
                 <div className="flex items-center justify-between gap-4 pt-5">
                   <div className="min-w-0">
                     <div className="text-sm text-adam-neutral-50">Password</div>
-                    <div className="mt-0.5 text-xs text-adam-neutral-200">
+                    <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
                       {localAccount
                         ? 'Password is managed by an administrator'
                         : 'Send a reset link to your email'}
@@ -297,23 +298,9 @@ export default function SettingsView() {
           )}
 
           <AdminSettingsSection />
+          <InstanceIdentitySettingsSection />
           <AiSettingsSection />
-
-          <div className="mt-2 flex items-center justify-center gap-3 text-xs text-adam-neutral-300">
-            <Link
-              to="/terms-of-service"
-              className="transition-colors hover:text-adam-neutral-50"
-            >
-              Terms of Service
-            </Link>
-            <span aria-hidden className="text-adam-neutral-700">•</span>
-            <Link
-              to="/privacy-policy"
-              className="transition-colors hover:text-adam-neutral-50"
-            >
-              Privacy Policy
-            </Link>
-          </div>
+          <InstanceLegalLinks />
         </div>
       </div>
     </div>
