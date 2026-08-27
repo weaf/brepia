@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 import {
+  CONNECTION_INTERRUPTED_MESSAGE,
   MODEL_USAGE_LIMIT_MESSAGE,
   PROVIDER_AUTH_MESSAGE,
   VISION_CONFIGURATION_MESSAGE,
@@ -28,6 +29,15 @@ describe('chat error presentation', () => {
     const error = new Error('AI_APICallError: Missing Authentication header');
 
     assert.equal(userFacingChatError(error).message, PROVIDER_AUTH_MESSAGE);
+  });
+
+  it('explains recoverable mobile/browser transport interruptions', () => {
+    const error = new Error('Network error');
+
+    assert.equal(
+      userFacingChatError(error).message,
+      CONNECTION_INTERRUPTED_MESSAGE,
+    );
   });
 
   it('preserves unknown Error instances unchanged', () => {
