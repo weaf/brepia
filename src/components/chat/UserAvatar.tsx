@@ -5,14 +5,20 @@ import { AvatarPresetIcon } from '@/components/avatar/AvatarPresetIcon';
 import { getInitials } from '@/lib/utils';
 import { ssoClaims, ssoManaged } from '@/lib/supabase';
 
-export function UserAvatar({ className }: { className?: string }) {
+export function UserAvatar({
+  className,
+  ignorePreset = false,
+}: {
+  className?: string;
+  ignorePreset?: boolean;
+}) {
   const { user } = useAuth();
   const { data: profile } = useProfile();
   const { data: avatarUrl } = useAvatarUrl(profile?.avatar_path);
 
   // A Brepia preset is an explicit app-level choice and therefore wins over
   // provider/uploaded images until the user switches back to their profile photo.
-  const avatarPreset = profile?.avatar_preset ?? null;
+  const avatarPreset = ignorePreset ? null : (profile?.avatar_preset ?? null);
 
   // The provider photo. Under SSO read it from the fresh identity claims (the
   // same source as the name) — NOT user_metadata, which GoTrue leaves stale. In
