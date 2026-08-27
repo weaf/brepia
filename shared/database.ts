@@ -257,6 +257,48 @@ export type Database = {
           },
         ];
       };
+      instance_settings: {
+        Row: {
+          community_label: string;
+          community_url: string | null;
+          contact_email: string | null;
+          created_at: string;
+          id: number;
+          legal_pages_enabled: boolean;
+          operator_name: string | null;
+          privacy_url: string | null;
+          show_community_link: boolean;
+          terms_url: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          community_label?: string;
+          community_url?: string | null;
+          contact_email?: string | null;
+          created_at?: string;
+          id?: number;
+          legal_pages_enabled?: boolean;
+          operator_name?: string | null;
+          privacy_url?: string | null;
+          show_community_link?: boolean;
+          terms_url?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          community_label?: string;
+          community_url?: string | null;
+          contact_email?: string | null;
+          created_at?: string;
+          id?: number;
+          legal_pages_enabled?: boolean;
+          operator_name?: string | null;
+          privacy_url?: string | null;
+          show_community_link?: boolean;
+          terms_url?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       meshes: {
         Row: {
           conversation_id: string;
