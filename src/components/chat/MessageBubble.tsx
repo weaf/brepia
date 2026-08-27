@@ -363,7 +363,7 @@ function UserBubble({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 rounded-sm p-0 hover:bg-adam-neutral-800"
+                        className="h-6 w-6 rounded-lg p-0 hover:bg-adam-neutral-800"
                         onClick={handleCopy}
                       >
                         {copied ? (
@@ -476,6 +476,38 @@ function AssistantBubble({
     () => message.parts.some((part) => !!answerUserMessageText(part)?.trim()),
     [message.parts],
   );
+  const hasVisibleProgress = useMemo(
+    () =>
+      message.parts.some((part) => {
+        if (part.type === 'reasoning') return Boolean(part.text.trim());
+        if (part.type === 'text') {
+          if (
+            conversation.type === 'parametric' &&
+            lastParametricBuildIndex !== -1
+          ) {
+            return false;
+          }
+          return (
+            !hasAnswerUserMessage && Boolean(cleanAssistantText(part.text).trim())
+          );
+        }
+        if (part.type === 'tool-answer_user') {
+          return Boolean(answerUserMessageText(part)?.trim());
+        }
+        return (
+          part.type === 'tool-build_parametric_model' ||
+          part.type === 'tool-create_mesh'
+        );
+      }),
+    [
+      conversation.type,
+      hasAnswerUserMessage,
+      lastParametricBuildIndex,
+      message.parts,
+    ],
+  );
+  const showPreparingModel =
+    isLoading && isLastMessage && !hasVisibleProgress;
   const branchIndex = message.siblings.findIndex((b) => b.id === message.id);
   const leafNodes = useMemo(
     () =>
@@ -504,6 +536,15 @@ function AssistantBubble({
         </Avatar>
       </div>
       <div className="flex min-w-0 max-w-[calc(100%-3rem)] flex-1 flex-col gap-2">
+        {showPreparingModel && (
+          <div className="flex min-h-9 items-center gap-2 text-sm text-adam-text-secondary">
+            <span
+              className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-adam-blue"
+              aria-hidden="true"
+            />
+            <span>Preparing model...</span>
+          </div>
+        )}
         {message.parts.map((part, index) => {
           if (part.type === 'text') {
             if (
