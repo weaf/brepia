@@ -7,15 +7,24 @@ import {
   requireUser,
 } from '@/server/api';
 import { getPreferences } from '@/server/aiSettings';
-import { buildFullCatalog } from '@/server/modelCatalog';
+import {
+  buildFullCatalog,
+  buildSelectableCatalog,
+} from '@/server/modelCatalog';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
-import { UpdateVisionModelsSchema } from '@shared/aiSettings';
+import {
+  UpdateDefaultModelsSchema,
+  UpdateVisionModelsSchema,
+} from '@shared/aiSettings';
+import { isCreativeMeshModelId } from '@shared/creativeMeshModels';
 
 function preferenceResponse(data: Record<string, unknown>) {
   return {
     userId: data.user_id,
     hiddenModelIds: data.hidden_model_ids ?? [],
     defaultPromptProfileId: data.default_prompt_profile_id ?? null,
+    defaultParametricModelId: data.default_parametric_model_id ?? null,
+    defaultCreativeModelId: data.default_creative_model_id ?? null,
     visionFastModelId: data.vision_fast_model_id ?? null,
     visionDeepModelId: data.vision_deep_model_id ?? null,
     createdAt: data.created_at,
@@ -56,6 +65,65 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
 
           if (body.defaultPromptProfileId !== undefined) {
             updates.default_prompt_profile_id = body.defaultPromptProfileId;
+          }
+
+          if (
+            body.defaultParametricModelId !== undefined ||
+            body.defaultCreativeModelId !== undefined
+          ) {
+            const parsed = UpdateDefaultModelsSchema.safeParse({
+              ...(body.defaultParametricModelId !== undefined
+                ? {
+                    defaultParametricModelId: body.defaultParametricModelId,
+                  }
+                : {}),
+              ...(body.defaultCreativeModelId !== undefined
+                ? { defaultCreativeModelId: body.defaultCreativeModelId }
+                : {}),
+            });
+            if (!parsed.success) {
+              return json({ error: 'invalid_default_model_settings' }, 400);
+            }
+
+            if (parsed.data.defaultParametricModelId) {
+              const selectableCatalog = await buildSelectableCatalog(user);
+              if (
+                !selectableCatalog.some(
+                  (entry) =>
+                    entry.id === parsed.data.defaultParametricModelId,
+                )
+              ) {
+                return json(
+                  {
+                    error: 'invalid_default_parametric_model',
+                    modelId: parsed.data.defaultParametricModelId,
+                  },
+                  400,
+                );
+              }
+            }
+
+            if (
+              parsed.data.defaultCreativeModelId &&
+              !isCreativeMeshModelId(parsed.data.defaultCreativeModelId)
+            ) {
+              return json(
+                {
+                  error: 'invalid_default_creative_model',
+                  modelId: parsed.data.defaultCreativeModelId,
+                },
+                400,
+              );
+            }
+
+            if (parsed.data.defaultParametricModelId !== undefined) {
+              updates.default_parametric_model_id =
+                parsed.data.defaultParametricModelId;
+            }
+            if (parsed.data.defaultCreativeModelId !== undefined) {
+              updates.default_creative_model_id =
+                parsed.data.defaultCreativeModelId;
+            }
           }
 
           if (
