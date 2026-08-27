@@ -10,7 +10,6 @@ import {
   ArrowUp,
   ImagePlus,
   Images,
-  Loader2,
   Square,
   CircleX,
   Wand2,
@@ -59,6 +58,7 @@ import { ModelSelector } from '@/components/ModelSelector';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar } from '@/components/ui/avatar';
+import { ActivityIndicator, BrepiaMark } from '@/components/brand';
 import { useItemSelection } from '@/hooks/useItemSelection';
 import {
   generatePreview,
@@ -481,7 +481,7 @@ function TextAreaChat({
   onSubmit,
   onFocus,
   isLoading = false,
-  placeholder = 'What can Adam help you build today?',
+  placeholder = 'What will you create with Brepia?',
   type,
   stopGenerating,
   disabled = false,
@@ -1368,8 +1368,8 @@ function TextAreaChat({
               ? 'h-0 border-transparent bg-transparent opacity-0'
               : isDragging
                 ? isDragHover
-                  ? 'h-20 border-[#00A6FF] bg-[rgba(0,166,255,0.24)] opacity-100' // Blue, full height
-                  : 'h-20 border-[#0077B7] bg-[rgba(0,166,255,0.12)] opacity-100' // Intermediate blue, full height
+                  ? 'h-20 border-[#00A6FF] bg-[rgba(0,166,255,0.24)] opacity-100'
+                  : 'h-20 border-[#0077B7] bg-[rgba(0,166,255,0.12)] opacity-100'
                 : images.length > 0 || mesh !== null
                   ? 'h-20 border-adam-neutral-700 bg-adam-neutral-950 opacity-100'
                   : 'h-0 border-transparent bg-transparent opacity-0',
@@ -1397,12 +1397,10 @@ function TextAreaChat({
       >
         {!disabled && (
           <>
-            {/* Case 1: Dragging, and items are ALREADY present -> Show "Add more images" prompt */}
             {isDragging && (images.length > 0 || mesh !== null) ? (
               <div
                 className={cn(
-                  'flex h-full w-full flex-row items-center justify-center gap-2', // Ensure it fills parent
-                  // Opacity is handled by the parent's transition when it appears/disappears due to isDragging
+                  'flex h-full w-full flex-row items-center justify-center gap-2',
                 )}
               >
                 <Images
@@ -1420,11 +1418,10 @@ function TextAreaChat({
                   Add more images here
                 </p>
               </div>
-            ) : /* Case 2: No items (images/mesh are zero) -> Show original "Drop images and 3D models here" logic */
-            images.length === 0 && mesh === null ? (
+            ) : images.length === 0 && mesh === null ? (
               <div
                 className={cn(
-                  'flex h-full w-full flex-row items-center justify-center gap-2', // Ensure it fills parent
+                  'flex h-full w-full flex-row items-center justify-center gap-2',
                   dropMessageTransitionClass,
                   dropMessageOpacityClass,
                 )}
@@ -1445,12 +1442,10 @@ function TextAreaChat({
                 </p>
               </div>
             ) : (
-              /* Case 3: Items are present, and NOT dragging -> Show thumbnails */
               (images.length > 0 || mesh !== null) && (
                 <div
                   className={cn(
                     'flex w-full items-center gap-4 overflow-x-auto overflow-y-hidden p-4',
-                    // Opacity dimming logic can remain if desired, or be simplified
                     isDragging && (images.length > 0 || mesh !== null)
                       ? 'opacity-60'
                       : 'opacity-100',
@@ -1459,7 +1454,6 @@ function TextAreaChat({
                 >
                   <AnimatePresence>
                     {' '}
-                    {/* Ensure no initial={false} here */}
                     {mesh && (
                       <motion.div
                         key={`mesh-${mesh.id}`}
@@ -1479,7 +1473,11 @@ function TextAreaChat({
                         )}
                         {mesh.isUploading && (
                           <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50">
-                            <Loader2 className="h-4 w-4 animate-spin text-white" />
+                            <ActivityIndicator
+                              label="Uploading mesh"
+                              size="sm"
+                              dotClassName="bg-white"
+                            />
                           </div>
                         )}
                         {!mesh.isUploading && (
@@ -1516,7 +1514,11 @@ function TextAreaChat({
                         />
                         {image.isUploading && (
                           <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50">
-                            <Loader2 className="h-4 w-4 animate-spin text-white" />
+                            <ActivityIndicator
+                              label="Uploading image"
+                              size="sm"
+                              dotClassName="bg-white"
+                            />
                           </div>
                         )}
                         <button
@@ -1569,14 +1571,8 @@ function TextAreaChat({
         }}
       >
         <div className="flex select-none items-start justify-between p-2">
-          <Avatar className="mt-1 h-8 w-8">
-            <div className="h-full w-full p-1.5">
-              <img
-                src={`${import.meta.env.BASE_URL}/Adam-Logo.png`}
-                alt="Adam Logo"
-                className="h-full w-full object-contain"
-              />
-            </div>
+          <Avatar className="mt-1 flex h-8 w-8 items-center justify-center border border-adam-neutral-700 bg-adam-neutral-950 p-1.5">
+            <BrepiaMark title="Brepia" className="h-full w-full" />
           </Avatar>
           <div className="relative grid w-full">
             <Textarea
@@ -1623,7 +1619,7 @@ function TextAreaChat({
                   disabled={isGeneratingPrompt || isLoading || disabled}
                 >
                   {isGeneratingPrompt ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-adam-blue" />
+                    <ActivityIndicator label="Generating prompt" size="sm" />
                   ) : (
                     <Wand2 className="h-4 w-4 text-gray-400 transition-colors duration-200 hover:text-white" />
                   )}
@@ -1667,7 +1663,6 @@ function TextAreaChat({
               </div>
             )}
 
-            {/* Creative mode toggle button */}
             {onTypeChange && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1698,7 +1693,6 @@ function TextAreaChat({
               </Tooltip>
             )}
 
-            {/* Quads vs Polys toggle button - show for standard and ultra models */}
             {showPolygonControls && (
               <QuadsButton
                 meshTopology={meshTopology}
@@ -1713,7 +1707,6 @@ function TextAreaChat({
               />
             )}
 
-            {/* Polygon Count button - show for standard and ultra models */}
             {creativeModel && showPolygonControls && (
               <PolygonButton
                 polygonCount={polygonCount}
@@ -1738,13 +1731,6 @@ function TextAreaChat({
               focused={isFocused}
               className="min-w-0 max-w-[240px]"
             />
-            {/* F01/R03: Transport selector — shown for any OpenCode model
-                (canonical agent/opencode/... or legacy opencode/...) that can
-                switch CLI vs Streaming transport. Rendered as a compact
-                two-button segmented control.
-                On mobile ( < md) it takes the full row below the model
-                selector so it never gets pushed offscreen by long model
-                names. On desktop it stays inline. */}
             <div className="w-full md:w-auto">
               {isOpenCodeTransportModel(model) && (
                 <Tooltip>
@@ -1790,7 +1776,6 @@ function TextAreaChat({
                 </Tooltip>
               )}
             </div>
-            {/* Enhanced submit button */}
             {isLoading && stopGenerating ? (
               <Tooltip>
                 <TooltipTrigger asChild>
