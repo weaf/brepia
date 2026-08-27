@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator } from '@/components/brand';
 import { Button } from '@/components/ui/button';
@@ -133,7 +133,10 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
           }
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Community label" description="For example Community, Discord or Forum.">
+          <Field
+            label="Community label"
+            description="For example Community, Discord or Forum."
+          >
             <Input
               value={settings.communityLabel}
               maxLength={40}
@@ -173,7 +176,10 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
           }
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Terms URL" description="Optional external Terms of Service document.">
+          <Field
+            label="Terms URL"
+            description="Optional external Terms of Service document."
+          >
             <Input
               type="url"
               value={settings.termsUrl ?? ''}
@@ -187,7 +193,10 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
               }
             />
           </Field>
-          <Field label="Privacy URL" description="Optional external privacy document.">
+          <Field
+            label="Privacy URL"
+            description="Optional external privacy document."
+          >
             <Input
               type="url"
               value={settings.privacyUrl ?? ''}
@@ -207,7 +216,11 @@ function InstanceIdentityForm({ initial }: { initial: InstanceIdentity }) {
       <div className="flex justify-end border-t border-adam-neutral-800 pt-5">
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending && (
-            <ActivityIndicator className="mr-2" label="Saving instance identity" size="sm" />
+            <ActivityIndicator
+              className="mr-2"
+              label="Saving instance identity"
+              size="sm"
+            />
           )}
           Save instance identity
         </Button>
@@ -223,7 +236,7 @@ function Field({
 }: {
   label: string;
   description?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div>
