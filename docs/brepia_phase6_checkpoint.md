@@ -46,7 +46,7 @@ Verified at that checkpoint:
 - `npm run lint` PASS.
 - `npm run build` PASS.
 
-The default-model implementation below changes application code and adds a new migration, so the local migration/type-generation/test gate must be rerun before the branch is called ready to merge.
+The later default-model/avatar changes were also exercised locally and the user reported the validation suite passing. The most recent Creative activity-indicator commits still require the normal local gate before the branch is called ready to merge.
 
 ## Runtime visual review — desktop/mobile PASS
 
@@ -60,20 +60,24 @@ User result:
 
 This satisfies the requirement that the main desktop/mobile visual gate be checked in the real application rather than by static code review alone.
 
-Do not infer from this general pass that every specialized generated-media state was exercised unless explicitly recorded separately. GIF watermark, GLB transition, reduced-motion and uncommon error states can still be checked opportunistically when those workflows are exercised.
+Do not infer from this general pass that every specialized generated-media state was exercised unless explicitly recorded separately. GIF watermark, reduced-motion and uncommon error states can still be checked opportunistically when those workflows are exercised.
 
-### Collapsed account-menu visual follow-up — implemented
+### Avatar follow-up — implemented
 
-The orange circular fallback avatar in the collapsed desktop sidebar was identified as visually out of place.
+The orange circular element in the collapsed sidebar was identified during review as the fallback user avatar, not a navigation/menu icon.
 
-Implementation:
+Current implementation:
 
-- the expanded sidebar still shows the real user avatar/name;
-- the collapsed account trigger now uses the existing Lucide `Menu` icon;
-- the trigger still opens the same account dropdown with Settings and Sign out;
-- the mobile sidebar already used the same `Menu` icon language.
+- the collapsed sidebar again shows the user's avatar rather than replacing it with a generic menu icon;
+- social/provider avatar remains supported;
+- the existing uploaded profile-image/crop flow remains supported for local accounts;
+- users can additionally choose a Brepia preset avatar;
+- the selected preset is stored per user as `profiles.avatar_preset` and takes precedence until the user switches back to the account/profile photo;
+- SSO/social users can choose a Brepia preset without changing their provider-side avatar;
+- the avatar picker uses a compact fixed-size grid on both desktop and mobile rather than allowing the choices to stretch into oversized horizontal circles;
+- the fallback avatar now renders visible initials rather than an anonymous colored circle.
 
-This is intentionally a small presentation correction, not a redesign of the account menu.
+Manual visual confirmation of the final compact picker is still useful after the latest pull, but the architecture/UI correction is implemented.
 
 ## Discord social link
 
@@ -134,11 +138,11 @@ Where not already exercised during the manual runtime pass, verify:
 
 ## Runtime-review follow-ups discovered 2026-08-27
 
-Three product-level follow-ups were discovered during the desktop/mobile review. They must be handled before the intentionally deferred `CADAM Original` decision.
+Product-level follow-ups were discovered during the desktop/mobile review. They must be handled before the intentionally deferred `CADAM Original` decision.
 
-### 1. Per-user default model selection — IMPLEMENTED, LOCAL VALIDATION PENDING
+### 1. Per-user default model selection — IMPLEMENTED AND RUNTIME VERIFIED
 
-The implementation now stores two independent per-user defaults:
+The implementation stores two independent per-user defaults:
 
 - `default_parametric_model_id`;
 - `default_creative_model_id`.
@@ -153,7 +157,7 @@ Implementation details:
 - existing `/api/ai-settings/preferences` GET/PUT carries both fields;
 - Parametric defaults are validated against the current selectable catalog;
 - Creative defaults are validated against the Creative mesh model IDs;
-- new `Default models` settings UI is shown under AI Settings -> Models;
+- `Default models` settings UI is shown under AI Settings -> Models;
 - users can independently choose Parametric and Creative defaults;
 - `Automatic fallback` resets either preference to `null`;
 - a saved Parametric model that becomes hidden/unavailable is not blindly used; the new-conversation resolver selects the normal fallback or the first currently selectable model;
@@ -162,27 +166,13 @@ Implementation details:
 - existing conversations remain pinned to their existing model settings and are not rewritten;
 - focused resolver tests were added in `tests/defaultModels.test.ts`.
 
-Important: `shared/database.ts` has **not** been hand-edited. Apply the new migration to the NOx-managed local Supabase instance and regenerate types from the real database before running the final gate.
+Runtime result:
 
-Required local verification:
+- the user confirmed the default-model control is visible after syncing the current branch;
+- the configured default model is applied correctly;
+- the local validation suite was reported passing after the migration/type regeneration and follow-up lint fix.
 
-```bash
-npx supabase migration up
-npx supabase gen types typescript --local > shared/database.ts
-npm test
-npm run typecheck
-npm run lint
-npm run build
-```
-
-Functional checks after the migration:
-
-1. Settings -> AI Settings -> Models shows both default selectors.
-2. Choose a non-fallback Parametric model, return to New Creation, verify it is preselected.
-3. Choose a Creative default, switch to Creative, verify it is preselected.
-4. Change the defaults again and verify an existing conversation keeps its pinned model.
-5. Hide the saved Parametric default and verify New Creation falls back to another selectable Parametric model rather than blocking.
-6. Reset either selector to `Automatic fallback` and verify the corresponding mode uses its normal fallback behavior.
+`shared/database.ts` must continue to be generated from the NOx-managed local Supabase instance and must never be hand-edited.
 
 ### 2. Remove the standalone `Generate prompt` feature — NEXT IMPLEMENTATION
 
@@ -207,7 +197,7 @@ Removal scope:
 - remove only imports/state made dead by this feature;
 - do **not** remove prompt profiles, prompt lineage, conversation system prompts or the title generator; those are separate features.
 
-### 3. Creative text-to-mesh capability needs clearer UX and verification
+### 3. Creative TRELLIS text-to-mesh — RUNTIME VERIFIED
 
 The current implementation is model-dependent, not globally image-only.
 
@@ -219,33 +209,67 @@ Creative model capabilities currently declare:
 - `local/stable-fast-3d` — image required;
 - historical fal.ai `quality`, `fast`, `ultra` modes — accept text and image through their hosted pipeline.
 
-The local server already rejects image-only models clearly and specifically recommends TRELLIS for text-to-3D. The local TRELLIS worker contains separate `TrellisTextTo3DPipeline` and `TrellisImageTo3DPipeline` paths.
+The local TRELLIS worker contains separate `TrellisTextTo3DPipeline` and `TrellisImageTo3DPipeline` paths.
 
-Required follow-up:
+Runtime verification on the real local installation:
 
-1. Verify `TRELLIS v1` text-only generation end-to-end in the real local installation:
-   - select Creative;
-   - select TRELLIS v1;
-   - attach no image;
-   - submit a simple text prompt;
-   - verify a GLB is generated and displayed.
-2. If TRELLIS text-only fails, debug the local gateway/backend before changing the product contract, because the repository explicitly implements it as text-capable.
-3. Make model capability obvious in the Creative model picker, for example:
+- Creative mode selected;
+- `TRELLIS v1` selected;
+- no reference image attached;
+- text-only prompts generated GLB meshes successfully;
+- the user successfully created two models.
+
+During that verification the managed TRELLIS runtime was hardened for dependencies that upstream installation could leave missing or inconsistent, including:
+
+- `pygltflib`;
+- `nvdiffrast`;
+- a compatible pinned `transformers` runtime with working `CLIPTextModel`/PyTorch detection;
+- `diff_gaussian_rasterization`.
+
+The remaining product work is capability UX, not proof that text-to-mesh works:
+
+1. Make Creative model capability obvious in the model picker, for example:
    - `Text + image`;
    - `Image required`;
    - optional provider/time information.
-4. When an image-required model is selected and the user has supplied text only, fail early in the UI with a specific explanation and offer the user to choose TRELLIS rather than letting the request look like a generic Creative failure.
-5. Do not silently switch the user's selected model unless that behavior is explicitly designed later.
+2. When an image-required model is selected and the user has supplied text only, fail early in the UI with a specific explanation and offer the user to choose TRELLIS rather than letting the request look like a generic Creative failure.
+3. Do not silently switch the user's selected model unless that behavior is explicitly designed later.
+4. Fold the verified TRELLIS repair hardening back into the full clean installer so a fresh environment cannot silently become partially installed.
 
 A future enhancement could add a text-to-image pre-step in front of image-only local mesh backends, but that is a separate feature and should not be introduced merely to hide model capability differences.
 
+### 4. Persistent Creative generation activity — IMPLEMENTED, LOCAL UI REVIEW PENDING
+
+Runtime review showed that Android/browser backgrounding or dev-HMR can reload/reconnect the page while a long TRELLIS generation continues successfully on the server. The generation itself is no longer lost, but the UI previously gave little evidence that work was still active after returning to the conversation.
+
+Current implementation:
+
+- the durable source of truth is the existing `meshes.status = 'pending'` row created before expensive local generation begins;
+- `ChatTitle` polls for pending Creative meshes for the current conversation every 2.5 seconds;
+- React Query refetches the activity state when the browser window regains focus;
+- returning to a Creative conversation after navigation/reload therefore restores a visible `Generating 3D model` activity pill even if the original chat SSE stream is gone;
+- multiple simultaneous pending jobs are represented as a count rather than hidden;
+- the indicator is indeterminate by design: no fake percentage is shown because the local backend does not currently persist determinate progress;
+- the shared preview `Loader` now accepts an explicit status label for places where a known operation should be described rather than using only a generic spinner verb.
+
+Required local UI check:
+
+1. Start a TRELLIS text-only generation.
+2. Confirm the header shows `Generating 3D model` while the mesh row is pending.
+3. Navigate to another conversation/model and then return before completion.
+4. Confirm the activity indicator reappears without restarting the mesh job.
+5. Background/foreground the Android browser and confirm the indicator is restored after reconnect/reload while generation continues.
+6. Confirm the indicator disappears after the mesh transitions to `success` or `failure`.
+
+The full-page reload itself remains a separate dev/browser/HMR investigation. It is no longer allowed to imply that the server generation stopped or to create duplicate mesh work.
+
 ## Recommended next sequence
 
-1. Apply `20260827095000_default_model_preferences.sql` in the NOx-managed local database.
-2. Regenerate `shared/database.ts` from the local database.
-3. Run the focused/full validation gate and exercise the default-model functional checks above.
-4. If green, remove the standalone `Generate prompt` feature and regenerate the route tree.
-5. Verify TRELLIS text-only Creative generation end-to-end and improve capability messaging/guardrails.
+1. Pull the latest branch and rerun `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` after the Creative activity-indicator changes.
+2. Manually verify the compact avatar picker on desktop/mobile and the persistent Creative generation indicator across navigation/reload.
+3. Remove the standalone `Generate prompt` feature and regenerate the TanStack route tree normally.
+4. Improve Creative model capability messaging/guardrails now that TRELLIS text-only is proven to work.
+5. Fold the verified TRELLIS dependency repairs into the full clean local-mesh installer and verify a clean/recreated TRELLIS environment when practical.
 6. Rerun the full validation gate after those code changes.
 7. Perform npm-generated cleanup of dead `lottie-react` and package metadata if still desired, with the lockfile regenerated by npm.
 8. Resolve the built-in prompt-profile `CADAM Original` display/lineage strategy **last**.
@@ -255,6 +279,6 @@ A future enhancement could add a text-to-image pre-step in front of image-only l
 
 - The main desktop/mobile visual gate has been manually reviewed and passed; do not reopen broad redesign without a concrete finding.
 - Do not rename compatibility-sensitive `PCAD_*`, `/cadam`, storage/database/local-state identifiers or external integration IDs merely for presentation cleanup.
-- Do not hand-edit `shared/database.ts`; regenerate it from the NOx-managed local Supabase instance after applying the new migration.
+- Do not hand-edit `shared/database.ts`; regenerate it from the NOx-managed local Supabase instance after applying migrations.
 - Do not confuse removal of the standalone prompt-generator button with removal/change of the prompt-profile architecture.
 - Do not touch `CADAM Original` until the Brepia regression, remaining functional follow-ups and resulting validation gate are complete.
