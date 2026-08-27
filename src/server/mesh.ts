@@ -1,5 +1,6 @@
 import { isLocalCreativeMeshModel } from '@shared/creativeMeshModels';
 import { corsHeaders } from './api';
+import { scheduleActiveGenerationCancellation } from './activeGeneration';
 import { syncConversationGeneratedMeshes } from './conversationWorkspaceGeneratedMeshes';
 import { handleMeshRequest as handleFalMeshRequest } from './falMesh';
 import { handleLocalMeshRequest } from './localMesh';
@@ -82,6 +83,14 @@ export async function handleMeshRequest(request: Request): Promise<Response> {
           additionalContext: { operation: 'post_local_mesh_generation_sync' },
         });
       }
+    } else if (!response.ok && conversationId) {
+      // Local backend/config/runtime failures are terminal for this Creative
+      // turn. AI SDK otherwise feeds the tool error straight back to the LLM
+      // and the model can immediately call create_mesh again, creating an
+      // expensive failure loop. Let the current tool-error part finish first,
+      // then abort the active multi-step generation before another backend job
+      // can start. The user can explicitly retry after fixing the runtime.
+      scheduleActiveGenerationCancellation(conversationId);
     }
     return response;
   }
