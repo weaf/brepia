@@ -447,7 +447,15 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup className="text-adam-text-primary">
                   <DropdownMenuItem asChild>
-                    <Link to="/settings" className="flex items-center">
+                    <Link
+                      to="/settings"
+                      className="flex items-center"
+                      onClick={() => {
+                        if (isMobile) {
+                          setIsSidebarOpen(false);
+                        }
+                      }}
+                    >
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </Link>
