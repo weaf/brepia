@@ -260,6 +260,6 @@ else
   export VITE_ENABLE_LIFECYCLE_DEBUG="${VITE_ENABLE_LIFECYCLE_DEBUG:-1}"
   npm run build
 
-  echo "=== Starting stable runtime (Nitro, no Vite client) ==="
+  echo "=== Starting stable runtime (production preview, no Vite dev client) ==="
   node scripts/stable-runtime-proxy.mjs
 fi
