@@ -2,7 +2,7 @@ import { MeshImagePreview } from '@/components/viewer/MeshImagePreview';
 import { StreamingCodeBlock } from '@/components/chat/StreamingCodeBlock';
 import { ChatReasoning } from '@/components/chat/ChatReasoning';
 import { UserAvatar } from '@/components/chat/UserAvatar';
-import { BrepiaMark } from '@/components/brand';
+import { ActivityIndicator, BrepiaMark } from '@/components/brand';
 import { ProviderLogo } from '@/components/ProviderLogo';
 import {
   DropdownMenu,
@@ -46,7 +46,6 @@ import {
   ChevronUp,
   Copy,
   History,
-  Loader2,
   Pencil,
   RefreshCw,
   ThumbsDown,
@@ -134,7 +133,11 @@ function UploadedImage({ id, alt }: { id: string; alt: string }) {
       {isDataError || isUrlError ? (
         <X className="h-5 w-5 text-adam-text-secondary" />
       ) : (
-        <Loader2 className="h-5 w-5 animate-spin text-adam-text-secondary" />
+        <ActivityIndicator
+          label="Loading image"
+          size="sm"
+          dotClassName="bg-adam-text-secondary"
+        />
       )}
     </div>
   );
@@ -960,7 +963,7 @@ function ToolBlock({
           disabled={!onPrimary}
         >
           {loading ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <ActivityIndicator label={title} size="sm" className="shrink-0" />
           ) : (
             <span className="shrink-0">{icon}</span>
           )}
@@ -1121,7 +1124,10 @@ function ParametricImagePreview({
   if (isPending) {
     return (
       <div className="relative flex aspect-square w-full items-center justify-center bg-adam-neutral-950">
-        <Loader2 className="h-6 w-6 animate-spin text-adam-neutral-500" />
+        <ActivityIndicator
+          label="Rendering preview"
+          dotClassName="bg-adam-neutral-500"
+        />
       </div>
     );
   }
