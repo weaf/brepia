@@ -1,4 +1,4 @@
-import type { SupabaseClient as SupabaseJsClient } from '@supabase/supabase-js';
+import type { Database } from '@shared/database';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
 
 export type InstanceIdentity = {
@@ -15,37 +15,8 @@ export type InstanceIdentity = {
 
 export type InstanceIdentityInput = InstanceIdentity;
 
-type InstanceSettingsRow = {
-  id: number;
-  operator_name: string | null;
-  contact_email: string | null;
-  community_url: string | null;
-  community_label: string;
-  show_community_link: boolean;
-  discord_url: string | null;
-  legal_pages_enabled: boolean;
-  terms_url: string | null;
-  privacy_url: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type InstanceSettingsDatabase = {
-  public: {
-    Tables: {
-      instance_settings: {
-        Row: InstanceSettingsRow;
-        Insert: Partial<InstanceSettingsRow> & { id?: number };
-        Update: Partial<InstanceSettingsRow>;
-        Relationships: [];
-      };
-    };
-    Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
-    Enums: { [_ in never]: never };
-    CompositeTypes: { [_ in never]: never };
-  };
-};
+type InstanceSettingsRow =
+  Database['public']['Tables']['instance_settings']['Row'];
 
 export const DEFAULT_INSTANCE_IDENTITY: InstanceIdentity = {
   operatorName: null,
@@ -67,12 +38,6 @@ export class InstanceIdentityError extends Error {
     super(code);
     this.name = 'InstanceIdentityError';
   }
-}
-
-function instanceSettingsClient() {
-  // Keep the feature isolated from generated database-type churn while schema
-  // changes are being regenerated and verified in the real local environment.
-  return getServiceRoleSupabaseClient() as unknown as SupabaseJsClient<InstanceSettingsDatabase>;
 }
 
 function nullableText(value: string | null, maxLength: number, code: string) {
@@ -152,7 +117,7 @@ function fromRow(row: InstanceSettingsRow): InstanceIdentity {
 }
 
 export async function getInstanceIdentity(): Promise<InstanceIdentity> {
-  const supabase = instanceSettingsClient();
+  const supabase = getServiceRoleSupabaseClient();
   const { data, error } = await supabase
     .from('instance_settings')
     .select(
@@ -171,7 +136,7 @@ export async function updateInstanceIdentity(
   input: InstanceIdentityInput,
 ): Promise<InstanceIdentity> {
   const normalized = normalizeInstanceIdentity(input);
-  const supabase = instanceSettingsClient();
+  const supabase = getServiceRoleSupabaseClient();
   const { error } = await supabase.from('instance_settings').upsert(
     {
       id: 1,
