@@ -9,17 +9,13 @@ This is the current execution checkpoint for `feature/brepia-remake`. Read it to
 - `docs/brepia_remake_status.md`
 - `docs/brepia_branding.md`
 
-## Branch state
+## Branch lineage
 
 The branch remains a linear descendant of master base:
 
 `967f744976d3ae2fb64f3681745c8c046345499a`
 
-At the start of the current visual/functional review pass, GitHub reports:
-
-- HEAD: `91ef0a7c875c5daa5348cf7e72f0b2b01a86beaa`
-- 140 commits ahead of `master`
-- 0 commits behind `master`
+The branch is still 0 commits behind `master`. The exact ahead count changes as this checkpoint is updated; use GitHub comparison rather than treating an old count in documentation as authoritative.
 
 ## Local environment convention
 
@@ -36,7 +32,7 @@ Follow `.cursor/rules/database-workflow.mdc`: declarative schema first, generate
 
 ## Phase 6 technical gate — GREEN
 
-The technical Phase 6 gate has now been completed in the real local development environment.
+The technical Phase 6 gate has been completed in the real local development environment.
 
 Verified:
 
@@ -50,7 +46,21 @@ Verified:
 - `npm run lint` PASS.
 - `npm run build` PASS.
 
-The current visual/functional review must therefore avoid unrelated implementation churn. If a review finding requires code changes, rerun the normal gate before calling Phase 6 complete.
+If any of the runtime-review follow-ups below change application code, rerun the normal gate before calling the branch ready to merge.
+
+## Runtime visual review — desktop/mobile PASS
+
+The application has now been manually reviewed in the real running environment on both desktop and mobile.
+
+User result:
+
+- desktop presentation looks good;
+- mobile presentation looks good;
+- no Brepia branding/layout issue was identified that requires visual rework.
+
+This satisfies the requirement that the main desktop/mobile visual gate be checked in the real application rather than by static code review alone.
+
+Do not infer from this general pass that every specialized generated-media state was exercised unless explicitly recorded separately. GIF watermark, GLB transition, reduced-motion and uncommon error states can still be checked opportunistically when those workflows are exercised.
 
 ## Discord social link
 
@@ -58,7 +68,7 @@ Discord is an administrator-configurable deployment social link, not a hardcoded
 
 Current behavior:
 
-- `discordUrl` is optional and defaults to `null`.
+- `discordUrl` is optional and defaults to `null`;
 - no Discord link is shown on a fresh installation;
 - admin configures the URL under Instance identity -> Social links;
 - only HTTP/HTTPS URLs are accepted;
@@ -69,7 +79,7 @@ Current behavior:
 
 ## Static Instance identity review — no blocking finding
 
-The current code review confirms the intended architecture before the live functional pass:
+The current code review confirms the intended architecture before/alongside the live functional pass:
 
 - public `GET /api/settings/instanceIdentity` returns only the explicit public presentation DTO;
 - `PUT` requires an authenticated user and `requireAdmin`, which also requires an active admin account;
@@ -87,11 +97,11 @@ The current code review confirms the intended architecture before the live funct
 
 `InstanceLegalNotice` currently distinguishes loading from loaded state but not load-error from an unconfigured instance. A failed public Instance identity request can therefore visually fall back to the neutral “no document published” presentation.
 
-Do **not** change this solely from static review during the visual gate. Treat it as a separate hardening item unless the real runtime review shows that it produces a user-visible regression or misleading state that should be fixed now.
+Do not change this solely from static review. Treat it as a separate hardening item unless a real runtime failure demonstrates that it is misleading enough to fix in this branch.
 
 ## Remaining functional Instance identity review
 
-Verify in the real running application/database:
+Where not already exercised during the manual runtime pass, verify:
 
 1. Fresh/default GET is neutral when no singleton configuration has been saved.
 2. Admin can save and reload:
@@ -109,55 +119,103 @@ Verify in the real running application/database:
 7. Turning off legal links hides external legal links while the neutral Brepia legal-information pages remain available.
 8. Terms/Privacy pages show configured operator/contact information accurately and never imply that Brepia/Noty is automatically the deployment operator.
 
-## Remaining visual desktop/mobile review
+## Runtime-review follow-ups discovered 2026-08-27
 
-This gate must be performed against the real running application. Static code review alone is not sufficient.
+Three product-level follow-ups were discovered during the desktop/mobile review. They should be handled before the intentionally deferred `CADAM Original` decision.
 
-### Desktop
+### 1. Per-user default model selection
 
-Review at a normal desktop viewport with the sidebar both expanded and collapsed:
+Current behavior is hardcoded on the new-conversation surface:
 
-- Brepia mark geometry and centering;
-- `BREPIA` wordmark spacing/tracking;
-- collapsed mark size relative to other sidebar icons;
-- GitHub, Discord and Community icon/label alignment;
-- Community + Discord coexistence without crowding;
-- user menu and Settings entry after the additional social rows;
-- Instance identity settings card hierarchy and spacing;
-- auth/sign-in/sign-up/password surfaces;
-- Terms/Privacy neutral notice surfaces;
-- activity/loading states used by real application workflows;
-- GIF watermark;
-- GLB Brepia point-cloud transition.
+- Parametric starts with `openai/gpt-5.6-sol`;
+- Creative starts with `quality`;
+- switching between Parametric and Creative resets to those hardcoded values.
 
-### Mobile
+Desired behavior:
 
-Review the mobile sheet independently rather than assuming desktop correctness:
+- user can choose default model(s) in Settings;
+- a new conversation starts with the configured default already selected;
+- switching mode selects that mode's configured default;
+- existing conversations keep their pinned model and are not rewritten.
 
-- menu trigger placement;
-- sheet width and vertical overflow;
-- Brepia brand lockup at the top of the sheet;
-- social rows with both Discord and Community configured;
-- user menu access at the bottom of the sheet;
-- Settings page at narrow width, especially Instance identity fields/switches;
-- auth/password layouts;
-- loading/activity indicators in compact layouts;
-- no horizontal overflow or clipped controls.
+Recommended implementation:
 
-### Theme / mark behavior
+- extend `user_ai_preferences` rather than using localStorage;
+- store two mode-specific preferences because Parametric and Creative use different model catalogs:
+  - `default_parametric_model_id`;
+  - `default_creative_model_id`;
+- expose both through the existing AI preferences API/DTO;
+- add selectors or a clear “Set as default” affordance in Settings;
+- validate Parametric defaults against the effective visible/available parametric catalog;
+- validate Creative defaults against the Creative mesh model catalog;
+- on startup/mode switch, use the saved default only when it is currently usable;
+- if a configured default is hidden or temporarily unavailable, fall back safely to a usable model instead of blocking conversation creation;
+- do not mutate old conversations when the user's default changes.
 
-Where supported by the current application:
+The preference should be deployment/user data, not an administrator-wide Instance identity setting.
 
-- inspect normal dark presentation;
-- inspect any supported light presentation;
-- verify `BrepiaMark tone="mono"` remains legible where monochrome is used;
-- verify reduced-motion activity behavior if the environment allows it.
+### 2. Remove the standalone `Generate prompt` feature
 
-Only make small geometry/spacing/accent corrections discovered by the real review. Do not use Phase 6 as a reason for unrelated UI redesign.
+Runtime observation: `Generate prompt` does not work in the current installation and is not considered necessary for the Brepia workflow.
 
-## After the visual gate
+Recommendation: remove it rather than repairing it.
 
-1. If review changes app code, rerun:
+Reasoning:
+
+- it adds UI complexity without being required to start a modelling request;
+- users can already write/edit the request directly;
+- the selected conversation agent/model can interpret or refine normal user intent as part of the actual modelling turn;
+- the current `/api/prompt-generator` implementation bypasses the configurable model/provider architecture and hardcodes `claude-haiku-4-5-20251001` through the Anthropic helper;
+- that hidden Anthropic dependency is especially inappropriate for local/self-hosted installations where the user may intentionally have no Anthropic credential configured.
+
+Removal scope:
+
+- remove the Wand/Generate-prompt control from `TextAreaChat`;
+- remove its loading/error state and client request code;
+- remove the now-unused `/api/prompt-generator` route;
+- regenerate the TanStack route tree normally;
+- remove only imports/state made dead by this feature;
+- do **not** remove prompt profiles, prompt lineage, conversation system prompts or the title generator; those are separate features.
+
+### 3. Creative text-to-mesh capability needs clearer UX and verification
+
+The current implementation is model-dependent, not globally image-only.
+
+Creative model capabilities currently declare:
+
+- `local/trellis-v1` — supports text and image;
+- `local/hunyuan3d-2` — image required;
+- `local/hunyuan3d-2.1` — image required;
+- `local/stable-fast-3d` — image required;
+- historical fal.ai `quality`, `fast`, `ultra` modes — accept text and image through their hosted pipeline.
+
+The local server already rejects image-only models clearly and specifically recommends TRELLIS for text-to-3D. The local TRELLIS worker contains separate `TrellisTextTo3DPipeline` and `TrellisImageTo3DPipeline` paths.
+
+Required follow-up:
+
+1. Verify `TRELLIS v1` text-only generation end-to-end in the real local installation:
+   - select Creative;
+   - select TRELLIS v1;
+   - attach no image;
+   - submit a simple text prompt;
+   - verify a GLB is generated and displayed.
+2. If TRELLIS text-only fails, debug the local gateway/backend before changing the product contract, because the repository explicitly implements it as text-capable.
+3. Make model capability obvious in the Creative model picker, for example:
+   - `Text + image`;
+   - `Image required`;
+   - optional provider/time information.
+4. When an image-required model is selected and the user has supplied text only, fail early in the UI with a specific explanation and offer the user to choose TRELLIS rather than letting the request look like a generic Creative failure.
+5. Do not silently switch the user's selected model unless that behavior is explicitly designed later.
+
+A future enhancement could add a text-to-image pre-step in front of image-only local mesh backends, but that is a separate feature and should not be introduced merely to hide model capability differences.
+
+## Recommended next sequence
+
+1. Finish any remaining functional Instance identity checks that were not already covered by the manual review.
+2. Implement per-user default Parametric/Creative model preferences.
+3. Remove the standalone `Generate prompt` feature and regenerate the route tree.
+4. Verify TRELLIS text-only Creative generation end-to-end and improve capability messaging/guardrails.
+5. Rerun:
 
 ```bash
 npm test
@@ -166,12 +224,13 @@ npm run lint
 npm run build
 ```
 
-2. Perform npm-generated cleanup of dead `lottie-react` and package metadata only after the visual gate, with the lockfile regenerated by npm.
-3. Resolve the built-in prompt-profile `CADAM Original` display/lineage strategy **last**.
-4. Repository/deployment renames remain a separate later decision.
+6. Perform npm-generated cleanup of dead `lottie-react` and package metadata if still desired, with the lockfile regenerated by npm.
+7. Resolve the built-in prompt-profile `CADAM Original` display/lineage strategy **last**.
+8. Repository/deployment renames remain a separate later decision.
 
 ## Important constraints
 
-- Do not mark the visual gate complete based only on static code review.
+- The main desktop/mobile visual gate has been manually reviewed and passed; do not reopen broad redesign without a concrete finding.
 - Do not rename compatibility-sensitive `PCAD_*`, `/cadam`, storage/database/local-state identifiers or external integration IDs merely for presentation cleanup.
-- Do not touch `CADAM Original` until the Brepia regression, functional Instance identity and visual gates are complete.
+- Do not confuse removal of the standalone prompt-generator button with removal/change of the prompt-profile architecture.
+- Do not touch `CADAM Original` until the Brepia regression, remaining functional follow-ups and resulting validation gate are complete.
