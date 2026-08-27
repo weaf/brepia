@@ -25,6 +25,10 @@ bring in reference images or existing geometry, and export the result for fabric
 The product identity is **Brepia by Noty**. The repository is still named `weaf/pCAD` while the product
 rename and its compatibility boundaries are completed.
 
+Brepia is currently distributed as **open-source software**, not as one centrally operated hosted service.
+Self-hosted deployments may optionally publish their own operator/contact/community/legal information through
+administrator-controlled **Instance identity** settings. A fresh installation claims none of those by default.
+
 ## What Brepia does
 
 - **AI-assisted parametric modelling** — generate and edit OpenSCAD-based models from natural-language intent.
@@ -79,12 +83,37 @@ cp .env.local.template .env.local
 # Start local Supabase services
 npx supabase start
 
+# Apply any migrations added since the local database was created
+npx supabase migration up
+
 # Start the application
 npm run dev
 ```
 
 The project has additional local-runtime and integration options. Use the repository's current `.env.local.template`
 and the relevant documents under `docs/` as the source of truth instead of copying environment values from old CADAM setup guides.
+
+The Brepia remake adds `supabase/migrations/20260827062000_instance_identity_settings.sql`; an existing local
+database must apply that migration before the Instance identity admin panel can persist settings.
+
+## Instance identity and self-hosting
+
+Instance-specific public identity is deliberately separate from Brepia's product branding.
+An administrator can optionally configure:
+
+- operator / organization name;
+- public contact email;
+- community label and URL;
+- external Terms URL;
+- external Privacy URL;
+- whether community/legal links are exposed.
+
+The default is neutral: no operator, contact, community or hosted-service legal links are shown.
+The underlying singleton settings table is server-managed; browser clients receive only the public whitelist through
+the application API.
+
+This lets a self-hoster present its own deployment accurately without implying that the Brepia open-source project
+itself is the operator or legal party for every installation.
 
 ## Validation
 
@@ -96,6 +125,9 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+When adding or changing file-based TanStack routes, start the Vite development server once so the generator refreshes
+`src/routeTree.gen.ts`, then include the generated route-tree diff if it changes before the final typecheck/build gate.
 
 Feature-specific plans and status documents under `docs/` may require additional focused verification.
 
@@ -137,7 +169,7 @@ corresponding server/export code.
 ## Benchmarks and examples
 
 The repository retains the existing parametric benchmark set under [`benchmarks/`](benchmarks/). Those models are useful
-for regression and capability comparisons even though older benchmark documentation may still contain historical CADAM naming.
+for regression and capability comparisons even when an individual artifact records historical CADAM-era output.
 
 Historical naming inside benchmark evidence should not be globally replaced when it describes the original result or source context.
 
