@@ -104,9 +104,9 @@ function handleHttp(req, res) {
 function handleUpgrade(req, socket, head) {
   const target = proxyTarget(req.url);
 
-  // Stable mode has no Vite/HMR websocket. Supabase Realtime is the expected
-  // upgrade path, while forwarding any future app websocket keeps the proxy
-  // transport-agnostic.
+  // Stable mode has no Vite development/HMR websocket. Supabase Realtime is
+  // the expected upgrade path, while forwarding any future app websocket keeps
+  // the proxy transport-agnostic.
   const upstream = net.connect(target.port, target.host, () => {
     const headers = forwardedHeaders(req, target);
     const requestLine = `${req.method || 'GET'} ${req.url || '/'} HTTP/${req.httpVersion}\r\n`;
@@ -154,7 +154,9 @@ function waitForPort(host, port, timeoutMs = 20000) {
         socket.destroy();
         if (Date.now() - startedAt >= timeoutMs) {
           reject(
-            new Error(`Nitro did not listen on ${host}:${port} within ${timeoutMs}ms`),
+            new Error(
+              `Stable app did not listen on ${host}:${port} within ${timeoutMs}ms`,
+            ),
           );
           return;
         }
@@ -168,22 +170,38 @@ function waitForPort(host, port, timeoutMs = 20000) {
 
 let server;
 let shuttingDown = false;
-let nitroExited = false;
+let appExited = false;
 
-const nitro = spawn(process.execPath, ['.output/server/index.mjs'], {
-  stdio: 'inherit',
-  env: {
-    ...process.env,
-    HOST: appHost,
-    PORT: String(appPort),
+// Nitro 3's Vite integration provides a production preview server for the
+// completed build. Using `vite preview` here is intentional: it serves the
+// built TanStack/Nitro application without the Vite development client, HMR,
+// reconnect polling, or the dev error overlay. It also avoids directly
+// executing Nitro's node-server entrypoint, whose current beta runtime can
+// silently exit on Node versions that do not implement import.meta.main.
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const app = spawn(
+  npmCommand,
+  [
+    'run',
+    'preview',
+    '--',
+    '--host',
+    appHost,
+    '--port',
+    String(appPort),
+    '--strictPort',
+  ],
+  {
+    stdio: 'inherit',
+    env: process.env,
   },
-});
+);
 
-nitro.once('exit', (code, signal) => {
-  nitroExited = true;
+app.once('exit', (code, signal) => {
+  appExited = true;
   if (shuttingDown) return;
   console.error(
-    `[stable-runtime] Nitro exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'none'})`,
+    `[stable-runtime] production preview exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'none'})`,
   );
   process.exitCode = code || 1;
   if (server) {
@@ -197,7 +215,7 @@ try {
   await waitForPort(appHost, appPort);
 } catch (error) {
   console.error(`[stable-runtime] ${error.message}`);
-  if (!nitroExited) nitro.kill('SIGTERM');
+  if (!appExited) app.kill('SIGTERM');
   process.exit(1);
 }
 
@@ -211,13 +229,13 @@ server.on('clientError', (error, socket) => {
 });
 server.on('error', (error) => {
   console.error(`[stable-proxy] failed to listen: ${error.message}`);
-  if (!nitroExited) nitro.kill('SIGTERM');
+  if (!appExited) app.kill('SIGTERM');
   process.exit(1);
 });
 
 server.listen(publicPort, publicHost, () => {
   console.log(
-    `[stable-runtime] http://${publicHost}:${publicPort} -> Nitro http://${appHost}:${appPort}, Supabase http://${supabaseHost}:${supabasePort}`,
+    `[stable-runtime] http://${publicHost}:${publicPort} -> app http://${appHost}:${appPort}, Supabase http://${supabaseHost}:${supabasePort}`,
   );
 });
 
@@ -226,7 +244,7 @@ function shutdown(signal) {
   shuttingDown = true;
   console.log(`[stable-runtime] ${signal}, shutting down`);
 
-  if (!nitroExited) nitro.kill('SIGTERM');
+  if (!appExited) app.kill('SIGTERM');
   if (server) {
     server.close(() => process.exit(0));
   } else {
@@ -234,7 +252,7 @@ function shutdown(signal) {
   }
 
   setTimeout(() => {
-    if (!nitroExited) nitro.kill('SIGKILL');
+    if (!appExited) app.kill('SIGKILL');
     process.exit(0);
   }, 2500).unref();
 }
