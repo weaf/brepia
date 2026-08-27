@@ -4,14 +4,12 @@ import { cjk } from '@streamdown/cjk';
 import { code } from '@streamdown/code';
 import { math } from '@streamdown/math';
 import { mermaid } from '@streamdown/mermaid';
-import { Shimmer } from '@/components/ai-elements/shimmer';
 import {
   Reasoning,
   ReasoningTrigger,
 } from '@/components/ai-elements/reasoning';
 import { CollapsibleContent } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useSharedSpinnerVerb } from '@/hooks/useSharedSpinnerVerb';
 import { cn } from '@/lib/utils';
 
 // Mirrors `streamdownPlugins` from ai-elements/reasoning.tsx ReasoningContent
@@ -60,7 +58,6 @@ export function ChatReasoning({
   isStreaming,
   className,
 }: ChatReasoningProps) {
-  const thinkingVerb = useSharedSpinnerVerb(isStreaming);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   useEffect(() => {
@@ -80,7 +77,7 @@ export function ChatReasoning({
         showIcon={false}
         getThinkingMessage={(streaming, duration) => {
           if (streaming || duration === 0) {
-            return <Shimmer duration={1}>{`${thinkingVerb}...`}</Shimmer>;
+            return <span>Thinking...</span>;
           }
           if (duration === undefined) {
             return <p>Thought for a few seconds</p>;
