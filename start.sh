@@ -248,5 +248,10 @@ else
   fi
 fi
 
-echo "=== Starting dev server ==="
-npm run dev
+if [ "${PCAD_ENABLE_HMR:-0}" = "1" ]; then
+  echo "=== Starting dev server (HMR enabled) ==="
+  npm run dev
+else
+  echo "=== Starting dev server (stable session mode) ==="
+  npm run dev:stable
+fi
