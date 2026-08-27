@@ -3,6 +3,7 @@ import { ChatSession } from '@/components/chat/ChatSession';
 import { CreateIcon } from '@/components/icons/ui/CreateIcon';
 import { ParameterSection } from '@/components/parameter/ParameterSection';
 import { ParameterSheetContent } from '@/components/parameter/ParameterSheetContent';
+import { ActivityIndicator } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -48,7 +49,7 @@ import type {
 } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Loader2, Share } from 'lucide-react';
+import { Share } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageItem } from '../types/misc.ts';
 import { ConversationView } from './ConversationView';
@@ -132,7 +133,7 @@ export default function EditorView() {
   if (isConversationLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-adam-bg-secondary-dark text-adam-text-primary">
-        <Loader2 className="h-10 w-10 animate-spin" />
+        <ActivityIndicator label="Loading conversation" />
       </div>
     );
   }
@@ -634,7 +635,7 @@ function ConversationEditor() {
   if (!areMessagesFetched) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-adam-bg-secondary-dark text-adam-text-primary">
-        <Loader2 className="h-10 w-10 animate-spin" />
+        <ActivityIndicator label="Loading messages" />
       </div>
     );
   }
