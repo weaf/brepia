@@ -1,292 +1,319 @@
 # Local Creative mesh backends
 
-pCAD Creative mode supports three local open-source 3D backends alongside the
-legacy fal.ai backends.
-
-| pCAD ID | Backend | Text -> 3D | Image -> 3D | Notes |
-| --- | --- | ---: | ---: | --- |
-| `local/trellis-v1` | Microsoft TRELLIS v1 | Yes | Yes | Text-to-GLB and managed runtime dependencies validated in pCAD. |
-| `local/hunyuan3d-2` | Tencent Hunyuan3D-2 | No | Yes | Image-to-GLB path manually validated in pCAD. |
-| `local/hunyuan3d-2.1` | Tencent Hunyuan3D-2.1 | No | Yes | Shape pipeline only in the first pCAD integration; runtime validation pending. |
-| `quality` | fal.ai legacy Draft | Yes | Yes | Requires `FAL_KEY`. |
-| `fast` | fal.ai legacy Textureless | Yes | Yes | Requires `FAL_KEY`. |
-| `ultra` | fal.ai legacy Max Quality | Yes | Yes | Requires `FAL_KEY`. |
-
-Stable Fast 3D was removed from the pCAD local backend set. It duplicated the
-image-to-3D role already covered by Hunyuan/TRELLIS while adding a gated model,
-an additional native runtime and extra installer failure modes.
-
-The historical fal.ai IDs are intentionally unchanged so existing Creative
-conversations remain loadable and reproducible.
-
-## Current Local Creative v1 boundary
-
-The verified local v1 path is:
+pCAD is transitioning its local Creative runtime from three Python/CUDA backends to one llama-swap-managed native product backend:
 
 ```text
-reference image or TRELLIS text prompt
--> pCAD Creative tool
--> selected local backend
--> loopback mesh gateway
--> generated GLB
+local/trellis2 — TRELLIS.2 — Text + image
+```
+
+The old local backends remain available **only during validation**. They are removed after the new path has produced real GLBs from both image and text inside pCAD.
+
+## Transitional Creative catalog
+
+| pCAD ID | Backend | Text -> 3D | Image -> 3D | Runtime status |
+| --- | --- | ---: | ---: | --- |
+| `local/trellis2` | Z-Image-Turbo + TRELLIS.2 | Yes | Yes | New native path; runtime validation pending. |
+| `local/trellis-v1` | Microsoft TRELLIS v1 | Yes | Yes | Existing working Python fallback during transition. |
+| `local/hunyuan3d-2` | Tencent Hunyuan3D-2 | No | Yes | Existing working Python fallback during transition. |
+| `local/hunyuan3d-2.1` | Tencent Hunyuan3D-2.1 | No | Yes | Transitional legacy backend. |
+| `quality` | fal.ai legacy Draft | Yes | Yes | Historical hosted ID; requires `FAL_KEY`. |
+| `fast` | fal.ai legacy Textureless | Yes | Yes | Historical hosted ID; requires `FAL_KEY`. |
+| `ultra` | fal.ai legacy Max Quality | Yes | Yes | Historical hosted ID; requires `FAL_KEY`. |
+
+Stable Fast 3D remains retired.
+
+The historical fal.ai IDs and persisted local IDs are not rewritten. Removal of an old selectable runtime must not make historical conversation metadata unsafe to load.
+
+# New native Creative path
+
+## Product ID versus runtime IDs
+
+The user-facing/persisted product ID is:
+
+```text
+local/trellis2
+```
+
+The runtime implementation is split into two llama-swap entries:
+
+```text
+creative/z-image-turbo
+creative/trellis2
+```
+
+This separation is intentional. Product persistence should not need to change if a runtime binary or quantization changes later.
+
+## Text-to-3D
+
+```text
+text prompt
+-> pCAD Creative create_mesh
+-> src/server/mesh.ts
+-> src/server/nativeCreativeMesh.ts
+-> llama-swap /v1/images/generations
+-> creative/z-image-turbo
+-> stable-diffusion.cpp
+-> Z-Image-Turbo conditioning PNG
+-> llama-swap /upstream/creative/trellis2/generate
+-> trellis.cpp / TRELLIS.2
+-> textured/PBR GLB
 -> Supabase mesh storage
 -> pCAD viewer
 -> conversation workspace models/generated/
 ```
 
-`local/trellis-v1` has been manually validated for text-to-3D through the pCAD
-runtime. `local/hunyuan3d-2` has been manually validated through the complete
-image-to-3D path.
+The conditioning image is an implementation artifact; it is not exposed as a separate Creative product model.
 
-Follow-up editing of an existing locally generated mesh is **not enabled in v1**.
-The stable local mesh entrypoint rejects local `meshId` edit requests instead of
-silently regenerating or reporting a false success. Deterministic/semantic mesh
-editing is deferred work.
-
-Runtime validation still pending independently of the working TRELLIS and
-Hunyuan3D-2 paths:
-
-- Hunyuan3D-2.1 runtime validation
-- full llama-swap GPU unload/reload arbitration validation
-
-## Architecture
-
-The main pCAD server never imports the local PyTorch stacks. Local requests go
-to a small loopback gateway:
+## Image-to-3D
 
 ```text
-pCAD create_mesh
-  -> src/server/mesh.ts
-      -> local/* -> src/server/localMesh.ts
-                   -> 127.0.0.1:8180 pCAD mesh gateway
-                      -> GPU arbitration with llama-swap
-                      -> exactly one GPU worker on 127.0.0.1:8190
-      -> quality/fast/ultra -> src/server/falMesh.ts (legacy fal.ai)
+reference image
+-> pCAD Creative create_mesh
+-> src/server/mesh.ts
+-> src/server/nativeCreativeMesh.ts
+-> llama-swap /upstream/creative/trellis2/generate
+-> trellis.cpp / TRELLIS.2
+-> textured/PBR GLB
+-> Supabase mesh storage
+-> pCAD viewer
+-> conversation workspace models/generated/
 ```
 
-Each local backend has its own Python environment. The gateway kills the active
-worker before starting a different backend, so only one heavyweight local 3D
-model owns VRAM at a time.
+The initial integration accepts one reference image for TRELLIS.2. Multiple requested images fail explicitly rather than being silently ignored.
 
-With GPU arbitration enabled, the gateway also checks llama-swap before a local
-3D generation. If llama-swap has a resident LLM/VLM, the gateway requests a
-manual unload and waits until `/running` reports no resident model before the
-3D worker starts. The default `PCAD_MESH_KEEP_WARM=false` then stops the 3D
-worker before `create_mesh` returns. The next LLM/VLM request can therefore let
-llama-swap load its model again normally. pCAD does not need to know which LLM
-was previously resident.
+## Why there is no new mesh gateway
 
-This is intentional for a single 24 GB consumer GPU. It is model-family
-hot-swapping, not concurrent execution.
-
-Local generation does not consume hosted mesh billing tokens. fal.ai requests
-continue through the existing billing path unchanged.
-
-## One-step installation
-
-From the pCAD repository:
-
-```bash
-bash ./scripts/install-local-mesh-backends.sh --install-system-deps
-```
-
-Without the optional apt/sudo step:
-
-```bash
-bash ./scripts/install-local-mesh-backends.sh
-```
-
-For runtime/environment installation without prefetching large Hugging Face
-repositories:
-
-```bash
-bash ./scripts/install-local-mesh-backends.sh --skip-weights
-```
-
-This is the recommended development path while selective checkpoint prefetch is
-still being refined. Models can download the checkpoint they need on first use.
-
-Default installation location:
+Current llama-swap provides a generic passthrough endpoint:
 
 ```text
-~/.local/share/pcad-mesh/
-  bin/micromamba
-  repos/
-  envs/
-  runtime/
-  cache/huggingface/
-  logs/
-  config/env
+/upstream/<model>/<path>
 ```
 
-The installer creates isolated environments, clones the three official
-repositories, installs their dependencies and installs a user service:
+It resolves configured model IDs that themselves contain slashes and starts/swaps the corresponding process before proxying the request. Therefore `creative/trellis2` can expose its native `/generate` endpoint through:
 
 ```text
-pcad-mesh-gateway.service
+/upstream/creative/trellis2/generate
 ```
 
-Unless `--skip-weights` is used, it also attempts weight prefetch. Repository
-prefetch can be substantially larger than the individual checkpoint used by a
-worker, so use `--skip-weights` when disk/download size matters. The directory
-`cache/huggingface` contains downloaded model weights; deleting it forces those
-weights to be downloaded again.
+pCAD only adapts its existing `create_mesh` request into TRELLIS.2 multipart form inside `src/server/nativeCreativeMesh.ts`.
 
-Check the gateway with:
+There is no second model registry, translator daemon or new generic gateway. llama-swap owns process lifecycle/GPU arbitration; pCAD owns application validation, persistence and conversation state.
 
-```bash
-systemctl --user status pcad-mesh-gateway.service
-curl -s http://127.0.0.1:8180/health | python3 -m json.tool
-```
+# GPU lifecycle
 
-pCAD defaults to this gateway URL automatically. Override it only when needed:
-
-```bash
-export PCAD_MESH_GATEWAY_URL=http://127.0.0.1:8180
-```
-
-## GPU arbitration with llama-swap
-
-The installer defaults to:
+Both new runtime entries are configured with short validation TTLs so they release resources after use:
 
 ```text
-PCAD_GPU_ARBITRATION=auto
+creative/z-image-turbo  ttl: 30
+creative/trellis2       ttl: 30
+```
+
+With normal llama-swap group routing, only the requested heavyweight model should remain active. The expected text path is:
+
+```text
+Z-Image process starts
+-> conditioning PNG produced
+-> TRELLIS.2 request starts
+-> llama-swap swaps away Z-Image as needed
+-> TRELLIS.2 generates GLB
+-> TRELLIS.2 unloads after TTL
+```
+
+The actual GPU lifecycle must be observed during runtime acceptance before the old stack is removed.
+
+# Installation
+
+The new installer is:
+
+```bash
+bash ./scripts/install-native-creative-backends.sh
+```
+
+Default runtime location:
+
+```text
+~/ai/pcad-native-creative/
+  stable-diffusion.cpp/
+  z-image/
+    z_image_turbo-Q4_K.gguf
+    Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+    ae.safetensors
+  trellis2/
+    runtime/trellis-server
+    models/
+```
+
+Default llama-swap config target:
+
+```text
+~/ai/llama-swap/config/config.yaml
+```
+
+Override either path when needed:
+
+```bash
+PCAD_NATIVE_CREATIVE_ROOT=/other/runtime/path \
+PCAD_LLAMA_SWAP_CONFIG=/other/config.yaml \
+bash ./scripts/install-native-creative-backends.sh
+```
+
+## Initial runtime choices
+
+Z-Image side:
+
+- pinned `stable-diffusion.cpp` Linux Vulkan binary;
+- Z-Image-Turbo Q4_K;
+- Qwen3-4B-Instruct-2507 Q4_K_M text encoder;
+- `ae.safetensors` VAE;
+- 8 sampling steps / CFG 1.0;
+- 1024 x 1024 default conditioning image.
+
+The installer verifies SHA256 for the pinned `stable-diffusion.cpp` archive and all three Z-Image model assets.
+
+TRELLIS.2 side:
+
+- official `trellis.cpp` installer;
+- CUDA runtime;
+- Q8 weights (~9.5 GB, upstream describes them as near-lossless);
+- no Trellis Studio desktop app.
+
+The native installer **does not remove** the existing Python mesh gateway, service, repositories, environments or model cache.
+
+It backs up the llama-swap config before adding:
+
+```yaml
+creative/z-image-turbo:
+  ttl: 30
+  checkEndpoint: /
+  # stable-diffusion.cpp sd-server command
+
+creative/trellis2:
+  ttl: 30
+  checkEndpoint: /health
+  # trellis-server command
+```
+
+# pCAD configuration
+
+Defaults:
+
+```text
 PCAD_LLAMA_SWAP_URL=http://127.0.0.1:9292
-PCAD_LLAMA_SWAP_UNLOAD_TIMEOUT=90
-PCAD_MESH_KEEP_WARM=false
+PCAD_Z_IMAGE_MODEL_ID=creative/z-image-turbo
+PCAD_TRELLIS2_MODEL_ID=creative/trellis2
+PCAD_TRELLIS2_RESOLUTION=1024
+PCAD_Z_IMAGE_SIZE=1024x1024
 ```
 
-`auto` means that a running llama-swap is coordinated with automatically, but a
-machine without llama-swap can still use the local mesh gateway. Use `required`
-when local 3D generation must fail closed unless llama-swap can be contacted:
-
-```bash
-export PCAD_GPU_ARBITRATION=required
-bash ./scripts/install-local-mesh-backends.sh
-```
-
-Use `off` to disable cross-runtime arbitration:
-
-```bash
-export PCAD_GPU_ARBITRATION=off
-```
-
-If llama-swap is protected by a bearer token, set:
+Optional bearer token:
 
 ```bash
 export PCAD_LLAMA_SWAP_API_KEY='...'
 ```
 
-The gateway health response exposes the arbitration state:
+The native handler checks `/v1/models` first and returns an actionable 503 when the required runtime ID is not configured.
+
+# Validation sequence
+
+Validate application code before downloading/starting the new runtimes:
 
 ```bash
-curl -s http://127.0.0.1:8180/health | python3 -m json.tool
-```
-
-Look for `arbitration.mode`, `arbitration.connected`,
-`arbitration.lastAction`, and `activeModel`.
-
-For normal single-GPU pCAD use, leave `PCAD_MESH_KEEP_WARM=false`. Setting it to
-`true` is only appropriate when enough VRAM exists to keep the selected 3D
-worker resident while later LLM requests run.
-
-## Installer options
-
-```text
---install-system-deps  Install common Ubuntu/Debian build dependencies via sudo apt.
---skip-weights         Do not prefetch model weights; models download on first use.
---no-service           Install runtimes but do not enable the user systemd service.
---recreate-envs        Force recreation of all managed Python environments.
-```
-
-The installer is designed to be rerunnable. Repository checkouts and the shared
-Hugging Face cache are preserved. Managed environments are recreated when their
-pCAD bootstrap spec changes or when `--recreate-envs` is requested.
-
-## GPU / model behavior
-
-TRELLIS v1 accepts a plain text prompt or a reference image. Hunyuan3D-2 and
-Hunyuan3D-2.1 require a reference image in the current pCAD integration; pCAD
-rejects incompatible text-only requests before starting GPU inference.
-
-Hunyuan3D-2.1's upstream documentation reports approximately 10 GB VRAM for
-shape, 21 GB for texture and 29 GB with shape+texture together. The initial pCAD
-worker therefore uses the shape pipeline only. PBR painting can be added later
-as a sequential worker stage without changing the pCAD mesh provider contract.
-
-The legacy CUDA profile used by TRELLIS is intentionally isolated from the
-Ubuntu host toolchain: Python 3.10, PyTorch cu121, CUDA toolkit/nvcc 12.1 and
-GCC/G++ 12 live in the managed environment. Hunyuan environments use the modern
-cu124 profile. The system NVIDIA driver/toolkit is not modified.
-
-The clean installer runs the same explicit TRELLIS runtime repair that has been
-validated in pCAD before writing the TRELLIS environment ready marker. This
-covers the CUDA extensions and runtime dependencies that upstream setup can
-otherwise skip while still returning success.
-
-## Logs
-
-Gateway service:
-
-```bash
-journalctl --user -u pcad-mesh-gateway.service -f
-```
-
-Backend worker logs:
-
-```bash
-ls -lh ~/.local/share/pcad-mesh/logs/
-tail -f ~/.local/share/pcad-mesh/logs/worker-local-trellis-v1.log
-```
-
-## Validation
-
-Validate the TypeScript side:
-
-```bash
+npm test
 npm run typecheck
-npx tsx --test tests/creativeMeshModels.test.ts
+npm run lint
+npm run build
+bash -n scripts/install-native-creative-backends.sh
 ```
 
-Validate the lightweight Python gateway without loading a model:
+Then install the runtimes:
 
 ```bash
-python3 -m py_compile scripts/local-mesh/gateway.py scripts/local-mesh/worker.py
-bash -n scripts/install-local-mesh-backends.sh
+bash ./scripts/install-native-creative-backends.sh
 ```
 
-After installation:
+Restart/reload llama-swap and verify discovery:
 
 ```bash
-curl -s http://127.0.0.1:8180/health | python3 -m json.tool
+curl -s http://127.0.0.1:9292/v1/models \
+  | grep -E 'creative/(z-image-turbo|trellis2)'
 ```
 
-Then create a new Creative conversation and explicitly select one of the local
-backends in the model picker. A local request must not require `FAL_KEY`.
-
-The manually validated Hunyuan3D-2 acceptance path is:
+Test **image-to-3D first**. This isolates TRELLIS.2 and avoids mixing a Z-Image problem into the first smoke test:
 
 ```text
 new Creative conversation
--> select local/hunyuan3d-2
--> attach reference image
--> generate mesh
+-> select TRELLIS.2
+-> attach one reference image
+-> generate
 -> GLB visible in pCAD
--> generated mesh mirrored to conversations/<uuid>/models/generated/
+-> mesh persisted
+-> conversation workspace mirror updated
 ```
 
-For the separate GPU arbitration runtime test, first let llama-swap load an
-LLM/VLM and confirm it appears in its `/running` endpoint. Start a local Creative
-generation and observe the gateway health/logs. The expected sequence is:
+Then test text-to-3D:
 
 ```text
-llama-swap model resident
--> gateway unloads llama-swap
--> local 3D worker starts
--> GLB is generated
--> local 3D worker exits
--> next LLM request reloads through llama-swap
+new Creative conversation
+-> select TRELLIS.2
+-> text prompt only
+-> Z-Image conditioning image generated internally
+-> TRELLIS.2 generates GLB
+-> GLB visible/persisted/mirrored
 ```
 
-This arbitration sequence remains a dedicated runtime validation item until it
-has been observed end-to-end.
+Also observe llama-swap `/running` or UI/activity during both tests to confirm model swapping and later VRAM release.
+
+# Existing Python runtime during transition
+
+The old path remains intact while validation is in progress:
+
+```text
+local/trellis-v1 | local/hunyuan3d-2 | local/hunyuan3d-2.1
+-> src/server/localMesh.ts
+-> 127.0.0.1:8180 pCAD mesh gateway
+-> Python GPU worker
+-> GLB
+```
+
+Its installer remains:
+
+```bash
+bash ./scripts/install-local-mesh-backends.sh
+```
+
+Do not uninstall or clean `~/.local/share/pcad-mesh` yet.
+
+# Removal gate
+
+The old Python runtime may be removed only after all of these are true:
+
+- [ ] `local/trellis2` image-to-3D produces a real viewable GLB.
+- [ ] `local/trellis2` text-to-3D produces a real viewable GLB through Z-Image-Turbo.
+- [ ] Supabase persistence succeeds for both.
+- [ ] conversation workspace mirroring succeeds for both.
+- [ ] llama-swap swapping/TTL releases resources correctly.
+- [ ] reconnect/background behavior does not duplicate generation.
+- [ ] project test/typecheck/lint/build gate is green.
+
+After that proof, remove normal selection and runtime code for the superseded local Python backends while keeping historical persisted data safe.
+
+# Follow-up editing
+
+Follow-up semantic editing of a locally generated mesh remains deferred. `meshId` edit requests to the new native backend are rejected explicitly rather than silently regenerating a mesh or claiming an edit succeeded.
+
+# Logs and diagnostics
+
+The new handler logs with:
+
+```text
+[native-creative-mesh]
+```
+
+Useful llama-swap endpoints include:
+
+```text
+GET /v1/models
+GET /running
+```
+
+Old gateway diagnostics remain available during the transition through its existing systemd service/logs.
