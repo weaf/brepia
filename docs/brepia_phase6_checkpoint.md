@@ -1,27 +1,47 @@
 # Brepia Phase 6 checkpoint
 
-Updated: 2026-08-27
+Updated: 2026-08-28  
+State: **closeout / final gate pending**
 
-This is the current execution checkpoint for `feature/brepia-remake`. Read it together with:
+This is the reconciled execution checkpoint for `feature/brepia-remake`. Read it together with:
 
 - `AGENTS.md`
 - `docs/brepia_remake_plan.md`
 - `docs/brepia_remake_status.md`
 - `docs/brepia_branding.md`
+- `docs/brepia_phase6_runtime_handover.md`
+- `docs/brepia_cosmetic_closeout_handover.md`
+
+The closeout handover and reconciled plan/status supersede older unchecked “next implementation” items in earlier versions of this file.
+
+## Scope lock
+
+The Brepia remake/cosmetic scope is frozen.
+
+Before merge, do only:
+
+- remaining explicit Instance identity runtime validation;
+- genuine regression fixes caused by the remake/closeout;
+- final local test/typecheck/lint/build gate;
+- closeout documentation and merge preparation.
+
+Do **not** start new Local Creative functionality, new backend experiments or the post-merge functionality plan on this branch.
 
 ## Branch lineage
 
-The branch remains a linear descendant of master base:
+Recorded master base / merge base:
 
 `967f744976d3ae2fb64f3681745c8c046345499a`
 
-The branch is still 0 commits behind `master`. The exact ahead count changes as this checkpoint is updated; use GitHub comparison rather than treating an old count in documentation as authoritative.
+At reconciliation commit `fcfbe55f48dfd7b778503990789cea44a95abb4f`, GitHub comparison showed the branch **270 commits ahead of `master`, 0 behind**.
+
+Always re-check immediately before merge rather than relying on this historical count.
 
 ## Local environment convention
 
 The local Supabase stack is managed by **NOx**.
 
-Do not start/stop Supabase with a global CLI or with `npx supabase start/stop` on this workstation. Once NOx has started the stack, use the repository-local CLI for operations such as:
+Do not start/stop Supabase with a global CLI or `npx supabase start/stop`. Once NOx has started the stack, repository-local operations remain:
 
 ```bash
 npx supabase migration up
@@ -30,255 +50,253 @@ npx supabase gen types typescript --local > shared/database.ts
 
 Follow `.cursor/rules/database-workflow.mdc`: declarative schema first, generated migration second, never `db push`/`db pull`, and never hand-edit `shared/database.ts`.
 
-## Phase 6 original technical gate — GREEN
+`src/routeTree.gen.ts` is generated through the normal TanStack/Vite toolchain and must not be hand-edited.
 
-The original Phase 6 technical gate was completed in the real local development environment before the runtime-review follow-ups were added.
+## Original Phase 6 technical gate — GREEN at its checkpoint
+
+The original technical gate was completed in the real local development environment.
 
 Verified at that checkpoint:
 
-- Instance identity migration applied.
-- Discord social-link migration applied.
-- `shared/database.ts` regenerated from the running local Supabase instance.
-- `src/routeTree.gen.ts` regenerated through the TanStack/Vite toolchain.
-- Generated database typing cleanup included.
-- `npm test` PASS.
-- `npm run typecheck` PASS.
-- `npm run lint` PASS.
+- Instance identity migration applied;
+- Discord social-link migration applied;
+- `shared/database.ts` regenerated from the running NOx-managed local Supabase instance;
+- `src/routeTree.gen.ts` regenerated through the TanStack/Vite toolchain;
+- generated database typing cleanup included;
+- `npm test` PASS;
+- `npm run typecheck` PASS;
+- `npm run lint` PASS;
 - `npm run build` PASS.
 
-The later default-model/avatar changes were also exercised locally and the user reported the validation suite passing. The most recent Creative activity-indicator commits still require the normal local gate before the branch is called ready to merge.
+This historical PASS must **not** be presented as the final closeout gate because subsequent runtime/cosmetic changes were added afterward.
 
-## Runtime visual review — desktop/mobile PASS
+## Desktop/mobile visual gate — PASS
 
-The application has been manually reviewed in the real running environment on both desktop and mobile.
+The main Brepia presentation was manually reviewed in the real running application on desktop and mobile.
 
-User result:
+Result:
 
 - desktop presentation looks good;
 - mobile presentation looks good;
-- no Brepia branding/layout issue was identified that requires broad visual rework.
+- no broad Brepia branding/layout redesign remains justified.
 
-This satisfies the requirement that the main desktop/mobile visual gate be checked in the real application rather than by static code review alone.
+Specialized GIF/GLB/reduced-motion edge workflows may still be exercised opportunistically, but they are not standalone merge blockers unless a closeout edit directly regresses them.
 
-Do not infer from this general pass that every specialized generated-media state was exercised unless explicitly recorded separately. GIF watermark, reduced-motion and uncommon error states can still be checked opportunistically when those workflows are exercised.
+## Stable runtime — PASS for normal local use
 
-### Avatar follow-up — implemented
+The browser lifecycle/HMR problem is resolved for normal use through the production-like stable runtime documented in `docs/brepia_phase6_runtime_handover.md`.
 
-The orange circular element in the collapsed sidebar was identified during review as the fallback user avatar, not a navigation/menu icon.
+Preserve:
 
-Current implementation:
+- `start.sh` build/preview behavior;
+- dynamic loopback preview port;
+- `scripts/stable-runtime-proxy.mjs`;
+- stable public/local port behavior;
+- explicit opt-in HMR development mode.
 
-- the collapsed sidebar again shows the user's avatar rather than replacing it with a generic menu icon;
-- social/provider avatar remains supported;
-- the existing uploaded profile-image/crop flow remains supported for local accounts;
-- users can additionally choose a Brepia preset avatar;
-- the selected preset is stored per user as `profiles.avatar_preset` and takes precedence until the user switches back to the account/profile photo;
-- SSO/social users can choose a Brepia preset without changing their provider-side avatar;
-- the avatar picker uses a compact fixed-size grid on both desktop and mobile rather than allowing the choices to stretch into oversized horizontal circles;
-- the fallback avatar now renders visible initials rather than an anonymous colored circle.
+Do not revert normal startup to Vite development/HMR.
 
-Manual visual confirmation of the final compact picker is still useful after the latest pull, but the architecture/UI correction is implemented.
+User verification showed that extended Android app switching/backgrounding no longer caused the recurring Brepia reload problem.
 
-## Discord social link
+## Parametric completion reconciliation — implemented and user-verified
 
-Discord is an administrator-configurable deployment social link, not a hardcoded CADAM-owned invite.
+The persisted completion recovery now handles the legitimate Parametric sequence where a live build/tool assistant is followed by a later terminal assistant in the same user turn.
 
-Current behavior:
+It only treats the later terminal assistant as covering the live turn when no newer user message intervenes.
 
-- `discordUrl` is optional and defaults to `null`;
-- no Discord link is shown on a fresh installation;
-- admin configures the URL under Instance identity -> Social links;
-- only HTTP/HTTPS URLs are accepted;
-- the sidebar uses the Discord brand icon;
-- desktop and mobile share the same sidebar rendering;
-- the old hardcoded invite URL was not restored;
-- the generic Community link remains separate for forum/Matrix/other communities.
+Regression coverage protects both the recovery case and the newer-user-message guard.
 
-## Static Instance identity review — no blocking finding
+User verification after the change: the behavior appeared to work correctly.
 
-The current code review confirms the intended architecture before/alongside the live functional pass:
+Do not replace this with strict message-ID-only reconciliation.
 
-- public `GET /api/settings/instanceIdentity` returns only the explicit public presentation DTO;
-- `PUT` requires an authenticated user and `requireAdmin`, which also requires an active admin account;
-- fresh-install server/client defaults contain no operator, contact, community, Discord or legal-service ownership claim;
-- public URLs are normalized and restricted to HTTP/HTTPS;
-- `showCommunityLink` cannot become publicly effective without a configured community URL;
-- Discord remains hidden when `discordUrl` is null;
-- the admin Instance identity section is only rendered for an admin account;
-- sidebar, legal surfaces and admin settings use the same `['instance-identity']` React Query cache key, so a successful save invalidates/refetches the public identity state;
-- mobile navigation reuses the expanded desktop sidebar renderer, so Community/Discord behavior is shared rather than implemented twice;
-- Community and Discord are independent and can coexist in the navigation;
-- legal links are only exposed as external links when `legalPagesEnabled` is true and the corresponding URL exists.
+## Avatar follow-up — implemented
+
+The collapsed sidebar remains an avatar surface, not a replacement navigation icon.
+
+Implemented:
+
+- provider/social avatar support;
+- uploaded/cropped profile photo support;
+- Brepia preset avatars stored per user;
+- preset choice can override provider photo without modifying provider-side identity;
+- compact fixed-size desktop/mobile picker;
+- initials fallback instead of an anonymous circle.
+
+The main desktop/mobile review has already passed. Do not reopen this as a broad redesign item without a concrete defect.
+
+## Instance identity architecture — static review PASS, live closeout evidence incomplete
+
+The current architecture matches the intended open-source instance model:
+
+- public `GET /api/settings/instanceIdentity` exposes only the whitelisted presentation DTO;
+- `PUT` requires an authenticated active administrator through `requireAdmin`;
+- fresh defaults contain no operator/contact/community/Discord/legal ownership claim;
+- public URLs are normalized/restricted to HTTP/HTTPS;
+- Community visibility cannot become effective without a valid Community URL;
+- Discord is independent, administrator-configured and hidden when unset;
+- admin Instance identity UI is admin-only;
+- Sidebar/legal/settings consume the shared Instance identity state;
+- desktop/mobile navigation shares the same rendering path;
+- Community and Discord may coexist;
+- external legal links require both the legal toggle and a configured URL.
 
 ### Non-blocking hardening observation
 
-`InstanceLegalNotice` currently distinguishes loading from loaded state but not load-error from an unconfigured instance. A failed public Instance identity request can therefore visually fall back to the neutral “no document published” presentation.
+`InstanceLegalNotice` distinguishes loading from loaded state but not an Instance identity fetch error from an unconfigured instance. A failed request can visually fall back to the neutral “no document published” presentation.
 
-Do not change this solely from static review. Treat it as a separate hardening item unless a real runtime failure demonstrates that it is misleading enough to fix in this branch.
+Do not change this solely from static review. It is separate hardening unless a real closeout runtime failure shows a misleading regression.
 
-## Remaining functional Instance identity review
+### Remaining live Instance identity checks
 
-Where not already exercised during the manual runtime pass, verify:
+Where not already exercised and explicitly recorded, verify before merge:
 
-1. Fresh/default GET is neutral when no singleton configuration has been saved.
-2. Admin can save and reload:
-   - operator;
-   - contact email;
-   - Community label + URL + visibility;
-   - Discord URL;
-   - legal-link toggle;
-   - Terms URL;
-   - Privacy URL.
-3. A non-admin authenticated user receives a forbidden response when attempting `PUT`.
-4. Clearing Discord removes it from navigation after the identity query refreshes.
-5. Community and Discord can be visible at the same time.
-6. Turning off Community hides the Community navigation entry without requiring the stored URL to be deleted.
-7. Turning off legal links hides external legal links while the neutral Brepia legal-information pages remain available.
-8. Terms/Privacy pages show configured operator/contact information accurately and never imply that Brepia/Noty is automatically the deployment operator.
+1. fresh/default public GET/presentation is neutral;
+2. admin can save/reload operator and contact;
+3. admin can save/reload Community label, URL and visibility;
+4. admin can save/reload Discord URL;
+5. admin can save/reload legal toggle, Terms URL and Privacy URL;
+6. authenticated non-admin `PUT` is forbidden;
+7. clearing Discord removes it from navigation after query refresh;
+8. Community and Discord can be visible simultaneously;
+9. disabling Community hides its entry without deleting its stored URL;
+10. disabling legal links hides external legal links while neutral Brepia legal pages remain accessible;
+11. Terms/Privacy show configured operator/contact accurately and never imply Brepia/Noty automatically operates every installation.
 
-## Runtime-review follow-ups discovered 2026-08-27
+These are validation items only. Do not redesign Instance identity to satisfy them unless an actual defect is found.
 
-Product-level follow-ups were discovered during the desktop/mobile review. They must be handled before the intentionally deferred `CADAM Original` decision.
+## Runtime follow-ups — reconciled final state
 
-### 1. Per-user default model selection — IMPLEMENTED AND RUNTIME VERIFIED
+### 1. Per-user default model selection — COMPLETE / RUNTIME VERIFIED
 
-The implementation stores two independent per-user defaults:
+Implemented and verified:
 
 - `default_parametric_model_id`;
-- `default_creative_model_id`.
+- `default_creative_model_id`;
+- storage in `user_ai_preferences`;
+- API DTO/preferences integration;
+- independent Settings controls;
+- mode-specific defaults for new conversations;
+- mode switches use the applicable saved default;
+- existing conversations remain pinned;
+- unavailable hidden Parametric defaults fall back safely;
+- focused resolver tests exist.
 
-Implementation details:
+Do not implement this again.
 
-- declarative schema updated in `supabase/schemas/user_ai_preferences.sql`;
-- migration added: `supabase/migrations/20260827095000_default_model_preferences.sql`;
-- `AiPreferencesDto` exposes:
-  - `defaultParametricModelId`;
-  - `defaultCreativeModelId`;
-- existing `/api/ai-settings/preferences` GET/PUT carries both fields;
-- Parametric defaults are validated against the current selectable catalog;
-- Creative defaults are validated against the Creative mesh model IDs;
-- `Default models` settings UI is shown under AI Settings -> Models;
-- users can independently choose Parametric and Creative defaults;
-- `Automatic fallback` resets either preference to `null`;
-- a saved Parametric model that becomes hidden/unavailable is not blindly used; the new-conversation resolver selects the normal fallback or the first currently selectable model;
-- new conversations use the configured default;
-- switching Parametric/Creative on the new-conversation surface switches to that mode's configured default;
-- existing conversations remain pinned to their existing model settings and are not rewritten;
-- focused resolver tests were added in `tests/defaultModels.test.ts`.
+### 2. Standalone Generate prompt — REMOVED
 
-Runtime result:
+This old “next implementation” item is complete.
 
-- the user confirmed the default-model control is visible after syncing the current branch;
-- the configured default model is applied correctly;
-- the local validation suite was reported passing after the migration/type regeneration and follow-up lint fix.
+Already removed:
 
-`shared/database.ts` must continue to be generated from the NOx-managed local Supabase instance and must never be hand-edited.
+- Wand/Generate-prompt control from `TextAreaChat`;
+- associated client loading/error/request state;
+- `/api/prompt-generator` route;
+- stale route-tree entry through normal TanStack regeneration.
 
-### 2. Remove the standalone `Generate prompt` feature — NEXT IMPLEMENTATION
+Prompt profiles, prompt lineage, conversation system prompts and title generation remain real functionality and must not be removed.
 
-Runtime observation: `Generate prompt` does not work in the current installation and is not considered necessary for the Brepia workflow.
+Do not repair or recreate the standalone prompt generator.
 
-Recommendation remains to remove it rather than repair it.
+### 3. Creative TRELLIS text-to-mesh — VERIFIED / REMAKE UX COMPLETE
 
-Reasoning:
+Real local runtime verification succeeded with:
 
-- it adds UI complexity without being required to start a modelling request;
-- users can already write/edit the request directly;
-- the selected conversation agent/model can interpret or refine normal user intent as part of the actual modelling turn;
-- the current `/api/prompt-generator` implementation bypasses the configurable model/provider architecture and hardcodes `claude-haiku-4-5-20251001` through the Anthropic helper;
-- that hidden Anthropic dependency is inappropriate for local/self-hosted installations where the user may intentionally have no Anthropic credential configured.
+- Creative mode;
+- TRELLIS v1 selected;
+- no reference image;
+- text-only prompts;
+- successful GLB generation.
 
-Removal scope:
+Current retained local Creative targets:
 
-- remove the Wand/Generate-prompt control from `TextAreaChat`;
-- remove its loading/error state and client request code;
-- remove the now-unused `/api/prompt-generator` route;
-- regenerate the TanStack route tree normally;
-- remove only imports/state made dead by this feature;
-- do **not** remove prompt profiles, prompt lineage, conversation system prompts or the title generator; those are separate features.
+- TRELLIS v1 — text + image;
+- Hunyuan3D-2 — image required;
+- Hunyuan3D-2.1 — image required.
 
-### 3. Creative TRELLIS text-to-mesh — RUNTIME VERIFIED
+Implemented UX:
 
-The current implementation is model-dependent, not globally image-only.
+- capability labels in the model picker;
+- image-required early validation/error messaging;
+- TRELLIS recommendation rather than silently switching the selected model.
 
-Creative model capabilities currently declare:
+Stable Fast 3D is retired from the active local stack and must not be restored.
 
-- `local/trellis-v1` — supports text and image;
-- `local/hunyuan3d-2` — image required;
-- `local/hunyuan3d-2.1` — image required;
-- `local/stable-fast-3d` — image required;
-- historical fal.ai `quality`, `fast`, `ultra` modes — accept text and image through their hosted pipeline.
+Any new text-to-image pre-step, LLaMA-Mesh, `trellis.cpp`, backend contract redesign or installer program is outside the frozen remake branch.
 
-The local TRELLIS worker contains separate `TrellisTextTo3DPipeline` and `TrellisImageTo3DPipeline` paths.
+### 4. Persistent Creative generation activity — IMPLEMENTED
 
-Runtime verification on the real local installation:
+The durable source of truth remains the pending mesh row. The UI restores a visible generation state from persisted activity after navigation/focus/reconnect rather than pretending the original SSE stream is the only source of truth.
 
-- Creative mode selected;
-- `TRELLIS v1` selected;
-- no reference image attached;
-- text-only prompts generated GLB meshes successfully;
-- the user successfully created two models.
+Do not invent determinate percentages when the local backend does not persist determinate progress.
 
-During that verification the managed TRELLIS runtime was hardened for dependencies that upstream installation could leave missing or inconsistent, including:
+The separately paused mobile `Creating...` issue is out of closeout scope unless a final closeout edit creates a new regression.
 
-- `pygltflib`;
-- `nvdiffrast`;
-- a compatible pinned `transformers` runtime with working `CLIPTextModel`/PyTorch detection;
-- `diff_gaussian_rasterization`.
+## `CADAM Original` — FINAL DECISION COMPLETE
 
-The remaining product work is capability UX, not proof that text-to-mesh works:
+The intentionally-last prompt-profile decision has now been made after inspecting the actual built-in profile and prompt semantics.
 
-1. Make Creative model capability obvious in the model picker, for example:
-   - `Text + image`;
-   - `Image required`;
-   - optional provider/time information.
-2. When an image-required model is selected and the user has supplied text only, fail early in the UI with a specific explanation and offer the user to choose TRELLIS rather than letting the request look like a generic Creative failure.
-3. Do not silently switch the user's selected model unless that behavior is explicitly designed later.
-4. Fold the verified TRELLIS repair hardening back into the full clean installer so a fresh environment cannot silently become partially installed.
+Decision: **preserve `CADAM Original` as the explicit inherited/pre-Brepia built-in profile and lineage marker.**
 
-A future enhancement could add a text-to-image pre-step in front of image-only local mesh backends, but that is a separate feature and should not be introduced merely to hide model capability differences.
+Reasons:
 
-### 4. Persistent Creative generation activity — IMPLEMENTED, LOCAL UI REVIEW PENDING
+- built-in ID `builtin:parametric` is synthetic and compatibility-sensitive;
+- the profile resolves to the inherited `PARAMETRIC_AGENT_PROMPT` rather than a newly authored Brepia prompt;
+- the actual system prompt still carries inherited Adam identity/behavior;
+- fingerprint/base-revision values drive fork lineage and stale-fork warnings;
+- renaming/revising the prompt itself would be a behavioral prompt revision, not merely cosmetic cleanup;
+- Brepia branding rules explicitly permit accurate historical/upstream/compatibility naming.
 
-Runtime review showed that Android/browser backgrounding or dev-HMR can reload/reconnect the page while a long TRELLIS generation continues successfully on the server. The generation itself is no longer lost, but the UI previously gave little evidence that work was still active after returning to the conversation.
+Therefore no closeout code migration is required for this item. Do not rename the built-in ID, rewrite the prompt or deliberately change the fingerprint solely for brand consistency.
 
-Current implementation:
+## Optional package cleanup
 
-- the durable source of truth is the existing `meshes.status = 'pending'` row created before expensive local generation begins;
-- `ChatTitle` polls for pending Creative meshes for the current conversation every 2.5 seconds;
-- React Query refetches the activity state when the browser window regains focus;
-- returning to a Creative conversation after navigation/reload therefore restores a visible `Generating 3D model` activity pill even if the original chat SSE stream is gone;
-- multiple simultaneous pending jobs are represented as a count rather than hidden;
-- the indicator is indeterminate by design: no fake percentage is shown because the local backend does not currently persist determinate progress;
-- the shared preview `Loader` now accepts an explicit status label for places where a known operation should be described rather than using only a generic spinner verb.
+`lottie-react` remains declared in `package.json` after the Lottie consumer was removed.
 
-Required local UI check:
+This is a genuine but optional cleanup. It is **not a merge blocker**. If done, use npm in the real checkout and commit npm-generated package/lockfile changes. Do not hand-edit the lockfile remotely immediately before merge.
 
-1. Start a TRELLIS text-only generation.
-2. Confirm the header shows `Generating 3D model` while the mesh row is pending.
-3. Navigate to another conversation/model and then return before completion.
-4. Confirm the activity indicator reappears without restarting the mesh job.
-5. Background/foreground the Android browser and confirm the indicator is restored after reconnect/reload while generation continues.
-6. Confirm the indicator disappears after the mesh transitions to `success` or `failure`.
+The conservative frozen-scope choice is to leave package metadata untouched for closeout.
 
-The full-page reload itself remains a separate dev/browser/HMR investigation. It is no longer allowed to imply that the server generation stopped or to create duplicate mesh work.
+## Final closeout gate — STILL REQUIRED
 
-## Recommended next sequence
+After the final branch state is pulled locally, run:
 
-1. Pull the latest branch and rerun `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` after the Creative activity-indicator changes.
-2. Manually verify the compact avatar picker on desktop/mobile and the persistent Creative generation indicator across navigation/reload.
-3. Remove the standalone `Generate prompt` feature and regenerate the TanStack route tree normally.
-4. Improve Creative model capability messaging/guardrails now that TRELLIS text-only is proven to work.
-5. Fold the verified TRELLIS dependency repairs into the full clean local-mesh installer and verify a clean/recreated TRELLIS environment when practical.
-6. Rerun the full validation gate after those code changes.
-7. Perform npm-generated cleanup of dead `lottie-react` and package metadata if still desired, with the lockfile regenerated by npm.
-8. Resolve the built-in prompt-profile `CADAM Original` display/lineage strategy **last**.
-9. Repository/deployment renames remain a separate later decision.
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
 
-## Important constraints
+Run focused tests relevant to any final code edit as appropriate.
 
-- The main desktop/mobile visual gate has been manually reviewed and passed; do not reopen broad redesign without a concrete finding.
-- Do not rename compatibility-sensitive `PCAD_*`, `/cadam`, storage/database/local-state identifiers or external integration IDs merely for presentation cleanup.
-- Do not hand-edit `shared/database.ts`; regenerate it from the NOx-managed local Supabase instance after applying migrations.
-- Do not confuse removal of the standalone prompt-generator button with removal/change of the prompt-profile architecture.
-- Do not touch `CADAM Original` until the Brepia regression, remaining functional follow-ups and resulting validation gate are complete.
+No PASS may be claimed for commands not actually run in the user's local environment.
+
+The remote assistant runtime cannot substitute for this gate: it has no access to the user's workstation and its container cannot currently resolve GitHub DNS.
+
+## Final manual smoke
+
+Before merge, minimally verify:
+
+- normal desktop/mobile Brepia presentation;
+- Parametric conversation creation/continuation;
+- Creative model selection and capability messaging;
+- authentication/settings access;
+- Instance identity navigation/legal presentation;
+- no obvious closeout regression.
+
+Do not reopen deferred product work unless a closeout change directly caused a regression.
+
+## Merge sequence
+
+1. Complete/record the remaining live Instance identity checks if not already evidenced.
+2. Run the final full local gate on the exact branch HEAD intended for merge.
+3. Record that exact tested HEAD and command results in closeout documentation.
+4. Freshly compare `feature/brepia-remake` against `master`; resolve only real integration drift if any.
+5. Merge through the repository's normal integration procedure only when the gate is green.
+6. After merge, create a new branch from updated `master` before beginning any deferred functionality work.
+
+## Governing closeout rule
+
+> **No new experiments. Reconcile what is already done, validate the genuinely open Instance identity/runtime gate, preserve stable-runtime and prompt-lineage semantics, run the final gate, document evidence and merge.**
