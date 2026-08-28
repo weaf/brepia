@@ -1,4 +1,7 @@
+export const NATIVE_TRELLIS2_MODEL_ID = 'local/trellis2' as const;
+
 export const CREATIVE_MESH_MODEL_IDS = [
+  NATIVE_TRELLIS2_MODEL_ID,
   'local/trellis-v1',
   'local/hunyuan3d-2',
   'local/hunyuan3d-2.1',
@@ -37,8 +40,24 @@ export type CreativeMeshModelDefinition = {
  * unchanged because they are persisted in existing conversation/message data.
  * They are now explicitly labelled as fal.ai backends instead of being treated
  * as generic quality presets.
+ *
+ * `local/trellis2` is the new native target. The older local IDs intentionally
+ * remain selectable during the parallel validation window and are retired only
+ * after TRELLIS.2 has passed real end-to-end generation in this application.
  */
 export const CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
+  {
+    id: NATIVE_TRELLIS2_MODEL_ID,
+    name: 'TRELLIS.2',
+    description:
+      'Local text-to-3D via Z-Image-Turbo or direct image-to-3D; textured PBR GLB',
+    provider: 'local',
+    providerLabel: 'Local',
+    supportsText: true,
+    supportsImage: true,
+    supportsMeshEdit: false,
+    outputFormats: ['glb'],
+  },
   {
     id: 'local/trellis-v1',
     name: 'TRELLIS v1',
@@ -116,8 +135,13 @@ const CREATIVE_MESH_MODEL_BY_ID = new Map(
   CREATIVE_MESH_MODELS.map((definition) => [definition.id, definition]),
 );
 
-export function isCreativeMeshModelId(value: unknown): value is CreativeMeshModelId {
-  return typeof value === 'string' && CREATIVE_MESH_MODEL_BY_ID.has(value as CreativeMeshModelId);
+export function isCreativeMeshModelId(
+  value: unknown,
+): value is CreativeMeshModelId {
+  return (
+    typeof value === 'string' &&
+    CREATIVE_MESH_MODEL_BY_ID.has(value as CreativeMeshModelId)
+  );
 }
 
 export function getCreativeMeshModelDefinition(
@@ -138,10 +162,20 @@ export function getCreativeMeshInputCapability(
   return 'Unsupported';
 }
 
-export function isLocalCreativeMeshModel(id: string): id is CreativeMeshModelId {
+export function isLocalCreativeMeshModel(
+  id: string,
+): id is CreativeMeshModelId {
   return getCreativeMeshModelDefinition(id)?.provider === 'local';
 }
 
-export function isFalCreativeMeshModel(id: string): id is CreativeMeshModelId {
+export function isNativeTrellis2Model(
+  id: string,
+): id is typeof NATIVE_TRELLIS2_MODEL_ID {
+  return id === NATIVE_TRELLIS2_MODEL_ID;
+}
+
+export function isFalCreativeMeshModel(
+  id: string,
+): id is CreativeMeshModelId {
   return getCreativeMeshModelDefinition(id)?.provider === 'fal';
 }
