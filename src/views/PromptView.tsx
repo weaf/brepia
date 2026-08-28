@@ -497,7 +497,6 @@ export function PromptView() {
                   disabled={isGenerating}
                   model={model}
                   setModel={setModel}
-                  showPromptGenerator={true}
                   showFullLabels={true}
                   onTypeChange={handleTypeChange}
                   executionMode={executionMode}
