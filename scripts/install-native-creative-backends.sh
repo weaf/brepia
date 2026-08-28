@@ -6,7 +6,7 @@ set -euo pipefail
 #   image -------------------------------------> TRELLIS.2/trellis.cpp -> GLB
 #
 # Runtime lifecycle remains owned by llama-swap. The script appends two model
-# entries to an existing llama-swap config and never removes existing models.
+# entries to the existing llama-swap config and never removes existing models.
 
 ROOT="${PCAD_NATIVE_CREATIVE_ROOT:-$HOME/ai/pcad-native-creative}"
 LLAMA_SWAP_CONFIG="${PCAD_LLAMA_SWAP_CONFIG:-$HOME/ai/llama-swap/config/config.yaml}"
@@ -21,10 +21,15 @@ SD_URL="https://github.com/leejet/stable-diffusion.cpp/releases/download/$SD_TAG
 
 Z_IMAGE_URL="https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf?download=true"
 Z_IMAGE_FILE="$Z_IMAGE_DIR/z_image_turbo-Q4_K.gguf"
+Z_IMAGE_SHA256="14b375ab4f226bc5378f68f37e899ef3c2242b8541e61e2bc1aff40976086fbd"
+
 QWEN_URL="https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf?download=true"
 QWEN_FILE="$Z_IMAGE_DIR/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+QWEN_SHA256="3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
+
 VAE_URL="https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors?download=true"
 VAE_FILE="$Z_IMAGE_DIR/ae.safetensors"
+VAE_SHA256="afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
 
 usage() {
   cat <<EOF
@@ -40,6 +45,8 @@ The installer downloads roughly:
   VAE                              335 MB
   TRELLIS.2 Q8                  ~9.5 GB
 plus native runtime binaries.
+
+Existing old pCAD TRELLIS/Hunyuan runtimes are not removed.
 EOF
 }
 
@@ -66,7 +73,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-for tool in curl unzip sha256sum find; do
+for tool in curl unzip sha256sum find grep; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "Missing required command: $tool" >&2
     exit 1
@@ -75,21 +82,30 @@ done
 
 mkdir -p "$ROOT" "$Z_IMAGE_DIR" "$SD_RUNTIME_DIR"
 
-download() {
-  local url="$1" destination="$2"
-  if [ -s "$destination" ]; then
-    echo "==> already present: $destination"
+checksum_ok() {
+  local destination="$1" expected="$2"
+  [ -s "$destination" ] && printf '%s  %s\n' "$expected" "$destination" | sha256sum -c - >/dev/null 2>&1
+}
+
+download_checked() {
+  local url="$1" destination="$2" expected="$3"
+  if checksum_ok "$destination" "$expected"; then
+    echo "==> already present and verified: $destination"
     return
+  fi
+  if [ -e "$destination" ]; then
+    echo "==> checksum mismatch/incomplete file; redownloading: $destination"
+    rm -f "$destination"
   fi
   mkdir -p "$(dirname "$destination")"
   echo "==> downloading $(basename "$destination")"
   curl -fL --retry 3 --retry-delay 2 -C - -o "$destination" "$url"
+  printf '%s  %s\n' "$expected" "$destination" | sha256sum -c -
 }
 
 echo "==> installing stable-diffusion.cpp Vulkan runtime ($SD_TAG)"
 SD_ZIP="$ROOT/$SD_ARCHIVE"
-download "$SD_URL" "$SD_ZIP"
-echo "$SD_SHA256  $SD_ZIP" | sha256sum -c -
+download_checked "$SD_URL" "$SD_ZIP" "$SD_SHA256"
 if ! find "$SD_RUNTIME_DIR" -type f -name sd-server -print -quit | grep -q .; then
   rm -rf "$SD_RUNTIME_DIR"/*
   unzip -q "$SD_ZIP" -d "$SD_RUNTIME_DIR"
@@ -101,10 +117,10 @@ SD_SERVER="$(find "$SD_RUNTIME_DIR" -type f -name sd-server -print -quit)"
 }
 chmod +x "$SD_SERVER"
 
-echo "==> downloading Z-Image-Turbo runtime weights"
-download "$Z_IMAGE_URL" "$Z_IMAGE_FILE"
-download "$QWEN_URL" "$QWEN_FILE"
-download "$VAE_URL" "$VAE_FILE"
+echo "==> downloading and verifying Z-Image-Turbo runtime weights"
+download_checked "$Z_IMAGE_URL" "$Z_IMAGE_FILE" "$Z_IMAGE_SHA256"
+download_checked "$QWEN_URL" "$QWEN_FILE" "$QWEN_SHA256"
+download_checked "$VAE_URL" "$VAE_FILE" "$VAE_SHA256"
 
 echo "==> installing TRELLIS.2 Q8 CUDA runtime and models"
 if [ ! -x "$TRELLIS_DIR/runtime/trellis-server" ]; then
@@ -134,7 +150,7 @@ fi
 if grep -qE '^[[:space:]]+creative/z-image-turbo:' "$LLAMA_SWAP_CONFIG" || \
    grep -qE '^[[:space:]]+creative/trellis2:' "$LLAMA_SWAP_CONFIG"; then
   echo "==> Creative llama-swap entries already exist; leaving config unchanged"
-  echo "    Verify paths manually if the runtime root changed."
+  echo "    Verify their paths manually if the runtime root changed."
 else
   BACKUP="$LLAMA_SWAP_CONFIG.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$LLAMA_SWAP_CONFIG" "$BACKUP"
