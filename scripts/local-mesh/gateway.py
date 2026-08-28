@@ -29,7 +29,6 @@ MODEL_LAYOUT: dict[str, tuple[str, str]] = {
     "local/trellis-v1": ("trellis", "TRELLIS"),
     "local/hunyuan3d-2": ("hunyuan3d-2", "Hunyuan3D-2"),
     "local/hunyuan3d-2.1": ("hunyuan3d-2.1", "Hunyuan3D-2.1"),
-    "local/stable-fast-3d": ("stable-fast-3d", "stable-fast-3d"),
 }
 
 WORKER_HOST = "127.0.0.1"
