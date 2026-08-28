@@ -66,10 +66,8 @@ export function PromptView() {
     staleTime: 30_000,
     enabled: !user && !ssoProvider,
   });
-  const {
-    models: parametricModels,
-    isLoading: isParametricCatalogLoading,
-  } = useParametricModelCatalog();
+  const { models: parametricModels, isLoading: isParametricCatalogLoading } =
+    useParametricModelCatalog();
   const { data: aiPreferences } = useQuery({
     queryKey: ['ai-preferences', 'defaults'],
     queryFn: getAiPreferences,

@@ -21,7 +21,6 @@ import { Route as LayoutRouteImport } from './routes/_layout';
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index';
 import { Route as AssetsSplatRouteImport } from './routes/assets.$';
 import { Route as ApiTitleGeneratorRouteImport } from './routes/api/title-generator';
-import { Route as ApiPromptGeneratorRouteImport } from './routes/api/prompt-generator';
 import { Route as ApiParametricChatRouteImport } from './routes/api/parametric-chat';
 import { Route as ApiMeshRouteImport } from './routes/api/mesh';
 import { Route as ApiFalWebhookRouteImport } from './routes/api/fal-webhook';
@@ -109,11 +108,6 @@ const AssetsSplatRoute = AssetsSplatRouteImport.update({
 const ApiTitleGeneratorRoute = ApiTitleGeneratorRouteImport.update({
   id: '/api/title-generator',
   path: '/api/title-generator',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiPromptGeneratorRoute = ApiPromptGeneratorRouteImport.update({
-  id: '/api/prompt-generator',
-  path: '/api/prompt-generator',
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiParametricChatRoute = ApiParametricChatRouteImport.update({
@@ -287,7 +281,6 @@ export interface FileRoutesByFullPath {
   '/api/fal-webhook': typeof ApiFalWebhookRoute;
   '/api/mesh': typeof ApiMeshRoute;
   '/api/parametric-chat': typeof ApiParametricChatRoute;
-  '/api/prompt-generator': typeof ApiPromptGeneratorRoute;
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
   '/history': typeof LayoutAuthHistoryRoute;
@@ -329,7 +322,6 @@ export interface FileRoutesByTo {
   '/api/fal-webhook': typeof ApiFalWebhookRoute;
   '/api/mesh': typeof ApiMeshRoute;
   '/api/parametric-chat': typeof ApiParametricChatRoute;
-  '/api/prompt-generator': typeof ApiPromptGeneratorRoute;
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
   '/history': typeof LayoutAuthHistoryRoute;
@@ -373,7 +365,6 @@ export interface FileRoutesById {
   '/api/fal-webhook': typeof ApiFalWebhookRoute;
   '/api/mesh': typeof ApiMeshRoute;
   '/api/parametric-chat': typeof ApiParametricChatRoute;
-  '/api/prompt-generator': typeof ApiPromptGeneratorRoute;
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
   '/_layout/': typeof LayoutIndexRoute;
@@ -418,7 +409,6 @@ export interface FileRouteTypes {
     | '/api/fal-webhook'
     | '/api/mesh'
     | '/api/parametric-chat'
-    | '/api/prompt-generator'
     | '/api/title-generator'
     | '/assets/$'
     | '/history'
@@ -460,7 +450,6 @@ export interface FileRouteTypes {
     | '/api/fal-webhook'
     | '/api/mesh'
     | '/api/parametric-chat'
-    | '/api/prompt-generator'
     | '/api/title-generator'
     | '/assets/$'
     | '/history'
@@ -503,7 +492,6 @@ export interface FileRouteTypes {
     | '/api/fal-webhook'
     | '/api/mesh'
     | '/api/parametric-chat'
-    | '/api/prompt-generator'
     | '/api/title-generator'
     | '/assets/$'
     | '/_layout/'
@@ -546,7 +534,6 @@ export interface RootRouteChildren {
   ApiFalWebhookRoute: typeof ApiFalWebhookRoute;
   ApiMeshRoute: typeof ApiMeshRoute;
   ApiParametricChatRoute: typeof ApiParametricChatRoute;
-  ApiPromptGeneratorRoute: typeof ApiPromptGeneratorRoute;
   ApiTitleGeneratorRoute: typeof ApiTitleGeneratorRoute;
   AssetsSplatRoute: typeof AssetsSplatRoute;
   ApiAiSettingsPreferencesRoute: typeof ApiAiSettingsPreferencesRoute;
@@ -646,13 +633,6 @@ declare module '@tanstack/react-router' {
       path: '/api/title-generator';
       fullPath: '/api/title-generator';
       preLoaderRoute: typeof ApiTitleGeneratorRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/prompt-generator': {
-      id: '/api/prompt-generator';
-      path: '/api/prompt-generator';
-      fullPath: '/api/prompt-generator';
-      preLoaderRoute: typeof ApiPromptGeneratorRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/api/parametric-chat': {
@@ -982,7 +962,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiFalWebhookRoute: ApiFalWebhookRoute,
   ApiMeshRoute: ApiMeshRoute,
   ApiParametricChatRoute: ApiParametricChatRoute,
-  ApiPromptGeneratorRoute: ApiPromptGeneratorRoute,
   ApiTitleGeneratorRoute: ApiTitleGeneratorRoute,
   AssetsSplatRoute: AssetsSplatRoute,
   ApiAiSettingsPreferencesRoute: ApiAiSettingsPreferencesRoute,
