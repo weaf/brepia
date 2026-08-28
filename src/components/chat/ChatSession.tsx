@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
 import { apiUrl } from '@/services/api';
 import { messageRowToChatMessage, type ChatMessage } from '@/lib/aiMessages';
+import { getCreativeInputValidationIssue } from '@/lib/creativeInputValidation';
 import { collectStuckToolRecovery } from '@/components/chat/stuckToolRecovery';
 import {
   AssistantRowMissingError,
@@ -757,7 +758,9 @@ export function ChatSession({
     userFacingChatError(chatError).message === CONNECTION_INTERRUPTED_MESSAGE &&
     shouldPollForPendingAssistant(dbMessages);
   const isLoading =
-    status === 'submitted' || status === 'streaming' || isRecoveringInterruptedTurn;
+    status === 'submitted' ||
+    status === 'streaming' ||
+    isRecoveringInterruptedTurn;
 
   useEffect(() => {
     onLoadingChange?.(isLoading);
@@ -842,6 +845,20 @@ export function ChatSession({
   // ───────────────────────────────────────────────────────────────────────
   const handleSend = useCallback(
     async (parts: AppUIMessage['parts']) => {
+      const issue = getCreativeInputValidationIssue({
+        conversationType: conversation.type,
+        model,
+        parts,
+      });
+
+      if (issue) {
+        toast({
+          title: issue.title,
+          description: issue.description,
+        });
+        return;
+      }
+
       const text = parts
         .filter((p) => p.type === 'text')
         .map((p) => p.text)
@@ -872,7 +889,14 @@ export function ChatSession({
         { body: { model } },
       );
     },
-    [conversation.id, conversation.type, model, onSendParts, sendMessage],
+    [
+      conversation.id,
+      conversation.type,
+      model,
+      onSendParts,
+      sendMessage,
+      toast,
+    ],
   );
 
   const handleEditUserText = useCallback(

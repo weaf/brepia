@@ -38,6 +38,7 @@ import {
   resolveCreativeDefaultModel,
   resolveParametricDefaultModel,
 } from '@/lib/defaultModels';
+import { getCreativeInputValidationIssue } from '@/lib/creativeInputValidation';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -415,6 +416,24 @@ export function PromptView() {
     },
   });
 
+  const handlePromptSubmit = (parts: AppUIMessage['parts']) => {
+    const issue = getCreativeInputValidationIssue({
+      conversationType: type,
+      model,
+      parts,
+    });
+
+    if (issue) {
+      toast({
+        title: issue.title,
+        description: issue.description,
+      });
+      return;
+    }
+
+    handleGenerate(parts);
+  };
+
   return (
     <div
       className={cn(
@@ -475,7 +494,7 @@ export function PromptView() {
                 value={{ images, setImages, mesh, setMesh }}
               >
                 <TextAreaChat
-                  onSubmit={handleGenerate}
+                  onSubmit={handlePromptSubmit}
                   conversation={{
                     id: draftConversationId,
                     user_id: user?.id ?? '',
