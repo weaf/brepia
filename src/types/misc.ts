@@ -21,6 +21,7 @@ export interface ModelConfig {
   disabled?: boolean;
   timeEstimate?: string;
   provider?: string;
+  inputCapability?: string;
   supportsTools?: boolean;
   supportsThinking?: boolean;
   supportsVision?: boolean;
