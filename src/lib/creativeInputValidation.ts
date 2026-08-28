@@ -28,6 +28,6 @@ export function getCreativeInputValidationIssue({
 
   return {
     title: 'Reference image required',
-    description: `${definition.name} requires a reference image. Add an image or choose TRELLIS v1 for text-only generation.`,
+    description: `${definition.name} requires a reference image. Add an image or choose TRELLIS.2 for text-only generation.`,
   };
 }
