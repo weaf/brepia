@@ -30,7 +30,8 @@ describe('default model resolution', () => {
     ).toBe('agent/opencode/example');
   });
 
-  it('accepts known Creative model IDs and rejects unknown ones', () => {
+  it('accepts known Creative model IDs including TRELLIS.2 and rejects unknown ones', () => {
+    expect(resolveCreativeDefaultModel('local/trellis2')).toBe('local/trellis2');
     expect(resolveCreativeDefaultModel('local/trellis-v1')).toBe(
       'local/trellis-v1',
     );
