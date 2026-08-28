@@ -117,9 +117,7 @@ Follow-up editing of an existing locally generated mesh is currently deferred. T
 The following runtime work is separate from the conversation-workspace architecture and may be completed independently:
 
 - local Creative follow-up/semantic mesh editing,
-- TRELLIS runtime dependency validation,
 - Hunyuan3D-2.1 runtime validation,
-- Stable Fast 3D gated-weight validation,
 - full llama-swap/local-mesh GPU arbitration validation.
 
 ## Operational invariants
