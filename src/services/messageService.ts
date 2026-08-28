@@ -8,7 +8,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 const PENDING_ASSISTANT_POLL_MS = 2_500;
 const PENDING_ASSISTANT_MAX_AGE_MS = 10 * 60_000;
 
-function shouldPollForPendingAssistant(messages: Message[] | undefined): boolean {
+export function shouldPollForPendingAssistant(
+  messages: Message[] | undefined,
+): boolean {
   const last = messages?.at(-1);
   if (!last) return false;
 
