@@ -197,6 +197,84 @@ describe('chat completion reconciliation', () => {
     assert.equal(persistedCompletionCoversLiveTurn(live, persisted), true);
   });
 
+  it('reconciles from the persisted user anchor when the local assistant id never persisted', () => {
+    const live = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Create' }] },
+      {
+        id: 'assistant-local-only',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'input-streaming',
+          },
+        ],
+      },
+    ];
+    const persisted = [
+      live[0],
+      {
+        id: 'assistant-persisted-build',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'output-available',
+          },
+        ],
+      },
+      {
+        id: 'assistant-final',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-answer_user',
+            state: 'output-available',
+          },
+        ],
+      },
+    ];
+
+    assert.equal(persistedCompletionCoversLiveTurn(live, persisted), true);
+  });
+
+  it('does not use a persisted user anchor across a newer user turn', () => {
+    const live = [
+      { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Create' }] },
+      {
+        id: 'assistant-local-only',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'input-streaming',
+          },
+        ],
+      },
+    ];
+    const persisted = [
+      live[0],
+      {
+        id: 'assistant-persisted-build',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-build_parametric_model',
+            state: 'output-available',
+          },
+        ],
+      },
+      { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'Change it' }] },
+      {
+        id: 'assistant-final',
+        role: 'assistant',
+        parts: [{ type: 'text', state: 'done', text: 'Changed.' }],
+      },
+    ];
+
+    assert.equal(persistedCompletionCoversLiveTurn(live, persisted), false);
+  });
+
   it('does not reconcile through a newer user turn after the live assistant', () => {
     const live = [
       { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Create' }] },
