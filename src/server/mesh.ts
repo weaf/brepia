@@ -1,10 +1,14 @@
-import { isLocalCreativeMeshModel } from '@shared/creativeMeshModels';
+import {
+  isLocalCreativeMeshModel,
+  isNativeTrellis2Model,
+} from '@shared/creativeMeshModels';
 import { corsHeaders } from './api';
 import { scheduleActiveGenerationCancellation } from './activeGeneration';
 import { syncConversationGeneratedMeshes } from './conversationWorkspaceGeneratedMeshes';
 import { handleMeshRequest as handleFalMeshRequest } from './falMesh';
 import { createInFlightRequestDeduper } from './inFlightRequestDeduper';
 import { handleLocalMeshRequest } from './localMesh';
+import { handleNativeCreativeMeshRequest } from './nativeCreativeMesh';
 import { logError } from './serverLog';
 
 type ResponseSnapshot = {
@@ -13,6 +17,11 @@ type ResponseSnapshot = {
   status: number;
   statusText: string;
 };
+
+type LocalMeshHandler = (
+  request: Request,
+  parsedBody?: unknown,
+) => Promise<Response>;
 
 const localMeshRequests = createInFlightRequestDeduper<ResponseSnapshot>();
 
@@ -42,6 +51,12 @@ function requestMeshId(body: unknown): string | null {
   return typeof meshId === 'string' && meshId ? meshId : null;
 }
 
+function localMeshHandler(model: string): LocalMeshHandler {
+  return isNativeTrellis2Model(model)
+    ? handleNativeCreativeMeshRequest
+    : handleLocalMeshRequest;
+}
+
 function localMeshRequestKey(
   request: Request,
   conversationId: string,
@@ -53,9 +68,9 @@ function localMeshRequestKey(
   // A conversation is intentionally single-flight for a selected local mesh
   // backend. Android/Chrome can drop the SSE connection while backgrounded;
   // the reconnect then starts the same Creative turn again before the first
-  // TRELLIS/Hunyuan call has finished. Include auth + conversation + backend
-  // so that reconnect shares the existing job without allowing another user
-  // to piggy-back on it.
+  // local 3D call has finished. Include auth + conversation + backend so that
+  // reconnect shares the existing job without allowing another user to
+  // piggy-back on it. This applies to both the legacy gateway and TRELLIS.2.
   return `${authorization}\n${conversationId}\n${model}`;
 }
 
@@ -99,8 +114,9 @@ async function executeLocalMeshRequest(
   request: Request,
   body: unknown,
   conversationId: string,
+  handler: LocalMeshHandler,
 ): Promise<ResponseSnapshot> {
-  const response = await handleLocalMeshRequest(request, body);
+  const response = await handler(request, body);
   if (response.ok) {
     try {
       await syncConversationGeneratedMeshes(request, conversationId);
@@ -128,12 +144,12 @@ async function executeLocalMeshRequest(
  * Stable entry point for Creative mesh generation.
  *
  * Historical `fast` / `quality` / `ultra` requests keep using the unchanged
- * fal.ai implementation in `falMesh.ts`. Local backend IDs are handled by the
- * pCAD local mesh gateway and never require FAL_KEY.
+ * fal.ai implementation in `falMesh.ts`. Transitional local TRELLIS v1 and
+ * Hunyuan IDs continue through the existing pCAD mesh gateway. `local/trellis2`
+ * instead uses the llama-swap managed Z-Image-Turbo/TRELLIS.2 runtime path.
  *
- * Local Creative v1 intentionally supports generation only. The experimental
- * follow-up mesh-edit path is deferred and rejected here rather than silently
- * regenerating or claiming an edit succeeded.
+ * Local Creative follow-up mesh editing remains deferred and is rejected here
+ * rather than silently regenerating or claiming an edit succeeded.
  */
 export async function handleMeshRequest(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
@@ -147,20 +163,21 @@ export async function handleMeshRequest(request: Request): Promise<Response> {
       return localMeshEditingDeferredResponse();
     }
 
+    const handler = localMeshHandler(model);
     const conversationId = requestConversationId(body);
     if (!conversationId) {
-      return handleLocalMeshRequest(request, body);
+      return handler(request, body);
     }
 
     const key = localMeshRequestKey(request, conversationId, model);
     if (!key) {
       return responseFromSnapshot(
-        await executeLocalMeshRequest(request, body, conversationId),
+        await executeLocalMeshRequest(request, body, conversationId, handler),
       );
     }
 
     const { promise, reused } = localMeshRequests.getOrRun(key, () =>
-      executeLocalMeshRequest(request, body, conversationId),
+      executeLocalMeshRequest(request, body, conversationId, handler),
     );
     if (reused) {
       console.info('[local-mesh] reusing in-flight generation after reconnect', {
