@@ -11,6 +11,7 @@ TRELLIS_CXX="$TRELLIS_ENV/bin/x86_64-conda-linux-gnu-c++"
 RUNTIME_WORKER="$PCAD_MESH_HOME/runtime/worker.py"
 ENV_FILE="$PCAD_MESH_HOME/config/env"
 TRELLIS_TRANSFORMERS_VERSION="4.57.6"
+DIFFOCTREERAST_COMMIT="b09c20b84ec3aace4729e6e18a613112320eca3a"
 MIP_SPLATTING_COMMIT="dda02ab5ecf45d6edb8c540d9bb65c7e451345a9"
 
 say() { printf '\n\033[1;34m[pCAD TRELLIS]\033[0m %s\n' "$*"; }
@@ -97,6 +98,20 @@ PATH="$TRELLIS_ENV/bin:$PATH" \
   "$PYTHON" -m pip install --no-build-isolation \
   git+https://github.com/NVlabs/nvdiffrast.git
 
+# TRELLIS' octree renderer imports diffoctreerast directly. Upstream setup.sh
+# builds it in an isolated PEP 517 environment where torch is unavailable on
+# current pip versions, then continues because setup.sh is not fail-fast. Build
+# the pinned extension explicitly against the managed torch/cu121 toolchain.
+say "Installing diffoctreerast for TRELLIS octree rendering"
+CUDA_HOME="$TRELLIS_ENV" \
+CUDACXX="$TRELLIS_ENV/bin/nvcc" \
+CUDAHOSTCXX="$TRELLIS_CXX" \
+CC="$TRELLIS_CC" \
+CXX="$TRELLIS_CXX" \
+PATH="$TRELLIS_ENV/bin:$PATH" \
+  "$PYTHON" -m pip install --no-deps --no-build-isolation \
+  "git+https://github.com/JeffreyXiang/diffoctreerast.git@$DIFFOCTREERAST_COMMIT"
+
 # TRELLIS imports diff_gaussian_rasterization when its Gaussian renderer is
 # loaded. Upstream's --mipgaussian branch builds this extension from the
 # mip-splatting source tree, but setup.sh is not fail-fast: a failed CUDA build
@@ -128,6 +143,7 @@ import xformers
 import warp
 import pygltflib
 import nvdiffrast.torch as dr
+import diffoctreerast
 import diff_gaussian_rasterization
 from pxr import Usd
 import kaolin
@@ -138,6 +154,7 @@ assert torch.version.cuda == "12.1", torch.version.cuda
 assert is_torch_available(), "Transformers does not see PyTorch"
 assert CLIPTextModel is not None
 assert dr is not None
+assert diffoctreerast is not None
 assert diff_gaussian_rasterization is not None
 print("torch:", torch.__version__)
 print("torch CUDA:", torch.version.cuda)
@@ -149,6 +166,7 @@ print("warp-lang:", metadata.version("warp-lang"))
 print("usd-core:", metadata.version("usd-core"))
 print("pygltflib:", metadata.version("pygltflib"))
 print("nvdiffrast: import OK")
+print("diffoctreerast: import OK")
 print("diff_gaussian_rasterization: import OK")
 print("TRELLIS runtime dependencies: OK")
 PY
