@@ -166,23 +166,50 @@ export const useMessagesQuery = () => {
       if (error) throw error;
       const rows = data ?? [];
 
-      // The messages INSERT trigger advances the conversation leaf in the DB,
-      // but the separate conversation query can still be stale after a mobile
-      // background/resume. If the newly persisted assistant is a direct child
-      // of our cached leaf, mirror that trigger result locally immediately.
+      // A backgrounded mobile browser can lose its SSE connection while the
+      // server continues a Parametric auto-continuation. One user turn may then
+      // append several assistant rows (build/tool assistant -> final assistant)
+      // while the cached Conversation still points at the original user row.
+      //
+      // The old shortcut only advanced the cache when the newest assistant was
+      // a DIRECT child of the cached leaf. That misses multi-assistant chains
+      // and leaves ChatSession on the stale branch until a full page reload.
+      // When the message list has moved beyond the cached leaf, read the small
+      // authoritative conversation leaf from Supabase and mirror the DB trigger
+      // result exactly. Do not infer ancestry from the message list: a user may
+      // intentionally select an older branch, and the authoritative leaf is the
+      // only safe way to distinguish that from a stale mobile cache.
       const latest = rows.at(-1);
-      if (
-        latest?.role === 'assistant' &&
-        latest.parent_message_id === conversation.current_message_leaf_id &&
-        latest.id !== conversation.current_message_leaf_id
-      ) {
-        queryClient.setQueryData<Conversation>(
-          ['conversation', conversation.id],
-          (current) =>
-            current
-              ? { ...current, current_message_leaf_id: latest.id }
-              : current,
-        );
+      if (latest && latest.id !== conversation.current_message_leaf_id) {
+        const { data: leafState, error: leafError } = await supabase
+          .from('conversations')
+          .select('current_message_leaf_id')
+          .eq('id', conversation.id)
+          .limit(1)
+          .single()
+          .overrideTypes<Pick<Conversation, 'current_message_leaf_id'>>();
+
+        if (leafError) {
+          console.warn(
+            'Failed to refresh authoritative conversation leaf during message polling:',
+            leafError,
+          );
+        } else if (
+          leafState?.current_message_leaf_id !==
+          conversation.current_message_leaf_id
+        ) {
+          queryClient.setQueryData<Conversation>(
+            ['conversation', conversation.id],
+            (current) =>
+              current
+                ? {
+                    ...current,
+                    current_message_leaf_id:
+                      leafState?.current_message_leaf_id ?? null,
+                  }
+                : current,
+          );
+        }
       }
 
       return rows;
