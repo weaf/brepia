@@ -92,9 +92,12 @@ export function isTerminalAssistantMessage(
  * Parametric auto-continuation can append more than one assistant row for a
  * single user turn: the browser may still be streaming the build/tool assistant
  * while persistence already contains a later assistant with the final answer.
- * Treat that later terminal assistant as covering the live turn only when the
- * live assistant is present in the persisted branch and no newer user message
- * appears after it.
+ * Prefer anchoring on the live assistant id when that row reached persistence.
+ * A mobile connection can disappear before that exact local assistant snapshot
+ * is persisted, however, while the server still saves a different assistant
+ * chain for the same user turn. In that case fall back to the nearest preceding
+ * live user id. Recovery is allowed only when that user exists in the persisted
+ * branch and no newer user message appears after it.
  */
 export function persistedCompletionCoversLiveTurn(
   liveMessages: readonly ChatCompletionMessageLike[],
@@ -110,12 +113,27 @@ export function persistedCompletionCoversLiveTurn(
     const assistantIndex = persistedMessages.findIndex(
       (message) => message.id === liveLast.id,
     );
-    if (assistantIndex < 0 || assistantIndex >= persistedMessages.length - 1) {
+    if (assistantIndex >= 0) {
+      if (assistantIndex >= persistedMessages.length - 1) return false;
+      return !persistedMessages
+        .slice(assistantIndex + 1)
+        .some((message) => message.role === 'user');
+    }
+
+    const liveUser = [...liveMessages]
+      .reverse()
+      .find((message) => message.role === 'user');
+    if (!liveUser) return false;
+
+    const userIndex = persistedMessages.findIndex(
+      (message) => message.id === liveUser.id,
+    );
+    if (userIndex < 0 || userIndex >= persistedMessages.length - 1) {
       return false;
     }
 
     return !persistedMessages
-      .slice(assistantIndex + 1)
+      .slice(userIndex + 1)
       .some((message) => message.role === 'user');
   }
 
