@@ -12,7 +12,6 @@ import {
   Images,
   Square,
   CircleX,
-  Wand2,
   Box,
   X,
 } from 'lucide-react';
@@ -68,15 +67,11 @@ import {
 } from '@/utils/meshUtils';
 import { useMeshFiles } from '@/contexts/MeshFilesContext';
 import { AnimatePresence, motion } from 'framer-motion';
-import { apiJson } from '@/services/api';
-import { z } from 'zod';
 import {
   getPromptDraftStorage,
   readPromptDraft,
   writePromptDraft,
 } from '@/lib/promptDraft';
-
-const promptResponseSchema = z.object({ prompt: z.string().optional() });
 
 interface TextAreaChatProps {
   type: 'parametric' | 'creative';
@@ -88,7 +83,6 @@ interface TextAreaChatProps {
   disabled?: boolean;
   model: Model;
   setModel: (model: Model) => void;
-  showPromptGenerator?: boolean;
   showFullLabels?: boolean; // Controls whether to show full text labels on buttons
   onTypeChange?: (type: 'parametric' | 'creative') => void;
   conversation: {
@@ -487,7 +481,6 @@ function TextAreaChat({
   disabled = false,
   model,
   setModel,
-  showPromptGenerator = false,
   showFullLabels = false,
   onTypeChange,
   conversation,
@@ -501,7 +494,6 @@ function TextAreaChat({
   const restoredDraftKeyRef = useRef<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isDragHover, setIsDragHover] = useState(false);
-  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [dropMessageOpacityClass, setDropMessageOpacityClass] = useState(
     'opacity-0 pointer-events-none',
   );
@@ -1215,36 +1207,6 @@ function TextAreaChat({
     }
   };
 
-  const generatePrompt = async () => {
-    if (isGeneratingPrompt) return;
-    setIsGeneratingPrompt(true);
-    try {
-      const data = await apiJson(
-        'prompt-generator',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            existingText: input.trim() || undefined,
-            type,
-          }),
-        },
-        promptResponseSchema,
-      );
-      if (!data?.prompt) throw new Error('No prompt generated');
-
-      setInput(data.prompt);
-    } catch (error) {
-      console.error('Error generating prompt:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to generate prompt',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsGeneratingPrompt(false);
-    }
-  };
-
   // Add global drag-and-drop listeners so that dropping files anywhere on the page is handled.
   useEffect(() => {
     // Prevent default browser behaviour (e.g. opening the image in a new tab)
@@ -1605,31 +1567,6 @@ function TextAreaChat({
               <br />
             </div>
           </div>
-          {showPromptGenerator && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full hover:bg-adam-neutral-800"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    generatePrompt();
-                  }}
-                  disabled={isGeneratingPrompt || isLoading || disabled}
-                >
-                  {isGeneratingPrompt ? (
-                    <ActivityIndicator label="Generating prompt" size="sm" />
-                  ) : (
-                    <Wand2 className="h-4 w-4 text-gray-400 transition-colors duration-200 hover:text-white" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {input.trim() ? 'Enhance Prompt' : 'Generate Prompt'}
-              </TooltipContent>
-            </Tooltip>
-          )}
         </div>
         <div className="flex items-center justify-between border-t border-[#2a2a2a] p-3">
           <div className="flex items-center gap-1">
