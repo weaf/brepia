@@ -3,17 +3,16 @@ set -euo pipefail
 
 # pCAD local Creative backend installer.
 #
-# Installs four isolated local 3D inference environments plus the lightweight
+# Installs three isolated local 3D inference environments plus the lightweight
 # gateway that swaps one GPU worker at a time:
 #   - TRELLIS v1
 #   - Hunyuan3D-2
 #   - Hunyuan3D-2.1 (shape pipeline; 24 GB-safe)
-#   - Stable Fast 3D (Hugging Face gated)
 #
-# GPU backends use two shared, version-pinned toolchain profiles while keeping
-# their Python packages isolated:
+# GPU backends use two version-pinned toolchain profiles while keeping their
+# Python packages isolated:
 #   modern-cu124: Hunyuan3D-2 + Hunyuan3D-2.1
-#   legacy-cu121: TRELLIS v1 + Stable Fast 3D
+#   legacy-cu121: TRELLIS v1
 #
 # The NVIDIA driver/system CUDA installation is never modified. Each managed
 # environment gets its own matching nvcc/toolkit and PyTorch CUDA wheel. Legacy
@@ -57,8 +56,7 @@ MODERN_TORCH_INDEX="https://download.pytorch.org/whl/cu124"
 GATEWAY_ENV_SPEC="pcad-gateway-py310-v2"
 HUNYUAN2_ENV_SPEC="hunyuan3d2-modern-cu124-v3"
 HUNYUAN21_ENV_SPEC="hunyuan3d21-modern-cu124-bpy400-v5"
-TRELLIS_ENV_SPEC="trellis-legacy-cu121-gcc12-v4"
-SF3D_ENV_SPEC="sf3d-legacy-cu121-gcc12-no-build-isolation-v5"
+TRELLIS_ENV_SPEC="trellis-legacy-cu121-gcc12-v5"
 
 usage() {
   cat <<'EOF'
@@ -68,12 +66,12 @@ Options:
   --install-system-deps  Install common Ubuntu/Debian build packages with sudo apt.
   --skip-weights         Install code/environments but do not prefetch model weights.
   --no-service           Do not install/enable the user systemd gateway service.
-  --recreate-envs        Force recreation of all five managed Python environments.
+  --recreate-envs        Force recreation of all four managed Python environments.
   -h, --help             Show this help.
 
 Environment variables:
   PCAD_MESH_HOME                 Install root (default ~/.local/share/pcad-mesh)
-  HF_TOKEN                       Hugging Face read token. Required for Stable Fast 3D weights.
+  HF_TOKEN                       Optional Hugging Face read token.
   HF_HOME                        Optional HF cache override; default is under PCAD_MESH_HOME.
   PCAD_GPU_ARBITRATION           auto (default), required, or off.
   PCAD_LLAMA_SWAP_URL            llama-swap base URL (default http://127.0.0.1:9292).
@@ -341,12 +339,10 @@ GATEWAY_ENV="$ENVS_DIR/gateway"
 TRELLIS_ENV="$ENVS_DIR/trellis"
 HUNYUAN2_ENV="$ENVS_DIR/hunyuan3d-2"
 HUNYUAN21_ENV="$ENVS_DIR/hunyuan3d-2.1"
-SF3D_ENV="$ENVS_DIR/stable-fast-3d"
 
 TRELLIS_REPO="$REPOS_DIR/TRELLIS"
 HUNYUAN2_REPO="$REPOS_DIR/Hunyuan3D-2"
 HUNYUAN21_REPO="$REPOS_DIR/Hunyuan3D-2.1"
-SF3D_REPO="$REPOS_DIR/stable-fast-3d"
 
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet pcad-mesh-gateway.service 2>/dev/null; then
   say "Stopping existing pCAD mesh gateway during environment maintenance"
@@ -357,12 +353,10 @@ prepare_env "$GATEWAY_ENV" "$GATEWAY_ENV_SPEC"
 prepare_env "$HUNYUAN2_ENV" "$HUNYUAN2_ENV_SPEC"
 prepare_env "$HUNYUAN21_ENV" "$HUNYUAN21_ENV_SPEC"
 prepare_env "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
-prepare_env "$SF3D_ENV" "$SF3D_ENV_SPEC"
 
 clone_or_update https://github.com/microsoft/TRELLIS.git "$TRELLIS_REPO" 1
 clone_or_update https://github.com/Tencent-Hunyuan/Hunyuan3D-2.git "$HUNYUAN2_REPO"
 clone_or_update https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "$HUNYUAN21_REPO"
-clone_or_update https://github.com/Stability-AI/stable-fast-3d.git "$SF3D_REPO"
 
 say "Installing pCAD mesh gateway environment"
 ensure_basic_env "$GATEWAY_ENV"
@@ -398,26 +392,12 @@ mamba_run "$TRELLIS_ENV" env \
 mamba_run "$TRELLIS_ENV" python -m pip install fastapi uvicorn
 verify_cuda_profile "$TRELLIS_ENV" "$LEGACY_CUDA_MINOR"
 verify_host_compiler_profile "$TRELLIS_ENV" "$LEGACY_GCC_MAJOR"
-mark_env_ready "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
 
-say "Installing Stable Fast 3D environment [legacy-cu121]"
-ensure_legacy_cuda_env "$SF3D_ENV"
-mamba_run "$SF3D_ENV" python -m pip install setuptools==69.5.1 wheel
-mamba_run "$SF3D_ENV" bash -c \
-  "cd '$SF3D_REPO' && grep -vE '^\\./(texture_baker|uv_unwrapper)/?$' requirements.txt > .pcad-requirements.txt && python -m pip install -r .pcad-requirements.txt"
-verify_cuda_profile "$SF3D_ENV" "$LEGACY_CUDA_MINOR"
-verify_host_compiler_profile "$SF3D_ENV" "$LEGACY_GCC_MAJOR"
-SF3D_CC="$(legacy_cc_path "$SF3D_ENV")"
-SF3D_CXX="$(legacy_cxx_path "$SF3D_ENV")"
-mamba_run "$SF3D_ENV" env \
-  CC="$SF3D_CC" CXX="$SF3D_CXX" CUDAHOSTCXX="$SF3D_CXX" \
-  CUDA_HOME="$SF3D_ENV" CUDACXX="$SF3D_ENV/bin/nvcc" PATH="$SF3D_ENV/bin:$PATH" \
-  python -m pip install --no-build-isolation "$SF3D_REPO/texture_baker" "$SF3D_REPO/uv_unwrapper"
-rm -f "$SF3D_REPO/.pcad-requirements.txt"
-mamba_run "$SF3D_ENV" python -m pip install fastapi uvicorn
-verify_cuda_profile "$SF3D_ENV" "$LEGACY_CUDA_MINOR"
-verify_host_compiler_profile "$SF3D_ENV" "$LEGACY_GCC_MAJOR"
-mark_env_ready "$SF3D_ENV" "$SF3D_ENV_SPEC"
+# Upstream TRELLIS setup.sh is not fail-fast and current pip build isolation can
+# silently skip CUDA extensions. Reuse the runtime repair that has been
+# validated end-to-end in pCAD before marking the managed environment ready.
+PCAD_MESH_HOME="$PCAD_MESH_HOME" bash "$REPO_ROOT/scripts/repair-trellis-runtime.sh"
+mark_env_ready "$TRELLIS_ENV" "$TRELLIS_ENV_SPEC"
 
 say "Installing gateway runtime files"
 install -m 0644 "$REPO_ROOT/scripts/local-mesh/gateway.py" "$RUNTIME_DIR/gateway.py"
@@ -454,20 +434,8 @@ if [[ $DOWNLOAD_WEIGHTS -eq 1 ]]; then
   prefetch microsoft/TRELLIS-text-xlarge
   prefetch tencent/Hunyuan3D-2
   prefetch tencent/Hunyuan3D-2.1
-
-  if [[ -n "${HF_TOKEN:-}" ]]; then
-    if prefetch stabilityai/stable-fast-3d; then
-      touch "$STATE_DIR/stable-fast-3d.ready"
-    else
-      warn "Stable Fast 3D weights could not be downloaded. Confirm that your HF account has accepted the model access terms."
-      rm -f "$STATE_DIR/stable-fast-3d.ready"
-    fi
-  else
-    warn "HF_TOKEN is not set. Stable Fast 3D code is installed, but its gated weights are not available yet. Request access to stabilityai/stable-fast-3d, export HF_TOKEN, then rerun this script."
-    rm -f "$STATE_DIR/stable-fast-3d.ready"
-  fi
 else
-  warn "Weight prefetch skipped. Non-gated models will download from Hugging Face on first use. Stable Fast 3D still requires HF_TOKEN/access."
+  warn "Weight prefetch skipped. Models will download from Hugging Face on first use."
 fi
 
 if [[ $ENABLE_SERVICE -eq 1 ]]; then
@@ -519,7 +487,6 @@ Local Creative backends:
   TRELLIS v1          local/trellis-v1   [legacy-cu121 + gcc12]
   Hunyuan3D-2         local/hunyuan3d-2  [modern-cu124]
   Hunyuan3D-2.1       local/hunyuan3d-2.1 [modern-cu124]
-  Stable Fast 3D      local/stable-fast-3d [legacy-cu121 + gcc12]
 
 Legacy fal.ai backends remain selectable as quality / fast / ultra.
 
