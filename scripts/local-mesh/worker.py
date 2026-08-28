@@ -15,7 +15,6 @@ import io
 import os
 import sys
 import tempfile
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -76,8 +75,6 @@ class Runtime:
             return self.generate_hunyuan2(request)
         if self.model_id == "local/hunyuan3d-2.1":
             return self.generate_hunyuan21(request)
-        if self.model_id == "local/stable-fast-3d":
-            return self.generate_sf3d(request)
         raise HTTPException(status_code=400, detail=f"Unsupported worker model: {self.model_id}")
 
     def generate_trellis(self, request: GenerateRequest) -> bytes:
@@ -155,54 +152,6 @@ class Runtime:
         # with both resident. Keeping paint out makes this reliable on 24 GB.
         mesh = self.pipeline(image=image)[0]
         return export_glb(mesh)
-
-    def generate_sf3d(self, request: GenerateRequest) -> bytes:
-        ensure_path(self.repo)
-        image = self.first_image(request).convert("RGBA")
-
-        import rembg
-        import torch
-        from sf3d.system import SF3D
-        from sf3d.utils import get_device, remove_background, resize_foreground
-
-        if self.pipeline is None:
-            self.pipeline = SF3D.from_pretrained(
-                "stabilityai/stable-fast-3d",
-                config_name="config.yaml",
-                weight_name="model.safetensors",
-            )
-            device = get_device()
-            if not torch.cuda.is_available():
-                device = "cpu"
-            self.aux["device"] = device
-            self.pipeline.to(device)
-            self.pipeline.eval()
-            self.aux["rembg_session"] = rembg.new_session()
-            self.pipeline_kind = "image"
-
-        image = remove_background(image, self.aux["rembg_session"])
-        image = resize_foreground(image, 0.85)
-        device = self.aux["device"]
-        remesh = {
-            "quads": "quad",
-            "polys": "triangle",
-        }.get(request.topology or "", "none")
-        vertex_count = request.polygonCount if request.polygonCount and request.polygonCount > 0 else -1
-
-        with torch.no_grad():
-            autocast = (
-                torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-                if "cuda" in device
-                else nullcontext()
-            )
-            with autocast:
-                mesh, _ = self.pipeline.run_image(
-                    [image],
-                    bake_resolution=1024,
-                    remesh=remesh,
-                    vertex_count=vertex_count,
-                )
-        return export_glb(mesh, include_normals=True)
 
 
 def ensure_path(path: Path) -> None:
