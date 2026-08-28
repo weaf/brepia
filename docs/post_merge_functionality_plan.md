@@ -70,10 +70,12 @@ The Brepia remake removed the only live Lottie consumer. Historically, `src/comp
 
 Current static review therefore classifies `lottie-react` as an unused dependency rather than an active Brepia runtime requirement.
 
+Removal was committed on this branch as `3fdc7fa55a560d48522f391f39dbf2213e4771d6` (`chore: remove unused lottie-react dependency`). The commit is one fast-forward commit after the plan activation commit and changes only `package.json` and `package-lock.json`.
+
 - [x] Confirm the current loader no longer imports or renders `lottie-react`.
 - [x] Confirm the historical usage was the removed Adam loading animation.
-- [ ] Remove the package with the real npm toolchain: `npm uninstall lottie-react`.
-- [ ] Accept the npm-generated `package.json` / `package-lock.json` changes; do not hand-edit the lockfile.
+- [x] Remove the package with the real npm toolchain: `npm uninstall lottie-react`.
+- [x] Accept the npm-generated `package.json` / `package-lock.json` changes; do not hand-edit the lockfile.
 - [ ] Re-run `npm test`, `npm run typecheck`, `npm run lint` and `npm run build` after removal.
 - [ ] Confirm the Brepia loader still behaves normally after the dependency removal.
 
