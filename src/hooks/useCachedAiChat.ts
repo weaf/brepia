@@ -121,6 +121,28 @@ export function lastAssistantHasTerminalMeshError(
   );
 }
 
+/**
+ * A successfully persisted Parametric build is enough to release the mobile
+ * recovery loader after the client transport has been interrupted. It is NOT
+ * globally terminal for the Parametric agent: the normal uninterrupted path
+ * may still auto-continue into visual review / answer_user. This helper is only
+ * used to recognise the narrow case where both the cached Chat and Supabase
+ * already contain the same resolved build after a dropped mobile connection.
+ */
+function lastAssistantHasResolvedParametricBuild(
+  messages: readonly AppUIMessage[],
+): boolean {
+  const message = messages.at(-1);
+  if (!message || message.role !== 'assistant') return false;
+
+  return message.parts.some(
+    (part) =>
+      part.type === 'tool-build_parametric_model' &&
+      'state' in part &&
+      part.state === 'output-available',
+  );
+}
+
 function canReplaceWithPersistedMessages(
   liveMessages: readonly AppUIMessage[],
   persistedMessages: readonly AppUIMessage[],
@@ -390,10 +412,39 @@ export function useCachedAiChat({
       recoveredFromPersistence = true;
     }
 
+    // A dropped mobile connection can reach this effect after the exact same
+    // resolved build is already present in both Chat state and Supabase. In
+    // that case no replacement occurs, so `recoveredFromPersistence` stays
+    // false even though persistence has demonstrably caught up. Clear only the
+    // classified transport error in that narrow case. The DB poll deliberately
+    // keeps running because a later final assistant may still arrive; clearing
+    // the client error merely releases the stale `Creating...`/stop UI and does
+    // NOT resubmit the model.
+    const persistedResolvedBuildMatchesLive =
+      messages !== undefined &&
+      messages.length > 0 &&
+      lastAssistantHasResolvedParametricBuild(messages) &&
+      messageSnapshot(chat.messages) === messageSnapshot(messages);
+    const recoveredInterruptedBuild =
+      chat.status === 'error' &&
+      !!chat.error &&
+      userFacingChatError(chat.error).message === CONNECTION_INTERRUPTED_MESSAGE &&
+      persistedResolvedBuildMatchesLive;
+
     // A genuine provider/model error must remain visible to the user. Clear a
     // cached error only when a fresh persisted DB snapshot actually recovered
-    // the chat (for example after a mobile SSE disconnect).
-    if (chat.status === 'error' && recoveredFromPersistence) {
+    // the chat, or when the matching resolved-build condition above proves the
+    // mobile transport was the only thing that failed.
+    if (
+      chat.status === 'error' &&
+      (recoveredFromPersistence || recoveredInterruptedBuild)
+    ) {
+      if (recoveredInterruptedBuild) {
+        console.info(
+          '[chat-recovery] persisted build matches client; releasing interrupted loading state',
+          { conversationId: id, messageId: chat.lastMessage?.id },
+        );
+      }
       chat.clearError();
     }
   }, [chat, handled, id, messages, refs]);
