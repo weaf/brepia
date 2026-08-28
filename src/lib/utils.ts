@@ -1,6 +1,9 @@
 export * from './utilsCore';
 
-import { CREATIVE_MESH_MODELS } from '@shared/creativeMeshModels';
+import {
+  CREATIVE_MESH_MODELS,
+  getCreativeMeshInputCapability,
+} from '@shared/creativeMeshModels';
 import type { ModelConfig } from '../types/misc.ts';
 
 /**
@@ -15,5 +18,6 @@ export const CREATIVE_MODELS: ModelConfig[] = CREATIVE_MESH_MODELS.map(
     description: definition.description,
     provider: definition.providerLabel,
     timeEstimate: definition.timeEstimate,
+    inputCapability: getCreativeMeshInputCapability(definition.id),
   }),
 );
