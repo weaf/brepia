@@ -1,352 +1,236 @@
 # Brepia remake — status and audit
 
 Branch: `feature/brepia-remake`  
-Base: `967f744976d3ae2fb64f3681745c8c046345499a`  
-Last updated: 2026-08-27
+Base / merge base: `967f744976d3ae2fb64f3681745c8c046345499a`  
+Last updated: 2026-08-28
 
 Companion plan: `docs/brepia_remake_plan.md`  
-Brand maintenance note: `docs/brepia_branding.md`
+Brand maintenance note: `docs/brepia_branding.md`  
+Runtime handover: `docs/brepia_phase6_runtime_handover.md`  
+Closeout handover: `docs/brepia_cosmetic_closeout_handover.md`
 
-## Current checkpoint
+## Current closeout checkpoint
 
-Immediately before this status commit, the branch was **121 commits ahead of `master`, 0 behind**. It remains a linear descendant of the recorded master base.
+The old status/checkpoint documents accumulated stale unchecked items while Phase 6 was still moving. They were reconciled against the actual branch on 2026-08-28 before any new closeout work was started.
 
-The Brepia presentation implementation is now substantially complete. The previously blocked legal/contact/community problem has been resolved architecturally by treating Brepia as open-source software and moving deployment-specific public identity into administrator-controlled **Instance identity** settings.
+At reconciliation commit `fcfbe55f48dfd7b778503990789cea44a95abb4f`, GitHub comparison showed:
 
-Remaining work is primarily real-environment migration/validation, visual review, npm-generated cleanup, and the intentionally deferred `CADAM Original` prompt-profile decision.
+- `feature/brepia-remake` is a linear descendant of the recorded master base;
+- **270 commits ahead of `master`, 0 behind**;
+- merge base remains `967f744976d3ae2fb64f3681745c8c046345499a`.
 
-## Local environment note — NOx owns Supabase lifecycle
+Do not treat this count as permanent; use a fresh comparison before merge.
 
-On the current pCAD/Brepia development workstation, the local Supabase services are started/stopped through **NOx**.
+The Brepia implementation scope is frozen. No new functional experiments belong on this branch. The remaining merge gate is intentionally narrow: finish/evidence the remaining Instance identity runtime smoke checks, run the final local regression gate on the final branch state, record evidence, and then merge.
 
-- Do not assume a global `supabase` executable exists.
+## Reconciliation result
+
+The following old checklist items are **already implemented and must not be redone**:
+
+- Brepia branding, app/auth/sidebar/home presentation and generated-media branding;
+- desktop/mobile main visual review;
+- Instance identity schema/API/admin UI/legal/community architecture;
+- administrator-configured Discord social link;
+- Supabase migrations and generated database types;
+- TanStack route-tree regeneration;
+- per-user default Parametric and Creative models;
+- standalone Generate-prompt removal;
+- TRELLIS v1 text-only Creative generation runtime verification;
+- Creative capability labels and image-required guardrails;
+- Stable Fast 3D retirement from the active local Creative stack;
+- persistent Creative generation activity;
+- stable production-like local runtime in `start.sh` / `scripts/stable-runtime-proxy.mjs`;
+- Parametric persisted-completion reconciliation after browser backgrounding;
+- original Phase 6 `npm test`, typecheck, lint and build gate at its recorded checkpoint.
+
+The following are **not remake blockers**:
+
+- repository/deployment rename;
+- additional app-store/raster icon targets not required by the current deployment;
+- specialized GIF/GLB/reduced-motion visual exercise when those paths are not otherwise being changed;
+- optional removal of dead `lottie-react` package metadata unless it is done through the real npm toolchain;
+- any Local Creative expansion described in `docs/post_merge_functionality_plan.md`.
+
+## Local environment convention
+
+The local Supabase stack is managed by **NOx**.
+
 - Do not use `supabase start`, `supabase stop`, `npx supabase start` or `npx supabase stop` as the normal lifecycle.
-- Start the local Supabase stack through NOx first.
-- Once NOx has started the stack, repository-local Supabase CLI operations may be run through `npx`, for example:
+- After NOx has started the stack, repository-local operations may use:
 
 ```bash
 npx supabase migration up
 npx supabase gen types typescript --local > shared/database.ts
 ```
 
-Repository-level agent guidance is recorded in `AGENTS.md` so future chats/coding agents do not replace the NOx-managed environment with a standalone Supabase lifecycle.
+- Never use `db push` / `db pull` for the normal workflow.
+- Never hand-edit `shared/database.ts`.
+- `src/routeTree.gen.ts` is generated and must not be hand-edited.
 
-## Completed product work
+## Product / visual state
 
-- [x] Brepia product/brand concept and rename boundaries recorded.
-- [x] Shared `BrepiaMark`, `BrepiaBrand` and `ActivityIndicator` implemented.
-- [x] Browser title/meta/favicon/web manifest migrated to Brepia.
-- [x] Desktop/mobile sidebar primary branding migrated.
-- [x] Auth/password surfaces migrated.
-- [x] Home/start copy uses rotating Brepia-specific prompts.
-- [x] Upstream Adam product banner removed.
-- [x] Assistant/prompt identity directly uses Brepia components.
-- [x] Main indeterminate activity language migrated away from inherited spinners/Lottie.
-- [x] Generated GIF watermark and GLB point transition migrated.
-- [x] Export UI and generated MTL branding migrated.
-- [x] README/contributor/benchmark current-product presentation migrated.
-- [x] Hardcoded CADAM Discord ownership removed.
-- [x] Inherited AdamCAD pseudo-SaaS Terms/Privacy text removed.
-- [x] Code-of-Conduct contact no longer points to upstream `zach@adam.new`.
-- [x] Final runtime CADAM logo asset removed.
-- [x] Obsolete upstream banner/vendor artwork and legacy screenshots removed.
-
-## Instance identity architecture
-
-### Why it exists
-
-Brepia is currently an **open-source project**, not one centrally operated service. A fresh installation must therefore not claim that Brepia/Noty/another entity is the legal operator, support contact or community owner.
-
-Default behavior is deliberately neutral:
+Brepia is the current product presentation, with the preferred hierarchy:
 
 ```text
-operatorName = null
-contactEmail = null
-communityUrl = null
-showCommunityLink = false
-legalPagesEnabled = false
-termsUrl = null
-privacyUrl = null
+BREPIA
+by Noty
 ```
 
-### Database
+The main desktop/mobile review passed in the real running application. Broad redesign is closed unless a concrete closeout regression is found.
 
-Added migration:
+Implemented shared brand primitives:
 
-`supabase/migrations/20260827062000_instance_identity_settings.sql`
+- `src/components/brand/BrepiaMark.tsx`;
+- `src/components/brand/BrepiaBrand.tsx`;
+- `src/components/brand/ActivityIndicator.tsx`.
 
-and declarative schema:
+Current public assets:
 
-`supabase/schemas/instance_settings.sql`
+- `public/brepia-mark.svg`;
+- `public/brepia-logo.svg`;
+- `public/brepia-watermark.svg`;
+- `public/site.webmanifest`.
 
-The singleton `public.instance_settings` stores:
+Historical/compatibility identifiers such as `/cadam`, `PCAD_*`, `adam-*` CSS tokens, external integration IDs and accurate upstream documentation remain intentionally separate from user-facing branding.
 
-- operator/organization name;
+## Instance identity — implementation state
+
+Brepia is treated as open-source software rather than one centrally operated hosted service. A fresh installation therefore must not claim an operator, support contact, community owner or hosted-service legal identity by default.
+
+Current neutral defaults include no operator/contact/community/Discord/legal ownership claim.
+
+### Database and generated types
+
+Implemented:
+
+- `supabase/migrations/20260827062000_instance_identity_settings.sql`;
+- `supabase/migrations/20260827070000_add_instance_discord_link.sql`;
+- `supabase/schemas/instance_settings.sql`;
+- matching `updated_at` trigger;
+- migrations applied in the real NOx-managed development environment at the recorded Phase 6 checkpoint;
+- `shared/database.ts` regenerated from that running local Supabase instance.
+
+### API and security
+
+Implemented:
+
+- `src/server/instanceIdentity.ts` normalization/defaults/storage layer;
+- public `GET /api/settings/instanceIdentity` returns only the public presentation DTO;
+- `PUT` requires an authenticated active administrator via `requireAdmin`;
+- browser roles do not directly own/read the underlying service-role-managed settings table;
+- public URLs are normalized/restricted to HTTP/HTTPS;
+- Community visibility requires a valid configured Community URL;
+- Discord is optional and hidden when unset.
+
+Static review found no blocking architecture issue.
+
+### Admin/public UI
+
+Implemented:
+
+- operator / organization;
 - public contact email;
-- community label/URL + visibility toggle;
-- legal-link visibility toggle;
+- generic Community label + URL + visibility;
+- Discord URL;
+- legal-link visibility;
 - Terms URL;
-- Privacy URL.
+- Privacy URL;
+- neutral Terms/Privacy fallback pages;
+- optional external legal links;
+- shared desktop/mobile sidebar behavior.
 
-Security model:
+### Still-open runtime evidence
 
-- RLS enabled;
-- direct `anon`/`authenticated` table access revoked;
-- service role gets only required table access;
-- browser clients read through the application API, not directly from the table.
+Where not already manually exercised and explicitly recorded, closeout still needs evidence for:
 
-`supabase/schemas/triggers.sql` includes the matching `updated_at` trigger.
+1. fresh/default public identity is neutral;
+2. admin save + reload of operator/contact/Community/Discord/legal configuration;
+3. authenticated non-admin `PUT` is forbidden;
+4. clearing Discord removes it after identity refresh;
+5. Community and Discord can coexist;
+6. disabling Community hides its navigation entry without deleting its stored URL;
+7. disabling legal links hides external links while neutral local Terms/Privacy pages remain available;
+8. Terms/Privacy show configured operator/contact accurately without implying Brepia/Noty is automatically the deployment operator.
 
-### Server/API
+These are runtime validation tasks, not requests for new Instance identity architecture.
 
-`src/server/instanceIdentity.ts`
+## Runtime follow-ups — final reconciled state
 
-- owns defaults and normalization;
-- validates contact email;
-- accepts only HTTP/HTTPS public URLs;
-- trims/limits text fields;
-- refuses to expose the community toggle without a URL;
-- reads/writes the singleton using the server service-role client.
+### Default model preferences — complete and runtime verified
 
-The generated `shared/database.ts` has not been manually rewritten for this new table. Until real Supabase type regeneration is run, the server module uses a deliberately isolated minimal typed adapter for `instance_settings`.
+Independent per-user fields exist in `user_ai_preferences`:
 
-`src/routes/api/settings/instanceIdentity.ts`
+- `default_parametric_model_id`;
+- `default_creative_model_id`.
 
-- `GET` is public by design and returns only the whitelisted presentation DTO;
-- `PUT` requires an authenticated active administrator;
-- invalid inputs receive explicit validation errors;
-- no secret/admin-only configuration is part of the public DTO.
+New conversations/mode switches use the applicable default, existing conversations remain pinned, and unavailable saved Parametric defaults fall back safely. Runtime use was verified in the real installation.
 
-`src/services/instanceIdentityService.ts` owns the client-side Zod contract.
+### Standalone Generate prompt — removed
 
-### Admin UI
+The unnecessary standalone Wand/Generate-prompt feature is already gone:
 
-`src/components/settings/InstanceIdentitySettingsSection.tsx`
+- UI/client request/state removed from `TextAreaChat`;
+- `/api/prompt-generator` removed;
+- generated TanStack route tree updated;
+- prompt profiles, prompt lineage, conversation prompts and title generation remain intact.
 
-Admin-only controls:
+Do not recreate or repair this retired feature.
 
-- Operator / organization
-- Public contact email
-- Show community link
-- Community label
-- Community URL
-- Show legal links
-- Terms URL
-- Privacy URL
+### Local Creative capabilities — complete for remake scope
 
-`SettingsView.tsx` now includes this section next to the existing admin/AI settings surfaces.
+Active retained local targets:
 
-### Community behavior
+- TRELLIS v1 — text + image;
+- Hunyuan3D-2 — image required;
+- Hunyuan3D-2.1 — image required.
 
-`Sidebar.tsx` no longer contains the inherited CADAM Discord invite.
+Stable Fast 3D has been retired and must not be restored during closeout.
 
-A community button appears only when the administrator has both:
+TRELLIS v1 text-only generation was runtime verified with successful real GLB generation. Model capability messaging and image-required early guardrails are implemented.
 
-1. configured a valid community URL; and
-2. enabled `showCommunityLink`.
+Any later Local Creative architecture or backend expansion is post-merge work and must not start on this branch.
 
-The button is generic (`MessageCircle`) and takes its label from instance settings, so it can represent Discord, a forum, Matrix or another community without product-specific hardcoding.
+### Stable runtime — complete
 
-### Legal behavior
+Normal `./start.sh` now builds/runs a production-like preview behind `scripts/stable-runtime-proxy.mjs` instead of relying on Vite development/HMR. The user verified that long mobile app switching/background periods no longer trigger the disruptive Brepia reload behavior.
 
-The old AdamCAD Terms/Privacy documents named AdamCAD as operator/controller and supplied `hello@adamcad.com`. Those statements were not valid for a generic Brepia open-source installation and have been removed.
+Explicit HMR mode remains separate for development.
 
-`src/components/legal/InstanceLegalNotice.tsx` now provides neutral open-source information:
+### Parametric completion reconciliation — complete
 
-- Brepia does not ship one hosted-service legal identity for every installation;
-- if an administrator has configured an external Terms/Privacy document and enabled legal links, the page links to it;
-- configured operator/contact information may be displayed;
-- source-code licensing is explicitly separated from deployment/operator terms.
+Persistent-message reconciliation now accepts a later terminal assistant for the same user turn when the live assistant is in the persisted branch and no newer user message intervenes. Regression coverage protects against incorrectly cancelling a genuinely newer user turn.
 
-`TermsOfServiceView.tsx` and `PrivacyPolicyView.tsx` are now small wrappers around this neutral notice.
+The user reported the recovery behavior working after the fix.
 
-`src/components/settings/InstanceLegalLinks.tsx` shows optional external legal links in Settings only when enabled/configured.
+## `CADAM Original` — final decision complete
 
-`public/cadam-logo.svg` was deleted after its final legal-page consumers disappeared.
+This item was intentionally deferred until the end and has now been inspected against the actual implementation.
 
-### Code of Conduct
+Decision: **preserve `CADAM Original` as the explicit inherited/pre-Brepia built-in prompt profile and lineage marker.**
 
-`CODE_OF_CONDUCT.md` no longer directs reports to an upstream Adam email address. It instructs reporters to use a private channel published by the maintainers/project, and to request a private reporting method without exposing incident details if none is published.
+Rationale:
 
-Runtime Instance identity and repository Code-of-Conduct reporting remain intentionally separate concepts.
+- the synthetic built-in profile remains `builtin:parametric`;
+- it resolves directly to the inherited `PARAMETRIC_AGENT_PROMPT`;
+- overlay/fork fingerprints and stale-fork warnings encode real prompt lineage;
+- the actual prompt still contains the inherited Adam agent identity and is not merely a cosmetic label;
+- historical/upstream references are explicitly allowed by the Brepia branding boundary.
 
-## Brand system
+Therefore closeout must **not** rename the internal built-in ID, rewrite the inherited system prompt, or intentionally change its fingerprint just to remove the CADAM name. Doing so would turn a cosmetic closeout into a behavioral prompt revision and would invalidate existing lineage semantics.
 
-### React components
+`CADAM Original` is now an intentional compatibility/history label, not an unfinished branding defect.
 
-`src/components/brand/`
+## Package metadata
 
-- `BrepiaMark` — open node-based wireframe/B-Rep mark;
-- `BrepiaBrand` — mark + `BREPIA` with optional `by Noty`;
-- `ActivityIndicator` — quiet pulsing indeterminate state with reduced-motion support.
+`package.json` still declares `lottie-react` although the old Lottie runtime consumer and asset are gone. The inherited package name also remains.
 
-### Current public Brepia assets
+This cleanup is optional and non-blocking. If performed, use npm in the real project checkout so `package-lock.json` is regenerated by npm; do not hand-edit the lockfile through a remote cosmetic pass.
 
-- `public/brepia-mark.svg`
-- `public/brepia-logo.svg`
-- `public/brepia-watermark.svg`
-- `public/site.webmanifest`
+Given the frozen closeout scope, it is reasonable to leave this cleanup for a later maintenance change rather than introduce package churn immediately before merge.
 
-Exact mark geometry, spacing and accent remain subject to real visual review.
+## Validation history vs final gate
 
-## Home/start
-
-`src/lib/homePromptCopy.ts` owns the rotating start copy:
-
-- `Bring your idea to life with Brepia...`
-- `Shape your idea with Brepia...`
-- `Turn an idea into geometry with Brepia...`
-- `Create something new with Brepia...`
-- `What will you create with Brepia?`
-
-One line is selected per mount and immediate repeats are avoided via `sessionStorage`.
-
-`tests/homePromptCopy.test.ts` exists but has not yet been executed in the real project environment.
-
-## Activity migration
-
-The previously tracked simple waits in these major surfaces are migrated to `ActivityIndicator`:
-
-- application/auth bootstrap;
-- auth/password/registration;
-- SCAD/GitHub import;
-- TextAreaChat;
-- assistant loading;
-- MessageBubble image/tool/preview waits;
-- image/GIF/GLB/OpenSCAD viewers;
-- settings/admin/provider/model/vision waits;
-- public share loading;
-- desktop/mobile parametric export;
-- creative mesh download/print;
-- EditorView bootstrap;
-- editor streaming preview.
-
-Determinate progress, especially GIF generation percentages, remains determinate.
-
-The old Lottie loader and `src/assets/adam-loading.json` are removed. `lottie-react` appears unused but dependency/lockfile removal is intentionally deferred until npm can regenerate the lockfile in the real project environment.
-
-## Generated media and export branding
-
-- GIF live overlay + baked frames use `brepia-watermark.svg`.
-- GLB transition uses `src/utils/brepiaLogoVertices.ts`.
-- old `src/utils/adamLogoVertices.ts` is removed.
-- exported `.mtl` metadata says `Generated by Brepia`.
-- Mandarin3D `external_source = adam-<mesh-id>` remains as an existing integration identifier.
-
-## Documentation/current presentation
-
-Current Brepia presentation is established in:
-
-- `README.md`
-- `CONTRIBUTING.md`
-- `benchmarks/README.md`
-- benchmark render-script comments
-- `docs/brepia_branding.md`
-- remake plan/status.
-
-Historical/technical documents may retain CADAM/pCAD wording when it accurately records history or compatibility. Do not mass-rewrite them.
-
-## Legacy assets removed
-
-Removed after consumers migrated or were deleted:
-
-- CADAM launch/favicons/logo assets;
-- Adam logo variants and icon;
-- old GitHub banners;
-- Adam Lottie loading JSON;
-- Adam logo vertex geometry;
-- temporary logo compatibility aliases;
-- `fusion.svg`, `solidworks.svg`, `onshape.png` used only by the deleted upstream product banner;
-- old `screenshot-1.jpeg`, `screenshot-2.jpeg`, `screenshot-3.jpeg` no longer used by Brepia documentation;
-- dead `DiscordIcon` after community navigation became generic.
-
-## Prompt-profile migration — intentionally last
-
-`src/components/settings/PromptProfilesSettings.tsx` still exposes `CADAM Original`.
-
-This remains intentionally untouched until the rest of the remake is validated. It participates in real profile lineage semantics:
-
-- built-in prompt overlays;
-- base revision/fingerprint tracking;
-- fork lineage;
-- stale-fork warnings;
-- built-in profile/API semantics.
-
-At the end, inspect the actual built-in prompt and decide whether to:
-
-1. preserve an explicitly inherited/upstream profile;
-2. rename display identity only; or
-3. introduce a genuine Brepia built-in revision and migrate displayed lineage.
-
-Internal IDs need not change solely because display identity changes.
-
-## Internal identifiers deliberately preserved
-
-### Deployment
-
-- Vite/router/output compatibility base remains `/cadam`.
-
-### External integrations
-
-- Sentry `org/project = adamcad` remains until the actual external resource is migrated.
-- Mandarin3D `external_source = adam-*` remains an integration identifier.
-
-### CSS/theme
-
-- `bg-adam-*`, `text-adam-*`, `border-adam-*` and related tokens remain implementation identifiers.
-
-### pCAD compatibility/ops
-
-Examples deliberately retained:
-
-- `PCAD_STEP_EXPORT_*`
-- `pcad-scad2step-sandbox`
-- `.opencode/agents/pcad-*`
-- `.opencode/skills/pcad-*`
-- `@pcad.invalid`
-- compatibility-sensitive DB/storage/localStorage identifiers.
-
-## Package metadata deferred cleanup
-
-`package.json` still has inherited starter metadata and still declares `lottie-react` even though the Lottie runtime consumer is gone.
-
-Do not hand-edit the large lockfile through a cosmetic GitHub pass. Perform package-name/dependency cleanup with npm in the actual project environment and commit the generated lockfile diff.
-
-## Tests added but not yet executed
-
-- `tests/homePromptCopy.test.ts`
-- `tests/instanceIdentity.test.ts`
-
-The instance test covers:
-
-- neutral fresh-install defaults;
-- whitespace/URL normalization;
-- community visibility without URL;
-- rejection of non-HTTP URLs;
-- rejection of malformed contact emails.
-
-No PASS claim is made yet.
-
-## Required real-environment validation
-
-First apply the new migration to the real development database:
-
-```text
-supabase/migrations/20260827062000_instance_identity_settings.sql
-```
-
-On the current workstation, start Supabase through NOx first; then use `npx supabase migration up` rather than trying to own the service lifecycle from the Supabase CLI.
-
-Then verify:
-
-- default GET is neutral;
-- admin PUT persists settings;
-- non-admin PUT is rejected;
-- community appears/disappears correctly desktop/mobile;
-- external legal links behave correctly;
-- Terms/Privacy fallback remains neutral with no configuration.
-
-Final project gate:
+A real local Phase 6 technical gate previously passed:
 
 ```bash
 npm test
@@ -355,21 +239,48 @@ npm run lint
 npm run build
 ```
 
-Also run real visual checks on desktop/mobile and relevant compact/light/dark states before merge.
+That historical PASS remains valid evidence for that checkpoint, but it is **not** a substitute for the required final gate on the final branch state after all subsequent runtime/cosmetic changes.
 
-The assistant shell/container previously could not resolve GitHub DNS, so no local test success is claimed from that environment. GitHub connector reads/writes continue to work.
+The final closeout gate must still be run locally before merge:
 
-## Recommended next order
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
 
-1. Start the local Supabase stack through NOx and apply the Instance identity migration with the repository-local CLI.
-2. Regenerate local Supabase types with `npx supabase gen types typescript --local > shared/database.ts`.
-3. Run the Vite/TanStack generator so `src/routeTree.gen.ts` includes the Instance identity route.
-4. Run focused/full tests, typecheck, lint and build; fix toolchain issues if any.
-5. Perform desktop/mobile visual review and make small mark/spacing/accent adjustments.
-6. Use npm to remove dead `lottie-react` and optionally rename private package metadata with a generated lockfile diff.
-7. Resolve `CADAM Original` prompt-profile lineage/display **last**.
-8. After the remake is stable, separately decide `weaf/pCAD` → `weaf/brepia` and any deployment path migration away from `/cadam`.
+Also run focused tests relevant to any final edit if needed.
+
+No final PASS is claimed here until those commands are actually executed in the user's local checkout. The remote assistant environment cannot currently reach the user's workstation and its container cannot resolve GitHub DNS, so it cannot honestly substitute its own run.
+
+## Final manual smoke before merge
+
+At minimum confirm:
+
+- normal desktop/mobile Brepia presentation remains intact;
+- a Parametric conversation can be created/continued;
+- Creative selection/capability messaging remains correct;
+- authentication and Settings remain accessible;
+- Instance identity navigation/legal presentation is correct;
+- no obvious regression was introduced by closeout documentation or any final cleanup.
+
+Do not reopen deferred runtime bugs unless a closeout change directly causes a regression.
+
+## Merge readiness
+
+The branch is **prepared for its final local gate but is not yet declared merge-green**.
+
+Remaining blockers are evidence, not additional product development:
+
+1. finish/record the remaining Instance identity live smoke checks if not already exercised;
+2. run the final local `npm test` / typecheck / lint / build gate on the current final branch state;
+3. record the exact tested branch HEAD and results;
+4. verify a fresh compare still shows the branch based cleanly on current `master`;
+5. merge using the repository's normal integration procedure.
+
+After merge, create a **new branch from updated `master`** before any post-merge functionality program begins.
 
 ## Governing rule
 
-> **Rebrand user-facing presentation while preserving compatibility identifiers and real behavioral semantics; deployment-specific identity belongs to the deployment administrator.**
+> **Reconcile, validate and merge the existing Brepia remake. Preserve compatibility and stable-runtime behavior. Do not expand the branch with new functionality.**
