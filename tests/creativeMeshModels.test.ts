@@ -12,12 +12,11 @@ import { MODEL_CONFIGS } from '../src/constants/meshConstants';
 import { getCreativeInputValidationIssue } from '../src/lib/creativeInputValidation';
 
 describe('Creative mesh backend catalog', () => {
-  it('contains all four local backends plus the three legacy fal.ai IDs', () => {
+  it('contains all three local backends plus the three legacy fal.ai IDs', () => {
     assert.deepEqual([...CREATIVE_MESH_MODEL_IDS], [
       'local/trellis-v1',
       'local/hunyuan3d-2',
       'local/hunyuan3d-2.1',
-      'local/stable-fast-3d',
       'quality',
       'fast',
       'ultra',
@@ -36,7 +35,6 @@ describe('Creative mesh backend catalog', () => {
       'local/trellis-v1',
       'local/hunyuan3d-2',
       'local/hunyuan3d-2.1',
-      'local/stable-fast-3d',
     ]) {
       assert.equal(isLocalCreativeMeshModel(id), true, id);
     }
@@ -45,11 +43,7 @@ describe('Creative mesh backend catalog', () => {
   it('marks TRELLIS as text-capable and image-only models explicitly', () => {
     assert.equal(getCreativeMeshModelDefinition('local/trellis-v1')?.supportsText, true);
     assert.equal(getCreativeMeshInputCapability('local/trellis-v1'), 'Text + image');
-    for (const id of [
-      'local/hunyuan3d-2',
-      'local/hunyuan3d-2.1',
-      'local/stable-fast-3d',
-    ]) {
+    for (const id of ['local/hunyuan3d-2', 'local/hunyuan3d-2.1']) {
       const definition = getCreativeMeshModelDefinition(id);
       assert.equal(definition?.supportsText, false, id);
       assert.equal(definition?.supportsImage, true, id);
