@@ -255,6 +255,31 @@ export function ModelSelector({
                     {model.description}
                   </p>
                 )}
+                {(model.inputCapability || model.timeEstimate) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {model.inputCapability && (
+                      <span
+                        className={cn(
+                          'rounded-full border px-2 py-0.5',
+                          focused
+                            ? 'border-white/25 text-white'
+                            : 'border-adam-neutral-500 text-adam-text-secondary',
+                        )}
+                      >
+                        {model.inputCapability}
+                      </span>
+                    )}
+                    {model.timeEstimate && (
+                      <span
+                        className={cn(
+                          focused ? 'text-white/80' : 'text-gray-500',
+                        )}
+                      >
+                        {model.timeEstimate}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {selectedModel === model.id && (
                 <Check
