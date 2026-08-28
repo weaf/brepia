@@ -65,7 +65,6 @@ export const MODEL_CONFIGS: Record<CreativeModel, ModelConfig> = {
   'local/trellis-v1': { ...LOCAL_MODEL_CONFIG },
   'local/hunyuan3d-2': { ...LOCAL_MODEL_CONFIG },
   'local/hunyuan3d-2.1': { ...LOCAL_MODEL_CONFIG },
-  'local/stable-fast-3d': { ...LOCAL_MODEL_CONFIG },
   fast: {
     brightness: MATERIAL_DEFAULTS.BRIGHTNESS_TEXTURELESS,
     roughness: MATERIAL_DEFAULTS.ROUGHNESS,
