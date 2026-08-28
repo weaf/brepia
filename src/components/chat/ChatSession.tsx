@@ -4,12 +4,19 @@ import TextAreaChat from '@/components/TextAreaChat';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCachedAiChat } from '@/hooks/useCachedAiChat';
+import {
+  CONNECTION_INTERRUPTED_MESSAGE,
+  userFacingChatError,
+} from '@/hooks/chatErrorPresentation';
 import { useToast } from '@/hooks/use-toast';
 import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
 import { apiUrl } from '@/services/api';
 import { messageRowToChatMessage, type ChatMessage } from '@/lib/aiMessages';
 import { collectStuckToolRecovery } from '@/components/chat/stuckToolRecovery';
-import { AssistantRowMissingError } from '@/services/messageService';
+import {
+  AssistantRowMissingError,
+  shouldPollForPendingAssistant,
+} from '@/services/messageService';
 import { supabase } from '@/lib/supabase';
 import {
   generateColoredPreview,
@@ -633,8 +640,15 @@ export function ChatSession({
     },
   });
 
-  const { messages, status, stop, sendMessage, regenerate, setMessages } =
-    useChat<AppUIMessage>({ chat });
+  const {
+    messages,
+    status,
+    error: chatError,
+    stop,
+    sendMessage,
+    regenerate,
+    setMessages,
+  } = useChat<AppUIMessage>({ chat });
 
   const stopGeneration = useCallback(async () => {
     try {
@@ -732,7 +746,18 @@ export function ChatSession({
     }
   }, [chat, onToolOutput, setMessages]);
 
-  const isLoading = status === 'submitted' || status === 'streaming';
+  // A mobile background transition can tear down only the client transport.
+  // The server continues the turn and useMessagesQuery keeps polling the DB.
+  // Preserve the same visible/loading state while that recoverable gap exists
+  // so "Preparing model..." / "Creating..." and the stop affordance do not
+  // disappear merely because the browser lost its stream connection.
+  const isRecoveringInterruptedTurn =
+    status === 'error' &&
+    !!chatError &&
+    userFacingChatError(chatError).message === CONNECTION_INTERRUPTED_MESSAGE &&
+    shouldPollForPendingAssistant(dbMessages);
+  const isLoading =
+    status === 'submitted' || status === 'streaming' || isRecoveringInterruptedTurn;
 
   useEffect(() => {
     onLoadingChange?.(isLoading);
