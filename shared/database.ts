@@ -435,6 +435,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_path: string | null;
+          avatar_preset: string | null;
           created_at: string;
           full_name: string;
           id: string;
@@ -444,6 +445,7 @@ export type Database = {
         };
         Insert: {
           avatar_path?: string | null;
+          avatar_preset?: string | null;
           created_at?: string;
           full_name: string;
           id?: string;
@@ -453,6 +455,7 @@ export type Database = {
         };
         Update: {
           avatar_path?: string | null;
+          avatar_preset?: string | null;
           created_at?: string;
           full_name?: string;
           id?: string;
@@ -585,6 +588,8 @@ export type Database = {
       user_ai_preferences: {
         Row: {
           created_at: string;
+          default_creative_model_id: string | null;
+          default_parametric_model_id: string | null;
           default_prompt_profile_id: string | null;
           hidden_model_ids: string[];
           updated_at: string;
@@ -594,6 +599,8 @@ export type Database = {
         };
         Insert: {
           created_at?: string;
+          default_creative_model_id?: string | null;
+          default_parametric_model_id?: string | null;
           default_prompt_profile_id?: string | null;
           hidden_model_ids?: string[];
           updated_at?: string;
@@ -603,6 +610,8 @@ export type Database = {
         };
         Update: {
           created_at?: string;
+          default_creative_model_id?: string | null;
+          default_parametric_model_id?: string | null;
           default_prompt_profile_id?: string | null;
           hidden_model_ids?: string[];
           updated_at?: string;
