@@ -5,12 +5,14 @@ type Timing = { expected: number; min: number; max: number };
 
 // Timing configuration. Local times are deliberately conservative because the
 // first request also lazy-loads weights into VRAM; subsequent requests on the
-// same backend are normally faster.
+// same backend are normally faster. TRELLIS.2 values are transitional UI
+// fallbacks only until the native runtime has real stage/progress reporting.
 export const TIMING_CONFIG: Record<
   'image' | 'mesh',
   Record<CreativeModel, Timing>
 > = {
   image: {
+    'local/trellis2': { expected: 180000, min: 45000, max: 600000 },
     'local/trellis-v1': { expected: 120000, min: 45000, max: 300000 },
     'local/hunyuan3d-2': { expected: 90000, min: 30000, max: 240000 },
     'local/hunyuan3d-2.1': { expected: 150000, min: 60000, max: 360000 },
@@ -19,6 +21,7 @@ export const TIMING_CONFIG: Record<
     ultra: { expected: 150000, min: 90000, max: 200000 },
   },
   mesh: {
+    'local/trellis2': { expected: 300000, min: 60000, max: 900000 },
     'local/trellis-v1': { expected: 180000, min: 60000, max: 600000 },
     'local/hunyuan3d-2': { expected: 120000, min: 45000, max: 360000 },
     'local/hunyuan3d-2.1': { expected: 210000, min: 60000, max: 600000 },
