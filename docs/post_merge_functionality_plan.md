@@ -1,10 +1,12 @@
 # Post-merge functionality improvement plan
 
-Status: **DEFERRED UNTIL AFTER `feature/brepia-remake` IS MERGED INTO `master`**
+Status: **ACTIVE on `feature/post-merge-functionality`**
 
-This plan captures functional/runtime improvements discovered while finishing the Brepia remake. It is deliberately separated from the cosmetic/rebrand branch so the current branch can be validated and merged without continuously expanding scope.
+Activated: 2026-08-28 after the Brepia remake was fast-forwarded into `master` at `763dbbfad453c6a9522e50aadc392ff80673bf2f`.
 
-The implementation work in this document must start from the then-current `master` on a new feature branch after the Brepia remake merge.
+This plan captures functional/runtime improvements discovered while finishing the Brepia remake. It is deliberately separated from the cosmetic/rebrand work so the merged Brepia baseline remains stable while functionality evolves on a dedicated branch.
+
+The implementation work in this document starts from the updated post-Brepia `master`; the dedicated branch was created from that exact merge state before this program was activated.
 
 ## Goals
 
@@ -14,6 +16,7 @@ The implementation work in this document must start from the then-current `maste
 4. Reduce dependence on fragile Python/CUDA-extension stacks where a validated native replacement exists.
 5. Keep output/persistence contracts compatible with the existing pCAD/Brepia Creative workflow.
 6. Preserve hosted fal.ai compatibility and historical Creative model IDs.
+7. Remove confirmed dead dependencies through their real package-management workflow instead of carrying obsolete runtime metadata forward.
 
 ## Current baseline after the remake branch
 
@@ -52,14 +55,29 @@ GPU arbitration with llama-swap remains important on a single-GPU workstation. A
 
 Start from the updated `master` after the Brepia remake merge.
 
-- [ ] Create a new dedicated functionality branch.
-- [ ] Read `AGENTS.md`, this plan, `docs/local_creative_mesh_backends.md` and the relevant runtime handover/checkpoint documents.
-- [ ] Verify current Creative catalog and local gateway behavior.
+- [x] Create a new dedicated functionality branch: `feature/post-merge-functionality`.
+- [x] Read `AGENTS.md`, this plan and `docs/local_creative_mesh_backends.md`; preserve the relevant Brepia runtime/closeout constraints.
+- [ ] Verify current Creative catalog and local gateway behavior in the real runtime.
 - [ ] Run the normal project validation gate before implementation.
 - [ ] Record a small benchmark set of representative text and image prompts.
 - [ ] Record baseline latency, VRAM behavior, output size and failure modes for the currently retained local backends.
 
 Acceptance criterion: the post-merge branch begins from a known-good baseline rather than treating failures inherited from the remake branch as new-backend regressions.
+
+## Phase 0A — Dependency hygiene: remove obsolete `lottie-react`
+
+The Brepia remake removed the only live Lottie consumer. Historically, `src/components/viewer/Loader.tsx` imported `lottie-react` and played `src/assets/adam-loading.json` with looping/autoplay behavior. The current Brepia loader instead renders `BrepiaMark` and CSS-driven motion, and `adam-loading.json` is gone.
+
+Current static review therefore classifies `lottie-react` as an unused dependency rather than an active Brepia runtime requirement.
+
+- [x] Confirm the current loader no longer imports or renders `lottie-react`.
+- [x] Confirm the historical usage was the removed Adam loading animation.
+- [ ] Remove the package with the real npm toolchain: `npm uninstall lottie-react`.
+- [ ] Accept the npm-generated `package.json` / `package-lock.json` changes; do not hand-edit the lockfile.
+- [ ] Re-run `npm test`, `npm run typecheck`, `npm run lint` and `npm run build` after removal.
+- [ ] Confirm the Brepia loader still behaves normally after the dependency removal.
+
+This cleanup is deliberately independent of the LLaMA-Mesh/`trellis.cpp` experiments and should not introduce visual redesign or loader behavior changes.
 
 # Phase 1 — LLaMA-Mesh feasibility spike
 
@@ -251,4 +269,4 @@ This post-merge improvement program is complete only when:
 
 ## Governing rule
 
-> **Finish and merge the Brepia remake first. Then improve functionality from a clean master baseline, introducing new local 3D runtimes only when they measurably improve quality, reliability or operational simplicity.**
+> **Improve functionality from the clean post-Brepia master baseline, introducing new local 3D runtimes only when they measurably improve quality, reliability or operational simplicity. Preserve the merged Brepia runtime and compatibility contracts while doing so.**
