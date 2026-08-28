@@ -10,6 +10,12 @@ export const CREATIVE_MESH_MODEL_IDS = [
 
 export type CreativeMeshModelId = (typeof CREATIVE_MESH_MODEL_IDS)[number];
 export type CreativeMeshProvider = 'local' | 'fal';
+export type CreativeMeshInputCapability =
+  | 'Text + image'
+  | 'Image required'
+  | 'Text only'
+  | 'Image only'
+  | 'Unsupported';
 
 export type CreativeMeshModelDefinition = {
   id: CreativeMeshModelId;
@@ -131,6 +137,18 @@ export function getCreativeMeshModelDefinition(
   id: string,
 ): CreativeMeshModelDefinition | undefined {
   return CREATIVE_MESH_MODEL_BY_ID.get(id as CreativeMeshModelId);
+}
+
+export function getCreativeMeshInputCapability(
+  id: string,
+): CreativeMeshInputCapability | undefined {
+  const definition = getCreativeMeshModelDefinition(id);
+  if (!definition) return undefined;
+  if (definition.requiresReferenceImage) return 'Image required';
+  if (definition.supportsText && definition.supportsImage) return 'Text + image';
+  if (definition.supportsText) return 'Text only';
+  if (definition.supportsImage) return 'Image only';
+  return 'Unsupported';
 }
 
 export function isLocalCreativeMeshModel(id: string): id is CreativeMeshModelId {
