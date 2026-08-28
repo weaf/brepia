@@ -2,7 +2,10 @@ import { Chat } from '@ai-sdk/react';
 import { useEffect, useMemo, useRef } from 'react';
 import type { AppUIMessage } from '@shared/chatAi';
 import { persistedCompletionCoversLiveTurn } from './chatCompletionReconciliation';
-import { userFacingChatError } from './chatErrorPresentation';
+import {
+  CONNECTION_INTERRUPTED_MESSAGE,
+  userFacingChatError,
+} from './chatErrorPresentation';
 import { pendingClientToolsNeedingRecovery } from './chatPendingToolRecovery';
 
 const MAX_CACHE_SIZE = 10;
@@ -154,6 +157,24 @@ function chatContainsToolCall(
   );
 }
 
+function forwardTransportError(refs: CallbackRefs, error: unknown) {
+  const visibleError = userFacingChatError(error);
+
+  // Mobile browsers may drop the client HTTP/SSE connection while the server
+  // keeps consuming and persisting the model turn. That condition is already
+  // recovered from the DB below, so presenting it as a destructive model error
+  // is misleading. Keep the SDK's internal error state intact until a fresh
+  // persisted snapshot is adopted; only suppress the red product-level toast.
+  if (visibleError.message === CONNECTION_INTERRUPTED_MESSAGE) {
+    console.info(
+      '[chat-recovery] client connection interrupted; awaiting persisted result',
+    );
+    return;
+  }
+
+  refs.onError.current?.(visibleError);
+}
+
 function dispatchToolCall(
   refs: CallbackRefs,
   handled: Set<string>,
@@ -274,7 +295,7 @@ export function useCachedAiChat({
       id,
       messages: seedMessages,
       transport,
-      onError: (error) => refs.onError.current?.(userFacingChatError(error)),
+      onError: (error) => forwardTransportError(refs, error),
       onFinish: (ctx) => refs.onFinish.current?.(ctx),
       onData: (ctx) => refs.onData.current?.(ctx),
       onToolCall: (ctx) => {
@@ -339,12 +360,15 @@ export function useCachedAiChat({
         // Cancel its eligibility before replay; dispatchToolCall marks the id
         // handled synchronously, so any already-queued timer becomes a no-op.
         scheduled.delete(toolCall.toolCallId);
-        console.info('[chat-tool-recovery] replaying persisted pending client tool', {
-          conversationId: id,
-          toolName: toolCall.toolName,
-          toolCallId: toolCall.toolCallId,
-          localStatus: chat.status,
-        });
+        console.info(
+          '[chat-tool-recovery] replaying persisted pending client tool',
+          {
+            conversationId: id,
+            toolName: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            localStatus: chat.status,
+          },
+        );
         dispatchToolCall(refs, handled, { toolCall } as ToolCallCallbackArg);
       }
     }
@@ -393,7 +417,7 @@ export function createAndCacheAiChat(
     ...rest,
     id,
     transport,
-    onError: (error) => refs.onError.current?.(userFacingChatError(error)),
+    onError: (error) => forwardTransportError(refs, error),
     onFinish: (ctx) => refs.onFinish.current?.(ctx),
     onData: (ctx) => refs.onData.current?.(ctx),
     onToolCall: (ctx) => {
