@@ -58,12 +58,16 @@ Current registered instruction keys:
 
 Model selection and AI-profile selection are separate dimensions. A model chooses the LLM/agent runtime; a repository-backed AI profile chooses the complete Brepia instruction package across all registered instruction keys.
 
-Initial package profiles:
+Stable package profiles:
 
 - `cadam` — upstream-managed CADAM lineage.
 - `standard` — Brepia-managed default.
 
-Both initially point to the immutable `cadam-split-2026-08-29` revision, but Standard does not extend CADAM live. Future CADAM imports create a new frozen revision and move only the CADAM package pointer. Standard remains unchanged until Brepia deliberately ports a change.
+Experimental package profile:
+
+- `test` — permanent Brepia laboratory slot. It extends Standard and overrides only instruction keys involved in the current experiment. It may be selected as a user's temporary default while testing, but the repository `defaultProfile` remains `standard`.
+
+CADAM and Standard initially point to the immutable `cadam-split-2026-08-29` revision, but Standard does not extend CADAM live. Future CADAM imports create a new frozen revision and move only the CADAM package pointer. Standard remains unchanged until Brepia deliberately ports a change.
 
 Future Brepia profiles such as `qwen` may extend Standard and override only instruction keys that need a measured model-specific difference. Profiles never select or hard-code a model.
 
@@ -107,7 +111,7 @@ If every auxiliary instruction uses the bundled repository template, no `prompt_
 
 Conversation-pinned primary Generative/Creative custom profiles are intentionally resolved by explicit ID so an old conversation can continue using the exact profile it was created with, including after that profile has later been archived.
 
-The repository package is pinned independently of those UUID-based custom profiles, so changing the Settings default cannot silently switch an existing conversation from Standard to CADAM or vice versa. Repository updates to the selected profile still intentionally evolve that profile across deployments; CADAM and Standard remain isolated from each other's revision pointers.
+The repository package is pinned independently of those UUID-based custom profiles, so changing the Settings default cannot silently switch an existing conversation from Standard to CADAM, Test or another profile. Repository updates to the selected profile still intentionally evolve that profile across deployments; CADAM and Standard remain isolated from each other's revision pointers.
 
 Tool objects themselves are created once per chat turn and reused by every model step/tool call in that turn.
 
@@ -116,6 +120,8 @@ Tool objects themselves are created once per chat turn and reused by every model
 - bundled templates are read-only repository references
 - repository-backed complete AI profiles are defined/versioned in Git, not mutable database rows
 - CADAM is upstream-managed; Standard is Brepia-managed
+- Test is Brepia-managed and intentionally mutable between experiments
+- repository `defaultProfile` remains Standard; Test is never the shipped default
 - custom profiles can be Replace or Overlay profiles
 - an active/default custom profile cannot be archived
 - the user must activate another custom profile first
@@ -215,13 +221,17 @@ Functional package smoke:
 
 ## Next active phase — Brepia Standard Parametric evaluation
 
-The package architecture is no longer a blocker. The next active phase is to compare the frozen CADAM Parametric prompt against the existing non-runtime Brepia Standard v1 candidate in `config/ai/evals/parametric/`.
+The package architecture is no longer a blocker. A permanent repository-backed `test` profile is now the runtime laboratory slot. Its current Parametric and attachment-context overrides mirror the Standard v1 candidate in `config/ai/evals/parametric/`; all other keys inherit from Standard.
 
 - keep CADAM frozen and unchanged
+- keep Standard unchanged until a candidate is promoted
+- keep repository `defaultProfile` set to Standard
+- use Test for experimental runtime instructions
 - keep model selection independent of profile selection
-- use the same Parametric model/runtime/application revision for baseline and candidate runs
-- evaluate the existing Standard v1 candidate before registering any runtime override
-- promote only measured improvements into `standard.instructions`
+- use the same Parametric model/runtime/application revision for CADAM and Test runs
+- compare CADAM versus Test in fresh conversations without an additional Custom Prompt Profile
+- promote only measured improvements from Test into `standard.instructions`
+- after promotion or rejection, reuse Test for the next candidate
 - do not add a Qwen/model-family profile until Standard evaluation demonstrates a repeatable model-specific need
 - keep Creative/TRELLIS-specific prompt optimization as a separate follow-up
 
