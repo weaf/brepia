@@ -135,30 +135,6 @@
       "default": 3,
       "min": 1,
       "max": 10
-    },
-    "provider.fal.texturelessMaxPolygons": {
-      "label": "fal.ai textureless polygon cap",
-      "description": "Maximum face count requested from the optional textureless fal.ai backend.",
-      "type": "integer",
-      "default": 50000,
-      "min": 1000,
-      "max": 50000
-    },
-    "provider.fal.samMinMaskScore": {
-      "label": "fal.ai SAM minimum mask score",
-      "description": "Minimum SAM segmentation confidence accepted before trying a fallback.",
-      "type": "number",
-      "default": 0.25,
-      "min": 0,
-      "max": 1
-    },
-    "provider.fal.meshyDefaultPolycount": {
-      "label": "fal.ai Meshy default polycount",
-      "description": "Default target polycount when no explicit Meshy polycount is supplied.",
-      "type": "integer",
-      "default": 30000,
-      "min": 200,
-      "max": 300000
     }
   }
 }
