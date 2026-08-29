@@ -61,6 +61,17 @@ export function ModelSelector({
     selectedModel,
   ]);
 
+  // Creative provider availability can change between deployments. If an old
+  // conversation points at a retired local backend or an optional provider
+  // that is no longer enabled, move it to the first selectable Creative model
+  // (TRELLIS.2 in the core catalog) instead of rendering a blank selector and
+  // submitting an unavailable backend ID.
+  useEffect(() => {
+    if (currentType !== 'creative' || models.length === 0) return;
+    if (models.some((model) => model.id === selectedModel)) return;
+    onModelChange(models[0].id);
+  }, [currentType, models, onModelChange, selectedModel]);
+
   // Track previous model name for slide animation
   const [prevModelName, setPrevModelName] = useState<string | null>(null);
   const [isSliding, setIsSliding] = useState(false);
