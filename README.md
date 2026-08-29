@@ -16,22 +16,21 @@
 
 ## About
 
-Brepia is an open-source 3D design workspace built around AI-assisted modelling, editable OpenSCAD geometry and local or hosted model runtimes.
+Brepia is an open-source 3D design workspace for AI-assisted modelling, editable OpenSCAD geometry and Creative 3D generation.
 
-You can describe a model in natural language, inspect it in the 3D viewer, change exposed parameters, import existing OpenSCAD, use reference images and export the result for printing or further CAD work.
+Describe a model in natural language, inspect it in the 3D viewer, adjust parameters, import existing OpenSCAD, use reference images and export the result for printing or further CAD work.
 
 ## Features
 
 - Parametric 3D generation and editing with OpenSCAD.
-- Editable dimensions, colours and other model parameters.
+- Editable dimensions, colours and model parameters.
 - Import of local `.scad` files and OpenSCAD sources from GitHub.
 - Live 3D preview in the browser.
-- Creative text-to-3D and image-to-3D workflows.
+- Text-to-3D and image-to-3D Creative workflows.
 - Local and hosted AI providers, including OpenAI-compatible endpoints.
 - OpenCode- and Codex-backed agent workflows.
-- Configurable vision models for image and rendered-model analysis.
-- Conversation workspaces that keep generated models, revisions and exports together.
-- Self-hosted instance settings for operator, contact, community and legal links.
+- Configurable vision models.
+- Conversation workspaces for generated models, revisions and exports.
 
 ## Export formats
 
@@ -42,22 +41,18 @@ You can describe a model in natural language, inspect it in the 3D viewer, chang
 | **DXF** | 2D CAD exchange |
 | **STEP** | 3D CAD exchange |
 
-Creative models can also provide mesh downloads such as GLB where supported.
+Creative workflows can also provide GLB output where supported.
 
 ## Requirements
-
-For the normal local development setup:
 
 - Node.js `^20.19.0` or `>=22.12.0`
 - npm `>=10`
 - Podman
-- a NOx-managed local Supabase stack
-- OpenCode if agent-backed OpenCode workflows are used
-- llama-swap if local AI models are used
+- NOx-managed local Supabase
+- OpenCode for OpenCode-backed workflows
+- llama-swap for local AI models
 
 ## Installation
-
-Clone the repository and install the Node dependencies:
 
 ```bash
 git clone https://github.com/weaf/pCAD.git
@@ -66,11 +61,9 @@ npm install
 cp .env.local.template .env.local
 ```
 
-Fill in the provider or integration credentials you want to use in `.env.local`. Local Supabase connection values are read from the running local stack by `start.sh`.
+Configure the providers and integrations you want to use in `.env.local`.
 
-Start the local Supabase stack through **NOx**. The project does not use `supabase start` or `npx supabase start` for its normal local workflow.
-
-Apply repository migrations after Supabase is running:
+Start the local Supabase stack through **NOx**, then apply migrations:
 
 ```bash
 npx supabase migration up
@@ -82,100 +75,33 @@ Start Brepia:
 ./start.sh
 ```
 
-`start.sh` checks the local services, starts or connects to OpenCode, prepares the local runtime environment and launches the application in the stable production-like mode used for normal development and testing.
-
-To run with Vite HMR instead:
+For Vite HMR:
 
 ```bash
 PCAD_ENABLE_HMR=1 ./start.sh
 ```
 
-## Local AI with llama-swap
-
-Brepia can use models exposed through an OpenAI-compatible endpoint such as llama-swap. Provider URLs and credentials are configured from the application settings.
-
-The default local llama-swap endpoint used by the Creative runtime is:
-
-```text
-http://127.0.0.1:9292
-```
-
 ## Local Creative 3D
 
-The native local Creative stack uses Z-Image-Turbo for text conditioning and TRELLIS.2 for 3D generation.
-
-Install it with:
+Install the local Creative runtime with:
 
 ```bash
 bash ./scripts/install-native-creative-backends.sh
 ```
 
-By default the model weights are stored with the other llama-swap models:
-
-```text
-~/ai/llama-swap/models/creative/
-├── z-image-turbo/
-└── trellis2/
-```
-
-Runtime binaries are stored separately under:
-
-```text
-~/ai/pcad-native-creative/
-```
-
-A different model directory can be selected during installation:
-
-```bash
-bash ./scripts/install-native-creative-backends.sh \
-  --models-dir /path/to/models
-```
-
-or with:
-
-```bash
-PCAD_NATIVE_CREATIVE_MODELS_DIR=/path/to/models \
-bash ./scripts/install-native-creative-backends.sh
-```
-
-The installer adds the Creative runtimes to the existing llama-swap configuration. Restart or reload llama-swap afterwards and verify that the models are visible:
-
-```bash
-curl -s http://127.0.0.1:9292/v1/models \
-  | grep -E 'creative/(z-image-turbo|trellis2)'
-```
+The installer configures the required local runtimes for llama-swap. See [`docs/local_creative_mesh_backends.md`](docs/local_creative_mesh_backends.md) for runtime and configuration details.
 
 ## STEP export
 
-STEP export uses the repository's Podman sandbox. Build the image first:
+Build the STEP export sandbox:
 
 ```bash
 ./scripts/step-export/build-image.sh
 ```
 
-Then point the application at the runner in `.env.local`:
+Then configure `PCAD_STEP_EXPORT_RUNNER` in `.env.local`. Additional settings are documented in `.env.local.template`.
 
-```text
-PCAD_STEP_EXPORT_RUNNER=/absolute/path/to/pCAD/scripts/step-export/pcad-scad2step-sandbox
-```
-
-Additional sandbox settings are documented in `.env.local.template`.
-
-## Configuration
-
-Start from:
-
-```text
-.env.local.template
-```
-
-Most AI provider credentials are optional. Configure only the providers and integrations you intend to use.
-
-Model/provider configuration is also available inside Brepia, including custom OpenAI-compatible endpoints, local models, OpenCode agents and vision models.
-
-## Development checks
-
-Run the standard project checks before merging changes:
+## Development
 
 ```bash
 npm test
@@ -184,11 +110,11 @@ npm run lint
 npm run build
 ```
 
-`src/routeTree.gen.ts` is generated by TanStack Router. Do not edit it by hand.
+`src/routeTree.gen.ts` is generated by TanStack Router and should not be edited manually.
 
 ## Project origin
 
-Brepia builds on the open-source [CADAM](https://github.com/Adam-CAD/CADAM) project and retains code derived from that work.
+Brepia builds on the open-source [CADAM](https://github.com/Adam-CAD/CADAM) project.
 
 ## License
 
