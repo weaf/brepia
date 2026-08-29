@@ -1,5 +1,6 @@
 import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
+import { loadBundledInstruction } from './aiInstructionCatalog.ts';
 import type { MeshFileType, Model } from './types.ts';
 
 export const createMeshInputSchema = z.object({
@@ -45,20 +46,17 @@ export const answerUserSchema = z.object({
 
 export const chatTools = {
   build_parametric_model: tool({
-    description:
-      'Create or update the complete OpenSCAD CAD artifact. After the browser compiles it, inspect the returned multi-view preview sheet and call this tool again if the model needs another revision.',
+    description: loadBundledInstruction('tool.build_parametric_model'),
     inputSchema: parametricArtifactSchema,
     outputSchema: parametricCompileOutputSchema,
   }),
   answer_user: tool({
-    description:
-      'Send the final user-facing chat message. Use this for normal non-CAD replies, and after a CAD build when the multi-view preview satisfies the user request.',
+    description: loadBundledInstruction('tool.answer_user'),
     inputSchema: answerUserSchema,
     outputSchema: answerUserSchema,
   }),
   create_mesh: tool({
-    description:
-      'Create a 3D mesh from text and/or reference images. The mesh backend is already selected by pCAD and must not be changed. Local Creative backends currently support generation only; follow-up editing of an existing locally generated mesh is deferred, so do not pass meshId for local backends or claim that a local mesh was edited. A tool error means the mesh was not created or changed: never claim success unless this tool returns an output with id and fileType. After a successful output, do not invent, construct, or emit asset URLs or download links; pCAD presents the mesh and all download options in the model viewer. IMPORTANT: if create_mesh returns a tool error, do not call create_mesh again automatically in the same user turn. Treat the backend failure as terminal for that turn, explain the failure concisely to the user, and wait for the user to retry after the runtime/configuration problem has been fixed.',
+    description: loadBundledInstruction('tool.create_mesh'),
     inputSchema: createMeshInputSchema,
     outputSchema: createMeshOutputSchema,
   }),
