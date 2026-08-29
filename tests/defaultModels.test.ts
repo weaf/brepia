@@ -30,13 +30,35 @@ describe('default model resolution', () => {
     ).toBe('agent/opencode/example');
   });
 
-  it('accepts known Creative model IDs including TRELLIS.2 and rejects unknown ones', () => {
+  it('uses TRELLIS.2 as the Creative fallback', () => {
+    expect(FALLBACK_CREATIVE_MODEL_ID).toBe('local/trellis2');
     expect(resolveCreativeDefaultModel('local/trellis2')).toBe('local/trellis2');
-    expect(resolveCreativeDefaultModel('local/trellis-v1')).toBe(
-      'local/trellis-v1',
-    );
     expect(resolveCreativeDefaultModel('not-a-creative-model')).toBe(
-      FALLBACK_CREATIVE_MODEL_ID,
+      'local/trellis2',
     );
+  });
+
+  it('migrates retired local Creative model IDs forward to TRELLIS.2', () => {
+    expect(resolveCreativeDefaultModel('local/trellis-v1')).toBe(
+      'local/trellis2',
+    );
+    expect(resolveCreativeDefaultModel('local/hunyuan3d-2')).toBe(
+      'local/trellis2',
+    );
+    expect(resolveCreativeDefaultModel('local/hunyuan3d-2.1')).toBe(
+      'local/trellis2',
+    );
+  });
+
+  it('falls back from an optional provider when it is not selectable', () => {
+    expect(
+      resolveCreativeDefaultModel('quality', [{ id: 'local/trellis2' }]),
+    ).toBe('local/trellis2');
+    expect(
+      resolveCreativeDefaultModel('quality', [
+        { id: 'local/trellis2' },
+        { id: 'quality' },
+      ]),
+    ).toBe('quality');
   });
 });
