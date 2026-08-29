@@ -146,6 +146,22 @@ The native installer does not depend on the retired Python Creative stack.
 - Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
 - Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
 
+## Local Supabase lifecycle / NOx follow-up
+
+The repository currently states that **NOx owns the local Supabase service lifecycle**, and `start.sh` assumes the Supabase stack has already been started through NOx. This needs an explicit workstation-level review before the convention is treated as authoritative long-term.
+
+Follow-up tasks:
+
+- [ ] identify exactly what `NOx` refers to on the current development workstation;
+- [ ] locate its configuration, service definition, scripts or launcher and document the real start/stop/status commands;
+- [ ] verify whether NOx still actively owns the pCAD/Brepia Supabase containers or whether the documentation reflects an older local setup;
+- [ ] verify how the NOx-managed lifecycle interacts with the repository-local `npx supabase` CLI, Podman socket/shim and `start.sh`;
+- [ ] choose one canonical local Supabase lifecycle and remove stale/ambiguous instructions from `AGENTS.md`, `start.sh` comments and related docs;
+- [ ] preserve the current rule that migrations and type generation use the repository-local CLI after the local stack is running, unless the review establishes a better supported workflow;
+- [ ] document recovery/troubleshooting steps for a missing or stopped local Supabase stack so future agents do not guess or substitute another lifecycle manager silently.
+
+This review is infrastructure/documentation cleanup and should remain separate from the AI profile/prompt evaluation work unless it blocks the required local migration/regression gate.
+
 ## Completion
 
 The native Creative replacement is complete. TRELLIS.2 is the sole built-in Creative backend, the project gate is green, both native generation paths have been proven, and the superseded Python runtime has been removed from both the repository and the workstation.
