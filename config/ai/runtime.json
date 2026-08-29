@@ -6,7 +6,7 @@
       "description": "Default reasoning token budget for models that expose bounded thinking.",
       "type": "integer",
       "default": 9000,
-      "min": 0,
+      "min": 1024,
       "max": 64000
     },
     "chat.parametricMaxSteps": {
@@ -111,6 +111,30 @@
       "type": "enum",
       "default": "1024",
       "options": ["512", "1024", "1536"]
+    },
+    "transport.openCodeTimeoutMs": {
+      "label": "OpenCode request timeout",
+      "description": "Maximum time for one OpenCode-backed Generative request.",
+      "type": "integer",
+      "default": 480000,
+      "min": 30000,
+      "max": 3600000
+    },
+    "transport.cliTimeoutMs": {
+      "label": "CLI agent timeout",
+      "description": "Maximum time for one OpenCode or Codex CLI agent invocation.",
+      "type": "integer",
+      "default": 480000,
+      "min": 30000,
+      "max": 3600000
+    },
+    "transport.openCodeValidationAttempts": {
+      "label": "OpenCode validation attempts",
+      "description": "Maximum automatic OpenSCAD repair attempts in the streaming OpenCode transport.",
+      "type": "integer",
+      "default": 3,
+      "min": 1,
+      "max": 10
     }
   }
 }
