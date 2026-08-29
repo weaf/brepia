@@ -15,6 +15,10 @@ import { resolveCreativeMeshProvider } from '@/server/creativeMeshProviderRegist
 import { getPromptProfile } from '@/server/promptProfiles';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
 import {
+  InstructionProfileDefaultsSchema,
+  RuntimeOverridesSchema,
+} from '@shared/aiInstructionSettings';
+import {
   UpdateDefaultModelsSchema,
   UpdateVisionModelsSchema,
 } from '@shared/aiSettings';
@@ -26,6 +30,8 @@ function preferenceResponse(data: Record<string, unknown>) {
     defaultPromptProfileId: data.default_prompt_profile_id ?? null,
     defaultCreativePromptProfileId:
       data.default_creative_prompt_profile_id ?? null,
+    instructionProfileDefaults: data.instruction_profile_defaults ?? {},
+    runtimeOverrides: data.runtime_overrides ?? {},
     defaultParametricModelId: data.default_parametric_model_id ?? null,
     defaultCreativeModelId: data.default_creative_model_id ?? null,
     visionFastModelId: data.vision_fast_model_id ?? null,
@@ -94,6 +100,44 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
             }
             updates.default_creative_prompt_profile_id =
               body.defaultCreativePromptProfileId;
+          }
+
+          if (body.instructionProfileDefaults !== undefined) {
+            const parsed = InstructionProfileDefaultsSchema.safeParse(
+              body.instructionProfileDefaults,
+            );
+            if (!parsed.success) {
+              return json({ error: 'invalid_instruction_profile_defaults' }, 400);
+            }
+
+            for (const [scope, profileId] of Object.entries(parsed.data)) {
+              if (profileId == null) continue;
+              const profile = await getPromptProfile(user.id, profileId);
+              if (
+                !profile ||
+                profile.scope !== scope ||
+                !profile.editable
+              ) {
+                return json(
+                  {
+                    error: 'invalid_instruction_profile_default',
+                    scope,
+                    profileId,
+                  },
+                  400,
+                );
+              }
+            }
+
+            updates.instruction_profile_defaults = parsed.data;
+          }
+
+          if (body.runtimeOverrides !== undefined) {
+            const parsed = RuntimeOverridesSchema.safeParse(body.runtimeOverrides);
+            if (!parsed.success) {
+              return json({ error: 'invalid_runtime_overrides' }, 400);
+            }
+            updates.runtime_overrides = parsed.data;
           }
 
           if (
