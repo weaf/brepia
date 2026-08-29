@@ -136,22 +136,6 @@
       "category": "provider",
       "template": "provider-fal-image-conditioning.md",
       "supportsOverlay": true
-    },
-    {
-      "key": "provider.fal.caption_genericize",
-      "label": "fal.ai caption genericization",
-      "description": "Instructions used to rewrite visual captions before fal.ai segmentation.",
-      "category": "provider",
-      "template": "provider-fal-caption-genericize.md",
-      "supportsOverlay": true
-    },
-    {
-      "key": "provider.fal.sam_segmentation",
-      "label": "fal.ai SAM segmentation",
-      "description": "Text prompt used by SAM image segmentation in the optional fal.ai Creative provider.",
-      "category": "provider",
-      "template": "provider-fal-sam-segmentation.md",
-      "supportsOverlay": true
     }
   ]
 }
