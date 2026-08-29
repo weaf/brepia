@@ -7,9 +7,14 @@ import { supabase, ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScadImportButton } from '@/components/ScadImportButton';
+import { InstructionProfileSelector } from '@/components/InstructionProfileSelector';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Model } from '@shared/types';
+import {
+  DEFAULT_AI_INSTRUCTION_PROFILE_ID,
+  type AiInstructionProfileId,
+} from '@shared/aiInstructionCatalog';
 import { conversationTitleFromText } from '@shared/conversationTitle';
 import { MessageItem } from '../types/misc.ts';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -106,7 +111,10 @@ export function PromptView() {
   );
 
   const [model, setModel] = useState<Model>(FALLBACK_PARAMETRIC_MODEL_ID);
+  const [instructionProfileId, setInstructionProfileId] =
+    useState<AiInstructionProfileId>(DEFAULT_AI_INSTRUCTION_PROFILE_ID);
   const initialDefaultAppliedRef = useRef(false);
+  const initialInstructionProfileAppliedRef = useRef(false);
 
   useEffect(() => {
     if (
@@ -130,6 +138,18 @@ export function PromptView() {
     type,
     user,
   ]);
+
+  useEffect(() => {
+    if (
+      !user ||
+      !aiPreferences ||
+      initialInstructionProfileAppliedRef.current
+    ) {
+      return;
+    }
+    setInstructionProfileId(aiPreferences.defaultInstructionProfileId);
+    initialInstructionProfileAppliedRef.current = true;
+  }, [aiPreferences, user]);
 
   const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
     'cli',
@@ -204,15 +224,16 @@ export function PromptView() {
       posthog.capture('new_conversation', {
         type: type,
         model_name: model,
+        instruction_profile_id: instructionProfileId,
         text: text.trim().slice(0, 100),
         image_count: imageCount,
         mesh_count: meshCount,
         conversation_id: conversationId,
       });
 
-      // Pin each mode's current prompt default when the conversation is
-      // created. Existing conversations therefore keep their prompt lineage
-      // even if the user changes the default later in Settings.
+      // Pin the complete repository instruction package independently from the
+      // mode-specific custom prompt profile. Existing conversations therefore
+      // keep their selected CADAM/Standard lineage when defaults change.
       const promptProfileId = aiPreferences?.defaultPromptProfileId ?? null;
       const creativePromptProfileId =
         aiPreferences?.defaultCreativePromptProfileId ?? null;
@@ -228,6 +249,7 @@ export function PromptView() {
               type: type,
               settings: {
                 model: model,
+                instructionProfileId,
                 openCodeExecutionMode: executionMode,
                 ...(type === 'creative'
                   ? { creativePromptProfileId }
@@ -457,6 +479,16 @@ export function PromptView() {
           </div>
           <div className="flex w-full flex-col items-center">
             <div className="w-full max-w-3xl space-y-4 pb-12">
+              {user && (
+                <div className="flex justify-end">
+                  <InstructionProfileSelector
+                    selectedProfileId={instructionProfileId}
+                    onProfileChange={setInstructionProfileId}
+                    disabled={isGenerating}
+                    className="max-w-[260px] border border-adam-neutral-700 bg-adam-background-2"
+                  />
+                </div>
+              )}
               <SelectedItemsContext.Provider
                 value={{ images, setImages, mesh, setMesh }}
               >
