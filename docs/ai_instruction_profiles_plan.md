@@ -145,19 +145,22 @@ Security controls such as provider moderation/safety tolerance remain non-user-c
 
 ## Regression gate
 
-Before closing this checkpoint:
+Technical gate verified green on 2026-08-29 after applying the instruction-profile migrations and regenerating Supabase types:
 
-- apply pending Supabase migrations
-- regenerate local Supabase TypeScript types
-- `npm test`
-- `npm run typecheck`
-- `npm run lint`
-- `npm run build`
-- verify Generative prompt Copy/New/Replace/Overlay/default behavior
-- verify Creative prompt Copy/New/Replace/Overlay/default behavior
-- verify an auxiliary instruction profile can be copied/replaced and affects a new request
-- verify Runtime Settings persist and influence a new request
-- verify normal TRELLIS.2 Creative generation remains healthy
-- verify an inactive profile can be archived but an active profile cannot
+- [x] pending Supabase migrations applied
+- [x] local Supabase TypeScript types regenerated
+- [x] `npm test`
+- [x] `npm run typecheck`
+- [x] `npm run lint`
+- [x] `npm run build`
 
-After this gate, the provider-specific fal.ai legacy refactor can be handled as a separate bounded follow-up without reopening the core instruction architecture.
+Functional smoke still required before closing the checkpoint:
+
+- [ ] verify Generative prompt Copy/New/Replace/Overlay/default behavior
+- [ ] verify Creative prompt Copy/New/Replace/Overlay/default behavior
+- [ ] verify an auxiliary instruction profile can be copied/replaced and affects a new request
+- [ ] verify Runtime Settings persist and influence a new request
+- [ ] verify normal TRELLIS.2 Creative generation remains healthy
+- [ ] verify an inactive profile can be archived but an active profile cannot
+
+After the functional smoke, the provider-specific fal.ai legacy refactor can be handled as a separate bounded follow-up without reopening the core instruction architecture.
