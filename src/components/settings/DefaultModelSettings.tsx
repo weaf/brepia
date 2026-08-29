@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CREATIVE_MESH_MODELS } from '@shared/creativeMeshModels';
 import { ActivityIndicator } from '@/components/brand';
 import {
   Select,
@@ -11,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
+import { CREATIVE_MODELS } from '@/lib/utils';
 import {
   getAiPreferences,
   updateDefaultModelPreferences,
@@ -69,10 +69,13 @@ export function DefaultModelSettings() {
       : AUTOMATIC_VALUE;
 
   const creativeIds = useMemo(
-    () => new Set<string>(CREATIVE_MESH_MODELS.map((model) => model.id)),
+    () => new Set<string>(CREATIVE_MODELS.map((model) => model.id)),
     [],
   );
   const savedCreativeId = preferences?.defaultCreativeModelId ?? null;
+  const creativeDefaultUnavailable = Boolean(
+    savedCreativeId && !creativeIds.has(savedCreativeId),
+  );
   const creativeValue =
     savedCreativeId && creativeIds.has(savedCreativeId)
       ? savedCreativeId
@@ -154,7 +157,7 @@ export function DefaultModelSettings() {
             </div>
             <Select
               value={creativeValue}
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || CREATIVE_MODELS.length === 0}
               onValueChange={(value) =>
                 mutation.mutate({
                   defaultCreativeModelId:
@@ -169,13 +172,19 @@ export function DefaultModelSettings() {
                 <SelectItem value={AUTOMATIC_VALUE}>
                   Automatic fallback
                 </SelectItem>
-                {CREATIVE_MESH_MODELS.map((model) => (
+                {CREATIVE_MODELS.map((model) => (
                   <SelectItem key={model.id} value={model.id}>
-                    {model.name} · {model.providerLabel}
+                    {model.name} · {model.provider}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {creativeDefaultUnavailable ? (
+              <p className="text-xs leading-relaxed text-adam-amber">
+                The saved Creative default is currently unavailable. Brepia will
+                use TRELLIS.2 until you select another model.
+              </p>
+            ) : null}
           </div>
         </div>
       )}
