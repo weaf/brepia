@@ -10,22 +10,22 @@ User-owned Custom Prompt Profiles remain a separate layer. They can still Overla
 
 ## Repository layout
 
-- `config/ai/instructions/manifest.json` declares the stable instruction keys and legacy split-baseline template for each key.
-- `config/ai/instructions/**/*.md` contains instruction template revisions. Nested directories are supported so future package revisions do not need to overwrite earlier templates.
-- `config/ai/profiles/manifest.json` declares repository-backed packages and maps instruction keys to package-specific template revisions when a package differs from its baseline or parent.
-- `config/ai/runtime.json` remains independent from package selection.
+- `config/ai/instructions/manifest.json` declares the stable instruction keys and legacy compatibility template for each key.
+- `config/ai/instructions/revisions/<revision>/*.md` contains frozen instruction revisions used by repository profiles.
+- `config/ai/profiles/manifest.json` declares named revisions, repository-backed profiles, provenance and package-specific overrides.
+- `config/ai/runtime.json` remains independent from profile selection.
 
-A package entry may define only the instruction keys that differ. Missing keys fall through an optional `extends` chain and finally to the frozen template declared by the instruction manifest.
+A profile can point to a frozen revision and may define only the instruction keys that differ. Missing profile overrides fall through an optional `extends` chain, then the selected frozen revision, and finally the compatibility template declared by the instruction manifest.
 
 ## Initial profiles
 
 ### CADAM
 
-`cadam` is the upstream-managed CADAM package. Its provenance is recorded in `lineage`. Future CADAM imports may advance this package without changing Brepia-managed profiles.
+`cadam` is the upstream-managed CADAM profile. Its provenance is recorded in `lineage`. Future CADAM imports can point CADAM at a new frozen revision without changing Brepia-managed profiles.
 
 ### Standard
 
-`standard` is the Brepia-managed default. It records that it originated from the CADAM split revision, but it does **not** extend CADAM live. At the initial split both packages resolve to the same frozen instruction templates.
+`standard` is the Brepia-managed default. It records that it originated from the CADAM split revision, but it does **not** extend CADAM live. At the initial split both profiles point to the same immutable `cadam-split-2026-08-29` revision.
 
 This isolation is intentional: a later CADAM sync must never silently change Standard.
 
@@ -33,10 +33,11 @@ This isolation is intentional: a later CADAM sync must never silently change Sta
 
 When new prompt material is imported from the CADAM project:
 
-1. Add new versioned Markdown templates for only the instruction keys changed by CADAM. Do not overwrite a template still used as the Standard split baseline.
-2. Update only the `cadam` package mappings and its lineage revision in `config/ai/profiles/manifest.json`.
-3. Verify that `standard` resolves to exactly the same templates/content as before the sync.
-4. Review useful CADAM changes separately before porting any of them into Standard. Brepia changes are deliberate, not inherited side effects.
+1. Create a new named revision directory under `config/ai/instructions/revisions/`; never overwrite a revision used by Standard.
+2. Record that revision in `config/ai/profiles/manifest.json`.
+3. Update only the `cadam` profile revision/mappings and its lineage metadata.
+4. Verify that `standard` still resolves the same frozen revision/content as before the sync.
+5. Review useful CADAM changes separately before porting any of them into Standard. Brepia changes are deliberate, not inherited side effects.
 
 ## Brepia-derived profiles
 
@@ -48,10 +49,10 @@ A model is never selected by the profile manifest. The user can combine any comp
 
 For one instruction key, runtime resolution is:
 
-1. selected repository-backed AI profile;
-2. profile override for the instruction key;
-3. inherited Brepia package override, when `extends` is configured;
-4. frozen split-baseline template from `config/ai/instructions/manifest.json`;
+1. selected repository-backed AI profile override;
+2. parent Brepia profile override, when `extends` is configured;
+3. the frozen instruction revision selected by the first applicable profile;
+4. compatibility template from `config/ai/instructions/manifest.json`;
 5. optional user Custom Prompt Profile Overlay or Replace for that exact instruction key;
 6. template variable rendering.
 
@@ -59,4 +60,4 @@ The package selection therefore affects the whole instruction system, while user
 
 ## Current checkpoint
 
-The initial `cadam` and `standard` packages intentionally resolve to the same instruction content. No prompt optimization is part of this checkpoint. The next prompt-content phase can audit all instruction keys and introduce Standard revisions without changing the CADAM lineage.
+The initial `cadam` and `standard` profiles intentionally resolve to the same frozen instruction revision. No prompt optimization is part of this checkpoint. The next prompt-content phase can audit all instruction keys and introduce Standard revisions/overrides without changing the CADAM lineage.

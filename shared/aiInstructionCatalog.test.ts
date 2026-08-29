@@ -17,6 +17,7 @@ describe('AI instruction profile packages', () => {
     expect(getAiInstructionProfileDefinition('standard')).toMatchObject({
       id: 'standard',
       managedBy: 'brepia',
+      revision: 'cadam-split-2026-08-29',
       origin: {
         profile: 'cadam',
         revision: 'brepia-split-2026-08-29',
@@ -25,6 +26,7 @@ describe('AI instruction profile packages', () => {
     expect(getAiInstructionProfileDefinition('cadam')).toMatchObject({
       id: 'cadam',
       managedBy: 'upstream',
+      revision: 'cadam-split-2026-08-29',
       lineage: {
         project: 'CADAM',
         revision: 'brepia-split-2026-08-29',
@@ -40,7 +42,7 @@ describe('AI instruction profile packages', () => {
     }
   });
 
-  it('starts Standard and CADAM from the same frozen split baseline', () => {
+  it('starts Standard and CADAM from the same frozen split revision', () => {
     for (const key of AI_INSTRUCTION_KEYS) {
       expect(loadBundledInstruction(key, 'standard')).toBe(
         loadBundledInstruction(key, 'cadam'),

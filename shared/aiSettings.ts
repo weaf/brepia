@@ -177,7 +177,6 @@ export const ProviderSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   name: z.string(),
-  description: z.string().nullable().optional(),
   slug: z.string(),
   driver: ProviderDriverSchema,
   baseUrl: z.string().nullable(),

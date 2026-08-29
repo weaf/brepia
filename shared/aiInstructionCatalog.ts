@@ -12,6 +12,12 @@ const instructionFiles = import.meta.glob<string>(
   },
 );
 
+const InstructionTemplatePathSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z0-9][a-z0-9_./-]*\.md$/)
+  .refine((value) => !value.split('/').includes('..'), 'invalid template path');
+
 const InstructionDefinitionSchema = z.object({
   key: z.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9_.-]*$/),
   label: z.string().min(1),
@@ -25,7 +31,7 @@ const InstructionDefinitionSchema = z.object({
     'transport',
     'provider',
   ]),
-  template: z.string().min(1).regex(/^[a-z0-9][a-z0-9_./-]*\.md$/),
+  template: InstructionTemplatePathSchema,
   supportsOverlay: z.boolean().default(true),
 });
 
@@ -44,20 +50,27 @@ const InstructionProfileOriginSchema = z.object({
   revision: z.string().min(1),
 });
 
+const InstructionRevisionSchema = z.record(
+  z.string(),
+  InstructionTemplatePathSchema,
+);
+
 const InstructionProfileDefinitionSchema = z.object({
   id: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/),
   label: z.string().min(1),
   description: z.string(),
   managedBy: z.enum(['upstream', 'brepia']),
   extends: z.string().min(1).max(64).optional(),
+  revision: z.string().min(1).max(128).optional(),
   lineage: InstructionProfileLineageSchema.optional(),
   origin: InstructionProfileOriginSchema.optional(),
-  instructions: z.record(z.string(), z.string().min(1)).default({}),
+  instructions: z.record(z.string(), InstructionTemplatePathSchema).default({}),
 });
 
 const InstructionProfilesManifestSchema = z.object({
   version: z.number().int().positive(),
   defaultProfile: z.string().min(1),
+  revisions: z.record(z.string(), InstructionRevisionSchema).default({}),
   profiles: z.array(InstructionProfileDefinitionSchema).min(1),
 });
 
@@ -131,6 +144,21 @@ if (!instructionProfileIds.has(profilesManifest.defaultProfile)) {
   );
 }
 
+function assertKnownInstructionMap(
+  owner: string,
+  instructions: Record<string, string>,
+) {
+  for (const [key, template] of Object.entries(instructions)) {
+    if (!instructionKeys.has(key)) {
+      throw new Error(`${owner} overrides unknown instruction key ${key}`);
+    }
+    const path = `../config/ai/instructions/${template}`;
+    if (typeof instructionFiles[path] !== 'string') {
+      throw new Error(`${owner} is missing template ${template}`);
+    }
+  }
+}
+
 for (const definition of manifest.instructions) {
   const path = `../config/ai/instructions/${definition.template}`;
   if (typeof instructionFiles[path] !== 'string') {
@@ -138,6 +166,12 @@ for (const definition of manifest.instructions) {
       `AI instruction template is missing for ${definition.key}: ${definition.template}`,
     );
   }
+}
+
+for (const [revisionId, revision] of Object.entries(
+  profilesManifest.revisions,
+)) {
+  assertKnownInstructionMap(`AI instruction revision ${revisionId}`, revision);
 }
 
 for (const profile of profilesManifest.profiles) {
@@ -149,20 +183,15 @@ for (const profile of profilesManifest.profiles) {
   if (profile.extends === profile.id) {
     throw new Error(`AI instruction profile ${profile.id} cannot extend itself`);
   }
-
-  for (const [key, template] of Object.entries(profile.instructions)) {
-    if (!instructionKeys.has(key)) {
-      throw new Error(
-        `AI instruction profile ${profile.id} overrides unknown key ${key}`,
-      );
-    }
-    const path = `../config/ai/instructions/${template}`;
-    if (typeof instructionFiles[path] !== 'string') {
-      throw new Error(
-        `AI instruction profile ${profile.id} is missing template ${template}`,
-      );
-    }
+  if (profile.revision && !profilesManifest.revisions[profile.revision]) {
+    throw new Error(
+      `AI instruction profile ${profile.id} uses unknown revision ${profile.revision}`,
+    );
   }
+  assertKnownInstructionMap(
+    `AI instruction profile ${profile.id}`,
+    profile.instructions,
+  );
 }
 
 export type AiInstructionKey = string;
@@ -233,8 +262,13 @@ function resolveProfileTemplate(
 
     const override = current.instructions[key];
     if (override) return override;
-    if (!current.extends) break;
 
+    if (current.revision) {
+      const revisionTemplate = profilesManifest.revisions[current.revision]?.[key];
+      if (revisionTemplate) return revisionTemplate;
+    }
+
+    if (!current.extends) break;
     current = getAiInstructionProfileDefinition(current.extends);
     if (!current) {
       throw new Error(`Unknown AI instruction profile: ${profileId}`);
