@@ -191,20 +191,23 @@ Functional smoke from that checkpoint still included:
 
 ## Package-profile extension gate
 
-The CADAM/Standard package-profile extension was implemented after the green gate above and therefore requires a fresh local verification. It intentionally does not optimize prompt content and does not change model/provider selection.
+The CADAM/Standard package-profile extension was implemented after the green gate above. The local code gate was reported green on 2026-08-29 after the compatibility fixes for legacy `CADAM Original` / `Creative Original` behavior. Prompt content remains unchanged at this checkpoint and model/provider selection is unaffected.
 
-Pending after NOx has started the local Supabase stack:
+Technical gate:
 
 - [ ] apply `20260829150000_instruction_profile_packages.sql`
 - [ ] regenerate local Supabase TypeScript types
+- [x] `npm test`
+- [x] `npm run typecheck`
+- [x] `npm run lint`
+- [x] `npm run build`
+
+Functional package smoke still required:
+
 - [ ] verify existing conversations receive a valid `settings.instructionProfileId`
 - [ ] verify new conversations pin the selected default package
 - [ ] switch default Standard → CADAM and verify an already-pinned conversation stays Standard
 - [ ] verify both CADAM and Standard currently resolve identical split-revision content
 - [ ] verify Custom Prompt Overlay/Replace still layers correctly over the selected package
-- [ ] `npm test`
-- [ ] `npm run typecheck`
-- [ ] `npm run lint`
-- [ ] `npm run build`
 
-After that gate, the next prompt-content phase can audit all 17 instruction keys and create Brepia Standard improvements while leaving the CADAM frozen/upstream lineage intact. The optional fal.ai legacy refactor remains a separate bounded follow-up.
+Once the functional package smoke is green, run the controlled Creative prompt evaluation in `config/ai/evals/creative/` and `docs/creative_prompt_eval_plan.md`. Promote only measured Brepia Standard deltas; keep the CADAM frozen/upstream lineage intact. The optional fal.ai legacy refactor remains a separate bounded follow-up.
