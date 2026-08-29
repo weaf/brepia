@@ -29,6 +29,8 @@ import type {
 export const BUILTIN_PROFILE_ID = 'builtin:parametric';
 export const BUILTIN_CREATIVE_PROFILE_ID = 'builtin:creative';
 
+const LEGACY_ORIGINAL_INSTRUCTION_PROFILE_ID: AiInstructionProfileId = 'cadam';
+
 type PromptProfileMode = PromptProfileDetailDto['mode'];
 
 type PromptProfileRow = {
@@ -80,6 +82,19 @@ function builtinProfileScope(profileId: string): PromptProfileScope | null {
   return isAiInstructionKey(scope) ? scope : null;
 }
 
+function builtinProfileName(
+  scope: PromptProfileScope,
+  instructionProfileId: AiInstructionProfileId,
+  packageLabel: string,
+  instructionLabel: string,
+): string {
+  if (instructionProfileId === LEGACY_ORIGINAL_INSTRUCTION_PROFILE_ID) {
+    if (scope === 'parametric') return 'CADAM Original';
+    if (scope === 'creative') return 'Creative Original';
+  }
+  return `${packageLabel} · ${instructionLabel}`;
+}
+
 async function assertPromptProfileIsNotActive(
   userId: string,
   profileId: string,
@@ -102,7 +117,8 @@ export function fingerprint(text: string): string {
 
 export function loadBuiltinProfile(
   scope: PromptProfileScope = 'parametric',
-  instructionProfileId: AiInstructionProfileId = DEFAULT_AI_INSTRUCTION_PROFILE_ID,
+  instructionProfileId: AiInstructionProfileId =
+    LEGACY_ORIGINAL_INSTRUCTION_PROFILE_ID,
 ): PromptProfileDetailDto {
   const definition = getAiInstructionDefinition(scope);
   if (!definition) throw new Error(`Unknown AI instruction: ${scope}`);
@@ -122,7 +138,12 @@ export function loadBuiltinProfile(
   return {
     id: builtinProfileId(scope),
     userId: '',
-    name: `${packageDefinition.label} · ${definition.label}`,
+    name: builtinProfileName(
+      scope,
+      instructionProfileId,
+      packageDefinition.label,
+      definition.label,
+    ),
     description: `${packageDefinition.label} package template. ${definition.description}`,
     promptTemplate: prompt,
     mode: 'overlay',
@@ -233,11 +254,7 @@ export async function getPromptProfile(
 ): Promise<PromptProfileDetailDto | null> {
   const bundledScope = builtinProfileScope(profileId);
   if (bundledScope) {
-    const preferences = await getPreferencesByUserId(userId);
-    return loadBuiltinProfile(
-      bundledScope,
-      preferences.defaultInstructionProfileId,
-    );
+    return loadBuiltinProfile(bundledScope);
   }
 
   const supabase = getServiceRoleSupabaseClient();
@@ -385,20 +402,26 @@ export async function resolveInstructionProfile({
   scope: PromptProfileScope;
   instructionProfileId?: AiInstructionProfileId;
 }): Promise<string> {
-  const selectedInstructionProfileId =
-    instructionProfileId ??
-    (await getPreferencesByUserId(userId)).defaultInstructionProfileId;
-  const basePrompt = bundledPrompt(scope, selectedInstructionProfileId);
   const expectedBuiltinId = builtinProfileId(scope);
 
-  if (!profileId || profileId === expectedBuiltinId) return basePrompt;
-
-  const otherBundledScope = builtinProfileScope(profileId);
-  if (otherBundledScope) {
-    throw new Error(
-      `Prompt template ${profileId} belongs to ${otherBundledScope}, not ${scope}.`,
-    );
+  if (profileId && profileId !== expectedBuiltinId) {
+    const otherBundledScope = builtinProfileScope(profileId);
+    if (otherBundledScope) {
+      throw new Error(
+        `Prompt template ${profileId} belongs to ${otherBundledScope}, not ${scope}.`,
+      );
+    }
   }
+
+  // The active chat runtime always supplies the conversation-pinned package ID.
+  // Legacy/direct callers that omit it resolve against the repository default
+  // without a database lookup, preserving deterministic built-in behavior in
+  // tests and compatibility call sites.
+  const selectedInstructionProfileId =
+    instructionProfileId ?? DEFAULT_AI_INSTRUCTION_PROFILE_ID;
+  const basePrompt = bundledPrompt(scope, selectedInstructionProfileId);
+
+  if (!profileId || profileId === expectedBuiltinId) return basePrompt;
 
   const profile = await getPromptProfile(userId, profileId);
   if (!profile) {
