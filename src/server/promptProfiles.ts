@@ -1,13 +1,15 @@
 // Server-side prompt_profiles management.
 //
-// Prompt profiles are scoped to either Parametric/Generative or Creative.
-// Existing profiles remain Parametric via the database default. Both scopes
-// support overlay and fork semantics against their own immutable built-in.
+// Primary Generative and Creative templates are repository-backed Markdown
+// files. Custom profiles can overlay or fully replace those shipped templates.
+// The technical `builtin:*` IDs are retained for backward compatibility with
+// existing conversations/tests, but there is no special Reset-to-Original
+// product operation.
 
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
-import { CREATIVE_AGENT_PROMPT, PARAMETRIC_AGENT_PROMPT } from './aiChat';
+import { loadBundledInstruction } from '@shared/aiInstructionCatalog';
 import type {
   CreatePromptProfileInput,
   UpdatePromptProfileInput,
@@ -45,8 +47,8 @@ function parsePromptProfileScope(scope: string | undefined): PromptProfileScope 
   return 'parametric';
 }
 
-function builtinPrompt(scope: PromptProfileScope): string {
-  return scope === 'creative' ? CREATIVE_AGENT_PROMPT : PARAMETRIC_AGENT_PROMPT;
+function bundledPrompt(scope: PromptProfileScope): string {
+  return loadBundledInstruction(scope);
 }
 
 function builtinProfileId(scope: PromptProfileScope): string {
@@ -62,7 +64,7 @@ export function fingerprint(text: string): string {
 export function loadBuiltinProfile(
   scope: PromptProfileScope = 'parametric',
 ): PromptProfileDetailDto {
-  const prompt = builtinPrompt(scope);
+  const prompt = bundledPrompt(scope);
   let currentFingerprint = builtinFingerprintCache.get(scope);
   if (!currentFingerprint) {
     currentFingerprint = fingerprint(prompt);
@@ -74,7 +76,9 @@ export function loadBuiltinProfile(
     userId: '',
     name: scope === 'creative' ? 'Creative Original' : 'CADAM Original',
     description:
-      scope === 'creative' ? 'Built-in Creative 3D agent prompt.' : null,
+      scope === 'creative'
+        ? 'Bundled Creative template from the repository.'
+        : 'Bundled CADAM template from the repository.',
     promptTemplate: prompt,
     mode: 'overlay',
     scope,
@@ -334,7 +338,7 @@ export async function resolveConversationSystemPrompt({
   profileId: string | null | undefined;
   scope?: PromptProfileScope;
 }): Promise<string> {
-  const basePrompt = builtinPrompt(scope);
+  const basePrompt = bundledPrompt(scope);
   const expectedBuiltinId = builtinProfileId(scope);
 
   if (!profileId || profileId === expectedBuiltinId) return basePrompt;
