@@ -6,11 +6,11 @@ import {
   preflight,
   requireUser,
 } from '@/server/api';
-import { getPreferences } from '@/server/aiSettings';
 import {
+  ActivePromptProfileError,
+  archivePromptProfile,
   getPromptProfile,
   updatePromptProfile,
-  deletePromptProfile,
 } from '@/server/promptProfiles';
 
 export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
@@ -75,31 +75,19 @@ export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
             return json({ error: 'Prompt profile not found' }, 404);
           }
 
-          if (profile.editable) {
-            const preferences = await getPreferences(user);
-            const activeProfileId =
-              profile.scope === 'parametric'
-                ? preferences.defaultPromptProfileId
-                : profile.scope === 'creative'
-                  ? preferences.defaultCreativePromptProfileId
-                  : (preferences.instructionProfileDefaults[profile.scope] ??
-                    null);
-
-            if (activeProfileId === profile.id) {
-              return json(
-                {
-                  error: 'active_prompt_profile',
-                  message:
-                    'Choose another active profile before deleting this profile.',
-                },
-                409,
-              );
-            }
-          }
-
-          await deletePromptProfile(user.id, params.profileId);
+          await archivePromptProfile(user.id, params.profileId);
           return json({ success: true });
         } catch (err) {
+          if (err instanceof ActivePromptProfileError) {
+            return json(
+              {
+                error: 'active_prompt_profile',
+                message: err.message,
+              },
+              409,
+            );
+          }
+
           const message = err instanceof Error ? err.message : 'Unknown error';
           if (message.includes('not found')) {
             return json({ error: 'Prompt profile not found' }, 404);
@@ -108,7 +96,7 @@ export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
             {
               error: isUnauthorizedError(err)
                 ? 'Unauthorized'
-                : 'failed_to_delete_profile',
+                : 'failed_to_archive_profile',
             },
             isUnauthorizedError(err) ? 401 : 500,
           );
