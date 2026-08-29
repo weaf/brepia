@@ -1,21 +1,24 @@
 import { z } from 'zod';
 import {
-  AI_INSTRUCTION_KEYS,
   AI_RUNTIME_LIMIT_DEFINITIONS,
+  isAiInstructionKey,
   type AiInstructionKey,
   type AiRuntimeLimitKey,
 } from './aiInstructionCatalog.ts';
 
 const nullableProfileIdSchema = z.union([z.string().uuid(), z.null()]);
 
-export const AiInstructionKeySchema = z.enum(AI_INSTRUCTION_KEYS);
+export const AiInstructionKeySchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .refine(isAiInstructionKey, 'Unknown AI instruction key');
 
 export const InstructionProfileDefaultsSchema = z
   .record(z.string(), nullableProfileIdSchema)
   .superRefine((value, ctx) => {
-    const allowed = new Set<string>(AI_INSTRUCTION_KEYS);
     for (const key of Object.keys(value)) {
-      if (!allowed.has(key)) {
+      if (!isAiInstructionKey(key)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
@@ -37,7 +40,7 @@ export const RuntimeOverridesSchema = z
   .record(z.string(), z.union([z.number(), z.string()]))
   .superRefine((value, ctx) => {
     for (const [key, raw] of Object.entries(value)) {
-      const definition = runtimeDefinitionByKey.get(key as AiRuntimeLimitKey);
+      const definition = runtimeDefinitionByKey.get(key);
       if (!definition) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
