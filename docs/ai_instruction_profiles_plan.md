@@ -24,7 +24,9 @@ A bundled template may be the initial effective value for a new user whose prefe
 No shipped prompt body or configurable runtime default should live as a duplicated TypeScript string/constant.
 
 - `config/ai/instructions/manifest.json` declares available instruction surfaces.
-- `config/ai/instructions/*.md` contains shipped instruction templates.
+- `config/ai/instructions/*.md` remains the compatibility/root template set.
+- `config/ai/instructions/revisions/<revision>/*.md` contains immutable instruction revisions used by complete AI profiles.
+- `config/ai/profiles/manifest.json` declares repository-backed AI profiles, provenance, frozen revisions, inheritance and per-key overrides.
 - `config/ai/runtime.json` contains shipped runtime defaults, types and allowed ranges/options.
 - TypeScript loads and validates those files; it does not duplicate their contents.
 
@@ -52,6 +54,25 @@ Current registered instruction keys:
 
 `prompt_profiles` is the shared persistence layer for primary and auxiliary instruction profiles. Generalized scopes use the same Replace/Overlay/Copy/New semantics and the same Settings editor model.
 
+## Complete repository-backed AI profiles
+
+Model selection and AI-profile selection are separate dimensions. A model chooses the LLM/agent runtime; a repository-backed AI profile chooses the complete Brepia instruction package across all registered instruction keys.
+
+Initial package profiles:
+
+- `cadam` — upstream-managed CADAM lineage.
+- `standard` — Brepia-managed default.
+
+Both initially point to the immutable `cadam-split-2026-08-29` revision, but Standard does not extend CADAM live. Future CADAM imports create a new frozen revision and move only the CADAM package pointer. Standard remains unchanged until Brepia deliberately ports a change.
+
+Future Brepia profiles such as `qwen` may extend Standard and override only instruction keys that need a measured model-specific difference. Profiles never select or hard-code a model.
+
+The user's default package is stored in `user_ai_preferences.default_instruction_profile_id`. Conversations pin the package in `settings.instructionProfileId`; existing conversations are snapshotted when the package migration is applied, and a database trigger pins the current default on future inserts unless a client explicitly supplied another package.
+
+Custom UUID-based Prompt Profiles remain a second layer. For each instruction key the repository package provides the base, then the selected Custom Profile can Overlay or Replace that one instruction.
+
+The detailed package/provenance contract is documented in `docs/ai_instruction_package_profiles.md`.
+
 ## Runtime limits
 
 Runtime behavior that is configurable is represented as validated typed values rather than prompt text. Definitions and shipped values live in `config/ai/runtime.json`.
@@ -77,26 +98,31 @@ Provider-specific runtime knobs are exposed only after their runtime path actual
 AI settings are resolved as a request snapshot:
 
 1. load the user's AI preferences once
-2. collect all selected custom auxiliary instruction-profile IDs
-3. bulk-load those profiles in one `prompt_profiles` query
-4. resolve all tools, context, title/suggestion and transport instructions from the in-memory snapshot for the rest of the turn
+2. select the conversation-pinned repository instruction package, falling back to the user's current default only for legacy/unmigrated conversations
+3. collect all selected custom auxiliary instruction-profile IDs
+4. bulk-load those profiles in one `prompt_profiles` query
+5. resolve all tools, context, title/suggestion and transport instructions from the in-memory snapshot for the rest of the turn
 
 If every auxiliary instruction uses the bundled repository template, no `prompt_profiles` bulk query is issued for the auxiliary snapshot.
 
-Conversation-pinned primary Generative/Creative profiles are intentionally resolved by explicit ID so an old conversation can continue using the exact profile it was created with, including after that profile has later been archived.
+Conversation-pinned primary Generative/Creative custom profiles are intentionally resolved by explicit ID so an old conversation can continue using the exact profile it was created with, including after that profile has later been archived.
+
+The repository package is pinned independently of those UUID-based custom profiles so a later Settings change or CADAM upstream sync cannot silently change a conversation's instruction lineage.
 
 Tool objects themselves are created once per chat turn and reused by every model step/tool call in that turn.
 
 ## Profile lifecycle rules
 
 - bundled templates are read-only repository references
+- repository-backed complete AI profiles are defined/versioned in Git, not mutable database rows
+- CADAM is upstream-managed; Standard is Brepia-managed
 - custom profiles can be Replace or Overlay profiles
 - an active/default custom profile cannot be archived
 - the user must activate another custom profile first
 - archive is soft removal, not hard delete
 - archived profiles disappear from normal Settings lists
 - an old conversation explicitly pinned to an archived primary profile can still resolve it
-- new defaults cannot point to archived or bundled/read-only profile IDs
+- new defaults cannot point to archived or bundled/read-only custom profile IDs
 
 These rules avoid an implicit hidden fallback to the bundled template.
 
@@ -129,7 +155,7 @@ The current architecture resolves configured instructions at request time for:
 - Codex transport behavior
 - optional fal.ai image-conditioning behavior
 
-The TRELLIS.2 core does not depend on the optional fal.ai provider.
+The selected repository-backed AI package now supplies the base version for that complete list. The TRELLIS.2 core does not depend on the optional fal.ai provider.
 
 ## Remaining provider-specific follow-up
 
@@ -143,9 +169,9 @@ These are deliberately **not exposed in Settings yet**. They should be moved int
 
 Security controls such as provider moderation/safety tolerance remain non-user-configurable.
 
-## Regression gate
+## Previous regression gate
 
-Technical gate verified green on 2026-08-29 after applying the instruction-profile migrations and regenerating Supabase types:
+The pre-package instruction architecture gate was verified green on 2026-08-29 after applying its migrations and regenerating Supabase types:
 
 - [x] pending Supabase migrations applied
 - [x] local Supabase TypeScript types regenerated
@@ -154,7 +180,7 @@ Technical gate verified green on 2026-08-29 after applying the instruction-profi
 - [x] `npm run lint`
 - [x] `npm run build`
 
-Functional smoke still required before closing the checkpoint:
+Functional smoke from that checkpoint still included:
 
 - [ ] verify Generative prompt Copy/New/Replace/Overlay/default behavior
 - [ ] verify Creative prompt Copy/New/Replace/Overlay/default behavior
@@ -163,4 +189,22 @@ Functional smoke still required before closing the checkpoint:
 - [ ] verify normal TRELLIS.2 Creative generation remains healthy
 - [ ] verify an inactive profile can be archived but an active profile cannot
 
-After the functional smoke, the provider-specific fal.ai legacy refactor can be handled as a separate bounded follow-up without reopening the core instruction architecture.
+## Package-profile extension gate
+
+The CADAM/Standard package-profile extension was implemented after the green gate above and therefore requires a fresh local verification. It intentionally does not optimize prompt content and does not change model/provider selection.
+
+Pending after NOx has started the local Supabase stack:
+
+- [ ] apply `20260829150000_instruction_profile_packages.sql`
+- [ ] regenerate local Supabase TypeScript types
+- [ ] verify existing conversations receive a valid `settings.instructionProfileId`
+- [ ] verify new conversations pin the selected default package
+- [ ] switch default Standard → CADAM and verify an already-pinned conversation stays Standard
+- [ ] verify both CADAM and Standard currently resolve identical split-revision content
+- [ ] verify Custom Prompt Overlay/Replace still layers correctly over the selected package
+- [ ] `npm test`
+- [ ] `npm run typecheck`
+- [ ] `npm run lint`
+- [ ] `npm run build`
+
+After that gate, the next prompt-content phase can audit all 17 instruction keys and create Brepia Standard improvements while leaving the CADAM frozen/upstream lineage intact. The optional fal.ai legacy refactor remains a separate bounded follow-up.
