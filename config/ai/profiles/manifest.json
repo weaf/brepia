@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaultProfile": "standard",
+  "profiles": [
+    {
+      "id": "cadam",
+      "label": "CADAM",
+      "description": "Upstream CADAM instruction package. This profile can advance independently when CADAM prompt updates are imported.",
+      "managedBy": "upstream",
+      "lineage": {
+        "project": "CADAM",
+        "revision": "brepia-split-2026-08-29"
+      },
+      "instructions": {}
+    },
+    {
+      "id": "standard",
+      "label": "Standard",
+      "description": "Brepia standard instruction package. It starts from the CADAM split revision and evolves independently inside Brepia.",
+      "managedBy": "brepia",
+      "origin": {
+        "profile": "cadam",
+        "revision": "brepia-split-2026-08-29"
+      },
+      "instructions": {}
+    }
+  ]
+}
