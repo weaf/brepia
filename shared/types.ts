@@ -89,6 +89,12 @@ export type ConversationSettings = {
    */
   creativeAgentModel?: Model;
   /**
+   * Prompt profile ID pinned to a Creative conversation. It is independent
+   * from the Parametric/Generative prompt profile so each mode can keep a
+   * reproducible system prompt across later Settings changes.
+   */
+  creativePromptProfileId?: string | null;
+  /**
    * Per-conversation follow-up suggestions rendered as pills above the
    * chat input. Regenerated server-side after each non-tool-call
    * assistant turn — see `emitConversationSuggestions` in
@@ -101,10 +107,11 @@ export type ConversationSettings = {
    */
   openCodeExecutionMode?: 'cli' | 'streaming';
   /**
-   * Prompt profile ID pinned to this conversation. When set, the resolver
-   * fetches the profile at runtime and uses its template (or the built-in
-   * when NULL). Pinned profiles make new-conversation behavior reproducible
-   * — changing Settings later does not silently alter old conversations.
+   * Parametric/Generative prompt profile ID pinned to this conversation.
+   * When set, the resolver fetches the profile at runtime and uses its
+   * template (or the built-in when NULL). Pinned profiles make
+   * new-conversation behavior reproducible — changing Settings later does not
+   * silently alter old conversations.
    */
   promptProfileId?: string | null;
 } | null;
