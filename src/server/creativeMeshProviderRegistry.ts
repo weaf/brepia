@@ -27,13 +27,17 @@ export type CreativeMeshProviderAdapter = {
   syncGeneratedMeshesAfterSuccess: boolean;
 };
 
-const optionalProviderIds = () =>
-  new Set(
-    env('PCAD_CREATIVE_MESH_PROVIDERS')
+const optionalProviderIds = () => {
+  const raw =
+    env('PCAD_CREATIVE_MESH_PROVIDERS') ||
+    env('VITE_PCAD_CREATIVE_MESH_PROVIDERS');
+  return new Set(
+    raw
       .split(',')
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
   );
+};
 
 function optionalProviderEnabled(id: CreativeMeshProvider): boolean {
   const configured = optionalProviderIds();
