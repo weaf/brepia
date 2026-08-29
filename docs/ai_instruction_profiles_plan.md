@@ -6,17 +6,26 @@ Make pCAD/Brepia AI behavior user-configurable without turning security, data in
 
 The same user-facing profile operations should be available wherever a model-facing instruction is configurable:
 
-- view Original
-- Override (full replacement while keeping Original recoverable)
+- view the bundled repo template
+- Replace (full replacement of effective behavior)
 - Overlay (append instructions where meaningful)
 - Copy
 - New profile
-- Set as default
-- Reset to Original
+- Edit existing custom profiles
+- Set as active/default
 
-## Instruction registry
+There is deliberately no `Reset to Original` operation. Shipped templates live as versioned files in the repository. If a user wants to recover an older/default instruction they can view/copy the bundled template into a new or existing profile.
 
-The canonical list lives in `shared/aiInstructionCatalog.ts`.
+## Repository configuration is the source of truth
+
+No prompt body or runtime default should live as a TypeScript string/constant.
+
+- `config/ai/instructions/manifest.json` declares available instruction surfaces.
+- `config/ai/instructions/*.md` contains the shipped instruction templates.
+- `config/ai/runtime.json` contains shipped runtime defaults, types and allowed ranges/options.
+- TypeScript loads and validates those files; it does not duplicate their contents.
+
+Adding a new instruction should normally require a manifest entry plus a Markdown template, not a TypeScript list or database migration.
 
 Initial instruction keys:
 
@@ -34,11 +43,11 @@ Initial instruction keys:
 - `context.mesh_preferences`
 - `context.parametric_inspection_output`
 
-Existing `prompt_profiles` remains the compatibility basis for the two primary prompts while the generalized registry is introduced. New auxiliary instruction profiles should use the same Original/Override/Overlay/Copy/New semantics and eventually share one reusable Settings editor.
+Existing `prompt_profiles` remains the compatibility basis for the two primary prompts while the generalized profile model is introduced. Auxiliary instruction profiles use the same Replace/Overlay/Copy/New semantics and should share one reusable Settings editor.
 
 ## Runtime limits
 
-Runtime behavior that is configurable should be represented as validated typed values rather than prompt text. Initial keys are also declared in `shared/aiInstructionCatalog.ts`.
+Runtime behavior that is configurable is represented as validated typed values rather than prompt text. Definitions and shipped values live in `config/ai/runtime.json`.
 
 Examples:
 
@@ -49,11 +58,11 @@ Examples:
 - Creative runtime health/image/mesh timeouts
 - supported TRELLIS.2 resolution
 
-Every value must have server-side validation and a recoverable built-in default.
+User settings store sparse overrides only. Removing/changing an override does not require a special reset action; the effective value is whatever profile/configuration is currently selected. The repo JSON remains available as a reference/template.
 
-## Hard invariants
+## Technical invariants
 
-The following are deliberately not user-overridable:
+These are application correctness/security boundaries, not AI instructions, and are therefore not represented as editable prompt profiles:
 
 - authentication and authorization
 - Supabase row/storage ownership checks
@@ -62,22 +71,23 @@ The following are deliberately not user-overridable:
 - tool input/output schemas required for application interoperability
 - binary/file integrity validation
 
-A setting may tune a supported backend option, but it may not claim an unsupported capability. For example, a supported TRELLIS.2 resolution may be selected, but an unsupported reference-image count may not be invented in Settings.
+A configurable setting may tune a supported backend option, but it may not claim an unsupported capability. For example, a supported TRELLIS.2 resolution may be selected, but an unsupported reference-image count may not be invented in Settings.
 
 ## Implementation sequence
 
-### Step 1 — Registry and semantics
+### Step 1 — Repository-backed catalog
 
-- central instruction/runtime catalog
-- define Override as a full replacement profile while retaining immutable Original
-- keep Overlay available for additive customization
-- align Generative and Creative wording/actions: Override, Overlay, Copy, New, Default, Reset
+- externalize instruction bodies to Markdown
+- externalize runtime defaults/ranges to JSON
+- make the manifest the registry/source of truth
+- remove duplicated hardcoded prompt/default values from TypeScript
 
 ### Step 2 — Generalized instruction persistence
 
 - add generic active/default profile mapping instead of one database column per future instruction
 - keep `default_prompt_profile_id` and `default_creative_prompt_profile_id` backward compatible
-- permit registered auxiliary instruction keys only
+- validate auxiliary instruction keys against the repo manifest at the API layer
+- database scope validation remains generic so new manifest entries do not require schema migrations
 
 ### Step 3 — Runtime wiring
 
@@ -90,20 +100,33 @@ Resolve configured instructions at request time for:
 - follow-up suggestions
 - model-facing attachment/inspection context
 
-Defaults must reproduce current behavior byte-for-byte when no customization exists.
+With no user profile selected, bundled repository templates must reproduce current behavior byte-for-byte.
 
-### Step 4 — Runtime-limit persistence and wiring
+### Step 4 — Settings UI
 
-- typed schemas
-- bounded validation
-- Settings editor
-- request-time resolution
-- original/reset support
+Provide one reusable instruction-profile editor with:
 
-### Step 5 — Regression gate
+- Bundled template view
+- Replace
+- Overlay
+- Copy
+- New profile
+- Edit/archive custom profiles
+- active/default selection
 
-- existing CADAM Original behavior unchanged by default
-- existing Creative Original behavior unchanged by default
+Do not expose a special Reset-to-Original action.
+
+### Step 5 — Runtime-limit persistence and UI
+
+- schema-driven typed controls
+- bounded server validation
+- sparse persisted overrides
+- request-time resolution from user choice + repo configuration
+
+### Step 6 — Regression gate
+
+- default Generative behavior unchanged
+- default Creative behavior unchanged
 - old conversations continue to resolve pinned primary prompt profiles
 - test/typecheck/lint/build green
-- functional smoke for Generative, Creative, vision fallback, and reset-to-original
+- functional smoke for Generative, Creative, vision fallback, bundled-template copy and full replacement
