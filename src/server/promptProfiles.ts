@@ -254,7 +254,11 @@ export async function getPromptProfile(
 ): Promise<PromptProfileDetailDto | null> {
   const bundledScope = builtinProfileScope(profileId);
   if (bundledScope) {
-    return loadBuiltinProfile(bundledScope);
+    const preferences = await getPreferencesByUserId(userId);
+    return loadBuiltinProfile(
+      bundledScope,
+      preferences.defaultInstructionProfileId,
+    );
   }
 
   const supabase = getServiceRoleSupabaseClient();
@@ -414,11 +418,11 @@ export async function resolveInstructionProfile({
   }
 
   // The active chat runtime always supplies the conversation-pinned package ID.
-  // Legacy/direct callers that omit it resolve against the repository default
-  // without a database lookup, preserving deterministic built-in behavior in
-  // tests and compatibility call sites.
+  // Legacy/direct callers that omit it keep the historical Original package
+  // without consulting user preferences. New Brepia conversations are not
+  // affected because aiChat passes their pinned Standard/CADAM package here.
   const selectedInstructionProfileId =
-    instructionProfileId ?? DEFAULT_AI_INSTRUCTION_PROFILE_ID;
+    instructionProfileId ?? LEGACY_ORIGINAL_INSTRUCTION_PROFILE_ID;
   const basePrompt = bundledPrompt(scope, selectedInstructionProfileId);
 
   if (!profileId || profileId === expectedBuiltinId) return basePrompt;
