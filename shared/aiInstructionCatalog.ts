@@ -1,21 +1,92 @@
-export const AI_INSTRUCTION_KEYS = [
-  'parametric',
-  'creative',
-  'tool.build_parametric_model',
-  'tool.answer_user',
-  'tool.create_mesh',
-  'vision.reference',
-  'vision.inspection',
-  'conversation.title',
-  'suggestions.parametric',
-  'suggestions.creative',
-  'context.parametric_attachment',
-  'context.mesh_preferences',
-  'context.parametric_inspection_output',
-] as const;
+import { z } from 'zod';
+import manifestRaw from '../config/ai/instructions/manifest.json?raw';
+import runtimeRaw from '../config/ai/runtime.json?raw';
 
-export type AiInstructionKey = (typeof AI_INSTRUCTION_KEYS)[number];
+const instructionFiles = import.meta.glob<string>(
+  '../config/ai/instructions/*.md',
+  {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+  },
+);
 
+const InstructionDefinitionSchema = z.object({
+  key: z.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9_.-]*$/),
+  label: z.string().min(1),
+  description: z.string(),
+  category: z.enum(['agent', 'tool', 'vision', 'conversation', 'context']),
+  template: z.string().min(1).regex(/^[a-z0-9][a-z0-9_.-]*\.md$/),
+  supportsOverlay: z.boolean().default(true),
+});
+
+const ManifestSchema = z.object({
+  version: z.number().int().positive(),
+  instructions: z.array(InstructionDefinitionSchema).min(1),
+});
+
+const RuntimeSettingSchema = z
+  .object({
+    label: z.string().min(1),
+    description: z.string(),
+    type: z.enum(['integer', 'number', 'enum']),
+    default: z.union([z.number(), z.string()]),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    options: z.array(z.string()).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === 'enum') {
+      if (typeof value.default !== 'string' || !value.options?.includes(value.default)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'enum default must be present in options',
+        });
+      }
+      return;
+    }
+
+    if (typeof value.default !== 'number' || !Number.isFinite(value.default)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'numeric runtime setting requires a finite numeric default',
+      });
+      return;
+    }
+
+    if (value.type === 'integer' && !Number.isInteger(value.default)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'integer runtime setting requires an integer default',
+      });
+    }
+  });
+
+const RuntimeConfigSchema = z.object({
+  version: z.number().int().positive(),
+  settings: z.record(z.string(), RuntimeSettingSchema),
+});
+
+const manifest = ManifestSchema.parse(JSON.parse(manifestRaw) as unknown);
+const runtimeConfig = RuntimeConfigSchema.parse(JSON.parse(runtimeRaw) as unknown);
+
+const instructionKeys = new Set(
+  manifest.instructions.map((definition) => definition.key),
+);
+if (instructionKeys.size !== manifest.instructions.length) {
+  throw new Error('AI instruction manifest contains duplicate keys');
+}
+
+for (const definition of manifest.instructions) {
+  const path = `../config/ai/instructions/${definition.template}`;
+  if (typeof instructionFiles[path] !== 'string') {
+    throw new Error(
+      `AI instruction template is missing for ${definition.key}: ${definition.template}`,
+    );
+  }
+}
+
+export type AiInstructionKey = string;
 export type AiInstructionCategory =
   | 'agent'
   | 'tool'
@@ -23,131 +94,55 @@ export type AiInstructionCategory =
   | 'conversation'
   | 'context';
 
-export type AiInstructionDefinition = {
-  key: AiInstructionKey;
-  label: string;
-  description: string;
-  category: AiInstructionCategory;
-  supportsOverlay: boolean;
-};
+export type AiInstructionDefinition = z.infer<
+  typeof InstructionDefinitionSchema
+>;
 
-export const AI_INSTRUCTION_DEFINITIONS: readonly AiInstructionDefinition[] = [
-  {
-    key: 'parametric',
-    label: 'Generative system prompt',
-    description: 'Primary system prompt used by the Generative/Parametric CAD agent.',
-    category: 'agent',
-    supportsOverlay: true,
-  },
-  {
-    key: 'creative',
-    label: 'Creative system prompt',
-    description: 'Primary system prompt used by the Creative mesh agent.',
-    category: 'agent',
-    supportsOverlay: true,
-  },
-  {
-    key: 'tool.build_parametric_model',
-    label: 'Build CAD tool instruction',
-    description: 'Instruction shown to the model for the build_parametric_model tool.',
-    category: 'tool',
-    supportsOverlay: true,
-  },
-  {
-    key: 'tool.answer_user',
-    label: 'Answer user tool instruction',
-    description: 'Instruction shown to the model for the answer_user tool.',
-    category: 'tool',
-    supportsOverlay: true,
-  },
-  {
-    key: 'tool.create_mesh',
-    label: 'Create mesh tool instruction',
-    description: 'Instruction shown to the Creative agent for the create_mesh tool.',
-    category: 'tool',
-    supportsOverlay: true,
-  },
-  {
-    key: 'vision.reference',
-    label: 'Vision reference analysis',
-    description: 'Instructions used when a vision model analyzes user reference images.',
-    category: 'vision',
-    supportsOverlay: true,
-  },
-  {
-    key: 'vision.inspection',
-    label: 'Vision inspection QA',
-    description: 'Instructions used when a vision model reviews rendered CAD inspection views.',
-    category: 'vision',
-    supportsOverlay: true,
-  },
-  {
-    key: 'conversation.title',
-    label: 'Conversation title generation',
-    description: 'Instruction used to generate short conversation titles.',
-    category: 'conversation',
-    supportsOverlay: true,
-  },
-  {
-    key: 'suggestions.parametric',
-    label: 'Generative follow-up suggestions',
-    description: 'Instruction used to generate follow-up suggestions for Generative conversations.',
-    category: 'conversation',
-    supportsOverlay: true,
-  },
-  {
-    key: 'suggestions.creative',
-    label: 'Creative follow-up suggestions',
-    description: 'Instruction used to generate follow-up suggestions for Creative conversations.',
-    category: 'conversation',
-    supportsOverlay: true,
-  },
-  {
-    key: 'context.parametric_attachment',
-    label: 'Imported CAD attachment context',
-    description: 'Model-facing context injected when an imported CAD/STL asset is attached.',
-    category: 'context',
-    supportsOverlay: true,
-  },
-  {
-    key: 'context.mesh_preferences',
-    label: 'Mesh preference context',
-    description: 'Model-facing context injected for topology and polygon-count preferences.',
-    category: 'context',
-    supportsOverlay: true,
-  },
-  {
-    key: 'context.parametric_inspection_output',
-    label: 'CAD inspection tool result context',
-    description: 'Model-facing text accompanying the rendered multi-view inspection result.',
-    category: 'context',
-    supportsOverlay: true,
-  },
-] as const;
+export const AI_INSTRUCTION_DEFINITIONS: readonly AiInstructionDefinition[] =
+  manifest.instructions;
+export const AI_INSTRUCTION_KEYS: readonly string[] = manifest.instructions.map(
+  (definition) => definition.key,
+);
 
 export function isAiInstructionKey(value: unknown): value is AiInstructionKey {
-  return (
-    typeof value === 'string' &&
-    (AI_INSTRUCTION_KEYS as readonly string[]).includes(value)
-  );
+  return typeof value === 'string' && instructionKeys.has(value);
 }
 
-export type AiRuntimeLimitKey =
-  | 'chat.thinkingBudgetTokens'
-  | 'chat.parametricMaxSteps'
-  | 'chat.creativeMaxSteps'
-  | 'chat.parametricMaxOutputTokens'
-  | 'chat.creativeMaxOutputTokens'
-  | 'chat.creativeThinkingMaxOutputTokens'
-  | 'vision.timeoutMs'
-  | 'vision.referenceMaxOutputTokens'
-  | 'vision.inspectionMaxOutputTokens'
-  | 'vision.temperature'
-  | 'creative.healthTimeoutMs'
-  | 'creative.imageGenerationTimeoutMs'
-  | 'creative.meshGenerationTimeoutMs'
-  | 'creative.trellisResolution';
+export function getAiInstructionDefinition(
+  key: AiInstructionKey,
+): AiInstructionDefinition | undefined {
+  return manifest.instructions.find((definition) => definition.key === key);
+}
 
+export function loadBundledInstruction(key: AiInstructionKey): string {
+  const definition = getAiInstructionDefinition(key);
+  if (!definition) throw new Error(`Unknown AI instruction key: ${key}`);
+  const path = `../config/ai/instructions/${definition.template}`;
+  const content = instructionFiles[path];
+  if (typeof content !== 'string') {
+    throw new Error(`Missing bundled AI instruction template: ${definition.template}`);
+  }
+  return content.trim();
+}
+
+export function renderInstructionTemplate(
+  template: string,
+  values: Record<string, string | number | boolean | null | undefined>,
+): string {
+  return template.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (_match, key: string) => {
+    const value = values[key];
+    return value == null ? '' : String(value);
+  });
+}
+
+export function renderBundledInstruction(
+  key: AiInstructionKey,
+  values: Record<string, string | number | boolean | null | undefined> = {},
+): string {
+  return renderInstructionTemplate(loadBundledInstruction(key), values);
+}
+
+export type AiRuntimeLimitKey = string;
 export type AiRuntimeLimitDefinition = {
   key: AiRuntimeLimitKey;
   label: string;
@@ -159,139 +154,28 @@ export type AiRuntimeLimitDefinition = {
   options?: readonly string[];
 };
 
-export const AI_RUNTIME_LIMIT_DEFINITIONS: readonly AiRuntimeLimitDefinition[] = [
-  {
-    key: 'chat.thinkingBudgetTokens',
-    label: 'Thinking budget',
-    description: 'Default reasoning token budget for models that expose a bounded thinking budget.',
-    kind: 'integer',
-    defaultValue: 9000,
-    min: 0,
-    max: 64000,
-  },
-  {
-    key: 'chat.parametricMaxSteps',
-    label: 'Generative max steps',
-    description: 'Maximum tool/reasoning steps allowed in one Generative turn.',
-    kind: 'integer',
-    defaultValue: 60,
-    min: 1,
-    max: 200,
-  },
-  {
-    key: 'chat.creativeMaxSteps',
-    label: 'Creative max steps',
-    description: 'Maximum tool/reasoning steps allowed in one Creative turn.',
-    kind: 'integer',
-    defaultValue: 5,
-    min: 1,
-    max: 50,
-  },
-  {
-    key: 'chat.parametricMaxOutputTokens',
-    label: 'Generative max output tokens',
-    description: 'Maximum output-token budget for Generative turns.',
-    kind: 'integer',
-    defaultValue: 64000,
-    min: 1024,
-    max: 131072,
-  },
-  {
-    key: 'chat.creativeMaxOutputTokens',
-    label: 'Creative max output tokens',
-    description: 'Maximum output-token budget for Creative turns without extended thinking.',
-    kind: 'integer',
-    defaultValue: 16000,
-    min: 1024,
-    max: 131072,
-  },
-  {
-    key: 'chat.creativeThinkingMaxOutputTokens',
-    label: 'Creative thinking max output tokens',
-    description: 'Maximum output-token budget for Creative turns with thinking enabled.',
-    kind: 'integer',
-    defaultValue: 32000,
-    min: 1024,
-    max: 131072,
-  },
-  {
-    key: 'vision.timeoutMs',
-    label: 'Vision timeout',
-    description: 'Maximum time allowed for a vision fallback request.',
-    kind: 'integer',
-    defaultValue: 300000,
-    min: 5000,
-    max: 1800000,
-  },
-  {
-    key: 'vision.referenceMaxOutputTokens',
-    label: 'Vision reference output tokens',
-    description: 'Maximum vision output for reference-image analysis.',
-    kind: 'integer',
-    defaultValue: 1800,
-    min: 256,
-    max: 16000,
-  },
-  {
-    key: 'vision.inspectionMaxOutputTokens',
-    label: 'Vision inspection output tokens',
-    description: 'Maximum vision output for rendered inspection QA.',
-    kind: 'integer',
-    defaultValue: 2400,
-    min: 256,
-    max: 16000,
-  },
-  {
-    key: 'vision.temperature',
-    label: 'Vision temperature',
-    description: 'Sampling temperature used by vision fallback analysis.',
-    kind: 'number',
-    defaultValue: 0.1,
-    min: 0,
-    max: 2,
-  },
-  {
-    key: 'creative.healthTimeoutMs',
-    label: 'Creative runtime health timeout',
-    description: 'Timeout for checking llama-swap Creative runtime availability.',
-    kind: 'integer',
-    defaultValue: 5000,
-    min: 1000,
-    max: 60000,
-  },
-  {
-    key: 'creative.imageGenerationTimeoutMs',
-    label: 'Conditioning image timeout',
-    description: 'Timeout for text-to-image conditioning generation before TRELLIS.2.',
-    kind: 'integer',
-    defaultValue: 600000,
-    min: 30000,
-    max: 3600000,
-  },
-  {
-    key: 'creative.meshGenerationTimeoutMs',
-    label: 'TRELLIS.2 generation timeout',
-    description: 'Timeout for TRELLIS.2 mesh generation.',
-    kind: 'integer',
-    defaultValue: 1800000,
-    min: 60000,
-    max: 7200000,
-  },
-  {
-    key: 'creative.trellisResolution',
-    label: 'TRELLIS.2 resolution',
-    description: 'Supported TRELLIS.2 generation resolution.',
-    kind: 'enum',
-    defaultValue: '1024',
-    options: ['512', '1024', '1536'],
-  },
-] as const;
+export const AI_RUNTIME_LIMIT_DEFINITIONS: readonly AiRuntimeLimitDefinition[] =
+  Object.entries(runtimeConfig.settings).map(([key, definition]) => ({
+    key,
+    label: definition.label,
+    description: definition.description,
+    kind: definition.type,
+    defaultValue: definition.default,
+    min: definition.min,
+    max: definition.max,
+    options: definition.options,
+  }));
 
-export const AI_HARD_INVARIANTS = [
-  'Authentication and authorization checks',
-  'Supabase row ownership and storage ownership checks',
-  'Database integrity and schema validation',
-  'Backend-advertised model capabilities',
-  'Tool input/output schemas required for application interoperability',
-  'File-format and binary-integrity validation',
-] as const;
+const runtimeDefinitionByKey = new Map(
+  AI_RUNTIME_LIMIT_DEFINITIONS.map((definition) => [definition.key, definition]),
+);
+
+export function isAiRuntimeLimitKey(value: unknown): value is AiRuntimeLimitKey {
+  return typeof value === 'string' && runtimeDefinitionByKey.has(value);
+}
+
+export function getAiRuntimeLimitDefinition(
+  key: AiRuntimeLimitKey,
+): AiRuntimeLimitDefinition | undefined {
+  return runtimeDefinitionByKey.get(key);
+}
