@@ -136,6 +136,12 @@ export function AuxiliaryInstructionProfilesSettings() {
     }
   }, [currentBundledId, profiles, selectedId]);
 
+  const selectedIsDefault = selected
+    ? selected.editable
+      ? selected.id === defaultId
+      : defaultId === null
+    : false;
+
   const invalidate = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
@@ -226,11 +232,6 @@ export function AuxiliaryInstructionProfilesSettings() {
   const archiveMutation = useMutation({
     mutationFn: async (profile: PromptProfile) => {
       await apiJson(`ai-settings/profiles/${profile.id}`, { method: 'DELETE' });
-      if (profile.id === defaultId) {
-        const next = { ...defaults };
-        delete next[instructionKey];
-        await saveDefaultMap(next);
-      }
     },
     onSuccess: async () => {
       setSelectedId(currentBundledId);
@@ -488,8 +489,7 @@ export function AuxiliaryInstructionProfilesSettings() {
                             ? 'Replace'
                             : 'Overlay'}
                       </Badge>
-                      {(selected.editable && selected.id === defaultId) ||
-                      (!selected.editable && defaultId === null) ? (
+                      {selectedIsDefault ? (
                         <Badge className="bg-adam-blue/10 text-adam-blue">
                           <Check className="mr-1 h-3 w-3" />
                           Default
@@ -504,7 +504,7 @@ export function AuxiliaryInstructionProfilesSettings() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {selected.editable && selected.id !== defaultId ? (
+                    {selected.editable && !selectedIsDefault ? (
                       <Button
                         type="button"
                         size="sm"
@@ -534,7 +534,7 @@ export function AuxiliaryInstructionProfilesSettings() {
                       <Copy className="mr-1 h-3.5 w-3.5" />
                       Copy
                     </Button>
-                    {selected.deletable ? (
+                    {selected.deletable && !selectedIsDefault ? (
                       <Button
                         type="button"
                         variant="ghost"
