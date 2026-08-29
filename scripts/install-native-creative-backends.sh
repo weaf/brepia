@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install the transitional pCAD/Brepia native Creative stack:
+# Install the Brepia native Creative stack:
 #   text -> Z-Image-Turbo/stable-diffusion.cpp -> TRELLIS.2/trellis.cpp -> GLB
 #   image -------------------------------------> TRELLIS.2/trellis.cpp -> GLB
 #
 # Runtime lifecycle remains owned by llama-swap. Large model weights default to
 # llama-swap's model tree while native runtime binaries stay in a separate pCAD
 # runtime root. The script appends two model entries to the existing llama-swap
-# config and never removes existing models.
+# config and never removes unrelated models.
 
 ROOT="${PCAD_NATIVE_CREATIVE_ROOT:-$HOME/ai/pcad-native-creative}"
 MODELS_ROOT="${PCAD_NATIVE_CREATIVE_MODELS_DIR:-$HOME/ai/llama-swap/models/creative}"
@@ -61,7 +61,8 @@ Environment overrides:
   PCAD_NATIVE_CREATIVE_MODELS_DIR
   PCAD_LLAMA_SWAP_CONFIG
 
-Existing old pCAD TRELLIS/Hunyuan runtimes are not removed.
+A retired pre-TRELLIS.2 Python installation can be removed separately with:
+  bash ./scripts/remove-legacy-creative-backends.sh
 EOF
 }
 
@@ -258,8 +259,9 @@ llama-swap model IDs:
 Next:
   1. Restart/reload llama-swap so it reads the updated config.
   2. Verify both IDs appear in: curl http://127.0.0.1:9292/v1/models
-  3. Start pCAD and select TRELLIS.2 (local/trellis2).
-  4. Test one image-to-3D generation first, then one text-to-3D generation.
+  3. Start Brepia and select TRELLIS.2 (local/trellis2).
 
-The old Python TRELLIS/Hunyuan stack has NOT been removed.
+Legacy Python Creative runtimes, if still installed from an older pCAD version,
+can be removed with:
+  bash ./scripts/remove-legacy-creative-backends.sh
 EOF
