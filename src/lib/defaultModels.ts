@@ -1,8 +1,8 @@
-import { isCreativeMeshModelId } from '@shared/creativeMeshModels';
+import { normalizeCreativeMeshModelId } from '@shared/creativeMeshModels';
 import type { Model } from '@shared/types';
 
 export const FALLBACK_PARAMETRIC_MODEL_ID: Model = 'openai/gpt-5.6-sol';
-export const FALLBACK_CREATIVE_MODEL_ID: Model = 'quality';
+export const FALLBACK_CREATIVE_MODEL_ID: Model = 'local/trellis2';
 
 type ModelLike = { id: string };
 
@@ -25,8 +25,17 @@ export function resolveParametricDefaultModel(
 
 export function resolveCreativeDefaultModel(
   preferredModelId: string | null | undefined,
+  selectableModels?: ModelLike[],
 ): Model {
-  return preferredModelId && isCreativeMeshModelId(preferredModelId)
-    ? preferredModelId
-    : FALLBACK_CREATIVE_MODEL_ID;
+  const normalized = normalizeCreativeMeshModelId(preferredModelId);
+  if (!normalized) return FALLBACK_CREATIVE_MODEL_ID;
+
+  if (selectableModels) {
+    const selectableIds = new Set(selectableModels.map((model) => model.id));
+    return selectableIds.has(normalized)
+      ? normalized
+      : FALLBACK_CREATIVE_MODEL_ID;
+  }
+
+  return normalized;
 }
