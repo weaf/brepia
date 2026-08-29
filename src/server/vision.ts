@@ -15,6 +15,10 @@ import { generateText, wrapLanguageModel, type LanguageModel } from 'ai';
 import { isCustomProviderModel } from '@shared/customModelIds';
 import { PARAMETRIC_MODELS } from '../lib/utils';
 import { getPreferencesByUserId } from './aiSettings';
+import {
+  resolveInstructionFromPreferences,
+  resolveRuntimeNumberFromPreferences,
+} from './aiInstructionRuntime';
 import { loadBuiltinProviderRuntimeOverrides } from './builtinProviderOverrides';
 import { buildCustomChatModel } from './customProviders';
 import {
@@ -24,7 +28,6 @@ import {
 import { env } from './env';
 import { logWarning } from './serverLog';
 
-const VISION_TIMEOUT_MS = 5 * 60_000;
 const MAX_CACHE_ENTRIES = 128;
 
 export const VISION_NOT_CONFIGURED_MESSAGE =
@@ -71,37 +74,11 @@ export function selectVisionModelId(
   return preferences.visionFastModelId ?? undefined;
 }
 
-function visionPrompt(kind: VisionAnalysisKind, userRequest?: string): string {
-  const task = userRequest?.trim()
-    ? `\nCurrent CAD request:\n${userRequest.trim()}`
-    : '';
-
-  if (kind === 'inspection') {
-    return [
-      'Analyze the attached pCAD/OpenSCAD multi-view render as a visual QA reviewer.',
-      'Return concise factual observations for another CAD model that cannot see the image.',
-      'Focus on overall shape, proportions, missing or disconnected parts, openings/cutouts, wall thickness, corner radii, symmetry, printability, collisions, hidden geometry, and obvious visual defects.',
-      'Compare the render with the current CAD request when it is supplied.',
-      'Do not generate OpenSCAD code. Do not guess details that are not visible.',
-      task,
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  return [
-    'Analyze the attached reference image(s) for a CAD/OpenSCAD modeler.',
-    'Return concise factual visual observations for another model that cannot see the images.',
-    'Focus on geometry, silhouette, proportions, spatial relationships, major features, holes/cutouts, symmetry, visible dimensions/text, and details that matter when recreating or modifying the object.',
-    'Do not generate OpenSCAD code. Distinguish visible facts from uncertain interpretation and do not invent hidden details.',
-    task,
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-function combinedSignal(signal?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(VISION_TIMEOUT_MS);
+function combinedSignal(
+  timeoutMs: number,
+  signal?: AbortSignal,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
@@ -206,13 +183,25 @@ async function resolveVisionModel(
   return resolveBuiltInVisionModel(userId, modelId);
 }
 
-function cacheKey(
-  userId: string,
-  kind: VisionAnalysisKind,
-  modelId: string,
-  images: string[],
-  userRequest?: string,
-): string {
+function cacheKey({
+  userId,
+  kind,
+  modelId,
+  images,
+  prompt,
+  timeoutMs,
+  temperature,
+  maxOutputTokens,
+}: {
+  userId: string;
+  kind: VisionAnalysisKind;
+  modelId: string;
+  images: string[];
+  prompt: string;
+  timeoutMs: number;
+  temperature: number;
+  maxOutputTokens: number;
+}): string {
   const hash = createHash('sha256');
   hash.update(userId);
   hash.update('\0');
@@ -220,7 +209,13 @@ function cacheKey(
   hash.update('\0');
   hash.update(modelId);
   hash.update('\0');
-  hash.update(userRequest ?? '');
+  hash.update(prompt);
+  hash.update('\0');
+  hash.update(String(timeoutMs));
+  hash.update('\0');
+  hash.update(String(temperature));
+  hash.update('\0');
+  hash.update(String(maxOutputTokens));
   for (const image of images) {
     hash.update('\0');
     hash.update(image);
@@ -255,7 +250,37 @@ async function analyzeImagesWithConfiguredVision(
     throw new Error(VISION_NOT_CONFIGURED_MESSAGE);
   }
 
-  const key = cacheKey(userId, kind, selectedModelId, images, userRequest);
+  const prompt = await resolveInstructionFromPreferences(
+    userId,
+    preferences,
+    kind === 'inspection' ? 'vision.inspection' : 'vision.reference',
+    { userRequest: userRequest?.trim() ?? '' },
+  );
+  const timeoutMs = resolveRuntimeNumberFromPreferences(
+    preferences,
+    'vision.timeoutMs',
+  );
+  const temperature = resolveRuntimeNumberFromPreferences(
+    preferences,
+    'vision.temperature',
+  );
+  const maxOutputTokens = resolveRuntimeNumberFromPreferences(
+    preferences,
+    kind === 'inspection'
+      ? 'vision.inspectionMaxOutputTokens'
+      : 'vision.referenceMaxOutputTokens',
+  );
+
+  const key = cacheKey({
+    userId,
+    kind,
+    modelId: selectedModelId,
+    images,
+    prompt,
+    timeoutMs,
+    temperature,
+    maxOutputTokens,
+  });
   const cached = visionCache.get(key);
   if (cached) return cached;
 
@@ -269,14 +294,14 @@ async function analyzeImagesWithConfiguredVision(
           {
             role: 'user',
             content: [
-              { type: 'text', text: visionPrompt(kind, userRequest) },
+              { type: 'text', text: prompt },
               ...images.map((image) => ({ type: 'image' as const, image })),
             ],
           },
         ],
-        temperature: 0.1,
-        maxOutputTokens: kind === 'inspection' ? 2400 : 1800,
-        abortSignal: combinedSignal(signal),
+        temperature,
+        maxOutputTokens,
+        abortSignal: combinedSignal(timeoutMs, signal),
       });
       const text = result.text.trim();
       if (!text) throw new Error('vision model returned no usable text');
