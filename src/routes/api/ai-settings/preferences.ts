@@ -11,12 +11,12 @@ import {
   buildFullCatalog,
   buildSelectableCatalog,
 } from '@/server/modelCatalog';
+import { resolveCreativeMeshProvider } from '@/server/creativeMeshProviderRegistry';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
 import {
   UpdateDefaultModelsSchema,
   UpdateVisionModelsSchema,
 } from '@shared/aiSettings';
-import { isCreativeMeshModelId } from '@shared/creativeMeshModels';
 
 function preferenceResponse(data: Record<string, unknown>) {
   return {
@@ -103,17 +103,19 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
               }
             }
 
-            if (
-              parsed.data.defaultCreativeModelId &&
-              !isCreativeMeshModelId(parsed.data.defaultCreativeModelId)
-            ) {
-              return json(
-                {
-                  error: 'invalid_default_creative_model',
-                  modelId: parsed.data.defaultCreativeModelId,
-                },
-                400,
+            if (parsed.data.defaultCreativeModelId) {
+              const creativeProvider = resolveCreativeMeshProvider(
+                parsed.data.defaultCreativeModelId,
               );
+              if (!creativeProvider?.enabled) {
+                return json(
+                  {
+                    error: 'invalid_default_creative_model',
+                    modelId: parsed.data.defaultCreativeModelId,
+                  },
+                  400,
+                );
+              }
             }
 
             if (parsed.data.defaultParametricModelId !== undefined) {
