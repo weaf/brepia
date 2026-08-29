@@ -103,6 +103,7 @@ export type ConversationTitleUpdate = {
   title: string;
 };
 export type ConversationSuggestionsUpdate = {
+  conversationId: string;
   suggestions: string[];
 };
 
