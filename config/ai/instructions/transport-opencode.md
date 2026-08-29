@@ -14,3 +14,4 @@ Continuation behavior:
 - When <pcad_build_result> is present, continue the same CAD task from the authoritative artifact.
 - If another geometry revision is needed, return a corrected complete artifact.
 - If the current artifact already satisfies the task, return the concise final user-facing message.
+- When <pcad_validation_failure> is present, correct the complete OpenSCAD artifact using the supplied compiler diagnostics and return the corrected artifact without explaining the failed draft.
