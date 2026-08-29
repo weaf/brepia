@@ -10,6 +10,7 @@ import type { AiPreferencesDto } from '@shared/aiSettings';
 const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   hiddenModelIds: [],
   defaultPromptProfileId: null,
+  defaultCreativePromptProfileId: null,
   defaultParametricModelId: null,
   defaultCreativeModelId: null,
   visionFastModelId: null,
@@ -20,6 +21,7 @@ type PreferenceRow = {
   user_id: string;
   hidden_model_ids: string[];
   default_prompt_profile_id: string | null;
+  default_creative_prompt_profile_id?: string | null;
   default_parametric_model_id?: string | null;
   default_creative_model_id?: string | null;
   vision_fast_model_id?: string | null;
@@ -33,6 +35,8 @@ function toDto(row: PreferenceRow): AiPreferencesDto {
     userId: row.user_id,
     hiddenModelIds: row.hidden_model_ids,
     defaultPromptProfileId: row.default_prompt_profile_id,
+    defaultCreativePromptProfileId:
+      row.default_creative_prompt_profile_id ?? null,
     defaultParametricModelId: row.default_parametric_model_id ?? null,
     defaultCreativeModelId: row.default_creative_model_id ?? null,
     visionFastModelId: row.vision_fast_model_id ?? null,
@@ -64,8 +68,6 @@ async function loadPreferences(userId: string): Promise<AiPreferencesDto> {
     .single();
 
   if (insertErr) {
-    // Race-safe: another request may have inserted between our select and
-    // insert. Try a second select before giving up.
     const { data: retry } = await supabase
       .from('user_ai_preferences')
       .select('*')
@@ -73,27 +75,22 @@ async function loadPreferences(userId: string): Promise<AiPreferencesDto> {
       .maybeSingle();
 
     if (retry) return toDto(retry as PreferenceRow);
-
-    // Keep the settings UI usable if persistence is temporarily unavailable.
     return { userId, ...DEFAULT_PREFERENCES };
   }
 
   return toDto(inserted as PreferenceRow);
 }
 
-/** Get (or lazily create) preferences for an authenticated Supabase user. */
 export async function getPreferences(user: User): Promise<AiPreferencesDto> {
   return loadPreferences(user.id);
 }
 
-/** Server-internal variant for request paths that already have a user id. */
 export async function getPreferencesByUserId(
   userId: string,
 ): Promise<AiPreferencesDto> {
   return loadPreferences(userId);
 }
 
-/** Update hidden_model_ids for the given user. */
 export async function updateHiddenModelIds(
   user: User,
   hiddenModelIds: string[],
@@ -118,7 +115,6 @@ export async function updateHiddenModelIds(
   return toDto(data as PreferenceRow);
 }
 
-/** Set the default prompt profile reference. Pass null to reset. */
 export async function setDefaultPromptProfileId(
   user: User,
   defaultPromptProfileId: string | null,
