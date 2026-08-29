@@ -162,6 +162,21 @@ Follow-up tasks:
 
 This review is infrastructure/documentation cleanup and should remain separate from the AI profile/prompt evaluation work unless it blocks the required local migration/regression gate.
 
+## Future 3D viewer interaction — free rotation
+
+The current model viewer rotation should be replaced or extended so the user can rotate a model **freely in all directions**, without being constrained by the present rotation behavior or by an inconvenient model origin.
+
+Follow-up goals:
+
+- [ ] support unrestricted orbit/trackball-style rotation around all axes;
+- [ ] make rotation intuitive on both mouse/desktop and touch/mobile;
+- [ ] avoid making usability depend on the generated model having a convenient OpenSCAD origin;
+- [ ] evaluate whether the viewer should orbit around the model bounds/visual center, a user-selected pivot, or both;
+- [ ] preserve pan/zoom behavior and existing stable-runtime/mobile recovery behavior;
+- [ ] add focused desktop/mobile interaction tests before replacing the current controls.
+
+This is a viewer/UI improvement and must remain independent from prompt-profile optimization. Prompt quality may still influence model origin, but viewer navigation should remain usable regardless of where the model origin is placed.
+
 ## Completion
 
 The native Creative replacement is complete. TRELLIS.2 is the sole built-in Creative backend, the project gate is green, both native generation paths have been proven, and the superseded Python runtime has been removed from both the repository and the workstation.
