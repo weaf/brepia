@@ -6,6 +6,10 @@
 // boolean.
 
 import { z } from 'zod';
+import {
+  InstructionProfileDefaultsSchema,
+  RuntimeOverridesSchema,
+} from './aiInstructionSettings.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +58,8 @@ export const AiPreferencesSchema = z.object({
   defaultCreativePromptProfileId: z
     .union([z.string().uuid(), z.null()])
     .default(null),
+  instructionProfileDefaults: InstructionProfileDefaultsSchema.default({}),
+  runtimeOverrides: RuntimeOverridesSchema.default({}),
   defaultParametricModelId: nullableModelIdSchema.default(null),
   defaultCreativeModelId: nullableModelIdSchema.default(null),
   visionFastModelId: nullableModelIdSchema.default(null),
@@ -278,6 +284,8 @@ export const SetDefaultPromptSchema = z.object({
   defaultCreativePromptProfileId: z
     .union([z.string().uuid(), z.null()])
     .optional(),
+  instructionProfileDefaults: InstructionProfileDefaultsSchema.optional(),
+  runtimeOverrides: RuntimeOverridesSchema.optional(),
 });
 
 export const UpdateDefaultModelsSchema = z.object({
