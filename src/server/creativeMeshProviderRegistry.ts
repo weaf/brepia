@@ -97,6 +97,12 @@ export function isCreativeMeshProviderEnabled(
   );
 }
 
+export function getCreativeMeshProviderAdapter(
+  id: CreativeMeshProvider,
+): CreativeMeshProviderAdapter | undefined {
+  return PROVIDERS.find((provider) => provider.id === id);
+}
+
 export function getCreativeMeshCatalog(): CreativeMeshCatalog {
   const providers = PROVIDERS.map((provider) => {
     const enabled = isCreativeMeshProviderEnabled(provider);
