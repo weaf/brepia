@@ -15,7 +15,14 @@ const InstructionDefinitionSchema = z.object({
   key: z.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9_.-]*$/),
   label: z.string().min(1),
   description: z.string(),
-  category: z.enum(['agent', 'tool', 'vision', 'conversation', 'context']),
+  category: z.enum([
+    'agent',
+    'tool',
+    'vision',
+    'conversation',
+    'context',
+    'transport',
+  ]),
   template: z.string().min(1).regex(/^[a-z0-9][a-z0-9_.-]*\.md$/),
   supportsOverlay: z.boolean().default(true),
 });
@@ -37,7 +44,10 @@ const RuntimeSettingSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.type === 'enum') {
-      if (typeof value.default !== 'string' || !value.options?.includes(value.default)) {
+      if (
+        typeof value.default !== 'string' ||
+        !value.options?.includes(value.default)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'enum default must be present in options',
@@ -92,7 +102,8 @@ export type AiInstructionCategory =
   | 'tool'
   | 'vision'
   | 'conversation'
-  | 'context';
+  | 'context'
+  | 'transport';
 
 export type AiInstructionDefinition = z.infer<
   typeof InstructionDefinitionSchema
@@ -120,7 +131,9 @@ export function loadBundledInstruction(key: AiInstructionKey): string {
   const path = `../config/ai/instructions/${definition.template}`;
   const content = instructionFiles[path];
   if (typeof content !== 'string') {
-    throw new Error(`Missing bundled AI instruction template: ${definition.template}`);
+    throw new Error(
+      `Missing bundled AI instruction template: ${definition.template}`,
+    );
   }
   return content.trim();
 }
@@ -129,10 +142,13 @@ export function renderInstructionTemplate(
   template: string,
   values: Record<string, string | number | boolean | null | undefined>,
 ): string {
-  return template.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (_match, key: string) => {
-    const value = values[key];
-    return value == null ? '' : String(value);
-  });
+  return template.replace(
+    /\{\{([a-zA-Z0-9_.-]+)\}\}/g,
+    (_match, key: string) => {
+      const value = values[key];
+      return value == null ? '' : String(value);
+    },
+  );
 }
 
 export function renderBundledInstruction(
