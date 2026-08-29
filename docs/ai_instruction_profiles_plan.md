@@ -195,8 +195,8 @@ The CADAM/Standard package-profile extension was implemented after the green gat
 
 Technical gate:
 
-- [ ] apply `20260829150000_instruction_profile_packages.sql`
-- [ ] regenerate local Supabase TypeScript types
+- [x] apply `20260829150000_instruction_profile_packages.sql`
+- [x] regenerate local Supabase TypeScript types
 - [x] `npm test`
 - [x] `npm run typecheck`
 - [x] `npm run lint`
