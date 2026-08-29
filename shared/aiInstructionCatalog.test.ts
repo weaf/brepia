@@ -20,7 +20,7 @@ describe('AI instruction profile packages', () => {
       revision: 'cadam-split-2026-08-29',
       origin: {
         profile: 'cadam',
-        revision: 'brepia-split-2026-08-29',
+        revision: 'cadam-split-2026-08-29',
       },
     });
     expect(getAiInstructionProfileDefinition('cadam')).toMatchObject({
@@ -29,7 +29,7 @@ describe('AI instruction profile packages', () => {
       revision: 'cadam-split-2026-08-29',
       lineage: {
         project: 'CADAM',
-        revision: 'brepia-split-2026-08-29',
+        revision: 'cadam-split-2026-08-29',
       },
     });
   });

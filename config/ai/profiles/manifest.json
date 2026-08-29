@@ -31,7 +31,7 @@
       "revision": "cadam-split-2026-08-29",
       "lineage": {
         "project": "CADAM",
-        "revision": "brepia-split-2026-08-29"
+        "revision": "cadam-split-2026-08-29"
       },
       "instructions": {}
     },
@@ -43,7 +43,7 @@
       "revision": "cadam-split-2026-08-29",
       "origin": {
         "profile": "cadam",
-        "revision": "brepia-split-2026-08-29"
+        "revision": "cadam-split-2026-08-29"
       },
       "instructions": {}
     }
