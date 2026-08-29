@@ -112,6 +112,22 @@
       "category": "context",
       "template": "context-parametric-inspection-output.md",
       "supportsOverlay": true
+    },
+    {
+      "key": "transport.opencode",
+      "label": "OpenCode transport",
+      "description": "Behavioral instructions added when Generative requests run through OpenCode.",
+      "category": "transport",
+      "template": "transport-opencode.md",
+      "supportsOverlay": true
+    },
+    {
+      "key": "transport.codex",
+      "label": "Codex transport",
+      "description": "Behavioral instructions added when Generative requests run through Codex CLI.",
+      "category": "transport",
+      "template": "transport-codex.md",
+      "supportsOverlay": true
     }
   ]
 }
