@@ -31,17 +31,29 @@ export async function loadUserAiPreferences(
   return getPreferencesByUserId(userId);
 }
 
+export async function resolveInstructionTemplateFromPreferences(
+  userId: string,
+  preferences: AiPreferencesDto,
+  key: AiInstructionKey,
+): Promise<string> {
+  return resolveInstructionProfile({
+    userId,
+    scope: key,
+    profileId: configuredProfileId(preferences, key),
+  });
+}
+
 export async function resolveInstructionFromPreferences(
   userId: string,
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
   values: InstructionValues = {},
 ): Promise<string> {
-  const template = await resolveInstructionProfile({
+  const template = await resolveInstructionTemplateFromPreferences(
     userId,
-    scope: key,
-    profileId: configuredProfileId(preferences, key),
-  });
+    preferences,
+    key,
+  );
   return renderInstructionTemplate(template, values);
 }
 
@@ -79,6 +91,7 @@ export function resolveRuntimeStringFromPreferences(
 
 export type UserAiRuntimeContext = {
   preferences: AiPreferencesDto;
+  template: (key: AiInstructionKey) => Promise<string>;
   instruction: (
     key: AiInstructionKey,
     values?: InstructionValues,
@@ -93,6 +106,8 @@ export async function createUserAiRuntimeContext(
   const preferences = await loadUserAiPreferences(userId);
   return {
     preferences,
+    template: (key) =>
+      resolveInstructionTemplateFromPreferences(userId, preferences, key),
     instruction: (key, values = {}) =>
       resolveInstructionFromPreferences(userId, preferences, key, values),
     number: (key) => resolveRuntimeNumberFromPreferences(preferences, key),
