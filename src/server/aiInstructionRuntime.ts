@@ -3,6 +3,7 @@ import {
   loadBundledInstruction,
   renderInstructionTemplate,
   type AiInstructionKey,
+  type AiInstructionProfileId,
   type AiRuntimeLimitKey,
 } from '@shared/aiInstructionCatalog';
 import {
@@ -77,8 +78,9 @@ function resolveInstructionTemplateFromSnapshot(
   preferences: AiPreferencesDto,
   snapshot: InstructionProfileSnapshot,
   key: AiInstructionKey,
+  instructionProfileId: AiInstructionProfileId,
 ): string {
-  const bundled = loadBundledInstruction(key);
+  const bundled = loadBundledInstruction(key, instructionProfileId);
   const profileId = configuredProfileId(preferences, key);
   const expectedBundledId = `builtin:${key}`;
 
@@ -116,11 +118,14 @@ export async function resolveInstructionTemplateFromPreferences(
   userId: string,
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
+  instructionProfileId: AiInstructionProfileId =
+    preferences.defaultInstructionProfileId,
 ): Promise<string> {
   return resolveInstructionProfile({
     userId,
     scope: key,
     profileId: configuredProfileId(preferences, key),
+    instructionProfileId,
   });
 }
 
@@ -129,11 +134,14 @@ export async function resolveInstructionFromPreferences(
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
   values: InstructionValues = {},
+  instructionProfileId: AiInstructionProfileId =
+    preferences.defaultInstructionProfileId,
 ): Promise<string> {
   const template = await resolveInstructionTemplateFromPreferences(
     userId,
     preferences,
     key,
+    instructionProfileId,
   );
   return renderInstructionTemplate(template, values);
 }
@@ -172,6 +180,7 @@ export function resolveRuntimeStringFromPreferences(
 
 export type UserAiRuntimeContext = {
   preferences: AiPreferencesDto;
+  instructionProfileId: AiInstructionProfileId;
   template: (key: AiInstructionKey) => Promise<string>;
   instruction: (
     key: AiInstructionKey,
@@ -183,15 +192,25 @@ export type UserAiRuntimeContext = {
 
 export async function createUserAiRuntimeContext(
   userId: string,
+  instructionProfileId?: AiInstructionProfileId,
 ): Promise<UserAiRuntimeContext> {
   const preferences = await loadUserAiPreferences(userId);
+  const selectedInstructionProfileId =
+    instructionProfileId ?? preferences.defaultInstructionProfileId;
   const snapshot = await loadInstructionProfileSnapshot(userId, preferences);
 
   const template = async (key: AiInstructionKey): Promise<string> =>
-    resolveInstructionTemplateFromSnapshot(userId, preferences, snapshot, key);
+    resolveInstructionTemplateFromSnapshot(
+      userId,
+      preferences,
+      snapshot,
+      key,
+      selectedInstructionProfileId,
+    );
 
   return {
     preferences,
+    instructionProfileId: selectedInstructionProfileId,
     template,
     instruction: async (key, values = {}) =>
       renderInstructionTemplate(await template(key), values),
