@@ -3,28 +3,21 @@ import { useEffect, useMemo, useState } from 'react';
 
 type Timing = { expected: number; min: number; max: number };
 
-// Timing configuration. Local times are deliberately conservative because the
-// first request also lazy-loads weights into VRAM; subsequent requests on the
-// same backend are normally faster. TRELLIS.2 values are transitional UI
-// fallbacks only until the native runtime has real stage/progress reporting.
+// Timing configuration. TRELLIS.2 includes first-run model loading, so the
+// fallback estimate remains deliberately conservative until the native runtime
+// exposes real stage/progress reporting.
 export const TIMING_CONFIG: Record<
   'image' | 'mesh',
   Record<CreativeModel, Timing>
 > = {
   image: {
     'local/trellis2': { expected: 180000, min: 45000, max: 600000 },
-    'local/trellis-v1': { expected: 120000, min: 45000, max: 300000 },
-    'local/hunyuan3d-2': { expected: 90000, min: 30000, max: 240000 },
-    'local/hunyuan3d-2.1': { expected: 150000, min: 60000, max: 360000 },
     fast: { expected: 35000, min: 15000, max: 45000 },
     quality: { expected: 120000, min: 60000, max: 150000 },
     ultra: { expected: 150000, min: 90000, max: 200000 },
   },
   mesh: {
     'local/trellis2': { expected: 300000, min: 60000, max: 900000 },
-    'local/trellis-v1': { expected: 180000, min: 60000, max: 600000 },
-    'local/hunyuan3d-2': { expected: 120000, min: 45000, max: 360000 },
-    'local/hunyuan3d-2.1': { expected: 210000, min: 60000, max: 600000 },
     fast: { expected: 75000, min: 60000, max: 90000 },
     quality: { expected: 45000, min: 30000, max: 60000 },
     ultra: { expected: 270000, min: 240000, max: 300000 },
@@ -44,7 +37,7 @@ export function useLoadingProgress(
 
   const actualStartTime = useMemo(() => startTime || Date.now(), [startTime]);
 
-  const modelName = model || 'local/trellis-v1';
+  const modelName = model || 'local/trellis2';
 
   const timing = TIMING_CONFIG[modelType][modelName];
 
