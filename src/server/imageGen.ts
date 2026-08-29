@@ -397,11 +397,7 @@ export const generateImageWithFalFlux = async (
     );
   }
 
-  const resolvedPrompt = await resolveFalImagePrompt(userId, promptText);
-  const enhancedPrompt =
-    contextImages.length > 0
-      ? `${resolvedPrompt}\n\nUse the provided image reference(s) as visual context and maintain relevant visual consistency.`
-      : resolvedPrompt;
+  const enhancedPrompt = await resolveFalImagePrompt(userId, promptText);
 
   let imageInputs: string[] = [];
   if (contextImages.length > 0) {
