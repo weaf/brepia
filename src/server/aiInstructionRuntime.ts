@@ -11,6 +11,11 @@ import {
 import { getPreferencesByUserId } from './aiSettings';
 import { resolveInstructionProfile } from './promptProfiles';
 
+type InstructionValues = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
+
 function configuredProfileId(
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
@@ -30,7 +35,7 @@ export async function resolveInstructionFromPreferences(
   userId: string,
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
-  values: Record<string, string | number | boolean | null | undefined> = {},
+  values: InstructionValues = {},
 ): Promise<string> {
   const template = await resolveInstructionProfile({
     userId,
@@ -38,15 +43,6 @@ export async function resolveInstructionFromPreferences(
     profileId: configuredProfileId(preferences, key),
   });
   return renderInstructionTemplate(template, values);
-}
-
-export async function resolveUserInstruction(
-  userId: string,
-  key: AiInstructionKey,
-  values: Record<string, string | number | boolean | null | undefined> = {},
-): Promise<string> {
-  const preferences = await loadUserAiPreferences(userId);
-  return resolveInstructionFromPreferences(userId, preferences, key, values);
 }
 
 export function resolveRuntimeFromPreferences(
@@ -79,6 +75,38 @@ export function resolveRuntimeStringFromPreferences(
     throw new Error(`AI runtime setting ${key} is not a string`);
   }
   return value;
+}
+
+export type UserAiRuntimeContext = {
+  preferences: AiPreferencesDto;
+  instruction: (
+    key: AiInstructionKey,
+    values?: InstructionValues,
+  ) => Promise<string>;
+  number: (key: AiRuntimeLimitKey) => number;
+  string: (key: AiRuntimeLimitKey) => string;
+};
+
+export async function createUserAiRuntimeContext(
+  userId: string,
+): Promise<UserAiRuntimeContext> {
+  const preferences = await loadUserAiPreferences(userId);
+  return {
+    preferences,
+    instruction: (key, values = {}) =>
+      resolveInstructionFromPreferences(userId, preferences, key, values),
+    number: (key) => resolveRuntimeNumberFromPreferences(preferences, key),
+    string: (key) => resolveRuntimeStringFromPreferences(preferences, key),
+  };
+}
+
+export async function resolveUserInstruction(
+  userId: string,
+  key: AiInstructionKey,
+  values: InstructionValues = {},
+): Promise<string> {
+  const preferences = await loadUserAiPreferences(userId);
+  return resolveInstructionFromPreferences(userId, preferences, key, values);
 }
 
 export async function resolveUserRuntimeValue(
