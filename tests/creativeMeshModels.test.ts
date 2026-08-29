@@ -76,6 +76,28 @@ describe('Creative mesh backend catalog', () => {
     );
   });
 
+  it('rejects multiple TRELLIS.2 reference images before generation', () => {
+    const issue = getCreativeInputValidationIssue({
+      conversationType: 'creative',
+      model: 'local/trellis2',
+      parts: [
+        {
+          type: 'file',
+          mediaType: 'image/png',
+          filename: 'one.png',
+          url: 'storage://one',
+        },
+        {
+          type: 'file',
+          mediaType: 'image/png',
+          filename: 'two.png',
+          url: 'storage://two',
+        },
+      ],
+    });
+    assert.equal(issue?.title, 'Too many reference images');
+  });
+
   it('has UI mesh configuration for every active model definition', () => {
     for (const id of CREATIVE_MESH_MODEL_IDS) {
       assert.ok(MODEL_CONFIGS[id], id);
