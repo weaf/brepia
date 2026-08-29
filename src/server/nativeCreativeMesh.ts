@@ -4,8 +4,14 @@ import {
   type CreativeMeshModelId,
 } from '@shared/creativeMeshModels';
 import { imageIdFromFilename } from '@shared/imageRefs';
+import type { AiPreferencesDto } from '@shared/aiSettings';
 import type { MeshFileType } from '@shared/types';
 import { corsHeaders, isRecord } from './api';
+import {
+  loadUserAiPreferences,
+  resolveRuntimeNumberFromPreferences,
+  resolveRuntimeStringFromPreferences,
+} from './aiInstructionRuntime';
 import { env } from './env';
 import { logError } from './serverLog';
 import {
@@ -16,9 +22,6 @@ import {
 const DEFAULT_LLAMA_SWAP_URL = 'http://127.0.0.1:9292';
 const DEFAULT_Z_IMAGE_MODEL_ID = 'creative/z-image-turbo';
 const DEFAULT_TRELLIS2_MODEL_ID = 'creative/trellis2';
-const HEALTH_TIMEOUT_MS = 5_000;
-const IMAGE_GENERATION_TIMEOUT_MS = 10 * 60_000;
-const MESH_GENERATION_TIMEOUT_MS = 30 * 60_000;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const IMAGE_ALIAS_RE = /^image-(\d+)(?:\.[^.]+)?$/i;
@@ -43,6 +46,13 @@ type ImageInput = {
   bytes: ArrayBuffer;
   mediaType: string;
   filename: string;
+};
+
+type NativeCreativeRuntime = {
+  healthTimeoutMs: number;
+  imageGenerationTimeoutMs: number;
+  meshGenerationTimeoutMs: number;
+  trellisResolution: '512' | '1024' | '1536';
 };
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -95,9 +105,55 @@ function encodedModelPath(modelId: string): string {
   return modelId.split('/').map(encodeURIComponent).join('/');
 }
 
-function trellisResolution(): '512' | '1024' | '1536' {
-  const configured = env('PCAD_TRELLIS2_RESOLUTION').trim();
-  return configured === '512' || configured === '1536' ? configured : '1024';
+function configuredTrellisResolution(
+  preferences: AiPreferencesDto,
+): '512' | '1024' | '1536' {
+  const userOverride = preferences.runtimeOverrides['creative.trellisResolution'];
+  if (
+    userOverride === '512' ||
+    userOverride === '1024' ||
+    userOverride === '1536'
+  ) {
+    return userOverride;
+  }
+
+  const deploymentOverride = env('PCAD_TRELLIS2_RESOLUTION').trim();
+  if (
+    deploymentOverride === '512' ||
+    deploymentOverride === '1024' ||
+    deploymentOverride === '1536'
+  ) {
+    return deploymentOverride;
+  }
+
+  const configured = resolveRuntimeStringFromPreferences(
+    preferences,
+    'creative.trellisResolution',
+  );
+  if (configured === '512' || configured === '1024' || configured === '1536') {
+    return configured;
+  }
+  throw new Error(`Unsupported TRELLIS.2 resolution: ${configured}`);
+}
+
+function resolveNativeCreativeRuntime(
+  preferences: AiPreferencesDto,
+): NativeCreativeRuntime {
+  return {
+    healthTimeoutMs: resolveRuntimeNumberFromPreferences(
+      preferences,
+      'creative.healthTimeoutMs',
+    ),
+    imageGenerationTimeoutMs: resolveRuntimeNumberFromPreferences(
+      preferences,
+      'creative.imageGenerationTimeoutMs',
+    ),
+    meshGenerationTimeoutMs: resolveRuntimeNumberFromPreferences(
+      preferences,
+      'creative.meshGenerationTimeoutMs',
+    ),
+    trellisResolution: configuredTrellisResolution(preferences),
+  };
 }
 
 function zImageSize(): string {
@@ -123,7 +179,10 @@ async function responseFailureDetail(response: Response): Promise<string> {
   return text.slice(0, 1000);
 }
 
-async function ensureLlamaSwapModels(requiredModelIds: string[]): Promise<void> {
+async function ensureLlamaSwapModels(
+  requiredModelIds: string[],
+  timeoutMs: number,
+): Promise<void> {
   const baseUrl = llamaSwapUrl();
   nativeCreativeLog('llama-swap-health', 'checking llama-swap model catalog', {
     llamaSwapUrl: baseUrl,
@@ -134,7 +193,7 @@ async function ensureLlamaSwapModels(requiredModelIds: string[]): Promise<void> 
   try {
     response = await fetch(`${baseUrl}/v1/models`, {
       headers: llamaSwapHeaders(),
-      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     throw new Error(
@@ -262,7 +321,10 @@ async function downloadReferenceImage(
   };
 }
 
-async function generateConditioningImage(prompt: string): Promise<ImageInput> {
+async function generateConditioningImage(
+  prompt: string,
+  timeoutMs: number,
+): Promise<ImageInput> {
   const model = zImageModelId();
   nativeCreativeLog('z-image-generate', 'generating TRELLIS conditioning image', {
     model,
@@ -279,7 +341,7 @@ async function generateConditioningImage(prompt: string): Promise<ImageInput> {
       size: zImageSize(),
       output_format: 'png',
     }),
-    signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -312,7 +374,10 @@ async function generateConditioningImage(prompt: string): Promise<ImageInput> {
   };
 }
 
-async function generateTrellisGlb(image: ImageInput): Promise<ArrayBuffer> {
+async function generateTrellisGlb(
+  image: ImageInput,
+  runtime: NativeCreativeRuntime,
+): Promise<ArrayBuffer> {
   const model = trellis2ModelId();
   const form = new FormData();
   form.append(
@@ -320,12 +385,12 @@ async function generateTrellisGlb(image: ImageInput): Promise<ArrayBuffer> {
     new Blob([image.bytes], { type: image.mediaType }),
     image.filename,
   );
-  form.append('resolution', trellisResolution());
+  form.append('resolution', runtime.trellisResolution);
 
   const url = `${llamaSwapUrl()}/upstream/${encodedModelPath(model)}/generate`;
   nativeCreativeLog('trellis-generate', 'starting TRELLIS.2 generation', {
     model,
-    resolution: trellisResolution(),
+    resolution: runtime.trellisResolution,
     via: url,
   });
 
@@ -333,7 +398,7 @@ async function generateTrellisGlb(image: ImageInput): Promise<ArrayBuffer> {
     method: 'POST',
     headers: llamaSwapHeaders(),
     body: form,
-    signal: AbortSignal.timeout(MESH_GENERATION_TIMEOUT_MS),
+    signal: AbortSignal.timeout(runtime.meshGenerationTimeoutMs),
   });
 
   if (!response.ok) {
@@ -454,6 +519,15 @@ export async function handleNativeCreativeMeshRequest(
   const { data: userData, error: userError } = await supabase.auth.getUser(token);
   if (userError || !userData.user?.id) return localError('Unauthorized', 401);
 
+  let runtime: NativeCreativeRuntime;
+  try {
+    runtime = resolveNativeCreativeRuntime(
+      await loadUserAiPreferences(userData.user.id),
+    );
+  } catch (error) {
+    return localError(`Invalid Creative runtime settings: ${errorMessage(error)}`, 500);
+  }
+
   const conversationId = body.conversationId;
   if (!conversationId) return localError('Conversation ID is required');
 
@@ -494,7 +568,7 @@ export async function handleNativeCreativeMeshRequest(
   const requiredRuntimeModels = [trellis2ModelId()];
   if (imageIds.length === 0) requiredRuntimeModels.unshift(zImageModelId());
   try {
-    await ensureLlamaSwapModels(requiredRuntimeModels);
+    await ensureLlamaSwapModels(requiredRuntimeModels, runtime.healthTimeoutMs);
   } catch (error) {
     return localError(errorMessage(error), 503);
   }
@@ -503,6 +577,7 @@ export async function handleNativeCreativeMeshRequest(
     conversationId,
     imageCount: imageIds.length,
     usesZImage: imageIds.length === 0,
+    runtime,
   });
   const { data: meshData, error: meshError } = await supabase
     .from('meshes')
@@ -547,11 +622,14 @@ export async function handleNativeCreativeMeshRequest(
       }
     } else {
       stage = 'z-image-generate';
-      conditioningImage = await generateConditioningImage(text as string);
+      conditioningImage = await generateConditioningImage(
+        text as string,
+        runtime.imageGenerationTimeoutMs,
+      );
     }
 
     stage = 'trellis-generate';
-    const glb = await generateTrellisGlb(conditioningImage);
+    const glb = await generateTrellisGlb(conditioningImage, runtime);
 
     stage = 'storage-persist';
     await persistMeshResult({
