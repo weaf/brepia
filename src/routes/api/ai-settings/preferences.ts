@@ -85,30 +85,32 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
           }
 
           if (body.defaultPromptProfileId !== undefined) {
-            if (body.defaultPromptProfileId !== null) {
-              const profile = await getPromptProfile(
-                user.id,
-                body.defaultPromptProfileId,
-              );
-              if (!isSelectablePromptProfile(profile, 'parametric')) {
-                return json({ error: 'invalid_default_prompt_profile' }, 400);
-              }
+            if (body.defaultPromptProfileId === null) {
+              return json({ error: 'prompt_reset_not_supported' }, 400);
+            }
+            const profile = await getPromptProfile(
+              user.id,
+              body.defaultPromptProfileId,
+            );
+            if (!isSelectablePromptProfile(profile, 'parametric')) {
+              return json({ error: 'invalid_default_prompt_profile' }, 400);
             }
             updates.default_prompt_profile_id = body.defaultPromptProfileId;
           }
 
           if (body.defaultCreativePromptProfileId !== undefined) {
-            if (body.defaultCreativePromptProfileId !== null) {
-              const profile = await getPromptProfile(
-                user.id,
-                body.defaultCreativePromptProfileId,
+            if (body.defaultCreativePromptProfileId === null) {
+              return json({ error: 'creative_prompt_reset_not_supported' }, 400);
+            }
+            const profile = await getPromptProfile(
+              user.id,
+              body.defaultCreativePromptProfileId,
+            );
+            if (!isSelectablePromptProfile(profile, 'creative')) {
+              return json(
+                { error: 'invalid_default_creative_prompt_profile' },
+                400,
               );
-              if (!isSelectablePromptProfile(profile, 'creative')) {
-                return json(
-                  { error: 'invalid_default_creative_prompt_profile' },
-                  400,
-                );
-              }
             }
             updates.default_creative_prompt_profile_id =
               body.defaultCreativePromptProfileId;
@@ -123,7 +125,15 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
             }
 
             for (const [scope, profileId] of Object.entries(parsed.data)) {
-              if (profileId == null) continue;
+              if (profileId == null) {
+                return json(
+                  {
+                    error: 'instruction_prompt_reset_not_supported',
+                    scope,
+                  },
+                  400,
+                );
+              }
               const profile = await getPromptProfile(user.id, profileId);
               if (!isSelectablePromptProfile(profile, scope)) {
                 return json(
