@@ -22,6 +22,7 @@ const InstructionDefinitionSchema = z.object({
     'conversation',
     'context',
     'transport',
+    'provider',
   ]),
   template: z.string().min(1).regex(/^[a-z0-9][a-z0-9_.-]*\.md$/),
   supportsOverlay: z.boolean().default(true),
@@ -103,7 +104,8 @@ export type AiInstructionCategory =
   | 'vision'
   | 'conversation'
   | 'context'
-  | 'transport';
+  | 'transport'
+  | 'provider';
 
 export type AiInstructionDefinition = z.infer<
   typeof InstructionDefinitionSchema
