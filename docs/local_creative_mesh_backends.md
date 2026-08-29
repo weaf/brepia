@@ -129,19 +129,37 @@ The new installer is:
 bash ./scripts/install-native-creative-backends.sh
 ```
 
-Default runtime location:
+Runtime binaries and model weights are deliberately separated. Native runtime binaries default to:
 
 ```text
 ~/ai/pcad-native-creative/
   stable-diffusion.cpp/
-  z-image/
+  trellis2/
+    runtime/trellis-server
+```
+
+Large model weights default to the existing llama-swap model tree:
+
+```text
+~/ai/llama-swap/models/creative/
+  z-image-turbo/
     z_image_turbo-Q4_K.gguf
     Qwen3-4B-Instruct-2507-Q4_K_M.gguf
     ae.safetensors
   trellis2/
-    runtime/trellis-server
-    models/
+    birefnet.gguf
+    dinov3.gguf
+    ss_flow.gguf
+    ss_dec.gguf
+    shape_flow_512.gguf
+    shape_flow_1024.gguf
+    shape_dec.gguf
+    tex_flow_512.gguf
+    tex_flow_1024.gguf
+    tex_dec.gguf
 ```
+
+This keeps the large reusable model assets together with the rest of llama-swap instead of mixing them with pCAD runtime binaries.
 
 Default llama-swap config target:
 
@@ -149,12 +167,36 @@ Default llama-swap config target:
 ~/ai/llama-swap/config/config.yaml
 ```
 
-Override either path when needed:
+Choose another model location with `--models-dir`:
+
+```bash
+bash ./scripts/install-native-creative-backends.sh \
+  --models-dir /mnt/models/llama-swap/creative
+```
+
+The equivalent persistent/environment-style override is:
+
+```bash
+PCAD_NATIVE_CREATIVE_MODELS_DIR=/mnt/models/llama-swap/creative \
+bash ./scripts/install-native-creative-backends.sh
+```
+
+Runtime and config locations can be overridden independently:
 
 ```bash
 PCAD_NATIVE_CREATIVE_ROOT=/other/runtime/path \
+PCAD_NATIVE_CREATIVE_MODELS_DIR=/other/model/path \
 PCAD_LLAMA_SWAP_CONFIG=/other/config.yaml \
 bash ./scripts/install-native-creative-backends.sh
+```
+
+The command-line equivalents are:
+
+```bash
+bash ./scripts/install-native-creative-backends.sh \
+  --root /other/runtime/path \
+  --models-dir /other/model/path \
+  --llama-swap-config /other/config.yaml
 ```
 
 ## Initial runtime choices
@@ -193,6 +235,8 @@ creative/trellis2:
   # trellis-server command
 ```
 
+The generated llama-swap entries reference the selected model directory directly, so moving model storage does not require copying weights back into the pCAD runtime tree.
+
 # pCAD configuration
 
 Defaults:
@@ -225,7 +269,7 @@ npm run build
 bash -n scripts/install-native-creative-backends.sh
 ```
 
-Then install the runtimes:
+Then install the runtimes and models. With the default layout no path argument is needed:
 
 ```bash
 bash ./scripts/install-native-creative-backends.sh
