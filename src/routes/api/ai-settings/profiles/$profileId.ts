@@ -6,6 +6,7 @@ import {
   preflight,
   requireUser,
 } from '@/server/api';
+import { getPreferences } from '@/server/aiSettings';
 import {
   getPromptProfile,
   updatePromptProfile,
@@ -69,6 +70,33 @@ export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
       DELETE: async ({ request, params }) => {
         try {
           const user = await requireUser(request);
+          const profile = await getPromptProfile(user.id, params.profileId);
+          if (!profile) {
+            return json({ error: 'Prompt profile not found' }, 404);
+          }
+
+          if (profile.editable) {
+            const preferences = await getPreferences(user);
+            const activeProfileId =
+              profile.scope === 'parametric'
+                ? preferences.defaultPromptProfileId
+                : profile.scope === 'creative'
+                  ? preferences.defaultCreativePromptProfileId
+                  : (preferences.instructionProfileDefaults[profile.scope] ??
+                    null);
+
+            if (activeProfileId === profile.id) {
+              return json(
+                {
+                  error: 'active_prompt_profile',
+                  message:
+                    'Choose another active profile before deleting this profile.',
+                },
+                409,
+              );
+            }
+          }
+
           await deletePromptProfile(user.id, params.profileId);
           return json({ success: true });
         } catch (err) {
