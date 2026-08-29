@@ -209,12 +209,14 @@ Functional package smoke still required:
 - [x] verify new conversations pin the selected default package
 - [x] switch default Standard → CADAM and verify an already-pinned conversation stays Standard
 - [x] verify both CADAM and Standard currently resolve identical split-revision content
-- [ ] verify Custom Prompt Overlay/Replace still layers correctly over the selected package — focused regression coverage is now in `src/server/promptProfiles.test.ts`; run it locally before closing this item
+- [ ] verify Custom Prompt Overlay/Replace still layers correctly over the selected package — focused regression coverage is in `tests/promptProfilesPackageLayering.test.ts`; run it locally before closing this item
 
 Focused final command:
 
 ```bash
-npx vitest run src/server/promptProfiles.test.ts shared/aiInstructionCatalog.test.ts
+npx vitest run tests/promptProfilesPackageLayering.test.ts tests/aiInstructionCatalog.test.ts
 ```
+
+Both files are inside Vitest's configured `tests/**/*.test.ts` discovery and therefore also run as part of `npm test`.
 
 After the functional package smoke is green, audit all 17 instruction keys and create Brepia-owned Standard improvements while leaving the CADAM frozen/upstream lineage intact. Start prompt-content work with the Generative/Parametric instruction set; keep Creative/TRELLIS-specific optimization as a separate follow-up unless a concrete regression requires it. The optional fal.ai legacy refactor remains a separate bounded follow-up.
