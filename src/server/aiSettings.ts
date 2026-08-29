@@ -6,11 +6,17 @@
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import type { AiPreferencesDto } from '@shared/aiSettings';
+import {
+  InstructionProfileDefaultsSchema,
+  RuntimeOverridesSchema,
+} from '@shared/aiInstructionSettings';
 
 const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   hiddenModelIds: [],
   defaultPromptProfileId: null,
   defaultCreativePromptProfileId: null,
+  instructionProfileDefaults: {},
+  runtimeOverrides: {},
   defaultParametricModelId: null,
   defaultCreativeModelId: null,
   visionFastModelId: null,
@@ -22,6 +28,8 @@ type PreferenceRow = {
   hidden_model_ids: string[];
   default_prompt_profile_id: string | null;
   default_creative_prompt_profile_id?: string | null;
+  instruction_profile_defaults?: unknown;
+  runtime_overrides?: unknown;
   default_parametric_model_id?: string | null;
   default_creative_model_id?: string | null;
   vision_fast_model_id?: string | null;
@@ -30,6 +38,16 @@ type PreferenceRow = {
   updated_at: string;
 };
 
+function parseInstructionProfileDefaults(value: unknown) {
+  const parsed = InstructionProfileDefaultsSchema.safeParse(value ?? {});
+  return parsed.success ? parsed.data : {};
+}
+
+function parseRuntimeOverrides(value: unknown) {
+  const parsed = RuntimeOverridesSchema.safeParse(value ?? {});
+  return parsed.success ? parsed.data : {};
+}
+
 function toDto(row: PreferenceRow): AiPreferencesDto {
   return {
     userId: row.user_id,
@@ -37,6 +55,10 @@ function toDto(row: PreferenceRow): AiPreferencesDto {
     defaultPromptProfileId: row.default_prompt_profile_id,
     defaultCreativePromptProfileId:
       row.default_creative_prompt_profile_id ?? null,
+    instructionProfileDefaults: parseInstructionProfileDefaults(
+      row.instruction_profile_defaults,
+    ),
+    runtimeOverrides: parseRuntimeOverrides(row.runtime_overrides),
     defaultParametricModelId: row.default_parametric_model_id ?? null,
     defaultCreativeModelId: row.default_creative_model_id ?? null,
     visionFastModelId: row.vision_fast_model_id ?? null,
