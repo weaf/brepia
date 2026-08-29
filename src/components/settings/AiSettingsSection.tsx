@@ -1,5 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiModelsSettings } from './AiModelsSettings';
+import { AiRuntimeSettings } from './AiRuntimeSettings';
+import { AuxiliaryInstructionProfilesSettings } from './AuxiliaryInstructionProfilesSettings';
 import { DefaultModelSettings } from './DefaultModelSettings';
 import { LocalModelsSettings } from './LocalModelsSettings';
 import { PrimaryPromptProfilesSettings } from './PrimaryPromptProfilesSettings';
@@ -18,6 +20,7 @@ export function AiSettingsSection() {
             <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="local-models">Local Models</TabsTrigger>
             <TabsTrigger value="prompts">Prompts</TabsTrigger>
+            <TabsTrigger value="runtime">Runtime</TabsTrigger>
             <TabsTrigger value="providers">Providers</TabsTrigger>
             <TabsTrigger value="vision">Vision</TabsTrigger>
           </TabsList>
@@ -31,17 +34,26 @@ export function AiSettingsSection() {
         </TabsContent>
         <TabsContent value="prompts" className="min-w-0">
           <Tabs defaultValue="generative" className="min-w-0">
-            <TabsList className="mb-4 h-auto w-full justify-start gap-1 sm:w-auto">
-              <TabsTrigger value="generative">Generative</TabsTrigger>
-              <TabsTrigger value="creative">Creative</TabsTrigger>
-            </TabsList>
+            <div className="hide-scrollbar mb-4 min-w-0 overflow-x-auto">
+              <TabsList className="h-auto w-max min-w-full justify-start gap-1 sm:min-w-0">
+                <TabsTrigger value="generative">Generative</TabsTrigger>
+                <TabsTrigger value="creative">Creative</TabsTrigger>
+                <TabsTrigger value="instructions">Instructions</TabsTrigger>
+              </TabsList>
+            </div>
             <TabsContent value="generative" className="min-w-0">
               <PrimaryPromptProfilesSettings scope="parametric" />
             </TabsContent>
             <TabsContent value="creative" className="min-w-0">
               <PrimaryPromptProfilesSettings scope="creative" />
             </TabsContent>
+            <TabsContent value="instructions" className="min-w-0">
+              <AuxiliaryInstructionProfilesSettings />
+            </TabsContent>
           </Tabs>
+        </TabsContent>
+        <TabsContent value="runtime" className="min-w-0">
+          <AiRuntimeSettings />
         </TabsContent>
         <TabsContent value="providers" className="min-w-0">
           <ProvidersSettings />
