@@ -1,9 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AiModelsSettings } from './AiModelsSettings';
-import { CreativePromptProfilesSettings } from './CreativePromptProfilesSettings';
 import { DefaultModelSettings } from './DefaultModelSettings';
 import { LocalModelsSettings } from './LocalModelsSettings';
-import { PromptProfilesSettings } from './PromptProfilesSettings';
+import { PrimaryPromptProfilesSettings } from './PrimaryPromptProfilesSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { VisionSettings } from './VisionSettings';
 
@@ -37,10 +36,10 @@ export function AiSettingsSection() {
               <TabsTrigger value="creative">Creative</TabsTrigger>
             </TabsList>
             <TabsContent value="generative" className="min-w-0">
-              <PromptProfilesSettings />
+              <PrimaryPromptProfilesSettings scope="parametric" />
             </TabsContent>
             <TabsContent value="creative" className="min-w-0">
-              <CreativePromptProfilesSettings />
+              <PrimaryPromptProfilesSettings scope="creative" />
             </TabsContent>
           </Tabs>
         </TabsContent>
