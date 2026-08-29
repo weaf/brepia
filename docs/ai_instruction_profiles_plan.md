@@ -197,7 +197,7 @@ Technical gate:
 
 - [x] apply `20260829150000_instruction_profile_packages.sql`
 - [x] regenerate local Supabase TypeScript types
-- [ ] commit/push the regenerated `shared/database.ts` so repository types match the migrated local database
+- [x] commit/push the regenerated `shared/database.ts` so repository types match the migrated local database
 - [x] `npm test`
 - [x] `npm run typecheck`
 - [x] `npm run lint`
