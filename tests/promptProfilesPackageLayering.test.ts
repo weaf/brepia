@@ -8,7 +8,7 @@ const promptProfileState = vi.hoisted(() => ({
   row: null as Record<string, unknown> | null,
 }));
 
-vi.mock('./supabaseClient', () => {
+vi.mock('../src/server/supabaseClient', () => {
   class FakePromptProfileQuery {
     select() {
       return this;
@@ -30,7 +30,7 @@ vi.mock('./supabaseClient', () => {
   };
 });
 
-vi.mock('./aiSettings', () => ({
+vi.mock('../src/server/aiSettings', () => ({
   getPreferencesByUserId: async () => ({
     defaultInstructionProfileId: 'standard',
     defaultPromptProfileId: null,
@@ -39,7 +39,7 @@ vi.mock('./aiSettings', () => ({
   }),
 }));
 
-import { resolveInstructionProfile } from './promptProfiles';
+import { resolveInstructionProfile } from '../src/server/promptProfiles';
 
 function promptProfileRow(mode: 'overlay' | 'fork', promptTemplate: string) {
   return {
