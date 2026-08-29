@@ -11,7 +11,6 @@ import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import { getPreferencesByUserId } from './aiSettings';
 import {
-  DEFAULT_AI_INSTRUCTION_PROFILE_ID,
   getAiInstructionDefinition,
   getAiInstructionProfileDefinition,
   isAiInstructionKey,
