@@ -45,7 +45,7 @@ describe('prompt profile scopes', () => {
         profileId: BUILTIN_PROFILE_ID,
         scope: 'creative',
       }),
-    ).rejects.toThrow('belongs to a different mode');
+    ).rejects.toThrow('belongs to parametric, not creative');
   });
 
   it('keeps legacy profile creation payloads Parametric-compatible', () => {
