@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import {
-  OrbitControls,
+  TrackballControls,
   Stage,
   Environment,
   OrthographicCamera,
@@ -34,7 +34,8 @@ export function ThreeScene({
 
   // The colored group's meshes sit at their raw OpenSCAD coordinates.
   // Offset so the combined bounds are centered at origin, mirroring the
-  // STL path's geom.center() behavior.
+  // STL path's geom.center() behavior. Camera controls can then use the scene
+  // origin as a stable visual pivot regardless of the model's authored datum.
   const groupCenterOffset = useMemo(() => {
     if (!coloredGroup) return null;
     const box = new THREE.Box3().setFromObject(coloredGroup);
@@ -114,10 +115,12 @@ export function ThreeScene({
           followCamera={false}
           infiniteGrid={true}
         /> */}
-          <OrbitControls
+          <TrackballControls
             makeDefault
-            enableDamping={true}
-            dampingFactor={0.05}
+            rotateSpeed={2.0}
+            zoomSpeed={1.2}
+            panSpeed={0.6}
+            dynamicDampingFactor={0.12}
           />
           {!initialIsMobile && <ViewGizmo />}
         </Canvas>
