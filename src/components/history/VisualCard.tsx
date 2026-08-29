@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   Clock,
@@ -133,7 +133,7 @@ export function VisualCard({
     },
   });
 
-  const handleSelectionClick = (event: React.MouseEvent) => {
+  const handleSelectionClick = (event: MouseEvent) => {
     if (!selectionMode) return;
     event.preventDefault();
     event.stopPropagation();
