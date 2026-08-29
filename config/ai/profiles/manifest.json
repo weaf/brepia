@@ -46,6 +46,17 @@
         "revision": "cadam-split-2026-08-29"
       },
       "instructions": {}
+    },
+    {
+      "id": "test",
+      "label": "Test",
+      "description": "Brepia test profile.",
+      "managedBy": "brepia",
+      "extends": "standard",
+      "instructions": {
+        "parametric": "profiles/test/parametric.md",
+        "context.parametric_attachment": "profiles/test/context-parametric-attachment.md"
+      }
     }
   ]
 }
