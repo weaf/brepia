@@ -2,285 +2,158 @@
 
 Status: **ACTIVE on `feature/post-merge-functionality`**
 
-Activated: 2026-08-28 after the Brepia remake was fast-forwarded into `master` at `763dbbfad453c6a9522e50aadc392ff80673bf2f`.
+The Brepia stable-runtime and persistence architecture remains the protected baseline. `CADAM Original` lineage remains unchanged.
 
-This program evolves functionality from the known-good post-Brepia baseline. The stable runtime, persistence contracts, historical IDs and `CADAM Original` lineage remain protected while the local Creative runtime is replaced.
+## Creative 3D — current architecture
 
-## Operator decision — skip the old Phase 0 benchmark gate
-
-On 2026-08-28 the operator explicitly chose to skip the pre-implementation Creative benchmark/baseline phase.
-
-Reason: the current local Creative implementation is already known to work. The safer and more useful sequence is now:
+TRELLIS.2 is the only built-in Creative 3D backend:
 
 ```text
-keep current runtime working
--> implement the new native runtime in parallel
--> validate new image-to-3D end-to-end
--> validate new text-to-3D end-to-end
--> only then remove the superseded local Python runtime
+local/trellis2 -> TRELLIS.2
 ```
 
-This means there is **no requirement to benchmark the old TRELLIS/Hunyuan stack before implementation**. The old stack remains the rollback path until the replacement is proven.
-
-The normal project gate before this work was green. After the Lottie cleanup the operator reported all of these green on 2026-08-28:
+Image-to-3D:
 
 ```text
-npm test
-npm run typecheck
-npm run lint
-npm run build
+reference image
+-> pCAD create_mesh
+-> llama-swap /upstream/creative/trellis2/generate
+-> trellis.cpp / TRELLIS.2
+-> PBR GLB
+-> Supabase + viewer + conversation workspace
 ```
 
-## Locked target architecture
-
-The primary product backend is one Creative model ID:
-
-```text
-local/trellis2  ->  TRELLIS.2
-```
-
-It supports both text and image input.
-
-### Text-to-3D
+Text-to-3D:
 
 ```text
 text prompt
-  -> pCAD
-  -> llama-swap
-  -> creative/z-image-turbo
-  -> stable-diffusion.cpp / Z-Image-Turbo
-  -> conditioning PNG
-  -> llama-swap /upstream/creative/trellis2/generate
-  -> trellis.cpp / TRELLIS.2
-  -> textured/PBR GLB
-  -> existing Supabase + conversation workspace + viewer contract
+-> pCAD create_mesh
+-> llama-swap /v1/images/generations
+-> stable-diffusion.cpp / Z-Image-Turbo
+-> conditioning image
+-> llama-swap /upstream/creative/trellis2/generate
+-> trellis.cpp / TRELLIS.2
+-> PBR GLB
+-> Supabase + viewer + conversation workspace
 ```
 
-### Image-to-3D
+llama-swap owns model lifecycle/GPU arbitration. No separate local mesh gateway is required.
+
+Runtime IDs:
 
 ```text
-user image
-  -> pCAD
-  -> llama-swap /upstream/creative/trellis2/generate
-  -> trellis.cpp / TRELLIS.2
-  -> textured/PBR GLB
-  -> existing Supabase + conversation workspace + viewer contract
+creative/z-image-turbo
+creative/trellis2
 ```
 
-### Important simplification discovered during implementation
+## Verified runtime proof
 
-A separate translator process/gateway is **not required**.
+The native replacement has been exercised successfully in Brepia:
 
-Current llama-swap exposes a generic `/upstream/<model>/<path>` passthrough and resolves model IDs containing slashes. Therefore pCAD can do the small request-shape adaptation inside its existing server boundary and still let llama-swap own process startup, swapping, TTL and GPU arbitration.
+- [x] llama-swap exposes both Creative runtime IDs.
+- [x] image -> TRELLIS.2 produced a real viewable 3D model.
+- [x] text -> Z-Image-Turbo -> TRELLIS.2 produced a real viewable 3D model.
+- [x] Creative model output remains downloadable through the model viewer.
+- [x] native Creative generation remains behind the existing reconnect/single-flight protection.
 
-The resulting boundary is:
+Still to verify after the final cleanup commits:
+
+- [ ] `npm test`
+- [ ] `npm run typecheck`
+- [ ] `npm run lint`
+- [ ] `npm run build`
+- [ ] final image-to-3D smoke test
+- [ ] final text-to-3D smoke test
+
+## Retired local backends
+
+The previous Python/CUDA product backends are no longer selectable or routable:
 
 ```text
-pCAD src/server/nativeCreativeMesh.ts
-  -> OpenAI image API for Z-Image when text input is used
-  -> multipart request through llama-swap /upstream/... for TRELLIS.2
+local/trellis-v1
+local/hunyuan3d-2
+local/hunyuan3d-2.1
 ```
 
-Do not introduce another general-purpose local model gateway unless a future runtime proves that llama-swap cannot manage it directly.
+Removed from the active repository runtime:
 
-## Runtime IDs
+- [x] `src/server/localMesh.ts`
+- [x] `scripts/install-local-mesh-backends.sh`
+- [x] `scripts/local-mesh/gateway.py`
+- [x] `scripts/local-mesh/worker.py`
+- [x] old model configuration and loading-time entries
 
-Product/persisted ID:
-
-- `local/trellis2` — TRELLIS.2, text + image capable.
-
-llama-swap runtime IDs:
-
-- `creative/z-image-turbo` — `stable-diffusion.cpp` + Z-Image-Turbo.
-- `creative/trellis2` — `trellis.cpp` / TRELLIS.2.
-
-The runtime IDs are intentionally separate from the product ID. Changing an implementation detail later must not require renaming persisted Creative model metadata.
-
-## Transitional compatibility
-
-Until the new path passes real runtime validation, keep these existing local IDs and their implementation intact:
-
-- `local/trellis-v1`
-- `local/hunyuan3d-2`
-- `local/hunyuan3d-2.1`
-
-Keep historical fal.ai IDs unchanged:
-
-- `quality`
-- `fast`
-- `ultra`
-
-Stable Fast 3D remains retired and must not return.
-
-# Phase 1 — Parallel application integration
-
-Goal: make the new path selectable without changing or deleting the working old path.
-
-Current implementation status:
-
-- [x] Add stable product ID `local/trellis2` to the authoritative Creative catalog.
-- [x] Expose TRELLIS.2 as `Text + image`, GLB output, no semantic follow-up mesh editing yet.
-- [x] Preserve the old three local model IDs during the transition.
-- [x] Add UI mesh configuration for `local/trellis2`.
-- [x] Add catalog/input-validation tests for the new model.
-- [x] Route `local/trellis2` to a dedicated native handler while leaving `src/server/localMesh.ts` unchanged for the old backends.
-- [x] Preserve the existing local single-flight/reconnect protection in `src/server/mesh.ts` for the new backend.
-- [x] For image input, send the reference image directly to TRELLIS.2.
-- [x] For text-only input, generate a hidden conditioning image through `creative/z-image-turbo`, then send it to TRELLIS.2.
-- [x] Route TRELLIS.2 through llama-swap `/upstream/creative/trellis2/generate`; no second gateway/translator service.
-- [x] Preserve existing Supabase mesh persistence and conversation-workspace mirroring.
-- [x] Mark a failed native generation as failure; do not create false-success mesh rows.
-- [x] Reject multiple reference images explicitly while the selected TRELLIS server contract accepts one image.
-- [x] Add a transitional loading-time entry so the exhaustive `CreativeModel` timing map remains type-safe.
-- [ ] Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` on the implementation commits.
-
-Implementation files include:
-
-- `shared/creativeMeshModels.ts`
-- `src/constants/meshConstants.ts`
-- `src/lib/creativeInputValidation.ts`
-- `src/hooks/useLoadingProgress.tsx`
-- `src/server/mesh.ts`
-- `src/server/nativeCreativeMesh.ts`
-- `tests/creativeMeshModels.test.ts`
-
-Acceptance criterion: the application compiles/tests cleanly while the old and new local backends coexist.
-
-# Phase 2 — Reproducible native runtime install
-
-Goal: install both native runtimes without destroying the working Python stack.
-
-Implemented installer:
+Historical conversations are not rewritten. The retired local IDs are read-compatibility aliases and normalize forward to:
 
 ```text
-scripts/install-native-creative-backends.sh
+local/trellis2
 ```
 
-Initial runtime choices:
+The old workstation installation can be removed explicitly with:
 
-- Z-Image-Turbo: Q4_K diffusion model.
-- Z-Image text encoder: Qwen3-4B-Instruct-2507 Q4_K_M.
-- Z-Image VAE: `ae.safetensors`.
-- `stable-diffusion.cpp`: pinned Linux Vulkan binary release for installation simplicity.
-- TRELLIS.2: Q8 weights, using the official `trellis.cpp` CUDA runtime installer.
-- llama-swap TTL: 30 seconds for both Creative runtime entries during validation.
+```bash
+bash ./scripts/remove-legacy-creative-backends.sh
+```
 
-Installer behavior:
+The cleanup is limited to the retired `pcad-mesh-gateway.service` and old `PCAD_MESH_HOME` tree (default `~/.local/share/pcad-mesh`). It does not touch the llama-swap TRELLIS.2/Z-Image model storage.
 
-- [x] Keep runtime/model files outside the pCAD repository.
-- [x] Reuse already downloaded files where practical.
-- [x] Verify the pinned stable-diffusion.cpp archive checksum.
-- [x] Use the official TRELLIS.2 installer with `--quant q8 --backend cuda --skip-app`.
-- [x] Back up the current llama-swap config before appending Creative entries.
-- [x] Add `creative/z-image-turbo` and `creative/trellis2` only; do not alter existing Qwen/vision models.
-- [x] Do not remove the existing local mesh service or Python environments.
-- [ ] Run shell syntax/static validation locally.
-- [ ] Run the installer on the target workstation.
-- [ ] Restart/reload llama-swap and confirm both new runtime IDs appear in `/v1/models`.
+## Optional hosted Creative providers
 
-If Vulkan Z-Image proves materially slower than desired, replace only that runtime build with CUDA later. The pCAD/llama-swap contract must not change merely because the backend build changes.
+Hosted 3D services are no longer part of the Creative core. They are registered as optional provider adapters.
 
-# Phase 3 — Runtime proof before removal
+The existing fal.ai integration is the first optional adapter. It is disabled by default and can be enabled with:
 
-The new path is not considered proven by compilation or model discovery alone.
+```env
+VITE_PCAD_CREATIVE_MESH_PROVIDERS=fal
+FAL_KEY=...
+```
 
-Run in this order so failures are easy to isolate.
+Removing `fal` from the provider list removes its models from the picker and disables server routing for that provider after restart/rebuild.
 
-## 3A — Image-to-3D first
+Provider extension points:
 
-- [ ] Select `TRELLIS.2` / `local/trellis2` in Creative mode.
-- [ ] Attach one reference image.
-- [ ] Produce a real GLB through `llama-swap -> trellis.cpp`.
-- [ ] Confirm GLB is visible in the pCAD viewer.
-- [ ] Confirm mesh row/storage persistence succeeds.
-- [ ] Confirm conversation workspace mirroring succeeds.
-- [ ] Confirm llama-swap unloads the runtime after TTL and VRAM is released.
+```text
+shared/creativeMeshModels.ts
+src/server/creativeMeshProviderRegistry.ts
+```
 
-## 3B — Text-to-3D
+A future service adds model metadata plus one provider adapter. The main `src/server/mesh.ts` route resolves the adapter through the registry rather than accumulating provider-specific model switches.
 
-- [ ] Select `TRELLIS.2` with no reference image.
-- [ ] Generate a conditioning PNG through `creative/z-image-turbo`.
-- [ ] Confirm llama-swap swaps from Z-Image to TRELLIS.2 rather than keeping both heavyweight workers resident.
-- [ ] Produce and display a real GLB.
-- [ ] Confirm persistence/workspace mirroring succeeds.
-- [ ] Confirm actionable errors if either runtime is unavailable.
+## Native installation
 
-## 3C — Runtime regressions
+Installer:
 
-- [ ] Verify reconnect/background behavior does not duplicate a generation.
-- [ ] Verify failed generations remain failures rather than completed mesh records.
-- [ ] Verify an existing old local backend still works during the transition.
-- [ ] Rerun `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` after any fixes found by runtime testing.
+```bash
+bash ./scripts/install-native-creative-backends.sh
+```
 
-Acceptance criterion:
+It installs/configures:
 
-> Both image-to-3D and text-to-3D must produce real, persisted, viewable GLBs through the new llama-swap-managed path before any old runtime is removed.
+- stable-diffusion.cpp + Z-Image-Turbo;
+- Qwen text encoder and VAE required by Z-Image;
+- trellis.cpp + TRELLIS.2 Q8;
+- llama-swap entries for both runtimes.
 
-# Phase 4 — Remove the superseded local Python stack
+The native installer does not depend on the retired Python Creative stack.
 
-Start only after Phase 3 is green.
+## Creative UI rules
 
-Removal target if the new backend succeeds:
+- TRELLIS.2 is the fallback/default Creative model.
+- TRELLIS.2 supports text or one reference image.
+- reference-image limits come from Creative model metadata.
+- unavailable/removed Creative selections repair to the first selectable model instead of leaving a blank picker.
+- downloads are exposed from the opened model viewer, not through generated asset links in chat text.
+- follow-up semantic editing of a TRELLIS.2 mesh remains unsupported and is rejected explicitly.
 
-- old loopback pCAD mesh gateway runtime;
-- old per-backend Python workers/environments for TRELLIS v1 and Hunyuan;
-- obsolete installer/service code tied only to those workers;
-- normal product selection entries for superseded local backends.
+## Invariants
 
-Requirements:
+- Preserve the stable-runtime/mobile recovery architecture.
+- Preserve existing Supabase/storage contracts.
+- Preserve `CADAM Original` identity and prompt lineage.
+- Do not restore Stable Fast 3D.
+- Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
+- Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
 
-- [ ] Decide how historical conversations containing old local IDs remain readable; persisted metadata must not crash the UI.
-- [ ] Remove old local models from new model selection without rewriting historical records.
-- [ ] Remove `scripts/local-mesh/gateway.py` / worker code only when no active route depends on it.
-- [ ] Remove or replace `scripts/install-local-mesh-backends.sh` only when the native installer fully covers the supported local product path.
-- [ ] Provide explicit cleanup instructions for the old `~/.local/share/pcad-mesh` installation/service.
-- [ ] Remove dead old runtime configuration from active application code.
-- [ ] Rerun the complete project validation gate.
-- [ ] Run final text-to-3D and image-to-3D smoke tests after cleanup.
+## Completion criteria
 
-Do **not** delete the old stack merely because the new runtime starts. Removal requires real generated GLBs in pCAD.
-
-# Optional challenger — Pixal3D / trellis2.c
-
-Pixal3D remains an interesting quality challenger, but it is **not a blocker for implementing or shipping the locked TRELLIS.2 path** under the operator's revised sequence.
-
-Reopen it only after the new primary backend works if there is a concrete reason to seek better image reconstruction quality.
-
-- [ ] Optional A/B against TRELLIS.2 using identical images.
-- [ ] Replace the primary backend only for a clear quality win that does not materially worsen installation/runtime simplicity.
-
-LLaMA-Mesh, Qwen-Image-2512, FLUX.2 Klein, Step1X-3D and other researched alternatives remain deferred unless the locked path fails a real requirement.
-
-# Completed dependency cleanup
-
-`lottie-react` was removed because the Brepia loader no longer uses the historical Adam Lottie animation.
-
-- [x] Removed with npm (`3fdc7fa55a560d48522f391f39dbf2213e4771d6`).
-- [x] npm-generated `package.json` / `package-lock.json` changes retained.
-- [x] Operator reported test/typecheck/lint/build green after removal.
-
-# Non-goals / invariants
-
-- Do not reopen the Brepia visual redesign.
-- Do not change `CADAM Original` prompt lineage.
-- Do not revert the stable-runtime/mobile recovery architecture.
-- Do not rename compatibility-sensitive `PCAD_*`, database/storage identifiers or external integration IDs just because the runtime changes.
-- Do not silently substitute one selected Creative backend for another.
-- Do not introduce another generic gateway while llama-swap can own lifecycle/routing directly.
-- Do not remove a working fallback before its replacement is proven end-to-end.
-
-# Completion criteria
-
-The local Creative replacement is complete when:
-
-1. `local/trellis2` generates a real GLB from an uploaded image;
-2. `local/trellis2` generates a real GLB from text through Z-Image-Turbo;
-3. both paths use llama-swap lifecycle/GPU arbitration successfully;
-4. persistence, workspace mirroring and viewer behavior remain correct;
-5. the old Python local mesh runtime has been removed only after those proofs;
-6. historical data remains safe;
-7. the final `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` gate is green.
-
-## Governing rule
-
-> **Implement the native Z-Image-Turbo + TRELLIS.2 path beside the known-working local stack, prove both text-to-3D and image-to-3D in the real application, and only then remove the superseded Python runtime.**
+The Creative replacement is complete when the final project gate and post-cleanup smoke tests are green. After that, the branch can proceed to remaining post-merge functionality work.
