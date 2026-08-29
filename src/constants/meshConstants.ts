@@ -53,9 +53,6 @@ const LOCAL_MODEL_CONFIG: ModelConfig = {
     quads: POLYGON_COUNTS.STANDARD_DEFAULT,
     polys: POLYGON_COUNTS.STANDARD_DEFAULT,
   },
-  // Local native/model-specific runtimes keep their own topology defaults.
-  // Expose backend-specific remesh controls only when the selected runtime can
-  // honor them instead of carrying historical fal.ai controls forward.
   showPolygonControls: false,
   showNormalIntensity: true,
   maxPolygonCount: POLYGON_COUNTS.STANDARD_MAX,
@@ -63,9 +60,6 @@ const LOCAL_MODEL_CONFIG: ModelConfig = {
 
 export const MODEL_CONFIGS: Record<CreativeModel, ModelConfig> = {
   'local/trellis2': { ...LOCAL_MODEL_CONFIG },
-  'local/trellis-v1': { ...LOCAL_MODEL_CONFIG },
-  'local/hunyuan3d-2': { ...LOCAL_MODEL_CONFIG },
-  'local/hunyuan3d-2.1': { ...LOCAL_MODEL_CONFIG },
   fast: {
     brightness: MATERIAL_DEFAULTS.BRIGHTNESS_TEXTURELESS,
     roughness: MATERIAL_DEFAULTS.ROUGHNESS,
