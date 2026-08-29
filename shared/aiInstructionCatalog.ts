@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import manifestRaw from '../config/ai/instructions/manifest.json?raw';
+import profilesRaw from '../config/ai/profiles/manifest.json?raw';
 import runtimeRaw from '../config/ai/runtime.json?raw';
 
 const instructionFiles = import.meta.glob<string>(
-  '../config/ai/instructions/*.md',
+  '../config/ai/instructions/**/*.md',
   {
     eager: true,
     query: '?raw',
@@ -24,13 +25,40 @@ const InstructionDefinitionSchema = z.object({
     'transport',
     'provider',
   ]),
-  template: z.string().min(1).regex(/^[a-z0-9][a-z0-9_.-]*\.md$/),
+  template: z.string().min(1).regex(/^[a-z0-9][a-z0-9_./-]*\.md$/),
   supportsOverlay: z.boolean().default(true),
 });
 
 const ManifestSchema = z.object({
   version: z.number().int().positive(),
   instructions: z.array(InstructionDefinitionSchema).min(1),
+});
+
+const InstructionProfileLineageSchema = z.object({
+  project: z.string().min(1),
+  revision: z.string().min(1),
+});
+
+const InstructionProfileOriginSchema = z.object({
+  profile: z.string().min(1),
+  revision: z.string().min(1),
+});
+
+const InstructionProfileDefinitionSchema = z.object({
+  id: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/),
+  label: z.string().min(1),
+  description: z.string(),
+  managedBy: z.enum(['upstream', 'brepia']),
+  extends: z.string().min(1).max(64).optional(),
+  lineage: InstructionProfileLineageSchema.optional(),
+  origin: InstructionProfileOriginSchema.optional(),
+  instructions: z.record(z.string(), z.string().min(1)).default({}),
+});
+
+const InstructionProfilesManifestSchema = z.object({
+  version: z.number().int().positive(),
+  defaultProfile: z.string().min(1),
+  profiles: z.array(InstructionProfileDefinitionSchema).min(1),
 });
 
 const RuntimeSettingSchema = z
@@ -79,6 +107,9 @@ const RuntimeConfigSchema = z.object({
 });
 
 const manifest = ManifestSchema.parse(JSON.parse(manifestRaw) as unknown);
+const profilesManifest = InstructionProfilesManifestSchema.parse(
+  JSON.parse(profilesRaw) as unknown,
+);
 const runtimeConfig = RuntimeConfigSchema.parse(JSON.parse(runtimeRaw) as unknown);
 
 const instructionKeys = new Set(
@@ -86,6 +117,18 @@ const instructionKeys = new Set(
 );
 if (instructionKeys.size !== manifest.instructions.length) {
   throw new Error('AI instruction manifest contains duplicate keys');
+}
+
+const instructionProfileIds = new Set(
+  profilesManifest.profiles.map((profile) => profile.id),
+);
+if (instructionProfileIds.size !== profilesManifest.profiles.length) {
+  throw new Error('AI instruction profile manifest contains duplicate IDs');
+}
+if (!instructionProfileIds.has(profilesManifest.defaultProfile)) {
+  throw new Error(
+    `Unknown default AI instruction profile: ${profilesManifest.defaultProfile}`,
+  );
 }
 
 for (const definition of manifest.instructions) {
@@ -97,7 +140,33 @@ for (const definition of manifest.instructions) {
   }
 }
 
+for (const profile of profilesManifest.profiles) {
+  if (profile.extends && !instructionProfileIds.has(profile.extends)) {
+    throw new Error(
+      `AI instruction profile ${profile.id} extends unknown profile ${profile.extends}`,
+    );
+  }
+  if (profile.extends === profile.id) {
+    throw new Error(`AI instruction profile ${profile.id} cannot extend itself`);
+  }
+
+  for (const [key, template] of Object.entries(profile.instructions)) {
+    if (!instructionKeys.has(key)) {
+      throw new Error(
+        `AI instruction profile ${profile.id} overrides unknown key ${key}`,
+      );
+    }
+    const path = `../config/ai/instructions/${template}`;
+    if (typeof instructionFiles[path] !== 'string') {
+      throw new Error(
+        `AI instruction profile ${profile.id} is missing template ${template}`,
+      );
+    }
+  }
+}
+
 export type AiInstructionKey = string;
+export type AiInstructionProfileId = string;
 export type AiInstructionCategory =
   | 'agent'
   | 'tool'
@@ -110,15 +179,27 @@ export type AiInstructionCategory =
 export type AiInstructionDefinition = z.infer<
   typeof InstructionDefinitionSchema
 >;
+export type AiInstructionProfileDefinition = z.infer<
+  typeof InstructionProfileDefinitionSchema
+>;
 
 export const AI_INSTRUCTION_DEFINITIONS: readonly AiInstructionDefinition[] =
   manifest.instructions;
 export const AI_INSTRUCTION_KEYS: readonly string[] = manifest.instructions.map(
   (definition) => definition.key,
 );
+export const AI_INSTRUCTION_PROFILE_DEFINITIONS: readonly AiInstructionProfileDefinition[] =
+  profilesManifest.profiles;
+export const DEFAULT_AI_INSTRUCTION_PROFILE_ID = profilesManifest.defaultProfile;
 
 export function isAiInstructionKey(value: unknown): value is AiInstructionKey {
   return typeof value === 'string' && instructionKeys.has(value);
+}
+
+export function isAiInstructionProfileId(
+  value: unknown,
+): value is AiInstructionProfileId {
+  return typeof value === 'string' && instructionProfileIds.has(value);
 }
 
 export function getAiInstructionDefinition(
@@ -127,15 +208,55 @@ export function getAiInstructionDefinition(
   return manifest.instructions.find((definition) => definition.key === key);
 }
 
-export function loadBundledInstruction(key: AiInstructionKey): string {
+export function getAiInstructionProfileDefinition(
+  profileId: AiInstructionProfileId,
+): AiInstructionProfileDefinition | undefined {
+  return profilesManifest.profiles.find((profile) => profile.id === profileId);
+}
+
+function resolveProfileTemplate(
+  profileId: AiInstructionProfileId,
+  key: AiInstructionKey,
+): string {
   const definition = getAiInstructionDefinition(key);
   if (!definition) throw new Error(`Unknown AI instruction key: ${key}`);
-  const path = `../config/ai/instructions/${definition.template}`;
+
+  const visited = new Set<string>();
+  let current = getAiInstructionProfileDefinition(profileId);
+  if (!current) throw new Error(`Unknown AI instruction profile: ${profileId}`);
+
+  while (current) {
+    if (visited.has(current.id)) {
+      throw new Error(`AI instruction profile inheritance cycle at ${current.id}`);
+    }
+    visited.add(current.id);
+
+    const override = current.instructions[key];
+    if (override) return override;
+    if (!current.extends) break;
+
+    current = getAiInstructionProfileDefinition(current.extends);
+    if (!current) {
+      throw new Error(`Unknown AI instruction profile: ${profileId}`);
+    }
+  }
+
+  return definition.template;
+}
+
+export function loadBundledInstruction(
+  key: AiInstructionKey,
+  profileId: AiInstructionProfileId = DEFAULT_AI_INSTRUCTION_PROFILE_ID,
+): string {
+  if (!isAiInstructionProfileId(profileId)) {
+    throw new Error(`Unknown AI instruction profile: ${profileId}`);
+  }
+
+  const template = resolveProfileTemplate(profileId, key);
+  const path = `../config/ai/instructions/${template}`;
   const content = instructionFiles[path];
   if (typeof content !== 'string') {
-    throw new Error(
-      `Missing bundled AI instruction template: ${definition.template}`,
-    );
+    throw new Error(`Missing bundled AI instruction template: ${template}`);
   }
   return content.trim();
 }
@@ -156,8 +277,9 @@ export function renderInstructionTemplate(
 export function renderBundledInstruction(
   key: AiInstructionKey,
   values: Record<string, string | number | boolean | null | undefined> = {},
+  profileId: AiInstructionProfileId = DEFAULT_AI_INSTRUCTION_PROFILE_ID,
 ): string {
-  return renderInstructionTemplate(loadBundledInstruction(key), values);
+  return renderInstructionTemplate(loadBundledInstruction(key, profileId), values);
 }
 
 export type AiRuntimeLimitKey = string;
