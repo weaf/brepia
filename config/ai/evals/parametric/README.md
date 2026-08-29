@@ -1,6 +1,6 @@
 # Standard Parametric prompt evaluation
 
-This directory contains non-runtime evaluation material for the Brepia-owned `standard` Parametric instruction set. Nothing here is loaded by the application and no candidate is registered in `config/ai/profiles/manifest.json`.
+This directory contains evaluation source material for the Brepia-owned `standard` Parametric instruction set. The current candidate is mirrored into the repository-backed `test` AI profile so it can be selected directly in the app without changing CADAM or Standard.
 
 ## Goal
 
@@ -10,17 +10,25 @@ Baseline:
 
 - repository package `cadam`, instruction key `parametric` from `cadam-split-2026-08-29`.
 
-Candidate:
+Candidate source:
 
 - `candidates/standard-v1-parametric.md`
 - `candidates/standard-v1-context-parametric-attachment.md`
+
+Runtime evaluation slot:
+
+- repository package `test`
+- `test` extends `standard`
+- its current `parametric` and `context.parametric_attachment` overrides mirror the Standard v1 candidate
+- all other instruction keys inherit from Standard
+- `test` is a permanent laboratory slot and must never become the default profile
 
 ## Controlled protocol
 
 1. Complete the package-profile functional smoke first.
 2. Use the same Parametric model, runtime settings and application revision for every comparison.
 3. Run each case in a fresh conversation.
-4. For the Standard candidate, use a temporary Custom Prompt Profile in **Replace** mode for `parametric`. Use the attachment-context candidate only for the STL case.
+4. Run the baseline with AI profile **CADAM** and the candidate with AI profile **Test**. Do not add a Custom Prompt Profile during the comparison.
 5. Record build calls, compile status, iteration count, final artifact, final reply and visual QA result.
 6. Do not introduce a Qwen/model-family overlay in this pass. First determine whether Standard itself is an improvement.
 
@@ -53,4 +61,4 @@ Compile success and hard-gate failures are recorded separately. Promotion requir
 
 ## Promotion
 
-After a winner is established, copy the measured prompt/context into Brepia-owned runtime instruction files and point only `standard.instructions` at them. Never edit the frozen CADAM revision.
+After a winner is established, copy the measured prompt/context from the Test slot into Brepia-owned Standard runtime instruction files and point only `standard.instructions` at them. Never edit the frozen CADAM revision. The Test slot remains available for the next experiment.
