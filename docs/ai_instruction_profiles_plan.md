@@ -210,4 +210,4 @@ Functional package smoke still required:
 - [ ] verify both CADAM and Standard currently resolve identical split-revision content
 - [ ] verify Custom Prompt Overlay/Replace still layers correctly over the selected package
 
-Once the functional package smoke is green, run the controlled Creative prompt evaluation in `config/ai/evals/creative/` and `docs/creative_prompt_eval_plan.md`. Promote only measured Brepia Standard deltas; keep the CADAM frozen/upstream lineage intact. The optional fal.ai legacy refactor remains a separate bounded follow-up.
+After the functional package smoke is green, audit all 17 instruction keys and create Brepia-owned Standard improvements while leaving the CADAM frozen/upstream lineage intact. Start prompt-content work with the Generative/Parametric instruction set; keep Creative/TRELLIS-specific optimization as a separate follow-up unless a concrete regression requires it. The optional fal.ai legacy refactor remains a separate bounded follow-up.
