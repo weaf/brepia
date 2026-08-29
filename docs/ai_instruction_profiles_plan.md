@@ -107,7 +107,7 @@ If every auxiliary instruction uses the bundled repository template, no `prompt_
 
 Conversation-pinned primary Generative/Creative custom profiles are intentionally resolved by explicit ID so an old conversation can continue using the exact profile it was created with, including after that profile has later been archived.
 
-The repository package is pinned independently of those UUID-based custom profiles so a later Settings change or CADAM upstream sync cannot silently change a conversation's instruction lineage.
+The repository package is pinned independently of those UUID-based custom profiles, so changing the Settings default cannot silently switch an existing conversation from Standard to CADAM or vice versa. Repository updates to the selected profile still intentionally evolve that profile across deployments; CADAM and Standard remain isolated from each other's revision pointers.
 
 Tool objects themselves are created once per chat turn and reused by every model step/tool call in that turn.
 
