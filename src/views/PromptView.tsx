@@ -85,9 +85,6 @@ export function PromptView() {
     : 'Sign Up';
 
   const firstName = useMemo(() => {
-    // Wait until the profile query resolves for signed-in users so the
-    // greeting doesn't flash the email local-part before snapping to the
-    // real first name.
     if (user && isProfileLoading) return '';
     const source = profile?.full_name || user?.email?.split('@')[0] || '';
     return source.trim().split(/\s+/)[0] || '';
@@ -134,9 +131,6 @@ export function PromptView() {
     user,
   ]);
 
-  // I09B — draft execution mode: owned locally so the transport selector
-  // is interactive. Persisted into new conversation settings (I09C done).
-  // Does NOT alter the chat request body (I09D).
   const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
     'cli',
   );
@@ -158,16 +152,13 @@ export function PromptView() {
   );
   const [homePrompt] = useState(() => pickHomePromptMessage());
 
-  // Trigger fade in on mount
   useEffect(() => {
-    // Use requestAnimationFrame to ensure the initial render is complete
     const frame = requestAnimationFrame(() => {
       setIsLoaded(true);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // Helper function to get time-based greeting (memoized for performance)
   const getTimeBasedGreeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) {
@@ -177,12 +168,8 @@ export function PromptView() {
     } else {
       return 'Good evening';
     }
-  }, []); // Empty dependency array means it only calculates once per page load
+  }, []);
 
-  // In SSO mode the provider redirect IS the sign-in: the existing signed-out
-  // affordances below fire it directly instead of navigating to the native
-  // auth routes (which bounce back to root in this mode). Same UI, same
-  // pixels — only where the click goes changes.
   const { mutate: signInWithSso } = useMutation({
     mutationFn: () => signInWithSsoProvider('/'),
     onError: (error) => {
@@ -223,21 +210,12 @@ export function PromptView() {
         conversation_id: conversationId,
       });
 
-      // P04F: pin the user's current default prompt profile on creation.
-      // This is a normal user-owned preference read, so use the already
-      // authenticated browser Supabase client and let RLS enforce ownership.
-      // A missing preferences row is the documented default: CADAM Original.
-      const { data: aiPreferences, error: preferencesError } = await supabase
-        .from('user_ai_preferences')
-        .select('default_prompt_profile_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (preferencesError) {
-        throw new Error(
-          `Failed to load AI preferences: ${preferencesError.message}`,
-        );
-      }
-      const promptProfileId = aiPreferences?.default_prompt_profile_id ?? null;
+      // Pin each mode's current prompt default when the conversation is
+      // created. Existing conversations therefore keep their prompt lineage
+      // even if the user changes the default later in Settings.
+      const promptProfileId = aiPreferences?.defaultPromptProfileId ?? null;
+      const creativePromptProfileId =
+        aiPreferences?.defaultCreativePromptProfileId ?? null;
 
       const createConversation = (title: string) =>
         supabase
@@ -251,17 +229,15 @@ export function PromptView() {
               settings: {
                 model: model,
                 openCodeExecutionMode: executionMode,
-                promptProfileId,
+                ...(type === 'creative'
+                  ? { creativePromptProfileId }
+                  : { promptProfileId }),
               },
             },
           ])
           .select()
           .single();
 
-      // Prefer the deterministic local title, but naming is metadata and must
-      // never be able to block the primary prompt flow. If a live database has
-      // an unexpected title-side constraint, retry the known-good legacy
-      // insert once with "New Conversation" and refine the title afterwards.
       let conversationResult = await createConversation(initialTitle);
       if (conversationResult.error && initialTitle !== 'New Conversation') {
         console.warn(
@@ -287,11 +263,6 @@ export function PromptView() {
       });
       if (parts.length === 0) throw new Error('No message parts to send');
 
-      // Persist the user message before kicking off the chat. The
-      // `update_leaf_trigger` on `public.messages` advances the
-      // conversation's `current_message_leaf_id` to this row, which is
-      // what the server-side chat handler walks to build the model
-      // branch — so the row has to land first.
       const userMessageId = await persistUserMessage({
         conversationId: conversation.id,
         parts,
@@ -336,10 +307,6 @@ export function PromptView() {
           });
         });
 
-      // Title refinement is deliberately best-effort and non-blocking. Local
-      // installs keep the deterministic title when no hosted provider
-      // credential exists; if the insert had to use the legacy title, first
-      // restore the deterministic title here, then let the endpoint improve it.
       void (async () => {
         try {
           if (conversation.title !== initialTitle) {
