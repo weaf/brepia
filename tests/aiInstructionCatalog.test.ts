@@ -84,11 +84,7 @@ describe('AI instruction profile packages', () => {
       id: 'test',
       managedBy: 'brepia',
       extends: 'standard',
-      instructions: {
-        parametric: 'profiles/test/parametric.md',
-        'context.parametric_attachment':
-          'profiles/test/context-parametric-attachment.md',
-      },
+      instructions: {},
     });
   });
 
@@ -109,19 +105,12 @@ describe('AI instruction profile packages', () => {
     }
   });
 
-  it('lets Test override experimental Parametric instructions while inheriting the rest of Standard', () => {
-    expect(loadBundledInstruction('parametric', 'test')).not.toBe(
-      loadBundledInstruction('parametric', 'standard'),
-    );
-    expect(loadBundledInstruction('context.parametric_attachment', 'test')).not.toBe(
-      loadBundledInstruction('context.parametric_attachment', 'standard'),
-    );
-    expect(loadBundledInstruction('tool.build_parametric_model', 'test')).toBe(
-      loadBundledInstruction('tool.build_parametric_model', 'standard'),
-    );
-    expect(loadBundledInstruction('creative', 'test')).toBe(
-      loadBundledInstruction('creative', 'standard'),
-    );
+  it('keeps an idle Test slot identical to Standard until an experiment is loaded', () => {
+    for (const key of AI_INSTRUCTION_KEYS) {
+      expect(loadBundledInstruction(key, 'test')).toBe(
+        loadBundledInstruction(key, 'standard'),
+      );
+    }
   });
 
   it('exposes only registered package IDs', () => {
