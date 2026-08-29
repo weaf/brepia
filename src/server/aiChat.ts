@@ -11,7 +11,11 @@ import { cleanAssistantText, getParametricText } from '@shared/parametricParts';
 import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
 import { normalizeConversationSuggestions } from '@shared/suggestions';
 import { normalizeModelId } from '@shared/models';
-import { streamingOpencodeChatModel } from '@/server/opencode';
+import {
+  opencodeChatModel,
+  streamingOpencodeChatModel,
+  type OpenCodeRuntimeOptions,
+} from '@/server/opencode';
 import { buildCustomChatModel } from '@/server/customProviders';
 import { isCustomProviderModel } from '@shared/customModelIds';
 import type { Conversation, Message, MeshFileType, Model } from '@shared/types';
@@ -48,7 +52,6 @@ import {
   resolveDanglingToolParts,
 } from './chatToolPersistence';
 import { handleMeshRequest } from './mesh';
-import { opencodeChatModel } from './opencode';
 import {
   cliAgentChatModel,
   isCliAgentModel,
@@ -64,8 +67,6 @@ import {
 } from './activeGeneration';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
 
-// Compatibility exports for tests/integrations that still import these names.
-// The actual source of truth is the repository-backed Markdown templates.
 export const PARAMETRIC_AGENT_PROMPT = loadBundledInstruction('parametric');
 export const CREATIVE_AGENT_PROMPT = loadBundledInstruction('creative');
 
@@ -246,6 +247,7 @@ function buildChatModel(
   thinking: boolean,
   thinkingBudget: number,
   thinkingBudgetOverridden: boolean,
+  openCodeRuntime: OpenCodeRuntimeOptions,
 ): { model: LanguageModel; providerOptions?: ProviderOptions } {
   const hasCappedThinkingBudget = thinking && thinkingBudgetOverridden;
 
@@ -317,11 +319,11 @@ function buildChatModel(
   }
 
   if (modelId.startsWith('opencode/')) {
-    return { model: opencodeChatModel(modelId) };
+    return { model: opencodeChatModel(modelId, openCodeRuntime) };
   }
 
   if (isCliAgentModel(modelId)) {
-    return { model: cliAgentChatModel(modelId) };
+    throw new Error('CLI agent model reached the normal model builder');
   }
 
   throw new Error(`Unsupported chat model ${modelId}`);
@@ -869,6 +871,8 @@ export async function handleAiChatRequest(req: Request) {
   let titleInstruction: string;
   let parametricSuggestionsInstruction: string;
   let creativeSuggestionsInstruction: string;
+  let openCodeTransportInstruction: string;
+  let codexTransportInstruction: string;
   try {
     [
       buildToolDescription,
@@ -881,6 +885,8 @@ export async function handleAiChatRequest(req: Request) {
       titleInstruction,
       parametricSuggestionsInstruction,
       creativeSuggestionsInstruction,
+      openCodeTransportInstruction,
+      codexTransportInstruction,
     ] = await Promise.all([
       aiRuntime.instruction('tool.build_parametric_model'),
       aiRuntime.instruction('tool.answer_user'),
@@ -892,6 +898,8 @@ export async function handleAiChatRequest(req: Request) {
       aiRuntime.instruction('conversation.title'),
       aiRuntime.instruction('suggestions.parametric'),
       aiRuntime.instruction('suggestions.creative'),
+      aiRuntime.instruction('transport.opencode'),
+      aiRuntime.instruction('transport.codex'),
     ]);
   } catch (error) {
     logError(error, {
@@ -1135,6 +1143,12 @@ export async function handleAiChatRequest(req: Request) {
         ? 'chat.creativeThinkingMaxOutputTokens'
         : 'chat.creativeMaxOutputTokens',
   );
+  const openCodeRuntime: OpenCodeRuntimeOptions = {
+    transportInstruction: openCodeTransportInstruction,
+    timeoutMs: aiRuntime.number('transport.openCodeTimeoutMs'),
+    validationAttempts: aiRuntime.number('transport.openCodeValidationAttempts'),
+  };
+  const cliTimeoutMs = aiRuntime.number('transport.cliTimeoutMs');
 
   const transport = selectChatTransport(actualModelId, executionMode);
   if (conversation.type === 'creative' && transport.kind !== 'normal') {
@@ -1146,7 +1160,7 @@ export async function handleAiChatRequest(req: Request) {
       400,
     );
   }
-  console.info(`transport`, {
+  console.info('transport', {
     modelId: actualModelId,
     executionMode,
     transportKind: transport.kind,
@@ -1164,7 +1178,16 @@ export async function handleAiChatRequest(req: Request) {
       chatLanguageModel = streamingOpencodeChatModel(
         transport.underlyingModelId,
         conversation.id,
+        openCodeRuntime,
       );
+      chatProviderOptions = undefined;
+    } else if (transport.kind === 'cli-agent') {
+      chatLanguageModel = cliAgentChatModel(actualModelId, {
+        transportInstruction: actualModelId.startsWith('agent/codex/')
+          ? codexTransportInstruction
+          : openCodeTransportInstruction,
+        timeoutMs: cliTimeoutMs,
+      });
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
       try {
@@ -1172,6 +1195,7 @@ export async function handleAiChatRequest(req: Request) {
           actualModelId,
           user.id,
           thinkingEnabled,
+          thinkingBudget,
         );
 
         const supportsTools = built.capabilities.supportsTools;
@@ -1207,6 +1231,7 @@ export async function handleAiChatRequest(req: Request) {
         thinkingEnabled,
         thinkingBudget,
         thinkingBudgetOverridden,
+        openCodeRuntime,
       );
       chatLanguageModel = built.model;
       chatProviderOptions = built.providerOptions;
@@ -1259,9 +1284,6 @@ export async function handleAiChatRequest(req: Request) {
     leafRole === 'user' &&
     !forceBuildToolChoice;
 
-  // The response is tee'd into consumeSseStream below, so generation can keep
-  // running and persist its result after the browser disconnects. Only the
-  // explicit cancel request above aborts this controller.
   const activeGeneration = beginActiveGeneration(user.id, conversation.id);
 
   const result = streamText({
