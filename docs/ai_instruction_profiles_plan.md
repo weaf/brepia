@@ -191,7 +191,9 @@ Functional smoke from that checkpoint still included:
 
 ## Package-profile extension gate
 
-The CADAM/Standard package-profile extension was implemented after the green gate above. The local code gate was reported green on 2026-08-29 after the compatibility fixes for legacy `CADAM Original` / `Creative Original` behavior. Prompt content remains unchanged at this checkpoint and model/provider selection is unaffected.
+**Status: GREEN — completed 2026-08-29.**
+
+The CADAM/Standard package-profile extension was implemented after the green gate above. The local code gate was reported green on 2026-08-29 after the compatibility fixes for legacy `CADAM Original` / `Creative Original` behavior. Prompt content remained unchanged during this gate and model/provider selection was unaffected.
 
 Technical gate:
 
@@ -203,20 +205,26 @@ Technical gate:
 - [x] `npm run lint`
 - [x] `npm run build`
 
-Functional package smoke still required:
+Functional package smoke:
 
 - [x] verify existing conversations receive a valid `settings.instructionProfileId` — the successfully applied migration backfills conversations both with and without an existing `user_ai_preferences` row, so no pre-migration conversation is left without a package ID
 - [x] verify new conversations pin the selected default package
 - [x] switch default Standard → CADAM and verify an already-pinned conversation stays Standard
 - [x] verify both CADAM and Standard currently resolve identical split-revision content
-- [ ] verify Custom Prompt Overlay/Replace still layers correctly over the selected package — focused regression coverage is in `tests/promptProfilesPackageLayering.test.ts`; run it locally before closing this item
+- [x] verify Custom Prompt Overlay/Replace still layers correctly over the selected package — focused regression tests in `tests/promptProfilesPackageLayering.test.ts` and `tests/aiInstructionCatalog.test.ts` were reported green locally, and the full `npm test` suite was also reported green
 
-Focused final command:
+## Next active phase — Brepia Standard Parametric evaluation
 
-```bash
-npx vitest run tests/promptProfilesPackageLayering.test.ts tests/aiInstructionCatalog.test.ts
-```
+The package architecture is no longer a blocker. The next active phase is to compare the frozen CADAM Parametric prompt against the existing non-runtime Brepia Standard v1 candidate in `config/ai/evals/parametric/`.
 
-Both files are inside Vitest's configured `tests/**/*.test.ts` discovery and therefore also run as part of `npm test`.
+- keep CADAM frozen and unchanged
+- keep model selection independent of profile selection
+- use the same Parametric model/runtime/application revision for baseline and candidate runs
+- evaluate the existing Standard v1 candidate before registering any runtime override
+- promote only measured improvements into `standard.instructions`
+- do not add a Qwen/model-family profile until Standard evaluation demonstrates a repeatable model-specific need
+- keep Creative/TRELLIS-specific prompt optimization as a separate follow-up
 
-After the functional package smoke is green, audit all 17 instruction keys and create Brepia-owned Standard improvements while leaving the CADAM frozen/upstream lineage intact. Start prompt-content work with the Generative/Parametric instruction set; keep Creative/TRELLIS-specific optimization as a separate follow-up unless a concrete regression requires it. The optional fal.ai legacy refactor remains a separate bounded follow-up.
+The evaluation protocol, hard gates, scoring dimensions and promotion rule are documented in `config/ai/evals/parametric/README.md`.
+
+After the Parametric Standard candidate is evaluated and promoted or rejected, continue the remaining non-Creative instruction-key audit while leaving the CADAM frozen/upstream lineage intact. The optional fal.ai legacy refactor remains a separate bounded follow-up.
