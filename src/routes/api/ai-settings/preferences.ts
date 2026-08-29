@@ -12,6 +12,7 @@ import {
   buildSelectableCatalog,
 } from '@/server/modelCatalog';
 import { resolveCreativeMeshProvider } from '@/server/creativeMeshProviderRegistry';
+import { getPromptProfile } from '@/server/promptProfiles';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
 import {
   UpdateDefaultModelsSchema,
@@ -23,6 +24,8 @@ function preferenceResponse(data: Record<string, unknown>) {
     userId: data.user_id,
     hiddenModelIds: data.hidden_model_ids ?? [],
     defaultPromptProfileId: data.default_prompt_profile_id ?? null,
+    defaultCreativePromptProfileId:
+      data.default_creative_prompt_profile_id ?? null,
     defaultParametricModelId: data.default_parametric_model_id ?? null,
     defaultCreativeModelId: data.default_creative_model_id ?? null,
     visionFastModelId: data.vision_fast_model_id ?? null,
@@ -64,7 +67,33 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
           }
 
           if (body.defaultPromptProfileId !== undefined) {
+            if (body.defaultPromptProfileId !== null) {
+              const profile = await getPromptProfile(
+                user.id,
+                body.defaultPromptProfileId,
+              );
+              if (!profile || profile.scope !== 'parametric') {
+                return json({ error: 'invalid_default_prompt_profile' }, 400);
+              }
+            }
             updates.default_prompt_profile_id = body.defaultPromptProfileId;
+          }
+
+          if (body.defaultCreativePromptProfileId !== undefined) {
+            if (body.defaultCreativePromptProfileId !== null) {
+              const profile = await getPromptProfile(
+                user.id,
+                body.defaultCreativePromptProfileId,
+              );
+              if (!profile || profile.scope !== 'creative') {
+                return json(
+                  { error: 'invalid_default_creative_prompt_profile' },
+                  400,
+                );
+              }
+            }
+            updates.default_creative_prompt_profile_id =
+              body.defaultCreativePromptProfileId;
           }
 
           if (
@@ -179,8 +208,8 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
           const supabase = getServiceRoleSupabaseClient();
           const { data, error } = await supabase
             .from('user_ai_preferences')
-            // The generated DB type may lag this migration until Supabase types
-            // are regenerated; the API schema above is the authoritative guard.
+            // New preference columns can briefly lead generated DB types after
+            // a migration; request validation above remains authoritative.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .update({ ...updates, updated_at: new Date().toISOString() } as any)
             .eq('user_id', user.id)
