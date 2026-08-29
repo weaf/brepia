@@ -86,7 +86,8 @@ describe('per-request AI instruction snapshot', () => {
 
     expect(mockPreferences).toHaveBeenCalledTimes(1);
     expect(mockIn).toHaveBeenCalledTimes(1);
-    expect(new Set(mockIn.mock.calls[0][1])).toEqual(
+    const selectedIds = mockIn.mock.calls[0]?.[1] as string[] | undefined;
+    expect(new Set(selectedIds ?? [])).toEqual(
       new Set(['profile-build', 'profile-vision']),
     );
   });
