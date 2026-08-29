@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import {
+  AiInstructionKeySchema,
   InstructionProfileDefaultsSchema,
   RuntimeOverridesSchema,
 } from './aiInstructionSettings.ts';
@@ -74,7 +75,7 @@ export type AiPreferencesDto = z.infer<typeof AiPreferencesSchema>;
 // prompt_profiles
 // ---------------------------------------------------------------------------
 
-export const PromptProfileScopeSchema = z.enum(['parametric', 'creative']);
+export const PromptProfileScopeSchema = AiInstructionKeySchema;
 export type PromptProfileScope = z.infer<typeof PromptProfileScopeSchema>;
 
 export const CreatePromptProfileSchema = z.object({
