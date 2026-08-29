@@ -3,6 +3,7 @@ import { AiModelsSettings } from './AiModelsSettings';
 import { AiRuntimeSettings } from './AiRuntimeSettings';
 import { AuxiliaryInstructionProfilesSettings } from './AuxiliaryInstructionProfilesSettings';
 import { DefaultModelSettings } from './DefaultModelSettings';
+import { InstructionProfileSettings } from './InstructionProfileSettings';
 import { LocalModelsSettings } from './LocalModelsSettings';
 import { PrimaryPromptProfilesSettings } from './PrimaryPromptProfilesSettings';
 import { ProvidersSettings } from './ProvidersSettings';
@@ -18,6 +19,7 @@ export function AiSettingsSection() {
         <div className="hide-scrollbar mb-4 min-w-0 overflow-x-auto">
           <TabsList className="h-auto w-max min-w-full justify-start gap-1">
             <TabsTrigger value="models">Models</TabsTrigger>
+            <TabsTrigger value="profiles">Profiles</TabsTrigger>
             <TabsTrigger value="local-models">Local Models</TabsTrigger>
             <TabsTrigger value="prompts">Prompts</TabsTrigger>
             <TabsTrigger value="runtime">Runtime</TabsTrigger>
@@ -28,6 +30,9 @@ export function AiSettingsSection() {
         <TabsContent value="models" className="min-w-0">
           <DefaultModelSettings />
           <AiModelsSettings />
+        </TabsContent>
+        <TabsContent value="profiles" className="min-w-0">
+          <InstructionProfileSettings />
         </TabsContent>
         <TabsContent value="local-models" className="min-w-0">
           <LocalModelsSettings />
