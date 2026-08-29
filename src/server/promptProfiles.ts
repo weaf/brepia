@@ -118,6 +118,7 @@ export async function getUserPromptProfiles(
 
   // `scope` is introduced by the Creative prompt migration. Keep this cast
   // local until generated Supabase types are refreshed after migration.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (supabase.from('prompt_profiles') as any)
     .select(
       'id, user_id, name, description, mode, scope, base_revision, archived, created_at, updated_at',
@@ -185,6 +186,7 @@ export async function getPromptProfile(
   }
 
   const supabase = getServiceRoleSupabaseClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from('prompt_profiles') as any)
     .select('*')
     .eq('id', profileId)
@@ -206,6 +208,7 @@ export async function createPromptProfile(
   const mode = input.mode ?? 'overlay';
   const scope = input.scope ?? 'parametric';
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from('prompt_profiles') as any)
     .insert({
       user_id: user.id,
@@ -239,6 +242,7 @@ export async function updatePromptProfile(
   }
 
   const supabase = getServiceRoleSupabaseClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase.from('prompt_profiles') as any)
     .select('id, mode')
     .eq('id', profileId)
@@ -262,6 +266,7 @@ export async function updatePromptProfile(
   if (input.mode !== undefined) update.mode = input.mode;
   if (input.baseRevision !== undefined) update.base_revision = input.baseRevision;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from('prompt_profiles') as any)
     .update(update)
     .eq('id', profileId)
