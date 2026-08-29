@@ -10,6 +10,11 @@ import {
   getUserPromptProfiles,
   createPromptProfile,
 } from '@/server/promptProfiles';
+import type { PromptProfileScope } from '@shared/aiSettings';
+
+function parseScope(value: unknown): PromptProfileScope {
+  return value === 'creative' ? 'creative' : 'parametric';
+}
 
 export const Route = createFileRoute('/api/ai-settings/profiles')({
   server: {
@@ -18,7 +23,10 @@ export const Route = createFileRoute('/api/ai-settings/profiles')({
       GET: async ({ request }) => {
         try {
           const user = await requireUser(request);
-          const profiles = await getUserPromptProfiles(user);
+          const scope = parseScope(
+            new URL(request.url).searchParams.get('scope'),
+          );
+          const profiles = await getUserPromptProfiles(user, false, scope);
           return json(profiles);
         } catch (err) {
           return json(
@@ -53,6 +61,7 @@ export const Route = createFileRoute('/api/ai-settings/profiles')({
             promptTemplate,
             description: body.description,
             mode: body.mode as 'overlay' | 'fork' | undefined,
+            scope: parseScope(body.scope),
             baseRevision: body.baseRevision,
           });
 
