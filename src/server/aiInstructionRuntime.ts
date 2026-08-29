@@ -1,5 +1,6 @@
 import type { AiPreferencesDto } from '@shared/aiSettings';
 import {
+  loadBundledInstruction,
   renderInstructionTemplate,
   type AiInstructionKey,
   type AiRuntimeLimitKey,
@@ -10,11 +11,21 @@ import {
 } from '@shared/aiInstructionSettings';
 import { getPreferencesByUserId } from './aiSettings';
 import { resolveInstructionProfile } from './promptProfiles';
+import { getServiceRoleSupabaseClient } from './supabaseClient';
 
 type InstructionValues = Record<
   string,
   string | number | boolean | null | undefined
 >;
+
+type SnapshotProfileRow = {
+  id: string;
+  mode: string;
+  prompt_template: string;
+  scope: string;
+};
+
+type InstructionProfileSnapshot = Map<string, SnapshotProfileRow>;
 
 function configuredProfileId(
   preferences: AiPreferencesDto,
@@ -23,6 +34,76 @@ function configuredProfileId(
   if (key === 'parametric') return preferences.defaultPromptProfileId;
   if (key === 'creative') return preferences.defaultCreativePromptProfileId;
   return preferences.instructionProfileDefaults[key] ?? null;
+}
+
+function configuredCustomProfileIds(preferences: AiPreferencesDto): string[] {
+  return [
+    preferences.defaultPromptProfileId,
+    preferences.defaultCreativePromptProfileId,
+    ...Object.values(preferences.instructionProfileDefaults),
+  ].flatMap((profileId) =>
+    profileId && !profileId.startsWith('builtin:') ? [profileId] : [],
+  );
+}
+
+async function loadInstructionProfileSnapshot(
+  userId: string,
+  preferences: AiPreferencesDto,
+): Promise<InstructionProfileSnapshot> {
+  const profileIds = [...new Set(configuredCustomProfileIds(preferences))];
+  if (profileIds.length === 0) return new Map();
+
+  const supabase = getServiceRoleSupabaseClient();
+  // Generalized instruction scopes are introduced by a post-merge migration.
+  // Keep this cast local until generated Supabase types are refreshed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase.from('prompt_profiles') as any)
+    .select('id, mode, prompt_template, scope')
+    .eq('user_id', userId)
+    .eq('archived', false)
+    .in('id', profileIds);
+
+  if (error) {
+    throw new Error(`Failed to load AI instruction profiles: ${error.message}`);
+  }
+
+  return new Map(
+    ((data ?? []) as SnapshotProfileRow[]).map((row) => [row.id, row]),
+  );
+}
+
+function resolveInstructionTemplateFromSnapshot(
+  userId: string,
+  preferences: AiPreferencesDto,
+  snapshot: InstructionProfileSnapshot,
+  key: AiInstructionKey,
+): string {
+  const bundled = loadBundledInstruction(key);
+  const profileId = configuredProfileId(preferences, key);
+  const expectedBundledId = `builtin:${key}`;
+
+  if (!profileId || profileId === expectedBundledId) return bundled;
+  if (profileId.startsWith('builtin:')) {
+    throw new Error(
+      `Prompt template ${profileId} does not belong to instruction ${key}.`,
+    );
+  }
+
+  const profile = snapshot.get(profileId);
+  if (!profile) {
+    throw new Error(
+      `Prompt profile ${profileId} not found for user ${userId}. This configuration may be stale.`,
+    );
+  }
+  if (profile.scope !== key) {
+    throw new Error(`Prompt profile ${profileId} is ${profile.scope}, not ${key}.`);
+  }
+  if (profile.mode === 'overlay') {
+    return `${bundled}\n\n--- User Custom Instructions ---\n\n${profile.prompt_template}`;
+  }
+  if (profile.mode === 'fork') return profile.prompt_template;
+
+  throw new Error(`Invalid prompt profile mode: ${profile.mode}`);
 }
 
 export async function loadUserAiPreferences(
@@ -104,12 +185,16 @@ export async function createUserAiRuntimeContext(
   userId: string,
 ): Promise<UserAiRuntimeContext> {
   const preferences = await loadUserAiPreferences(userId);
+  const snapshot = await loadInstructionProfileSnapshot(userId, preferences);
+
+  const template = async (key: AiInstructionKey): Promise<string> =>
+    resolveInstructionTemplateFromSnapshot(userId, preferences, snapshot, key);
+
   return {
     preferences,
-    template: (key) =>
-      resolveInstructionTemplateFromPreferences(userId, preferences, key),
-    instruction: (key, values = {}) =>
-      resolveInstructionFromPreferences(userId, preferences, key, values),
+    template,
+    instruction: async (key, values = {}) =>
+      renderInstructionTemplate(await template(key), values),
     number: (key) => resolveRuntimeNumberFromPreferences(preferences, key),
     string: (key) => resolveRuntimeStringFromPreferences(preferences, key),
   };
@@ -120,8 +205,8 @@ export async function resolveUserInstruction(
   key: AiInstructionKey,
   values: InstructionValues = {},
 ): Promise<string> {
-  const preferences = await loadUserAiPreferences(userId);
-  return resolveInstructionFromPreferences(userId, preferences, key, values);
+  const runtime = await createUserAiRuntimeContext(userId);
+  return runtime.instruction(key, values);
 }
 
 export async function resolveUserRuntimeValue(
