@@ -223,6 +223,10 @@ Functional package smoke:
 
 The package architecture is no longer a blocker. A permanent repository-backed `test` profile is now the runtime laboratory slot. Its current Parametric and attachment-context overrides mirror the Standard v1 candidate in `config/ai/evals/parametric/`; all other keys inherit from Standard.
 
+### Current A/B observations
+
+Initial hands-on CADAM-versus-Test runs used the same model and prompts for an L-shaped mounting bracket, followed by the same constrained hole-position edit. The observed geometry and requested follow-up edit were effectively identical in both profiles. CADAM additionally exposed the hole Z offset as an editable parameter in the first result and produced a more convenient model origin for interactive rotation. These are provisional observations from this case, but they mean Standard v1 has **not yet demonstrated a measurable advantage** and currently shows a small usability/parameterization disadvantage in this example.
+
 - keep CADAM frozen and unchanged
 - keep Standard unchanged until a candidate is promoted
 - keep repository `defaultProfile` set to Standard
