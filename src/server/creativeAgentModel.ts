@@ -25,6 +25,16 @@ function creativeAgentModel(value: unknown): string | null {
   return modelId && !isInternalCreativeRuntimeModelId(modelId) ? modelId : null;
 }
 
+function isAutomaticCreativeAgentCandidate(entry: CatalogEntry): boolean {
+  return (
+    !isInternalCreativeRuntimeModelId(entry.id) &&
+    entry.source !== 'opencode' &&
+    entry.enabled &&
+    entry.available &&
+    entry.supportsTools === true
+  );
+}
+
 /**
  * Choose a Creative-mode LLM independently from the Creative mesh backend.
  *
@@ -32,6 +42,11 @@ function creativeAgentModel(value: unknown): string | null {
  * they point at an internal Creative runtime endpoint. Runtime IDs such as
  * Z-Image-Turbo and TRELLIS.2 are generation services, not chat language
  * models, and must never be selected as the Creative agent.
+ *
+ * Automatic fallback prefers a tool-capable non-vision chat model. Vision
+ * models remain eligible only as a last resort because Creative already has a
+ * separate vision-routing path; using a vision-specialized model as the agent
+ * can otherwise couple unrelated model alignment/behavior to mesh requests.
  *
  * OpenCode/Codex catalog entries are excluded from automatic Creative fallback
  * because pCAD's current agent adapters are intentionally parametric/OpenSCAD
@@ -53,14 +68,10 @@ export function selectCreativeAgentModel(
     return { modelId: normalizeModelId(pinned), source: 'conversation' };
   }
 
-  const fallback = selectableCatalog.find(
-    (entry) =>
-      !isInternalCreativeRuntimeModelId(entry.id) &&
-      entry.source !== 'opencode' &&
-      entry.enabled &&
-      entry.available &&
-      entry.supportsTools === true,
-  );
+  const eligible = selectableCatalog.filter(isAutomaticCreativeAgentCandidate);
+  const fallback =
+    eligible.find((entry) => entry.supportsVision !== true) ?? eligible[0];
+
   return fallback
     ? { modelId: normalizeModelId(fallback.id), source: 'catalog' }
     : null;
