@@ -28,7 +28,7 @@ export type CreativeMeshProviderAdapter = {
 };
 
 const optionalProviderIds = () => {
-  const raw =
+  const raw: string =
     env('PCAD_CREATIVE_MESH_PROVIDERS') ||
     import.meta.env.VITE_PCAD_CREATIVE_MESH_PROVIDERS ||
     env('VITE_PCAD_CREATIVE_MESH_PROVIDERS');
