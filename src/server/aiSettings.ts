@@ -7,12 +7,15 @@ import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import type { AiPreferencesDto } from '@shared/aiSettings';
 import {
+  AiInstructionProfileIdSchema,
+  DEFAULT_INSTRUCTION_PROFILE_ID,
   InstructionProfileDefaultsSchema,
   RuntimeOverridesSchema,
 } from '@shared/aiInstructionSettings';
 
 const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   hiddenModelIds: [],
+  defaultInstructionProfileId: DEFAULT_INSTRUCTION_PROFILE_ID,
   defaultPromptProfileId: null,
   defaultCreativePromptProfileId: null,
   instructionProfileDefaults: {},
@@ -26,6 +29,7 @@ const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
 type PreferenceRow = {
   user_id: string;
   hidden_model_ids: string[];
+  default_instruction_profile_id?: string | null;
   default_prompt_profile_id: string | null;
   default_creative_prompt_profile_id?: string | null;
   instruction_profile_defaults?: unknown;
@@ -37,6 +41,11 @@ type PreferenceRow = {
   created_at: string;
   updated_at: string;
 };
+
+function parseInstructionProfileId(value: unknown) {
+  const parsed = AiInstructionProfileIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_INSTRUCTION_PROFILE_ID;
+}
 
 function parseInstructionProfileDefaults(value: unknown) {
   const parsed = InstructionProfileDefaultsSchema.safeParse(value ?? {});
@@ -52,6 +61,9 @@ function toDto(row: PreferenceRow): AiPreferencesDto {
   return {
     userId: row.user_id,
     hiddenModelIds: row.hidden_model_ids,
+    defaultInstructionProfileId: parseInstructionProfileId(
+      row.default_instruction_profile_id,
+    ),
     defaultPromptProfileId: row.default_prompt_profile_id,
     defaultCreativePromptProfileId:
       row.default_creative_prompt_profile_id ?? null,
