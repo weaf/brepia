@@ -38,6 +38,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$LEGACY_HOME" in
+  /*) ;;
+  *)
+    echo "Refusing non-absolute legacy root: $LEGACY_HOME" >&2
+    exit 1
+    ;;
+esac
+
+case "$LEGACY_HOME" in
   ""|"/"|"$HOME"|"$HOME/.local"|"$HOME/.local/share")
     echo "Refusing unsafe legacy root: $LEGACY_HOME" >&2
     exit 1
