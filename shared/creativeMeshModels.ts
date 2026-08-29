@@ -94,6 +94,7 @@ export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition
     supportsMeshEdit: true,
     outputFormats: ['glb', 'fbx'],
     timeEstimate: '5-6 minutes',
+    maxReferenceImages: 1,
   },
   {
     id: 'quality',
@@ -106,6 +107,7 @@ export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition
     supportsMeshEdit: true,
     outputFormats: ['glb'],
     timeEstimate: '~45 seconds',
+    maxReferenceImages: 1,
   },
   {
     id: 'fast',
@@ -118,6 +120,7 @@ export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition
     supportsMeshEdit: true,
     outputFormats: ['glb'],
     timeEstimate: '60-90 seconds',
+    maxReferenceImages: 1,
   },
 ] as const;
 
