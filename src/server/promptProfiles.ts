@@ -1,15 +1,18 @@
 // Server-side prompt_profiles management.
 //
-// Primary Generative and Creative templates are repository-backed Markdown
-// files. Custom profiles can overlay or fully replace those shipped templates.
-// The technical `builtin:*` IDs are retained for backward compatibility with
-// existing conversations/tests, but there is no special Reset-to-Original
-// product operation.
+// Shipped instructions are repository-backed Markdown files declared by the
+// AI instruction manifest. Custom profiles can overlay or fully replace those
+// templates. `builtin:*` IDs are technical compatibility/template identifiers,
+// not mutable database rows and not a Reset-to-Original product mechanism.
 
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
-import { loadBundledInstruction } from '@shared/aiInstructionCatalog';
+import {
+  getAiInstructionDefinition,
+  isAiInstructionKey,
+  loadBundledInstruction,
+} from '@shared/aiInstructionCatalog';
 import type {
   CreatePromptProfileInput,
   UpdatePromptProfileInput,
@@ -43,8 +46,9 @@ function parsePromptProfileMode(mode: string): PromptProfileMode {
 }
 
 function parsePromptProfileScope(scope: string | undefined): PromptProfileScope {
-  if (scope === 'creative') return 'creative';
-  return 'parametric';
+  if (scope == null) return 'parametric';
+  if (isAiInstructionKey(scope)) return scope;
+  throw new Error(`Unknown prompt profile scope: ${scope}`);
 }
 
 function bundledPrompt(scope: PromptProfileScope): string {
@@ -52,7 +56,13 @@ function bundledPrompt(scope: PromptProfileScope): string {
 }
 
 function builtinProfileId(scope: PromptProfileScope): string {
-  return scope === 'creative' ? BUILTIN_CREATIVE_PROFILE_ID : BUILTIN_PROFILE_ID;
+  return `builtin:${scope}`;
+}
+
+function builtinProfileScope(profileId: string): PromptProfileScope | null {
+  if (!profileId.startsWith('builtin:')) return null;
+  const scope = profileId.slice('builtin:'.length);
+  return isAiInstructionKey(scope) ? scope : null;
 }
 
 const builtinFingerprintCache = new Map<PromptProfileScope, string>();
@@ -64,6 +74,9 @@ export function fingerprint(text: string): string {
 export function loadBuiltinProfile(
   scope: PromptProfileScope = 'parametric',
 ): PromptProfileDetailDto {
+  const definition = getAiInstructionDefinition(scope);
+  if (!definition) throw new Error(`Unknown AI instruction: ${scope}`);
+
   const prompt = bundledPrompt(scope);
   let currentFingerprint = builtinFingerprintCache.get(scope);
   if (!currentFingerprint) {
@@ -71,14 +84,18 @@ export function loadBuiltinProfile(
     builtinFingerprintCache.set(scope, currentFingerprint);
   }
 
+  const name =
+    scope === 'parametric'
+      ? 'CADAM Original'
+      : scope === 'creative'
+        ? 'Creative Original'
+        : `${definition.label} bundled`;
+
   return {
     id: builtinProfileId(scope),
     userId: '',
-    name: scope === 'creative' ? 'Creative Original' : 'CADAM Original',
-    description:
-      scope === 'creative'
-        ? 'Bundled Creative template from the repository.'
-        : 'Bundled CADAM template from the repository.',
+    name,
+    description: `Bundled repository template. ${definition.description}`,
     promptTemplate: prompt,
     mode: 'overlay',
     scope,
@@ -118,8 +135,8 @@ export async function getUserPromptProfiles(
 ): Promise<PromptProfileSummaryDto[]> {
   const supabase = getServiceRoleSupabaseClient();
 
-  // `scope` is introduced by the Creative prompt migration. Keep this cast
-  // local until generated Supabase types are refreshed after migration.
+  // Generalized instruction scopes are introduced by a post-merge migration.
+  // Keep this cast local until generated Supabase types are refreshed.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (supabase.from('prompt_profiles') as any)
     .select(
@@ -182,10 +199,8 @@ export async function getPromptProfile(
   userId: string,
   profileId: string,
 ): Promise<PromptProfileDetailDto | null> {
-  if (profileId === BUILTIN_PROFILE_ID) return loadBuiltinProfile('parametric');
-  if (profileId === BUILTIN_CREATIVE_PROFILE_ID) {
-    return loadBuiltinProfile('creative');
-  }
+  const bundledScope = builtinProfileScope(profileId);
+  if (bundledScope) return loadBuiltinProfile(bundledScope);
 
   const supabase = getServiceRoleSupabaseClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -236,11 +251,13 @@ export async function updatePromptProfile(
   profileId: string,
   input: UpdatePromptProfileInput,
 ): Promise<PromptProfileDetailDto> {
-  if (profileId === BUILTIN_PROFILE_ID) {
+  const bundledScope = builtinProfileScope(profileId);
+  if (bundledScope === 'parametric') {
+    // Preserve the established B8 error contract.
     throw new Error('Cannot update the built-in prompt profile');
   }
-  if (profileId === BUILTIN_CREATIVE_PROFILE_ID) {
-    throw new Error('Cannot update a built-in prompt profile');
+  if (bundledScope) {
+    throw new Error('Cannot update a bundled prompt template');
   }
 
   const supabase = getServiceRoleSupabaseClient();
@@ -287,11 +304,8 @@ export async function archivePromptProfile(
   userId: string,
   profileId: string,
 ): Promise<void> {
-  if (
-    profileId === BUILTIN_PROFILE_ID ||
-    profileId === BUILTIN_CREATIVE_PROFILE_ID
-  ) {
-    throw new Error('Cannot archive a built-in prompt profile');
+  if (builtinProfileScope(profileId)) {
+    throw new Error('Cannot archive a bundled prompt template');
   }
 
   const supabase = getServiceRoleSupabaseClient();
@@ -310,11 +324,8 @@ export async function deletePromptProfile(
   userId: string,
   profileId: string,
 ): Promise<void> {
-  if (
-    profileId === BUILTIN_PROFILE_ID ||
-    profileId === BUILTIN_CREATIVE_PROFILE_ID
-  ) {
-    throw new Error('Cannot delete a built-in prompt profile');
+  if (builtinProfileScope(profileId)) {
+    throw new Error('Cannot delete a bundled prompt template');
   }
 
   const supabase = getServiceRoleSupabaseClient();
@@ -329,6 +340,41 @@ export async function deletePromptProfile(
   }
 }
 
+export async function resolveInstructionProfile({
+  userId,
+  profileId,
+  scope,
+}: {
+  userId: string;
+  profileId: string | null | undefined;
+  scope: PromptProfileScope;
+}): Promise<string> {
+  const basePrompt = bundledPrompt(scope);
+  const expectedBuiltinId = builtinProfileId(scope);
+
+  if (!profileId || profileId === expectedBuiltinId) return basePrompt;
+
+  const otherBundledScope = builtinProfileScope(profileId);
+  if (otherBundledScope) {
+    throw new Error(`Prompt template ${profileId} belongs to ${otherBundledScope}, not ${scope}.`);
+  }
+
+  const profile = await getPromptProfile(userId, profileId);
+  if (!profile) {
+    throw new Error(
+      `Prompt profile ${profileId} not found for user ${userId}. This configuration may be stale.`,
+    );
+  }
+  if (profile.scope !== scope) {
+    throw new Error(`Prompt profile ${profileId} is ${profile.scope}, not ${scope}.`);
+  }
+
+  if (profile.mode === 'overlay') {
+    return `${basePrompt}\n\n--- User Custom Instructions ---\n\n${profile.promptTemplate}`;
+  }
+  return profile.promptTemplate;
+}
+
 export async function resolveConversationSystemPrompt({
   userId,
   profileId,
@@ -338,32 +384,5 @@ export async function resolveConversationSystemPrompt({
   profileId: string | null | undefined;
   scope?: PromptProfileScope;
 }): Promise<string> {
-  const basePrompt = bundledPrompt(scope);
-  const expectedBuiltinId = builtinProfileId(scope);
-
-  if (!profileId || profileId === expectedBuiltinId) return basePrompt;
-
-  if (
-    profileId === BUILTIN_PROFILE_ID ||
-    profileId === BUILTIN_CREATIVE_PROFILE_ID
-  ) {
-    throw new Error(`Prompt profile ${profileId} belongs to a different mode.`);
-  }
-
-  const profile = await getPromptProfile(userId, profileId);
-  if (!profile) {
-    throw new Error(
-      `Prompt profile ${profileId} not found for user ${userId}. This conversation may have been corrupted.`,
-    );
-  }
-  if (profile.scope !== scope) {
-    throw new Error(
-      `Prompt profile ${profileId} is ${profile.scope}, not ${scope}.`,
-    );
-  }
-
-  if (profile.mode === 'overlay') {
-    return `${basePrompt}\n\n--- User Custom Instructions ---\n\n${profile.promptTemplate}`;
-  }
-  return profile.promptTemplate;
+  return resolveInstructionProfile({ userId, profileId, scope });
 }
