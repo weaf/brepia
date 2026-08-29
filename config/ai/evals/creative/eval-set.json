@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "scope": "creative",
+  "cases": [
+    {
+      "id": "C01-balanced-product",
+      "prompt": "Create a compact desk speaker with a soft rounded triangular silhouette, matte charcoal body, warm walnut side panels and one subtle copper accent. It should feel premium and calm, not aggressive. No text, logo, display or visible buttons.",
+      "expectMesh": true,
+      "focus": ["intentFidelity", "restraint", "visualCoherence"],
+      "mustPreserve": ["rounded triangular silhouette", "matte charcoal", "walnut side panels", "single subtle copper accent", "no text", "no logo", "no display", "no visible buttons"]
+    },
+    {
+      "id": "C02-underspecified-autonomy",
+      "prompt": "Make a charming little forest guardian figurine for a shelf. Friendly rather than cute, mostly natural materials, with a strong silhouette. Surprise me with the details.",
+      "expectMesh": true,
+      "focus": ["autonomy", "briefQuality", "visualCoherence"],
+      "mustPreserve": ["forest guardian", "figurine", "friendly rather than cute", "mostly natural materials", "strong silhouette"]
+    },
+    {
+      "id": "C03-artistic-enrichment",
+      "prompt": "Create an elegant ceremonial mask inspired by wind and flowing water. Keep it wearable-looking and symmetrical, with no horns, feathers, gemstones or text. Use only ivory ceramic and dark oxidized metal.",
+      "expectMesh": true,
+      "focus": ["visualCoherence", "intentFidelity", "restraint"],
+      "mustPreserve": ["ceremonial mask", "wind and flowing water", "wearable-looking", "symmetrical", "no horns", "no feathers", "no gemstones", "no text", "ivory ceramic", "dark oxidized metal"]
+    },
+    {
+      "id": "C04-negative-constraints",
+      "prompt": "Create a stylized lunar rover toy with six chunky wheels and a low rectangular body. Keep the design simple and manufacturable-looking. Do not add an astronaut, antenna dish, solar panels, weapons, decals, lettering or a base.",
+      "expectMesh": true,
+      "focus": ["intentFidelity", "restraint", "briefQuality"],
+      "mustPreserve": ["six chunky wheels", "low rectangular body", "simple", "manufacturable-looking", "no astronaut", "no antenna dish", "no solar panels", "no weapons", "no decals", "no lettering", "no base"]
+    },
+    {
+      "id": "C05-style-with-structure",
+      "prompt": "Create a table lamp shaped like a single continuous ribbon that loops upward around a small glowing sphere. Minimal Scandinavian feel, brushed aluminum ribbon, frosted glass sphere, stable flat footprint. No extra decorative objects.",
+      "expectMesh": true,
+      "focus": ["briefQuality", "visualCoherence", "intentFidelity"],
+      "mustPreserve": ["single continuous ribbon", "loops upward around a small sphere", "Scandinavian", "brushed aluminum", "frosted glass", "stable flat footprint", "no extra decorative objects"]
+    },
+    {
+      "id": "C06-cad-boundary",
+      "prompt": "Make a replacement mounting bracket with two M4 clearance holes exactly 32.0 mm center-to-center, overall width 48.0 mm, thickness 3.0 mm, and a 90 degree bend with a 1.5 mm inside radius. The holes must align with an existing part.",
+      "expectMesh": false,
+      "expectCadRedirect": true,
+      "focus": ["intentFidelity"],
+      "mustPreserve": ["exact dimensions", "hole spacing", "mating alignment"]
+    },
+    {
+      "id": "C07-reference-fidelity",
+      "prompt": "Create a clean stylized 3D asset based closely on the attached reference image. Preserve the subject's distinctive silhouette, asymmetry, major colors, visible parts and material cues. Do not invent accessories, text or a display base unless they are visible in the reference.",
+      "expectMesh": true,
+      "requiresReferenceImage": true,
+      "referenceGuidance": "Use one fixed reference image for every profile. Prefer an object with visible asymmetry, 3-5 distinctive parts, at least two colors/materials, and no text-dependent details. Keep that same image when later comparing model changes.",
+      "focus": ["intentFidelity", "briefQuality", "restraint"],
+      "mustPreserve": ["distinctive silhouette", "asymmetry", "major colors", "visible parts", "material cues", "no invented accessories", "no invented text", "no invented base"]
+    }
+  ]
+}
