@@ -32,7 +32,8 @@ async function resolveFalImagePrompt(
     'provider.fal.image_conditioning',
   );
   const resolved = prompt
-    .replaceAll(INSTRUCTIONS_3D, conditioning)
+    .split(INSTRUCTIONS_3D)
+    .join(conditioning)
     .replace(LEGACY_IMAGE_GUIDANCE, conditioning)
     .trim();
   return resolved || conditioning;
