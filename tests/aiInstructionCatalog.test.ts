@@ -56,10 +56,11 @@ describe('repository-driven AI instruction catalog', () => {
 });
 
 describe('AI instruction profile packages', () => {
-  it('ships Standard as the Brepia default and keeps CADAM separately addressable', () => {
+  it('ships Standard as the Brepia default and keeps CADAM and Test separately addressable', () => {
     expect(DEFAULT_AI_INSTRUCTION_PROFILE_ID).toBe('standard');
     expect(isAiInstructionProfileId('standard')).toBe(true);
     expect(isAiInstructionProfileId('cadam')).toBe(true);
+    expect(isAiInstructionProfileId('test')).toBe(true);
 
     expect(getAiInstructionProfileDefinition('standard')).toMatchObject({
       id: 'standard',
@@ -79,17 +80,28 @@ describe('AI instruction profile packages', () => {
         revision: 'cadam-split-2026-08-29',
       },
     });
+    expect(getAiInstructionProfileDefinition('test')).toMatchObject({
+      id: 'test',
+      managedBy: 'brepia',
+      extends: 'standard',
+      instructions: {
+        parametric: 'profiles/test/parametric.md',
+        'context.parametric_attachment':
+          'profiles/test/context-parametric-attachment.md',
+      },
+    });
   });
 
-  it('resolves every current instruction key through both initial packages', () => {
+  it('resolves every current instruction key through all registered packages', () => {
     expect(AI_INSTRUCTION_KEYS.length).toBeGreaterThan(0);
     for (const key of AI_INSTRUCTION_KEYS) {
       expect(loadBundledInstruction(key, 'standard').length).toBeGreaterThan(0);
       expect(loadBundledInstruction(key, 'cadam').length).toBeGreaterThan(0);
+      expect(loadBundledInstruction(key, 'test').length).toBeGreaterThan(0);
     }
   });
 
-  it('starts Standard and CADAM from the same frozen split revision', () => {
+  it('keeps Standard and CADAM on the same frozen split revision', () => {
     for (const key of AI_INSTRUCTION_KEYS) {
       expect(loadBundledInstruction(key, 'standard')).toBe(
         loadBundledInstruction(key, 'cadam'),
@@ -97,10 +109,26 @@ describe('AI instruction profile packages', () => {
     }
   });
 
-  it('exposes only valid package IDs', () => {
+  it('lets Test override experimental Parametric instructions while inheriting the rest of Standard', () => {
+    expect(loadBundledInstruction('parametric', 'test')).not.toBe(
+      loadBundledInstruction('parametric', 'standard'),
+    );
+    expect(loadBundledInstruction('context.parametric_attachment', 'test')).not.toBe(
+      loadBundledInstruction('context.parametric_attachment', 'standard'),
+    );
+    expect(loadBundledInstruction('tool.build_parametric_model', 'test')).toBe(
+      loadBundledInstruction('tool.build_parametric_model', 'standard'),
+    );
+    expect(loadBundledInstruction('creative', 'test')).toBe(
+      loadBundledInstruction('creative', 'standard'),
+    );
+  });
+
+  it('exposes only registered package IDs', () => {
     expect(AI_INSTRUCTION_PROFILE_DEFINITIONS.map((profile) => profile.id)).toEqual([
       'cadam',
       'standard',
+      'test',
     ]);
     expect(isAiInstructionProfileId('qwen')).toBe(false);
     expect(isAiInstructionProfileId('builtin:parametric')).toBe(false);
