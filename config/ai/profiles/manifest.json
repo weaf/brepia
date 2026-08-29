@@ -53,10 +53,7 @@
       "description": "Brepia test profile.",
       "managedBy": "brepia",
       "extends": "standard",
-      "instructions": {
-        "parametric": "profiles/test/parametric.md",
-        "context.parametric_attachment": "profiles/test/context-parametric-attachment.md"
-      }
+      "instructions": {}
     }
   ]
 }
