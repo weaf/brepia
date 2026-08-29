@@ -95,11 +95,6 @@ export function CreativePromptProfilesSettings() {
     }
   }, [profiles, selectedId]);
 
-  useEffect(() => {
-    if (!selected || draft?.id !== selected.id) return;
-    setDraft(null);
-  }, [selected, draft?.id]);
-
   const selectedIsDefault =
     selectedId === BUILTIN_ID ? defaultId === null : selectedId === defaultId;
 
@@ -489,7 +484,12 @@ export function CreativePromptProfilesSettings() {
                     </Button>
                   ) : null}
                   {selected.editable ? (
-                    <Button type="button" size="sm" variant="outline" onClick={startEdit}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={startEdit}
+                    >
                       Edit
                     </Button>
                   ) : null}
