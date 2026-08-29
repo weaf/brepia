@@ -5,14 +5,19 @@ set -euo pipefail
 #   text -> Z-Image-Turbo/stable-diffusion.cpp -> TRELLIS.2/trellis.cpp -> GLB
 #   image -------------------------------------> TRELLIS.2/trellis.cpp -> GLB
 #
-# Runtime lifecycle remains owned by llama-swap. The script appends two model
-# entries to the existing llama-swap config and never removes existing models.
+# Runtime lifecycle remains owned by llama-swap. Large model weights default to
+# llama-swap's model tree while native runtime binaries stay in a separate pCAD
+# runtime root. The script appends two model entries to the existing llama-swap
+# config and never removes existing models.
 
 ROOT="${PCAD_NATIVE_CREATIVE_ROOT:-$HOME/ai/pcad-native-creative}"
+MODELS_ROOT="${PCAD_NATIVE_CREATIVE_MODELS_DIR:-$HOME/ai/llama-swap/models/creative}"
 LLAMA_SWAP_CONFIG="${PCAD_LLAMA_SWAP_CONFIG:-$HOME/ai/llama-swap/config/config.yaml}"
-Z_IMAGE_DIR="$ROOT/z-image"
+
 SD_RUNTIME_DIR="$ROOT/stable-diffusion.cpp"
-TRELLIS_DIR="$ROOT/trellis2"
+TRELLIS_RUNTIME_DIR="$ROOT/trellis2"
+Z_IMAGE_DIR="$MODELS_ROOT/z-image-turbo"
+TRELLIS_MODELS_DIR="$MODELS_ROOT/trellis2"
 
 SD_TAG="master-829-0a565f2"
 SD_ARCHIVE="sd-master-0a565f2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"
@@ -33,11 +38,16 @@ VAE_SHA256="afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
 
 usage() {
   cat <<EOF
-Usage: $0 [--root DIR] [--llama-swap-config FILE]
+Usage: $0 [--root DIR] [--models-dir DIR] [--llama-swap-config FILE]
 
 Defaults:
   runtime root:       $ROOT
+  model root:         $MODELS_ROOT
   llama-swap config:  $LLAMA_SWAP_CONFIG
+
+Model layout:
+  <model root>/z-image-turbo/
+  <model root>/trellis2/
 
 The installer downloads roughly:
   Z-Image-Turbo Q4_K            ~3.9 GB
@@ -45,6 +55,11 @@ The installer downloads roughly:
   VAE                              335 MB
   TRELLIS.2 Q8                  ~9.5 GB
 plus native runtime binaries.
+
+Environment overrides:
+  PCAD_NATIVE_CREATIVE_ROOT
+  PCAD_NATIVE_CREATIVE_MODELS_DIR
+  PCAD_LLAMA_SWAP_CONFIG
 
 Existing old pCAD TRELLIS/Hunyuan runtimes are not removed.
 EOF
@@ -54,9 +69,13 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --root)
       ROOT="$2"; shift 2
-      Z_IMAGE_DIR="$ROOT/z-image"
       SD_RUNTIME_DIR="$ROOT/stable-diffusion.cpp"
-      TRELLIS_DIR="$ROOT/trellis2"
+      TRELLIS_RUNTIME_DIR="$ROOT/trellis2"
+      ;;
+    --models-dir)
+      MODELS_ROOT="$2"; shift 2
+      Z_IMAGE_DIR="$MODELS_ROOT/z-image-turbo"
+      TRELLIS_MODELS_DIR="$MODELS_ROOT/trellis2"
       Z_IMAGE_FILE="$Z_IMAGE_DIR/z_image_turbo-Q4_K.gguf"
       QWEN_FILE="$Z_IMAGE_DIR/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
       VAE_FILE="$Z_IMAGE_DIR/ae.safetensors"
@@ -80,7 +99,7 @@ for tool in curl unzip sha256sum find grep; do
   }
 done
 
-mkdir -p "$ROOT" "$Z_IMAGE_DIR" "$SD_RUNTIME_DIR"
+mkdir -p "$ROOT" "$MODELS_ROOT" "$Z_IMAGE_DIR" "$SD_RUNTIME_DIR" "$TRELLIS_RUNTIME_DIR"
 
 checksum_ok() {
   local destination="$1" expected="$2"
@@ -123,21 +142,27 @@ download_checked "$QWEN_URL" "$QWEN_FILE" "$QWEN_SHA256"
 download_checked "$VAE_URL" "$VAE_FILE" "$VAE_SHA256"
 
 echo "==> installing TRELLIS.2 Q8 CUDA runtime and models"
-if [ ! -x "$TRELLIS_DIR/runtime/trellis-server" ]; then
+TRELLIS_SERVER="$TRELLIS_RUNTIME_DIR/runtime/trellis-server"
+TRELLIS_MODEL_MARKER="$TRELLIS_MODELS_DIR/shape_dec.gguf"
+if [ ! -x "$TRELLIS_SERVER" ] || [ ! -s "$TRELLIS_MODEL_MARKER" ]; then
   curl -fsSL https://raw.githubusercontent.com/pwilkin/trellis.cpp/main/install/install.sh \
     | bash -s -- \
       --backend cuda \
-      --dest "$TRELLIS_DIR" \
-      --models-dir "$TRELLIS_DIR/models" \
+      --dest "$TRELLIS_RUNTIME_DIR" \
+      --models-dir "$TRELLIS_MODELS_DIR" \
       --quant q8 \
       --skip-app \
       -y
 else
-  echo "==> already present: $TRELLIS_DIR/runtime/trellis-server"
+  echo "==> already present: $TRELLIS_SERVER"
+  echo "==> already present: $TRELLIS_MODELS_DIR"
 fi
-TRELLIS_SERVER="$TRELLIS_DIR/runtime/trellis-server"
 [ -x "$TRELLIS_SERVER" ] || {
   echo "trellis-server not found at $TRELLIS_SERVER" >&2
+  exit 1
+}
+[ -s "$TRELLIS_MODEL_MARKER" ] || {
+  echo "TRELLIS.2 models not found under $TRELLIS_MODELS_DIR" >&2
   exit 1
 }
 
@@ -150,7 +175,7 @@ fi
 if grep -qE '^[[:space:]]+creative/z-image-turbo:' "$LLAMA_SWAP_CONFIG" || \
    grep -qE '^[[:space:]]+creative/trellis2:' "$LLAMA_SWAP_CONFIG"; then
   echo "==> Creative llama-swap entries already exist; leaving config unchanged"
-  echo "    Verify their paths manually if the runtime root changed."
+  echo "    Verify their paths manually if the runtime or model root changed."
 else
   BACKUP="$LLAMA_SWAP_CONFIG.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$LLAMA_SWAP_CONFIG" "$BACKUP"
@@ -180,7 +205,7 @@ else
     checkEndpoint: /health
     cmd: >
       "$TRELLIS_SERVER"
-      --models "$TRELLIS_DIR/models"
+      --models "$TRELLIS_MODELS_DIR"
       --host 127.0.0.1
       --port \${PORT}
     proxy: http://127.0.0.1:\${PORT}
@@ -194,6 +219,13 @@ Native Creative runtime installed.
 
 Runtime root:
   $ROOT
+
+Model root:
+  $MODELS_ROOT
+
+Model directories:
+  $Z_IMAGE_DIR
+  $TRELLIS_MODELS_DIR
 
 llama-swap model IDs:
   creative/z-image-turbo
