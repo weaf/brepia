@@ -231,12 +231,6 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
   const archiveMutation = useMutation({
     mutationFn: async (profile: PromptProfile) => {
       await apiJson(`ai-settings/profiles/${profile.id}`, { method: 'DELETE' });
-      if (profile.id === defaultId) {
-        await apiJson('ai-settings/preferences', {
-          method: 'PUT',
-          body: JSON.stringify({ [config.defaultField]: null }),
-        });
-      }
     },
     onSuccess: async () => {
       setSelectedId(config.bundledId);
@@ -259,7 +253,7 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
       id: null,
       name: config.newName,
       description: '',
-      promptTemplate: mode === 'fork' ? '' : '',
+      promptTemplate: '',
       mode,
       baseRevision: mode === 'fork' ? bundled?.fingerprint ?? null : null,
     });
@@ -515,7 +509,7 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
                     <Copy className="mr-1 h-3.5 w-3.5" />
                     Copy
                   </Button>
-                  {selected.deletable ? (
+                  {selected.deletable && !selectedIsDefault ? (
                     <Button
                       type="button"
                       variant="ghost"
