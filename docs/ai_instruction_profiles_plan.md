@@ -2,9 +2,9 @@
 
 ## Goal
 
-Make pCAD/Brepia AI behavior user-configurable without turning security, data integrity, or backend capability checks into prompt settings.
+Make pCAD/Brepia AI behavior user-configurable without turning security, data integrity, protocol requirements, or backend capability checks into prompt settings.
 
-The same user-facing profile operations should be available wherever a model-facing instruction is configurable:
+The same user-facing profile operations are used wherever a model-facing instruction is configurable:
 
 - view the bundled repo template
 - Replace (full replacement of effective behavior)
@@ -13,21 +13,24 @@ The same user-facing profile operations should be available wherever a model-fac
 - New profile
 - Edit existing custom profiles
 - Set as active/default
+- Archive an inactive custom profile
 
-There is deliberately no `Reset to Original` operation. Shipped templates live as versioned files in the repository. If a user wants to recover an older/default instruction they can view/copy the bundled template into a new or existing profile.
+There is deliberately no `Reset to Original` operation. Shipped templates live as versioned files in the repository. If a user wants to reuse a bundled instruction they copy that template into a normal editable profile and activate the copy.
+
+A bundled template may be the initial effective value for a new user whose preference row has never selected a custom profile. Once a custom profile is active, Settings and the preferences API do not provide a reset-to-null path back to the bundled template.
 
 ## Repository configuration is the source of truth
 
-No prompt body or runtime default should live as a TypeScript string/constant.
+No shipped prompt body or configurable runtime default should live as a duplicated TypeScript string/constant.
 
 - `config/ai/instructions/manifest.json` declares available instruction surfaces.
-- `config/ai/instructions/*.md` contains the shipped instruction templates.
+- `config/ai/instructions/*.md` contains shipped instruction templates.
 - `config/ai/runtime.json` contains shipped runtime defaults, types and allowed ranges/options.
 - TypeScript loads and validates those files; it does not duplicate their contents.
 
-Adding a new instruction should normally require a manifest entry plus a Markdown template, not a TypeScript list or database migration.
+Adding a new instruction normally requires a manifest entry plus a Markdown template, not a database migration or another hardcoded Settings list.
 
-Initial instruction keys:
+Current registered instruction keys:
 
 - `parametric` — Generative/Parametric system prompt
 - `creative` — Creative system prompt
@@ -40,93 +43,121 @@ Initial instruction keys:
 - `suggestions.parametric`
 - `suggestions.creative`
 - `context.parametric_attachment`
+- `context.creative_reference_mesh`
 - `context.mesh_preferences`
 - `context.parametric_inspection_output`
+- `transport.opencode`
+- `transport.codex`
+- `provider.fal.image_conditioning` — optional fal.ai provider conditioning
 
-Existing `prompt_profiles` remains the compatibility basis for the two primary prompts while the generalized profile model is introduced. Auxiliary instruction profiles use the same Replace/Overlay/Copy/New semantics and should share one reusable Settings editor.
+`prompt_profiles` is the shared persistence layer for primary and auxiliary instruction profiles. Generalized scopes use the same Replace/Overlay/Copy/New semantics and the same Settings editor model.
 
 ## Runtime limits
 
 Runtime behavior that is configurable is represented as validated typed values rather than prompt text. Definitions and shipped values live in `config/ai/runtime.json`.
 
-Examples:
+Currently wired values include:
 
 - Generative/Creative max step count
 - reasoning token budget
-- max output token budgets
-- vision timeout, temperature, and output budgets
+- Generative/Creative max output-token budgets
+- vision timeout, temperature and output budgets
 - Creative runtime health/image/mesh timeouts
 - supported TRELLIS.2 resolution
+- OpenCode request timeout
+- OpenCode/Codex CLI timeout
+- OpenCode validation-attempt count
 
-User settings store sparse overrides only. Removing/changing an override does not require a special reset action; the effective value is whatever profile/configuration is currently selected. The repo JSON remains available as a reference/template.
+The repository JSON supplies the initial value. The Runtime Settings editor persists explicit validated user choices. There is no dedicated reset control.
+
+Provider-specific runtime knobs are exposed only after their runtime path actually consumes them. Do not add Settings fields merely because a legacy constant exists.
+
+## Request-time performance model
+
+AI settings are resolved as a request snapshot:
+
+1. load the user's AI preferences once
+2. collect all selected custom auxiliary instruction-profile IDs
+3. bulk-load those profiles in one `prompt_profiles` query
+4. resolve all tools, context, title/suggestion and transport instructions from the in-memory snapshot for the rest of the turn
+
+If every auxiliary instruction uses the bundled repository template, no `prompt_profiles` bulk query is issued for the auxiliary snapshot.
+
+Conversation-pinned primary Generative/Creative profiles are intentionally resolved by explicit ID so an old conversation can continue using the exact profile it was created with, including after that profile has later been archived.
+
+Tool objects themselves are created once per chat turn and reused by every model step/tool call in that turn.
+
+## Profile lifecycle rules
+
+- bundled templates are read-only repository references
+- custom profiles can be Replace or Overlay profiles
+- an active/default custom profile cannot be archived
+- the user must activate another custom profile first
+- archive is soft removal, not hard delete
+- archived profiles disappear from normal Settings lists
+- an old conversation explicitly pinned to an archived primary profile can still resolve it
+- new defaults cannot point to archived or bundled/read-only profile IDs
+
+These rules avoid an implicit hidden fallback to the bundled template.
 
 ## Technical invariants
 
-These are application correctness/security boundaries, not AI instructions, and are therefore not represented as editable prompt profiles:
+These are application correctness/security boundaries, not AI behavior settings, and therefore remain fixed application logic:
 
 - authentication and authorization
 - Supabase row/storage ownership checks
 - database integrity and schema validation
-- backend-advertised capabilities
+- provider safety/moderation controls
+- backend-advertised capabilities and unsupported input combinations
 - tool input/output schemas required for application interoperability
+- OpenCode/Codex structured result protocol required by the parser
 - binary/file integrity validation
 
 A configurable setting may tune a supported backend option, but it may not claim an unsupported capability. For example, a supported TRELLIS.2 resolution may be selected, but an unsupported reference-image count may not be invented in Settings.
 
-## Implementation sequence
+## Implemented runtime wiring
 
-### Step 1 — Repository-backed catalog
+The current architecture resolves configured instructions at request time for:
 
-- externalize instruction bodies to Markdown
-- externalize runtime defaults/ranges to JSON
-- make the manifest the registry/source of truth
-- remove duplicated hardcoded prompt/default values from TypeScript
+- Generative and Creative system prompts
+- model-facing tool descriptions
+- vision fallback reference and inspection prompts
+- conversation title generation
+- Generative/Creative follow-up suggestions
+- model-facing attachment, mesh-preference and inspection context
+- OpenCode transport behavior
+- Codex transport behavior
+- optional fal.ai image-conditioning behavior
 
-### Step 2 — Generalized instruction persistence
+The TRELLIS.2 core does not depend on the optional fal.ai provider.
 
-- add generic active/default profile mapping instead of one database column per future instruction
-- keep `default_prompt_profile_id` and `default_creative_prompt_profile_id` backward compatible
-- validate auxiliary instruction keys against the repo manifest at the API layer
-- database scope validation remains generic so new manifest entries do not require schema migrations
+## Remaining provider-specific follow-up
 
-### Step 3 — Runtime wiring
+The optional legacy fal.ai implementation in `src/server/falMesh.ts` still contains provider-internal heuristics that predate the generalized instruction system, notably:
 
-Resolve configured instructions at request time for:
+- caption genericization used in the quality segmentation path
+- the SAM text prompt used to select model objects
+- provider-specific numeric heuristics/caps such as textureless polygon cap, SAM confidence threshold and Meshy default polycount
 
-- chat system prompts
-- tool descriptions
-- vision fallback prompts
-- title generation
-- follow-up suggestions
-- model-facing attachment/inspection context
+These are deliberately **not exposed in Settings yet**. They should be moved into provider-specific instruction/runtime definitions only when `falMesh.ts` is refactored to consume those definitions. This prevents Settings entries that appear configurable but do nothing.
 
-With no user profile selected, bundled repository templates must reproduce current behavior byte-for-byte.
+Security controls such as provider moderation/safety tolerance remain non-user-configurable.
 
-### Step 4 — Settings UI
+## Regression gate
 
-Provide one reusable instruction-profile editor with:
+Before closing this checkpoint:
 
-- Bundled template view
-- Replace
-- Overlay
-- Copy
-- New profile
-- Edit/archive custom profiles
-- active/default selection
+- apply pending Supabase migrations
+- regenerate local Supabase TypeScript types
+- `npm test`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- verify Generative prompt Copy/New/Replace/Overlay/default behavior
+- verify Creative prompt Copy/New/Replace/Overlay/default behavior
+- verify an auxiliary instruction profile can be copied/replaced and affects a new request
+- verify Runtime Settings persist and influence a new request
+- verify normal TRELLIS.2 Creative generation remains healthy
+- verify an inactive profile can be archived but an active profile cannot
 
-Do not expose a special Reset-to-Original action.
-
-### Step 5 — Runtime-limit persistence and UI
-
-- schema-driven typed controls
-- bounded server validation
-- sparse persisted overrides
-- request-time resolution from user choice + repo configuration
-
-### Step 6 — Regression gate
-
-- default Generative behavior unchanged
-- default Creative behavior unchanged
-- old conversations continue to resolve pinned primary prompt profiles
-- test/typecheck/lint/build green
-- functional smoke for Generative, Creative, vision fallback, bundled-template copy and full replacement
+After this gate, the provider-specific fal.ai legacy refactor can be handled as a separate bounded follow-up without reopening the core instruction architecture.
