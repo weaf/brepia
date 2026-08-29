@@ -8,6 +8,7 @@
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
+import { getPreferencesByUserId } from './aiSettings';
 import {
   getAiInstructionDefinition,
   isAiInstructionKey,
@@ -40,6 +41,13 @@ type PromptProfileRow = {
   updated_at: string;
 };
 
+export class ActivePromptProfileError extends Error {
+  constructor() {
+    super('Choose another active profile before archiving this profile.');
+    this.name = 'ActivePromptProfileError';
+  }
+}
+
 function parsePromptProfileMode(mode: string): PromptProfileMode {
   if (mode === 'overlay' || mode === 'fork') return mode;
   throw new Error(`Invalid prompt profile mode: ${mode}`);
@@ -63,6 +71,20 @@ function builtinProfileScope(profileId: string): PromptProfileScope | null {
   if (!profileId.startsWith('builtin:')) return null;
   const scope = profileId.slice('builtin:'.length);
   return isAiInstructionKey(scope) ? scope : null;
+}
+
+async function assertPromptProfileIsNotActive(
+  userId: string,
+  profileId: string,
+): Promise<void> {
+  const preferences = await getPreferencesByUserId(userId);
+  if (
+    preferences.defaultPromptProfileId === profileId ||
+    preferences.defaultCreativePromptProfileId === profileId ||
+    Object.values(preferences.instructionProfileDefaults).includes(profileId)
+  ) {
+    throw new ActivePromptProfileError();
+  }
 }
 
 const builtinFingerprintCache = new Map<PromptProfileScope, string>();
@@ -203,6 +225,8 @@ export async function getPromptProfile(
   if (bundledScope) return loadBuiltinProfile(bundledScope);
 
   const supabase = getServiceRoleSupabaseClient();
+  // Intentionally do not filter on `archived`. Existing conversations can be
+  // pinned to an archived profile and must keep resolving that exact snapshot.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from('prompt_profiles') as any)
     .select('*')
@@ -308,6 +332,8 @@ export async function archivePromptProfile(
     throw new Error('Cannot archive a bundled prompt template');
   }
 
+  await assertPromptProfileIsNotActive(userId, profileId);
+
   const supabase = getServiceRoleSupabaseClient();
   const { error } = await supabase
     .from('prompt_profiles')
@@ -320,24 +346,16 @@ export async function archivePromptProfile(
   }
 }
 
+/**
+ * Compatibility alias for older call sites. User-visible removal is archival,
+ * not a hard delete, so historical conversations pinned to this profile keep
+ * resolving the exact prompt they originally used.
+ */
 export async function deletePromptProfile(
   userId: string,
   profileId: string,
 ): Promise<void> {
-  if (builtinProfileScope(profileId)) {
-    throw new Error('Cannot delete a bundled prompt template');
-  }
-
-  const supabase = getServiceRoleSupabaseClient();
-  const { error } = await supabase
-    .from('prompt_profiles')
-    .delete()
-    .eq('id', profileId)
-    .eq('user_id', userId);
-
-  if (error) {
-    throw new Error(`Failed to delete prompt profile: ${error.message}`);
-  }
+  return archivePromptProfile(userId, profileId);
 }
 
 export async function resolveInstructionProfile({
