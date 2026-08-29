@@ -8,6 +8,8 @@
 import { z } from 'zod';
 import {
   AiInstructionKeySchema,
+  AiInstructionProfileIdSchema,
+  DEFAULT_INSTRUCTION_PROFILE_ID,
   InstructionProfileDefaultsSchema,
   RuntimeOverridesSchema,
 } from './aiInstructionSettings.ts';
@@ -55,6 +57,9 @@ const nonReservedSlugSchema = z
 export const AiPreferencesSchema = z.object({
   userId: z.string().uuid(),
   hiddenModelIds: z.array(z.string().min(1).max(256)).default([]),
+  defaultInstructionProfileId: AiInstructionProfileIdSchema.default(
+    DEFAULT_INSTRUCTION_PROFILE_ID,
+  ),
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]).default(null),
   defaultCreativePromptProfileId: z
     .union([z.string().uuid(), z.null()])
@@ -171,8 +176,9 @@ export const UpdateProviderSchema = z.object({
 export const ProviderSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
-  slug: z.string(),
   name: z.string(),
+  description: z.string().nullable().optional(),
+  slug: z.string(),
   driver: ProviderDriverSchema,
   baseUrl: z.string().nullable(),
   hasCredential: z.boolean(),
@@ -281,6 +287,7 @@ export const UpdateHiddenModelsSchema = z.object({
 });
 
 export const SetDefaultPromptSchema = z.object({
+  defaultInstructionProfileId: AiInstructionProfileIdSchema.optional(),
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]).optional(),
   defaultCreativePromptProfileId: z
     .union([z.string().uuid(), z.null()])
