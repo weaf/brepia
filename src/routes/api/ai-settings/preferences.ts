@@ -15,6 +15,8 @@ import { resolveCreativeMeshProvider } from '@/server/creativeMeshProviderRegist
 import { getPromptProfile } from '@/server/promptProfiles';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
 import {
+  AiInstructionProfileIdSchema,
+  DEFAULT_INSTRUCTION_PROFILE_ID,
   InstructionProfileDefaultsSchema,
   RuntimeOverridesSchema,
 } from '@shared/aiInstructionSettings';
@@ -24,9 +26,15 @@ import {
 } from '@shared/aiSettings';
 
 function preferenceResponse(data: Record<string, unknown>) {
+  const instructionProfile = AiInstructionProfileIdSchema.safeParse(
+    data.default_instruction_profile_id,
+  );
   return {
     userId: data.user_id,
     hiddenModelIds: data.hidden_model_ids ?? [],
+    defaultInstructionProfileId: instructionProfile.success
+      ? instructionProfile.data
+      : DEFAULT_INSTRUCTION_PROFILE_ID,
     defaultPromptProfileId: data.default_prompt_profile_id ?? null,
     defaultCreativePromptProfileId:
       data.default_creative_prompt_profile_id ?? null,
@@ -82,6 +90,16 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
 
           if (body.hiddenModelIds !== undefined) {
             updates.hidden_model_ids = body.hiddenModelIds;
+          }
+
+          if (body.defaultInstructionProfileId !== undefined) {
+            const parsed = AiInstructionProfileIdSchema.safeParse(
+              body.defaultInstructionProfileId,
+            );
+            if (!parsed.success) {
+              return json({ error: 'invalid_default_instruction_profile' }, 400);
+            }
+            updates.default_instruction_profile_id = parsed.data;
           }
 
           if (body.defaultPromptProfileId !== undefined) {
