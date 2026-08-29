@@ -1,18 +1,22 @@
 // Server-side prompt_profiles management.
 //
-// Shipped instructions are repository-backed Markdown files declared by the
-// AI instruction manifest. Custom profiles can overlay or fully replace those
-// templates. `builtin:*` IDs are technical compatibility/template identifiers,
-// not mutable database rows and not a Reset-to-Original product mechanism.
+// Repository-backed instruction packages choose the shipped template version
+// for every instruction key. User-owned prompt_profiles remain a second layer:
+// they can overlay or fully replace the selected package template for one key.
+// `builtin:*` IDs are technical compatibility/template identifiers, not mutable
+// database rows and not a Reset-to-Original product mechanism.
 
 import crypto from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import { getPreferencesByUserId } from './aiSettings';
 import {
+  DEFAULT_AI_INSTRUCTION_PROFILE_ID,
   getAiInstructionDefinition,
+  getAiInstructionProfileDefinition,
   isAiInstructionKey,
   loadBundledInstruction,
+  type AiInstructionProfileId,
 } from '@shared/aiInstructionCatalog';
 import type {
   CreatePromptProfileInput,
@@ -59,8 +63,11 @@ function parsePromptProfileScope(scope: string | undefined): PromptProfileScope 
   throw new Error(`Unknown prompt profile scope: ${scope}`);
 }
 
-function bundledPrompt(scope: PromptProfileScope): string {
-  return loadBundledInstruction(scope);
+function bundledPrompt(
+  scope: PromptProfileScope,
+  instructionProfileId: AiInstructionProfileId,
+): string {
+  return loadBundledInstruction(scope, instructionProfileId);
 }
 
 function builtinProfileId(scope: PromptProfileScope): string {
@@ -87,7 +94,7 @@ async function assertPromptProfileIsNotActive(
   }
 }
 
-const builtinFingerprintCache = new Map<PromptProfileScope, string>();
+const builtinFingerprintCache = new Map<string, string>();
 
 export function fingerprint(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
@@ -95,29 +102,28 @@ export function fingerprint(text: string): string {
 
 export function loadBuiltinProfile(
   scope: PromptProfileScope = 'parametric',
+  instructionProfileId: AiInstructionProfileId = DEFAULT_AI_INSTRUCTION_PROFILE_ID,
 ): PromptProfileDetailDto {
   const definition = getAiInstructionDefinition(scope);
   if (!definition) throw new Error(`Unknown AI instruction: ${scope}`);
-
-  const prompt = bundledPrompt(scope);
-  let currentFingerprint = builtinFingerprintCache.get(scope);
-  if (!currentFingerprint) {
-    currentFingerprint = fingerprint(prompt);
-    builtinFingerprintCache.set(scope, currentFingerprint);
+  const packageDefinition = getAiInstructionProfileDefinition(instructionProfileId);
+  if (!packageDefinition) {
+    throw new Error(`Unknown AI instruction profile: ${instructionProfileId}`);
   }
 
-  const name =
-    scope === 'parametric'
-      ? 'CADAM Original'
-      : scope === 'creative'
-        ? 'Creative Original'
-        : `${definition.label} bundled`;
+  const prompt = bundledPrompt(scope, instructionProfileId);
+  const cacheKey = `${instructionProfileId}:${scope}`;
+  let currentFingerprint = builtinFingerprintCache.get(cacheKey);
+  if (!currentFingerprint) {
+    currentFingerprint = fingerprint(prompt);
+    builtinFingerprintCache.set(cacheKey, currentFingerprint);
+  }
 
   return {
     id: builtinProfileId(scope),
     userId: '',
-    name,
-    description: `Bundled repository template. ${definition.description}`,
+    name: `${packageDefinition.label} · ${definition.label}`,
+    description: `${packageDefinition.label} package template. ${definition.description}`,
     promptTemplate: prompt,
     mode: 'overlay',
     scope,
@@ -196,7 +202,11 @@ export async function getUserPromptProfiles(
     };
   });
 
-  const builtIn = loadBuiltinProfile(scope);
+  const preferences = await getPreferencesByUserId(user.id);
+  const builtIn = loadBuiltinProfile(
+    scope,
+    preferences.defaultInstructionProfileId,
+  );
   return [
     {
       id: builtIn.id,
@@ -222,7 +232,13 @@ export async function getPromptProfile(
   profileId: string,
 ): Promise<PromptProfileDetailDto | null> {
   const bundledScope = builtinProfileScope(profileId);
-  if (bundledScope) return loadBuiltinProfile(bundledScope);
+  if (bundledScope) {
+    const preferences = await getPreferencesByUserId(userId);
+    return loadBuiltinProfile(
+      bundledScope,
+      preferences.defaultInstructionProfileId,
+    );
+  }
 
   const supabase = getServiceRoleSupabaseClient();
   // Intentionally do not filter on `archived`. Existing conversations can be
@@ -362,19 +378,26 @@ export async function resolveInstructionProfile({
   userId,
   profileId,
   scope,
+  instructionProfileId,
 }: {
   userId: string;
   profileId: string | null | undefined;
   scope: PromptProfileScope;
+  instructionProfileId?: AiInstructionProfileId;
 }): Promise<string> {
-  const basePrompt = bundledPrompt(scope);
+  const selectedInstructionProfileId =
+    instructionProfileId ??
+    (await getPreferencesByUserId(userId)).defaultInstructionProfileId;
+  const basePrompt = bundledPrompt(scope, selectedInstructionProfileId);
   const expectedBuiltinId = builtinProfileId(scope);
 
   if (!profileId || profileId === expectedBuiltinId) return basePrompt;
 
   const otherBundledScope = builtinProfileScope(profileId);
   if (otherBundledScope) {
-    throw new Error(`Prompt template ${profileId} belongs to ${otherBundledScope}, not ${scope}.`);
+    throw new Error(
+      `Prompt template ${profileId} belongs to ${otherBundledScope}, not ${scope}.`,
+    );
   }
 
   const profile = await getPromptProfile(userId, profileId);
@@ -397,10 +420,17 @@ export async function resolveConversationSystemPrompt({
   userId,
   profileId,
   scope = 'parametric',
+  instructionProfileId,
 }: {
   userId: string;
   profileId: string | null | undefined;
   scope?: PromptProfileScope;
+  instructionProfileId?: AiInstructionProfileId;
 }): Promise<string> {
-  return resolveInstructionProfile({ userId, profileId, scope });
+  return resolveInstructionProfile({
+    userId,
+    profileId,
+    scope,
+    instructionProfileId,
+  });
 }
