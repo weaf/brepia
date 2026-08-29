@@ -21,7 +21,7 @@ Runtime evaluation slot:
 - `test` extends `standard`
 - its current `parametric` and `context.parametric_attachment` overrides mirror the Standard v1 candidate
 - all other instruction keys inherit from Standard
-- `test` is a permanent laboratory slot and must never become the default profile
+- `test` is a permanent laboratory slot; it may be selected as a user's temporary default during experiments, but `defaultProfile` in the repository manifest remains `standard`
 
 ## Controlled protocol
 
