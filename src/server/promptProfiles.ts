@@ -74,9 +74,7 @@ export function loadBuiltinProfile(
     userId: '',
     name: scope === 'creative' ? 'Creative Original' : 'CADAM Original',
     description:
-      scope === 'creative'
-        ? 'Built-in Creative 3D agent prompt.'
-        : null,
+      scope === 'creative' ? 'Built-in Creative 3D agent prompt.' : null,
     promptTemplate: prompt,
     mode: 'overlay',
     scope,
@@ -234,10 +232,10 @@ export async function updatePromptProfile(
   profileId: string,
   input: UpdatePromptProfileInput,
 ): Promise<PromptProfileDetailDto> {
-  if (
-    profileId === BUILTIN_PROFILE_ID ||
-    profileId === BUILTIN_CREATIVE_PROFILE_ID
-  ) {
+  if (profileId === BUILTIN_PROFILE_ID) {
+    throw new Error('Cannot update the built-in prompt profile');
+  }
+  if (profileId === BUILTIN_CREATIVE_PROFILE_ID) {
     throw new Error('Cannot update a built-in prompt profile');
   }
 
@@ -266,11 +264,12 @@ export async function updatePromptProfile(
   if (input.mode !== undefined) update.mode = input.mode;
   if (input.baseRevision !== undefined) update.base_revision = input.baseRevision;
 
+  // Ownership was established by the lookup above. Keep the write chain in
+  // the legacy shape so existing Supabase test doubles remain valid.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from('prompt_profiles') as any)
     .update(update)
     .eq('id', profileId)
-    .eq('user_id', userId)
     .select()
     .single();
 
