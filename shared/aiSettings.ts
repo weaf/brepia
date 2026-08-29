@@ -79,7 +79,7 @@ export const CreatePromptProfileSchema = z.object({
     .min(1, 'promptTemplate is required')
     .max(MAX_CONTENT_LENGTH),
   mode: z.enum(['overlay', 'fork']).optional(),
-  scope: PromptProfileScopeSchema.default('parametric'),
+  scope: PromptProfileScopeSchema.optional(),
   baseRevision: z.string().max(64).nullable().optional(),
 });
 
