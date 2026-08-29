@@ -83,6 +83,12 @@ export type GenerationStatus = Database['public']['Enums']['generation-status'];
 export type ConversationSettings = {
   model?: Model;
   /**
+   * Repository-backed AI instruction package pinned when the conversation is
+   * created. Model selection remains independent. Old conversations without
+   * this field fall back to the user's current package for compatibility.
+   */
+  instructionProfileId?: string;
+  /**
    * LLM/agent model used by Creative conversations. `model` remains the
    * Creative mesh backend ID in that mode, so keeping the two identities
    * separate avoids treating a mesh backend as an LLM.
