@@ -475,6 +475,7 @@ export type Database = {
           mode: string;
           name: string;
           prompt_template: string;
+          scope: string;
           updated_at: string;
           user_id: string;
         };
@@ -487,6 +488,7 @@ export type Database = {
           mode?: string;
           name: string;
           prompt_template: string;
+          scope?: string;
           updated_at?: string;
           user_id: string;
         };
@@ -499,6 +501,7 @@ export type Database = {
           mode?: string;
           name?: string;
           prompt_template?: string;
+          scope?: string;
           updated_at?: string;
           user_id?: string;
         };
@@ -589,9 +592,13 @@ export type Database = {
         Row: {
           created_at: string;
           default_creative_model_id: string | null;
+          default_creative_prompt_profile_id: string | null;
+          default_instruction_profile_id: string;
           default_parametric_model_id: string | null;
           default_prompt_profile_id: string | null;
           hidden_model_ids: string[];
+          instruction_profile_defaults: Json;
+          runtime_overrides: Json;
           updated_at: string;
           user_id: string;
           vision_deep_model_id: string | null;
@@ -600,9 +607,13 @@ export type Database = {
         Insert: {
           created_at?: string;
           default_creative_model_id?: string | null;
+          default_creative_prompt_profile_id?: string | null;
+          default_instruction_profile_id?: string;
           default_parametric_model_id?: string | null;
           default_prompt_profile_id?: string | null;
           hidden_model_ids?: string[];
+          instruction_profile_defaults?: Json;
+          runtime_overrides?: Json;
           updated_at?: string;
           user_id: string;
           vision_deep_model_id?: string | null;
@@ -611,9 +622,13 @@ export type Database = {
         Update: {
           created_at?: string;
           default_creative_model_id?: string | null;
+          default_creative_prompt_profile_id?: string | null;
+          default_instruction_profile_id?: string;
           default_parametric_model_id?: string | null;
           default_prompt_profile_id?: string | null;
           hidden_model_ids?: string[];
+          instruction_profile_defaults?: Json;
+          runtime_overrides?: Json;
           updated_at?: string;
           user_id?: string;
           vision_deep_model_id?: string | null;
