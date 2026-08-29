@@ -4,7 +4,7 @@ Status: **ACTIVE on `feature/post-merge-functionality`**
 
 The Brepia stable-runtime and persistence architecture remains the protected baseline. `CADAM Original` lineage remains unchanged.
 
-## Creative 3D — current architecture
+## Creative 3D — completed native migration
 
 TRELLIS.2 is the only built-in Creative 3D backend:
 
@@ -55,15 +55,13 @@ The native replacement has been exercised successfully in Brepia:
 - [x] text -> Z-Image-Turbo -> TRELLIS.2 produced a real viewable 3D model.
 - [x] Creative model output remains downloadable through the model viewer.
 - [x] native Creative generation remains behind the existing reconnect/single-flight protection.
-
-Still to verify after the final cleanup commits:
-
-- [ ] `npm test`
-- [ ] `npm run typecheck`
-- [ ] `npm run lint`
-- [ ] `npm run build`
-- [ ] final image-to-3D smoke test
-- [ ] final text-to-3D smoke test
+- [x] `npm test` reported green after the final Creative cleanup.
+- [x] `npm run typecheck` reported green after the final Creative cleanup.
+- [x] `npm run lint` reported green after the final Creative cleanup.
+- [x] `npm run build` reported green after the final Creative cleanup.
+- [x] native installer shell syntax reported green.
+- [x] legacy cleanup script shell syntax reported green.
+- [x] the legacy workstation runtime was removed with `scripts/remove-legacy-creative-backends.sh`.
 
 ## Retired local backends
 
@@ -89,13 +87,7 @@ Historical conversations are not rewritten. The retired local IDs are read-compa
 local/trellis2
 ```
 
-The old workstation installation can be removed explicitly with:
-
-```bash
-bash ./scripts/remove-legacy-creative-backends.sh
-```
-
-The cleanup is limited to the retired `pcad-mesh-gateway.service` and old `PCAD_MESH_HOME` tree (default `~/.local/share/pcad-mesh`). It does not touch the llama-swap TRELLIS.2/Z-Image model storage.
+The legacy workstation installation has also been removed. The cleanup was limited to the retired `pcad-mesh-gateway.service` and old `PCAD_MESH_HOME` tree (default `~/.local/share/pcad-mesh`) and did not touch the llama-swap TRELLIS.2/Z-Image model storage.
 
 ## Optional hosted Creative providers
 
@@ -154,6 +146,8 @@ The native installer does not depend on the retired Python Creative stack.
 - Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
 - Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
 
-## Completion criteria
+## Completion
 
-The Creative replacement is complete when the final project gate and post-cleanup smoke tests are green. After that, the branch can proceed to remaining post-merge functionality work.
+The native Creative replacement is complete. TRELLIS.2 is the sole built-in Creative backend, the project gate is green, both native generation paths have been proven, and the superseded Python runtime has been removed from both the repository and the workstation.
+
+Remaining work on this branch should proceed independently from the completed Creative runtime migration.
