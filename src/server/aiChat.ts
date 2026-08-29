@@ -4,6 +4,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { chatTools, type AppUIMessage, type AppTools } from '@shared/chatAi';
 import {
+  isAiInstructionProfileId,
   loadBundledInstruction,
   renderInstructionTemplate,
 } from '@shared/aiInstructionCatalog';
@@ -811,10 +812,18 @@ export async function handleAiChatRequest(req: Request) {
     rawBody.openCodeExecutionMode ??
     conversation.settings?.openCodeExecutionMode ??
     'cli';
+  const pinnedInstructionProfileId = isAiInstructionProfileId(
+    conversation.settings?.instructionProfileId,
+  )
+    ? conversation.settings?.instructionProfileId
+    : undefined;
 
   let aiRuntime: Awaited<ReturnType<typeof createUserAiRuntimeContext>>;
   try {
-    aiRuntime = await createUserAiRuntimeContext(user.id);
+    aiRuntime = await createUserAiRuntimeContext(
+      user.id,
+      pinnedInstructionProfileId,
+    );
   } catch (error) {
     logError(error, {
       functionName: 'ai-chat',
@@ -835,6 +844,7 @@ export async function handleAiChatRequest(req: Request) {
         userId: user.id,
         profileId: creativePromptProfileId,
         scope: 'creative',
+        instructionProfileId: aiRuntime.instructionProfileId,
       });
     } else {
       const promptProfileId = conversation.settings?.promptProfileId as
@@ -845,6 +855,7 @@ export async function handleAiChatRequest(req: Request) {
         userId: user.id,
         profileId: promptProfileId,
         scope: 'parametric',
+        instructionProfileId: aiRuntime.instructionProfileId,
       });
     }
   } catch (error) {
