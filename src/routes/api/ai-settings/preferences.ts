@@ -41,6 +41,18 @@ function preferenceResponse(data: Record<string, unknown>) {
   };
 }
 
+function isSelectablePromptProfile(
+  profile: Awaited<ReturnType<typeof getPromptProfile>>,
+  scope: string,
+): boolean {
+  return Boolean(
+    profile &&
+      profile.scope === scope &&
+      profile.editable &&
+      !profile.archived,
+  );
+}
+
 export const Route = createFileRoute('/api/ai-settings/preferences')({
   server: {
     handlers: {
@@ -78,7 +90,7 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
                 user.id,
                 body.defaultPromptProfileId,
               );
-              if (!profile || profile.scope !== 'parametric') {
+              if (!isSelectablePromptProfile(profile, 'parametric')) {
                 return json({ error: 'invalid_default_prompt_profile' }, 400);
               }
             }
@@ -91,7 +103,7 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
                 user.id,
                 body.defaultCreativePromptProfileId,
               );
-              if (!profile || profile.scope !== 'creative') {
+              if (!isSelectablePromptProfile(profile, 'creative')) {
                 return json(
                   { error: 'invalid_default_creative_prompt_profile' },
                   400,
@@ -113,11 +125,7 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
             for (const [scope, profileId] of Object.entries(parsed.data)) {
               if (profileId == null) continue;
               const profile = await getPromptProfile(user.id, profileId);
-              if (
-                !profile ||
-                profile.scope !== scope ||
-                !profile.editable
-              ) {
+              if (!isSelectablePromptProfile(profile, scope)) {
                 return json(
                   {
                     error: 'invalid_instruction_profile_default',
