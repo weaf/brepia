@@ -20,9 +20,6 @@ import { Share as ShareIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShareContent } from '@/components/ui/ShareContent';
-import { ActivityIndicator } from '@/components/brand';
-import { supabase } from '@/lib/supabase';
-import { useQuery } from '@tanstack/react-query';
 
 interface ChatTitleProps {
   activeMeshId?: string | null;
@@ -40,28 +37,6 @@ export function ChatTitle({
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const isParametric = conversation.type === 'parametric';
-
-  // Creative mesh generation outlives the browser stream. The meshes row is
-  // inserted with status=pending before the expensive local generation starts,
-  // so it is the durable source of truth for "work is still happening" after
-  // navigation, Android backgrounding, reconnects, or a full page reload.
-  const { data: pendingMeshCount = 0 } = useQuery({
-    queryKey: ['creative-generation-activity', conversation.id],
-    enabled: conversation.type === 'creative',
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('meshes')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversation_id', conversation.id)
-        .eq('status', 'pending');
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-    refetchInterval: 2500,
-    refetchOnWindowFocus: true,
-  });
-  const hasPendingMesh = pendingMeshCount > 0;
 
   // Keep local state in sync when switching conversations quickly
   useEffect(() => {
@@ -115,7 +90,7 @@ export function ChatTitle({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <div className="min-w-0 flex-1">
         <AnimatePresence mode="wait" initial={false}>
           {isEditingTitle ? (
@@ -254,20 +229,6 @@ export function ChatTitle({
           )}
         </AnimatePresence>
       </div>
-
-      {hasPendingMesh && (
-        <div className="w-fit shrink-0 rounded-full border border-adam-neutral-700 bg-adam-neutral-900/70 px-2.5 py-1 text-xs text-adam-text-secondary">
-          <ActivityIndicator
-            label={
-              pendingMeshCount === 1
-                ? 'Generating 3D model'
-                : `Generating ${pendingMeshCount} 3D models`
-            }
-            showLabel
-            size="sm"
-          />
-        </div>
-      )}
     </div>
   );
 }
