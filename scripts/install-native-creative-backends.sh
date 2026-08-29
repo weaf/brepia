@@ -144,7 +144,13 @@ download_checked "$VAE_URL" "$VAE_FILE" "$VAE_SHA256"
 echo "==> installing TRELLIS.2 Q8 CUDA runtime and models"
 TRELLIS_SERVER="$TRELLIS_RUNTIME_DIR/runtime/trellis-server"
 TRELLIS_MODEL_MARKER="$TRELLIS_MODELS_DIR/shape_dec.gguf"
+TRELLIS_INSTALL_STATUS=0
 if [ ! -x "$TRELLIS_SERVER" ] || [ ! -s "$TRELLIS_MODEL_MARKER" ]; then
+  # trellis.cpp currently returns status 1 after a successful --skip-app install
+  # because its final AppImage existence test is false. Verify the actual runtime
+  # assets below instead of treating that known upstream status as installation
+  # failure.
+  set +e
   curl -fsSL https://raw.githubusercontent.com/pwilkin/trellis.cpp/main/install/install.sh \
     | bash -s -- \
       --backend cuda \
@@ -153,18 +159,24 @@ if [ ! -x "$TRELLIS_SERVER" ] || [ ! -s "$TRELLIS_MODEL_MARKER" ]; then
       --quant q8 \
       --skip-app \
       -y
+  TRELLIS_INSTALL_STATUS=$?
+  set -e
 else
   echo "==> already present: $TRELLIS_SERVER"
   echo "==> already present: $TRELLIS_MODELS_DIR"
 fi
+
 [ -x "$TRELLIS_SERVER" ] || {
-  echo "trellis-server not found at $TRELLIS_SERVER" >&2
+  echo "trellis-server not found at $TRELLIS_SERVER (upstream installer status: $TRELLIS_INSTALL_STATUS)" >&2
   exit 1
 }
 [ -s "$TRELLIS_MODEL_MARKER" ] || {
-  echo "TRELLIS.2 models not found under $TRELLIS_MODELS_DIR" >&2
+  echo "TRELLIS.2 models not found under $TRELLIS_MODELS_DIR (upstream installer status: $TRELLIS_INSTALL_STATUS)" >&2
   exit 1
 }
+if [ "$TRELLIS_INSTALL_STATUS" -ne 0 ]; then
+  echo "==> trellis.cpp installer returned status $TRELLIS_INSTALL_STATUS after --skip-app; runtime and model assets are present, continuing"
+fi
 
 if [ ! -f "$LLAMA_SWAP_CONFIG" ]; then
   echo "llama-swap config not found: $LLAMA_SWAP_CONFIG" >&2
@@ -172,15 +184,20 @@ if [ ! -f "$LLAMA_SWAP_CONFIG" ]; then
   exit 1
 fi
 
-if grep -qE '^[[:space:]]+creative/z-image-turbo:' "$LLAMA_SWAP_CONFIG" || \
-   grep -qE '^[[:space:]]+creative/trellis2:' "$LLAMA_SWAP_CONFIG"; then
+HAS_Z_IMAGE=0
+HAS_TRELLIS2=0
+grep -qE '^[[:space:]]+creative/z-image-turbo:' "$LLAMA_SWAP_CONFIG" && HAS_Z_IMAGE=1 || true
+grep -qE '^[[:space:]]+creative/trellis2:' "$LLAMA_SWAP_CONFIG" && HAS_TRELLIS2=1 || true
+
+if [ "$HAS_Z_IMAGE" -eq 1 ] && [ "$HAS_TRELLIS2" -eq 1 ]; then
   echo "==> Creative llama-swap entries already exist; leaving config unchanged"
-  echo "    Verify their paths manually if the runtime or model root changed."
 else
   BACKUP="$LLAMA_SWAP_CONFIG.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$LLAMA_SWAP_CONFIG" "$BACKUP"
   echo "==> backed up llama-swap config to $BACKUP"
-  cat >> "$LLAMA_SWAP_CONFIG" <<EOF
+
+  if [ "$HAS_Z_IMAGE" -eq 0 ]; then
+    cat >> "$LLAMA_SWAP_CONFIG" <<EOF
 
   creative/z-image-turbo:
     ttl: 30
@@ -199,6 +216,12 @@ else
       --width 1024
       --steps 8
     proxy: http://127.0.0.1:\${PORT}
+EOF
+    echo "==> appended creative/z-image-turbo to llama-swap"
+  fi
+
+  if [ "$HAS_TRELLIS2" -eq 0 ]; then
+    cat >> "$LLAMA_SWAP_CONFIG" <<EOF
 
   creative/trellis2:
     ttl: 30
@@ -210,7 +233,8 @@ else
       --port \${PORT}
     proxy: http://127.0.0.1:\${PORT}
 EOF
-  echo "==> appended creative/z-image-turbo and creative/trellis2 to llama-swap"
+    echo "==> appended creative/trellis2 to llama-swap"
+  fi
 fi
 
 cat <<EOF
