@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import {
   AI_RUNTIME_LIMIT_DEFINITIONS,
+  DEFAULT_AI_INSTRUCTION_PROFILE_ID,
   isAiInstructionKey,
+  isAiInstructionProfileId,
   type AiInstructionKey,
+  type AiInstructionProfileId,
   type AiRuntimeLimitKey,
 } from './aiInstructionCatalog.ts';
 
@@ -13,6 +16,15 @@ export const AiInstructionKeySchema = z
   .min(1)
   .max(128)
   .refine(isAiInstructionKey, 'Unknown AI instruction key');
+
+export const AiInstructionProfileIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(isAiInstructionProfileId, 'Unknown AI instruction profile');
+
+export const DEFAULT_INSTRUCTION_PROFILE_ID: AiInstructionProfileId =
+  DEFAULT_AI_INSTRUCTION_PROFILE_ID;
 
 export const InstructionProfileDefaultsSchema = z
   .record(z.string(), nullableProfileIdSchema)
