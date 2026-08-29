@@ -10,10 +10,18 @@ import {
   getUserPromptProfiles,
   createPromptProfile,
 } from '@/server/promptProfiles';
-import type { PromptProfileScope } from '@shared/aiSettings';
+import {
+  PromptProfileScopeSchema,
+  type PromptProfileScope,
+} from '@shared/aiSettings';
 
 function parseScope(value: unknown): PromptProfileScope {
-  return value === 'creative' ? 'creative' : 'parametric';
+  if (value == null || value === '') return 'parametric';
+  const parsed = PromptProfileScopeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Unknown prompt profile scope: ${String(value)}`);
+  }
+  return parsed.data;
 }
 
 export const Route = createFileRoute('/api/ai-settings/profiles')({
