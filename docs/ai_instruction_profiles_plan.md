@@ -65,7 +65,7 @@ Stable package profiles:
 
 Experimental package profile:
 
-- `test` — permanent Brepia laboratory slot. It extends Standard and overrides only instruction keys involved in the current experiment. It may be selected as a user's temporary default while testing, but the repository `defaultProfile` remains `standard`.
+- `test` — permanent Brepia laboratory slot. It extends Standard and overrides only instruction keys involved in the current experiment. When no experiment is active, `instructions` is empty and Test resolves identically to Standard. It may be selected as a user's temporary default while testing, but the repository `defaultProfile` remains `standard`.
 
 CADAM and Standard initially point to the immutable `cadam-split-2026-08-29` revision, but Standard does not extend CADAM live. Future CADAM imports create a new frozen revision and move only the CADAM package pointer. Standard remains unchanged until Brepia deliberately ports a change.
 
@@ -122,6 +122,7 @@ Tool objects themselves are created once per chat turn and reused by every model
 - CADAM is upstream-managed; Standard is Brepia-managed
 - Test is Brepia-managed and intentionally mutable between experiments
 - repository `defaultProfile` remains Standard; Test is never the shipped default
+- after an experiment is promoted or rejected, Test returns to an idle state with no overrides
 - custom profiles can be Replace or Overlay profiles
 - an active/default custom profile cannot be archived
 - the user must activate another custom profile first
@@ -219,26 +220,31 @@ Functional package smoke:
 - [x] verify both CADAM and Standard currently resolve identical split-revision content
 - [x] verify Custom Prompt Overlay/Replace still layers correctly over the selected package — focused regression tests in `tests/promptProfilesPackageLayering.test.ts` and `tests/aiInstructionCatalog.test.ts` were reported green locally, and the full `npm test` suite was also reported green
 
-## Next active phase — Brepia Standard Parametric evaluation
+## Brepia Standard Parametric evaluation
 
-The package architecture is no longer a blocker. A permanent repository-backed `test` profile is now the runtime laboratory slot. Its current Parametric and attachment-context overrides mirror the Standard v1 candidate in `config/ai/evals/parametric/`; all other keys inherit from Standard.
+### Standard v1 — REJECTED 2026-08-29
 
-### Current A/B observations
+Hands-on CADAM-versus-Test runs used the same model and prompts for an L-shaped mounting bracket, followed by the same constrained hole-position edit. The observed geometry and requested follow-up edit were effectively identical in both profiles. CADAM additionally exposed the hole Z offset as an editable parameter in the first result and produced a more convenient model origin for interactive rotation.
 
-Initial hands-on CADAM-versus-Test runs used the same model and prompts for an L-shaped mounting bracket, followed by the same constrained hole-position edit. The observed geometry and requested follow-up edit were effectively identical in both profiles. CADAM additionally exposed the hole Z offset as an editable parameter in the first result and produced a more convenient model origin for interactive rotation. These are provisional observations from this case, but they mean Standard v1 has **not yet demonstrated a measurable advantage** and currently shows a small usability/parameterization disadvantage in this example.
+Conclusion: Standard v1 did not demonstrate an improvement and showed a small parameterization/usability regression in the observed case. It is therefore rejected and must not be promoted into Standard. Additional testing of this candidate is unnecessary unless a future experiment identifies a concrete scenario where different behavior is specifically expected.
+
+The candidate source remains under `config/ai/evals/parametric/candidates/` as evaluation history. The runtime Test slot has been reset to inherit Standard with no overrides.
+
+## Next prompt-profile work
+
+Do not create a new general Standard candidate merely to make it different from CADAM. A future Test experiment must begin with a concrete hypothesis, regression, missing capability or measurable behavior that should improve over the current baseline.
 
 - keep CADAM frozen and unchanged
-- keep Standard unchanged until a candidate is promoted
+- keep Standard unchanged while CADAM remains the stronger/equal measured baseline
 - keep repository `defaultProfile` set to Standard
-- use Test for experimental runtime instructions
+- keep Test idle until a specific experiment is defined
 - keep model selection independent of profile selection
-- use the same Parametric model/runtime/application revision for CADAM and Test runs
-- compare CADAM versus Test in fresh conversations without an additional Custom Prompt Profile
-- promote only measured improvements from Test into `standard.instructions`
-- after promotion or rejection, reuse Test for the next candidate
-- do not add a Qwen/model-family profile until Standard evaluation demonstrates a repeatable model-specific need
+- for future candidates, compare against CADAM with the same model/runtime/application revision
+- promote only measured improvements into `standard.instructions`
+- after promotion or rejection, return Test to its idle state
+- add a model-specific profile only after a repeatable model-specific deficiency is demonstrated
 - keep Creative/TRELLIS-specific prompt optimization as a separate follow-up
 
-The evaluation protocol, hard gates, scoring dimensions and promotion rule are documented in `config/ai/evals/parametric/README.md`.
+The evaluation protocol, hard gates, scoring dimensions and V1 rejection record are documented in `config/ai/evals/parametric/README.md`.
 
-After the Parametric Standard candidate is evaluated and promoted or rejected, continue the remaining non-Creative instruction-key audit while leaving the CADAM frozen/upstream lineage intact. The optional fal.ai legacy refactor remains a separate bounded follow-up.
+Continue the remaining non-Creative instruction-key audit only where it identifies a concrete reason to differ from the current baseline. The optional fal.ai legacy refactor remains a separate bounded follow-up.
