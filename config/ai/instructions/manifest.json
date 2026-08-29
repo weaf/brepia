@@ -90,6 +90,14 @@
       "supportsOverlay": true
     },
     {
+      "key": "context.creative_reference_mesh",
+      "label": "Creative reference mesh context",
+      "description": "Model-facing context injected for reference meshes in Creative conversations.",
+      "category": "context",
+      "template": "context-creative-reference-mesh.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "context.mesh_preferences",
       "label": "Mesh preferences context",
       "description": "Model-facing context for topology and polygon-count preferences.",
