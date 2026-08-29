@@ -66,6 +66,14 @@ export function getParametricText(parts: unknown): string {
 export function cleanAssistantText(text: string): string {
   text = text.replace(/!\[[^\]]*]\([^)]+\)/g, '');
 
+  // Older Creative agents sometimes invented direct pCAD asset URLs after a
+  // successful create_mesh call. Downloads belong to the model viewer, so
+  // suppress those legacy lines instead of presenting a broken external link.
+  text = text.replace(
+    /(?:^|\n)[^\n]*\/api\/asset\/[^\n]*(?=\n|$)/gi,
+    '\n',
+  );
+
   const metadataLeak =
     /(?:^|\n)\s*,?\s*(?:"?(?:viewpoint_state|zoom_info|title|version)"?\s*:)/i.exec(
       text,
