@@ -146,7 +146,7 @@ The native installer does not depend on the retired Python Creative stack.
 - Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
 - Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
 
-## Local Supabase lifecycle / NOx follow-up
+## Local Supabase lifecycle / NOx follow-up — active
 
 The repository currently states that **NOx owns the local Supabase service lifecycle**, and `start.sh` assumes the Supabase stack has already been started through NOx. This needs an explicit workstation-level review before the convention is treated as authoritative long-term.
 
@@ -160,42 +160,53 @@ Follow-up tasks:
 - [ ] preserve the current rule that migrations and type generation use the repository-local CLI after the local stack is running, unless the review establishes a better supported workflow;
 - [ ] document recovery/troubleshooting steps for a missing or stopped local Supabase stack so future agents do not guess or substitute another lifecycle manager silently.
 
-This review is infrastructure/documentation cleanup and should remain separate from the AI profile/prompt evaluation work unless it blocks the required local migration/regression gate.
+Repository reconciliation already identified one stale instruction source: `.cursor/rules/database-workflow.mdc` still instructs agents to use global `supabase stop/start`, while `AGENTS.md` and `start.sh` describe a NOx-owned lifecycle with repository-local `npx supabase` operations. Resolve this contradiction as part of the workstation review rather than guessing which document is authoritative.
+
+This review is infrastructure/documentation cleanup and should remain separate from AI profile/prompt evaluation unless it blocks a required local migration/regression gate.
 
 ## 3D viewer interaction — free rotation (completed)
 
-The primary Parametric/OpenSCAD viewer now uses unrestricted trackball-style rotation instead of the previous constrained orbit behavior.
+The primary Parametric/OpenSCAD viewer now uses unrestricted arcball-style rotation. The earlier TrackballControls implementation was replaced after final UX testing exposed an orthographic zoom-out regression; the current ArcballControls implementation restores bidirectional wheel zoom while retaining free rotation.
 
 Completed outcomes:
 
 - [x] unrestricted rotation around all axes;
-- [x] pan and zoom preserved;
+- [x] pan and bidirectional zoom preserved;
 - [x] model bounds/visual center remains the practical rotation target, so usability no longer depends on a convenient OpenSCAD origin;
 - [x] desktop ViewGizmo can still snap back to canonical views after free rotation;
 - [x] the control change was isolated from prompt/profile and stable-runtime behavior;
-- [x] manual functional review confirmed the new rotation behavior works as intended.
+- [x] manual functional review confirmed the final rotation/zoom behavior works as intended.
 
 Focused automated pointer/touch interaction coverage was not added before the control replacement. Add it later only if viewer-control regressions justify dedicated browser interaction tests.
 
-## Settings UX and appearance — active
+## Settings UX and appearance — completed
 
-The next active UI/UX workstream is documented in:
+The completed workstream is documented in:
 
 - `docs/settings_ux_plan.md`
 
-The plan covers:
+Completed outcomes include:
 
-- responsive Settings width and stable top alignment;
-- responsive desktop/mobile Settings navigation;
-- application-level `System / Light / Dark` appearance;
-- optional information-hierarchy cleanup for advanced AI settings;
-- contrast, focus, target-size, reflow, and reduced-motion review;
-- desktop/mobile visual and repository regression gates.
+- [x] responsive Settings width and stable top alignment;
+- [x] responsive desktop/mobile Settings navigation;
+- [x] application-level `System / Light / Dark` appearance with persistence and live System behavior;
+- [x] theme-aware shared/app surfaces including the final Light-theme conversation/sidebar regressions;
+- [x] clearer Common/Advanced AI settings information hierarchy;
+- [x] contrast, focus, target-size, reflow, and reduced-motion improvements;
+- [x] desktop/mobile visual verification;
+- [x] responsive/reflow verification including narrow phones and 200% zoom;
+- [x] appearance/reload/viewer-independence verification;
+- [x] keyboard/accessibility spot checks;
+- [x] final repository regression gate user-confirmed complete.
 
-This work must remain cosmetic/interaction-focused and must not alter Parametric, Creative, AI routing/profile semantics, Supabase contracts, or the stable-runtime recovery architecture.
+Phase 6 is closed as implemented and tested. Future Settings changes should be treated as new requirements or concrete regressions rather than continuation of this UX plan.
 
-## Completion
+## Completion / current active work
 
 The native Creative replacement is complete. TRELLIS.2 is the sole built-in Creative backend, the project gate is green, both native generation paths have been proven, and the superseded Python runtime has been removed from both the repository and the workstation.
 
-The free-rotation viewer improvement is also complete and manually verified. The active user-facing follow-up on this branch is now the Settings UX and appearance plan, with the local Supabase/NOx lifecycle review remaining a separate infrastructure/documentation task.
+The final free-rotation/zoom viewer behavior is complete and manually verified.
+
+The Settings UX and appearance plan is complete, including Phase 6 final verification.
+
+The remaining active infrastructure/documentation task in this plan is the **local Supabase / NOx lifecycle review**. Other deferred work should remain in its dedicated plan/status files and must not be reopened implicitly.
