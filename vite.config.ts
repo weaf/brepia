@@ -162,6 +162,13 @@ function serveOpenScadWasm(): Plugin {
   };
 }
 
+const vendorChunkTest = (id: string) =>
+  id.includes('/node_modules/react/') ||
+  id.includes('/node_modules/react-dom/') ||
+  id.includes('/node_modules/@tanstack/react-router/') ||
+  id.includes('/node_modules/@tanstack/react-start/') ||
+  id.includes('/node_modules/lucide-react/');
+
 export default defineConfig({
   base: appBase,
   plugins: [
@@ -213,18 +220,15 @@ export default defineConfig({
     client: {
       build: {
         outDir: 'dist/brepia',
-        rollupOptions: {
+        rolldownOptions: {
           output: {
-            manualChunks(id) {
-              if (
-                id.includes('/node_modules/react/') ||
-                id.includes('/node_modules/react-dom/') ||
-                id.includes('/node_modules/@tanstack/react-router/') ||
-                id.includes('/node_modules/@tanstack/react-start/') ||
-                id.includes('/node_modules/lucide-react/')
-              ) {
-                return 'vendor';
-              }
+            codeSplitting: {
+              groups: [
+                {
+                  name: 'vendor',
+                  test: vendorChunkTest,
+                },
+              ],
             },
           },
         },
