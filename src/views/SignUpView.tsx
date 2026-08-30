@@ -92,7 +92,7 @@ export function SignUpView() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-adam-bg-dark p-4">
         <div className="w-full max-w-md rounded-lg bg-adam-bg-secondary-dark p-8 text-center shadow-md">
-          <h1 className="text-xl font-semibold text-white">
+          <h1 className="text-xl font-semibold text-adam-text-primary">
             Registration unavailable
           </h1>
           <p className="mt-3 text-sm text-adam-text-secondary">
@@ -141,7 +141,7 @@ export function SignUpView() {
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
           <div className="mb-4 flex flex-col items-center justify-center gap-3">
             <BrepiaBrand showByNoty />
-            <h1 className="text-xl font-semibold text-white">
+            <h1 className="text-xl font-semibold text-adam-text-primary">
               {bootstrap ? 'Create administrator account' : 'Create account'}
             </h1>
           </div>
