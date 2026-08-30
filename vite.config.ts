@@ -10,10 +10,11 @@ import { defineConfig, type Plugin } from 'vite';
 const appBase = '/';
 const legacyAppBase = '/cadam';
 const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim();
 
-function legacyCadamRedirectPlugin(): Plugin {
+function legacyBaseRedirectPlugin(): Plugin {
   return {
-    name: 'legacy-cadam-base-redirect',
+    name: 'legacy-base-redirect',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (!req.url) return next();
@@ -164,7 +165,7 @@ function serveOpenScadWasm(): Plugin {
 export default defineConfig({
   base: appBase,
   plugins: [
-    legacyCadamRedirectPlugin(),
+    legacyBaseRedirectPlugin(),
     serveOpenScadWasm(),
     supabaseProxyPlugin(),
     tanstackStart({
@@ -182,10 +183,13 @@ export default defineConfig({
       inlineDynamicImports: true,
     }),
     react(),
-    sentryVitePlugin({
-      org: 'adamcad',
-      project: 'adamcad',
-    }),
+    sentryAuthToken
+      ? sentryVitePlugin({
+          org: 'adamcad',
+          project: 'adamcad',
+          authToken: sentryAuthToken,
+        })
+      : null,
   ],
   resolve: {
     alias: {
