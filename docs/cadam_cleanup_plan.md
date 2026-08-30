@@ -1,14 +1,16 @@
 # CADAM cleanup plan
 
-Status: **ACTIVE on `feature/cadam-cleanup`**
+Status: **COMPLETE / MERGE-READY on `feature/cadam-cleanup`**
 
 Base: `master` after merge commit `3511046a6439cc6796571ef63a5c3c70d184b599`.
+
+Final reconciliation on 2026-08-30: branch was 40 commits ahead of `master` and 0 behind before this documentation closeout commit. No master reconciliation was required.
 
 ## Goal
 
 Remove inherited CADAM naming where it is now an unnecessary product/runtime constraint, starting with the user-visible requirement to access Brepia under `/cadam`.
 
-This is a staged compatibility cleanup, not a blind global rename.
+This was executed as a staged compatibility cleanup, not a blind global rename.
 
 ## Preserve deliberately
 
@@ -113,9 +115,10 @@ Verified workstation result:
 - [x] Creative conversation/generation works against the migrated stack — user verified 2026-08-30;
 - [x] OpenSCAD WASM rendering works in stable runtime after the root-path regression fix — user verified 2026-08-30;
 - [x] normal stable application smoke passed against the migrated `brepia` stack — user verified 2026-08-30;
-- [x] full automated gate (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) passed after migration/root-path fixes — user verified 2026-08-30.
-
-The regression/rollback window is therefore closed. The old `cadam` Podman resources are now cleanup candidates rather than active rollback state. Migration backup archives are retained independently by default so removing old volumes does not remove the last archival recovery copy.
+- [x] full automated gate (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) passed after migration/root-path fixes — user verified 2026-08-30;
+- [x] guarded legacy cleanup removed the old `supabase_db_cadam`, `supabase_storage_cadam` and stale `supabase_edge_runtime_cadam` volumes after verifying that no container mounted them;
+- [x] post-cleanup inspection showed only active `brepia` Supabase resources and no remaining `cadam` volumes;
+- [x] migration backup archives were retained under `supabase/.temp/project-id-migration-backups/` as an independent recovery copy.
 
 ### Root-path OpenSCAD regression found during migration smoke
 
@@ -135,44 +138,39 @@ Prepared tooling remains available for audit/recovery/cleanup:
 
 - `scripts/inspect-supabase-project-identity.sh` — read-only identity/mount inventory;
 - `scripts/migrate-supabase-project-id.sh` — guarded migration tool using stop/archive/create/import/config/start with fingerprint verification and rollback to untouched original volumes;
-- `scripts/cleanup-cadam-supabase-resources.sh` — dry-run-by-default cleanup that refuses to act unless the `brepia` DB/Storage stack is active and no legacy volume is mounted. It removes only matching legacy Podman containers/networks/volumes and intentionally retains migration backup archives.
+- `scripts/cleanup-cadam-supabase-resources.sh` — dry-run-by-default cleanup that refuses to act unless the `brepia` DB/Storage stack is active and no legacy volume is mounted.
 
-## Phase 4 — source/config naming inventory — ACTIVE
+## Phase 4 — source/config naming inventory — COMPLETE
 
-Remaining `cadam`, `CADAM`, `adamcad`, `Adam` and `PCAD_*` occurrences are classified into:
+Remaining `cadam`, `CADAM`, `adamcad`, `Adam` and `PCAD_*` occurrences were classified rather than globally renamed.
 
-1. safe product/runtime cleanup;
-2. compatibility-sensitive identifiers;
-3. external-service account identifiers;
-4. intentional historical/upstream attribution;
-5. prompt/profile lineage that must remain stable.
-
-Current classification:
+Completed classification and cleanup:
 
 - [x] `/cadam` in `vite.config.ts` is now only the intentional legacy compatibility redirect; retain during the transition period;
+- [x] the active Creative mesh-tool request path was corrected from `/cadam/api/mesh` to `/api/mesh`;
 - [x] `CADAM Original` and related profile/revision references are intentional lineage; preserve;
 - [x] README/upstream Adam-CAD/CADAM attribution and historical remake/closeout documents are intentional historical records; preserve;
 - [x] Sentry `adamcad` org/project values are external-service identifiers; do not rename without corresponding Sentry configuration;
 - [x] `PCAD_*` variables are operator/API compatibility contracts; do not mass-rename;
 - [x] `pcad.invalid` and `pcad_*` auth/bootstrap/database identifiers are compatibility-sensitive and require a separate auth/database migration decision;
-- [x] active contributor/branding guidance was updated to point at this staged cleanup and no longer describes `/cadam` as the canonical deployment path;
-- [ ] local seed identity `test@adamcad.com` should be changed to a Brepia synthetic address; connector write is currently blocked because the seed file contains a literal local test password, so this remains a small manual/tooling follow-up;
-- [x] `scripts/load-prod-snapshot.mjs` classified as an unreferenced historical one-off production snapshot loader; preserve as historical migration tooling rather than editing its workstation-specific source paths or `/tmp/cadam_load` scratch directory;
-- [x] `public/` currently contains only Brepia/current generic assets (`brepia-*`, Geist, HDR, libraries, manifest); no legacy Adam/CADAM public asset remains to delete;
-- [ ] inspect internal `adam-*` CSS/Tailwind token names separately; rename only if a complete mechanical replacement can be proven behavior-neutral.
+- [x] active contributor/branding guidance points at this staged cleanup and no longer describes `/cadam` as the canonical deployment path;
+- [x] local seed identity was changed from `test@adamcad.com` to the synthetic Brepia address `test@brepia.invalid`;
+- [x] `scripts/load-prod-snapshot.mjs` is an unreferenced historical one-off production snapshot loader; preserve as historical migration tooling rather than editing its workstation-specific source paths or `/tmp/cadam_load` scratch directory;
+- [x] `public/` contains only Brepia/current generic assets (`brepia-*`, Geist, HDR, libraries, manifest); no legacy Adam/CADAM public asset remains to delete;
+- [x] internal `adam-*` Tailwind/CSS names were inspected and classified as a broad compatibility token layer already mapped primarily to `--brepia-*` design variables. A mass rename would create disproportionate cosmetic regression risk and is intentionally deferred to a future dedicated Tailwind/design-token migration.
 
-Only category 1 should be renamed automatically. Categories 2–5 require an explicit decision.
+Only genuinely active category-1 runtime remnants were changed. Compatibility contracts, external service identities, historical attribution and prompt/profile lineage remain intentionally stable.
 
-## Phase 5 — final regression gate — COMPLETE FOR CURRENT CLEANUP STATE
+## Phase 5 — final regression gate — COMPLETE
 
-Automated gate, user verified 2026-08-30:
+Automated gate, user verified 2026-08-30 after the final runtime/seed cleanup:
 
 - [x] `npm test`;
 - [x] `npm run typecheck`;
 - [x] `npm run lint`;
 - [x] `npm run build`.
 
-Manual smoke verified for the current cleanup state:
+Manual smoke verified for the cleanup state:
 
 - [x] root URL startup and reload;
 - [x] old `/cadam` redirect compatibility;
@@ -183,8 +181,18 @@ Manual smoke verified for the current cleanup state:
 - [x] OpenSCAD WASM rendering;
 - [x] stable runtime operation during the tested workflow.
 
-Exported/shared-link behavior and any deeper auth/password-flow permutations remain normal release-regression items, but no current CADAM cleanup blocker is known from them.
+Exported/shared-link behavior and deeper auth/password-flow permutations remain normal release-regression items, but no current CADAM cleanup blocker is known from them.
 
-## Current next step
+## Merge readiness
 
-Run `scripts/cleanup-cadam-supabase-resources.sh` in dry-run mode and inspect the exact stale `cadam` Podman resources. If the inventory contains only the expected legacy resources, execute the guarded cleanup; migration backup archives are retained. Then continue the remaining safe Phase 4 source/config cleanup. Do not mass-rename `PCAD_*`, auth/database identifiers, external Sentry identity or `CADAM Original` lineage.
+`feature/cadam-cleanup` is ready to merge to `master` based on the verified cleanup scope and regression evidence above.
+
+Before this documentation closeout commit, GitHub reconciliation showed:
+
+- base/merge-base: `3511046a6439cc6796571ef63a5c3c70d184b599`;
+- branch head: `ee5d0356ee64f0141fa967abd02caa17a12a71a7`;
+- ahead of `master`: 40 commits;
+- behind `master`: 0 commits;
+- no unexpected files outside the documented cleanup, migration tooling, root-path fixes and OpenSCAD regression repair.
+
+No further broad CADAM/Adam rename should be added before merge. In particular, preserve `CADAM Original`, Sentry `adamcad`, `PCAD_*`, compatibility-sensitive `pcad_*`/`pcad.invalid` identifiers and the `adam-*` design-token compatibility layer unless they receive their own explicit migration plan.
