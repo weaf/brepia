@@ -3,7 +3,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -17,9 +19,12 @@ import { PrimaryPromptProfilesSettings } from './PrimaryPromptProfilesSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { VisionSettings } from './VisionSettings';
 
-const AI_SETTINGS_SECTIONS = [
-  { value: 'models', label: 'Models' },
-  { value: 'profiles', label: 'Profiles' },
+const COMMON_AI_SETTINGS_SECTIONS = [
+  { value: 'general', label: 'General' },
+] as const;
+
+const ADVANCED_AI_SETTINGS_SECTIONS = [
+  { value: 'model-catalog', label: 'Model catalog' },
   { value: 'local-models', label: 'Local Models' },
   { value: 'prompts', label: 'Prompts' },
   { value: 'runtime', label: 'Runtime' },
@@ -27,17 +32,29 @@ const AI_SETTINGS_SECTIONS = [
   { value: 'vision', label: 'Vision' },
 ] as const;
 
+const AI_SETTINGS_SECTIONS = [
+  ...COMMON_AI_SETTINGS_SECTIONS,
+  ...ADVANCED_AI_SETTINGS_SECTIONS,
+] as const;
+
 type AiSettingsTab = (typeof AI_SETTINGS_SECTIONS)[number]['value'];
 
 export function AiSettingsSection() {
   const [activeSection, setActiveSection] =
-    useState<AiSettingsTab>('models');
+    useState<AiSettingsTab>('general');
 
   return (
     <section className="min-w-0 rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 text-adam-neutral-100 sm:p-6">
-      <h2 className="mb-4 text-lg font-semibold text-adam-neutral-50">
-        AI Settings
-      </h2>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-adam-neutral-50">
+          AI Settings
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
+          Start with your default models and AI profile. Advanced sections
+          control model visibility, runtimes, providers, prompts and vision.
+        </p>
+      </div>
+
       <Tabs
         value={activeSection}
         onValueChange={(value) => setActiveSection(value as AiSettingsTab)}
@@ -63,11 +80,22 @@ export function AiSettingsSection() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {AI_SETTINGS_SECTIONS.map((section) => (
-                <SelectItem key={section.value} value={section.value}>
-                  {section.label}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectLabel>Common</SelectLabel>
+                {COMMON_AI_SETTINGS_SECTIONS.map((section) => (
+                  <SelectItem key={section.value} value={section.value}>
+                    {section.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Advanced</SelectLabel>
+                {ADVANCED_AI_SETTINGS_SECTIONS.map((section) => (
+                  <SelectItem key={section.value} value={section.value}>
+                    {section.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
@@ -77,7 +105,23 @@ export function AiSettingsSection() {
             aria-label="AI settings sections"
             className="hidden h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl bg-adam-neutral-800 p-1 md:flex"
           >
-            {AI_SETTINGS_SECTIONS.map((section) => (
+            <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400">
+              Common
+            </div>
+            {COMMON_AI_SETTINGS_SECTIONS.map((section) => (
+              <TabsTrigger
+                key={section.value}
+                value={section.value}
+                className="w-full justify-start px-3 py-2 text-left"
+              >
+                {section.label}
+              </TabsTrigger>
+            ))}
+
+            <div className="mt-2 border-t border-adam-neutral-700 px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400">
+              Advanced
+            </div>
+            {ADVANCED_AI_SETTINGS_SECTIONS.map((section) => (
               <TabsTrigger
                 key={section.value}
                 value={section.value}
@@ -89,12 +133,15 @@ export function AiSettingsSection() {
           </TabsList>
 
           <div className="min-w-0">
-            <TabsContent value="models" className="mt-0 min-w-0">
+            <TabsContent
+              value="general"
+              className="mt-0 flex min-w-0 flex-col gap-4"
+            >
               <DefaultModelSettings />
-              <AiModelsSettings />
-            </TabsContent>
-            <TabsContent value="profiles" className="mt-0 min-w-0">
               <InstructionProfileSettings />
+            </TabsContent>
+            <TabsContent value="model-catalog" className="mt-0 min-w-0">
+              <AiModelsSettings />
             </TabsContent>
             <TabsContent value="local-models" className="mt-0 min-w-0">
               <LocalModelsSettings />
