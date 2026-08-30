@@ -51,13 +51,52 @@ volume_mountpoint() {
 }
 
 volume_size() {
-  local mountpoint
+  local mountpoint size
   mountpoint="$(volume_mountpoint "$1")"
-  if [ -n "${mountpoint}" ] && [ -e "${mountpoint}" ]; then
-    du -sh "${mountpoint}" 2>/dev/null | awk '{print $1}' || echo unknown
+  if [ -z "${mountpoint}" ] || [ ! -e "${mountpoint}" ]; then
+    echo unknown
+    return
+  fi
+
+  # Rootless Podman volumes can contain UID-mapped files that the host user
+  # cannot traverse directly. `podman unshare` enters the matching user
+  # namespace so du can inspect the complete volume without modifying it.
+  size="$(podman unshare du -sh "${mountpoint}" 2>/dev/null | awk 'NR == 1 {print $1}' || true)"
+  if [ -n "${size}" ]; then
+    printf '%s\n' "${size}"
   else
     echo unknown
   fi
+}
+
+db_fingerprint() {
+  local project="$1"
+  local container="supabase_db_${project}"
+
+  if ! podman container exists "${container}" >/dev/null 2>&1; then
+    echo "Database container not found: ${container}" >&2
+    return 1
+  fi
+
+  podman exec "${container}" psql -U postgres -d postgres -At -F '|' -v ON_ERROR_STOP=1 <<'SQL'
+SELECT
+  (SELECT count(*) FROM auth.users),
+  (SELECT count(*) FROM public.conversations),
+  (SELECT count(*) FROM public.messages),
+  (SELECT count(*) FROM storage.objects),
+  (SELECT count(*) FROM storage.buckets);
+SQL
+}
+
+print_fingerprint() {
+  local value="$1"
+  local auth_users conversations messages storage_objects storage_buckets
+  IFS='|' read -r auth_users conversations messages storage_objects storage_buckets <<< "${value}"
+  printf 'auth.users:          %s\n' "${auth_users:-?}"
+  printf 'conversations:       %s\n' "${conversations:-?}"
+  printf 'messages:            %s\n' "${messages:-?}"
+  printf 'storage.objects:     %s\n' "${storage_objects:-?}"
+  printf 'storage.buckets:     %s\n' "${storage_buckets:-?}"
 }
 
 require_prerequisites() {
@@ -69,6 +108,7 @@ require_prerequisites() {
   }
   command -v podman >/dev/null 2>&1 || { echo "podman not found" >&2; exit 1; }
   command -v gzip >/dev/null 2>&1 || { echo "gzip not found" >&2; exit 1; }
+  command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum not found" >&2; exit 1; }
   podman volume rename --help >/dev/null 2>&1 || {
     echo "This Podman version does not support 'podman volume rename'." >&2
     exit 1
@@ -92,14 +132,26 @@ print_plan() {
     fi
   done
 
+  if podman container exists "supabase_db_${OLD_ID}" >/dev/null 2>&1; then
+    echo
+    echo "Current database fingerprint:"
+    current_fingerprint="$(db_fingerprint "${OLD_ID}" 2>/dev/null || true)"
+    if [ -n "${current_fingerprint}" ]; then
+      print_fingerprint "${current_fingerprint}"
+    else
+      echo "  unavailable (database may not be ready)"
+    fi
+  fi
+
   cat <<EOF
 
 Execution will:
-  1. stop local Supabase project '${OLD_ID}' without --no-backup;
-  2. export compressed safety archives of the DB and Storage volumes;
-  3. rename the existing persistent volumes to the '${NEW_ID}' names;
-  4. change supabase/config.toml project_id to '${NEW_ID}';
-  5. start Supabase and verify that the '${NEW_ID}' stack is healthy.
+  1. record a database fingerprint for the running '${OLD_ID}' stack;
+  2. stop local Supabase project '${OLD_ID}' without --no-backup;
+  3. export compressed safety archives of the DB and Storage volumes;
+  4. rename the existing persistent volumes to the '${NEW_ID}' names;
+  5. change supabase/config.toml project_id to '${NEW_ID}';
+  6. start Supabase and verify the '${NEW_ID}' stack, volume mounts and database fingerprint.
 
 The migration does not delete backup archives or unrelated volumes/networks.
 If a migration step fails after the volumes are renamed, the script attempts to
@@ -168,6 +220,12 @@ for volume in "${NEW_DB_VOLUME}" "${NEW_STORAGE_VOLUME}"; do
   fi
 done
 
+OLD_FINGERPRINT="$(db_fingerprint "${OLD_ID}")"
+[ -n "${OLD_FINGERPRINT}" ] || { echo "Could not fingerprint the existing database." >&2; exit 1; }
+
+echo "Database fingerprint before migration:"
+print_fingerprint "${OLD_FINGERPRINT}"
+
 print_plan
 printf '\nType MIGRATE to continue: '
 read -r confirmation
@@ -196,6 +254,7 @@ for volume in "${OLD_DB_VOLUME}" "${OLD_STORAGE_VOLUME}"; do
 done
 sha256sum "${BACKUP_DIR}"/*.tar.gz > "${BACKUP_DIR}/SHA256SUMS"
 printf 'old_project_id=%s\nnew_project_id=%s\n' "${OLD_ID}" "${NEW_ID}" > "${BACKUP_DIR}/migration.txt"
+printf 'database_fingerprint=%s\n' "${OLD_FINGERPRINT}" >> "${BACKUP_DIR}/migration.txt"
 
 echo "Backup manifest: ${BACKUP_DIR}/SHA256SUMS"
 
@@ -223,6 +282,17 @@ if [ "${STORAGE_MOUNT}" != "${NEW_STORAGE_VOLUME}" ]; then
   echo "New Storage container is not mounted from ${NEW_STORAGE_VOLUME}; got '${STORAGE_MOUNT:-<none>}'" >&2
   false
 fi
+
+NEW_FINGERPRINT="$(db_fingerprint "${NEW_ID}")"
+if [ "${NEW_FINGERPRINT}" != "${OLD_FINGERPRINT}" ]; then
+  echo "Database fingerprint changed during migration." >&2
+  echo "Before: ${OLD_FINGERPRINT}" >&2
+  echo "After:  ${NEW_FINGERPRINT}" >&2
+  false
+fi
+
+echo "Database fingerprint after migration:"
+print_fingerprint "${NEW_FINGERPRINT}"
 
 rollback_needed=0
 trap - ERR INT TERM
