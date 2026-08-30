@@ -44,6 +44,7 @@ import {
   resolveParametricDefaultModel,
 } from '@/lib/defaultModels';
 import { getCreativeInputValidationIssue } from '@/lib/creativeInputValidation';
+import { resolvePreferredCreativeAgentModel } from '@/lib/creativeAgentSelection';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -205,6 +206,14 @@ export function PromptView() {
     mutationFn: async (parts: AppUIMessage['parts']) => {
       if (!user?.id) throw new Error('User must be authenticated');
       const conversationId = draftConversationId;
+      const creativeAgentModel =
+        type === 'creative'
+          ? resolvePreferredCreativeAgentModel(parametricModels)
+          : undefined;
+
+      if (type === 'creative' && !creativeAgentModel) {
+        throw new Error('No compatible Creative AI model is available');
+      }
 
       const text = parts
         .filter((p) => p.type === 'text')
@@ -224,6 +233,9 @@ export function PromptView() {
       posthog.capture('new_conversation', {
         type: type,
         model_name: model,
+        ...(creativeAgentModel
+          ? { creative_agent_model_name: creativeAgentModel }
+          : {}),
         instruction_profile_id: instructionProfileId,
         text: text.trim().slice(0, 100),
         image_count: imageCount,
@@ -252,7 +264,7 @@ export function PromptView() {
                 instructionProfileId,
                 openCodeExecutionMode: executionMode,
                 ...(type === 'creative'
-                  ? { creativePromptProfileId }
+                  ? { creativePromptProfileId, creativeAgentModel }
                   : { promptProfileId }),
               },
             },
@@ -285,10 +297,15 @@ export function PromptView() {
       });
       if (parts.length === 0) throw new Error('No message parts to send');
 
+      const messageMetadata: AppUIMessage['metadata'] = {
+        model,
+        ...(creativeAgentModel ? { agentModel: creativeAgentModel } : {}),
+      };
+
       const userMessageId = await persistUserMessage({
         conversationId: conversation.id,
         parts,
-        metadata: { model },
+        metadata: messageMetadata,
         parentMessageId: null,
       });
 
@@ -311,6 +328,7 @@ export function PromptView() {
             body: {
               conversationId: conversation.id,
               model,
+              ...(creativeAgentModel ? { agentModel: creativeAgentModel } : {}),
               openCodeExecutionMode: executionMode,
               ...(body ?? {}),
             },
@@ -319,7 +337,7 @@ export function PromptView() {
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       });
       void chat
-        .sendMessage({ id: userMessageId, parts, metadata: { model } })
+        .sendMessage({ id: userMessageId, parts, metadata: messageMetadata })
         .catch((error) => {
           Sentry.captureException(error, {
             extra: {
