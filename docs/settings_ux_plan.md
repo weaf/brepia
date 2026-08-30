@@ -139,21 +139,35 @@ Implementation notes:
 - `Local Models`, `Prompts`, `Runtime`, `Providers`, and `Vision` retain their existing components and behavior.
 - Desktop group labels are presentation-only inside the Radix tab list so they do not become additional keyboard tabs; the mobile selector uses Radix Select groups/labels.
 
-Acceptance — pending visual review:
+Acceptance:
 
-- [ ] AI opens on `General` with Default models and AI profile immediately visible.
-- [ ] `Model catalog` and every other advanced section remain clearly discoverable on desktop and mobile.
-- [ ] The new grouping reduces perceived technical density without hiding or changing any setting.
-- [ ] General and advanced sections remain usable at narrow mobile widths.
+- [x] AI opens on `General` with Default models and AI profile immediately visible in user visual review.
+- [x] `Model catalog` and the advanced grouping remain clearly discoverable in user visual review.
+- [x] The new grouping reduces perceived technical density without hiding or changing any setting; user review reported that it looks good.
+- [ ] General and advanced sections remain usable at narrow mobile widths; retain for the explicit responsive gate rather than infer it from desktop review.
 
 ## Phase 5 — Accessibility and interaction polish
 
-- [ ] Audit normal and secondary text contrast in both themes.
-- [ ] Ensure visible keyboard focus on tabs, selectors, buttons, switches, and links.
-- [ ] Check mobile pointer/touch targets; aim for approximately 40–44 px practical targets even where WCAG minimum spacing would technically pass.
-- [ ] Verify selected/disabled/error states do not rely on color alone.
-- [ ] Check zoom/reflow at 200% and narrow viewport widths.
-- [ ] Respect reduced-motion preferences for nonessential UI transitions.
+Interaction checkpoint: `281eb0c05de53b6c201dfc56bf2c1f19f9b11d42`.
+
+### Phase 5A — core Settings controls
+
+- [x] Increase the primary Settings tabs, desktop AI section tabs and Prompt subsection tabs to practical 40 px minimum targets while preserving existing Radix keyboard semantics.
+- [x] Increase Account action buttons and the editable-name input to a practical 40 px minimum target without changing their actions.
+- [x] Give the Notifications switch an explicit accessible name and description through `aria-labelledby` / `aria-describedby`.
+- [x] Mark the Appearance choices as an explicitly labelled control group while retaining `aria-pressed` on each choice, so selection is not communicated by color alone.
+- [x] Add `prefers-reduced-motion` handling to the Settings/AI tab and Appearance transitions introduced or touched by this UX work.
+- [x] Retain visible `focus-visible` rings already provided by the Radix/shared primitives on tabs, selects, buttons and switches; the Appearance buttons retain their explicit two-pixel focus ring.
+
+### Phase 5B — contrast and remaining dense controls
+
+- [ ] Complete a component-level normal/secondary-text contrast pass in both themes before changing global palette tokens.
+- [ ] Dark-theme audit finding: `adam-neutral-400` resolves to `#676767` against the dark Brepia canvas near `#191A1A`, roughly 3.1:1 contrast. That is acceptable for some non-text decoration but below the 4.5:1 target for small normal text. Prefer targeted Settings copy changes or semantic text tokens rather than globally brightening every `neutral-400` use without visual review.
+- [ ] Review dense advanced controls (model-filter chips, switches and icon buttons) at phone width. The core navigation/actions now meet the practical target, but dense expert panels need their own mobile pass before claiming 40–44 px throughout.
+- [ ] Verify links and any custom non-Radix controls have an equally visible keyboard focus treatment.
+- [ ] Check zoom/reflow at 200% and ~320–390 px widths.
+- [ ] Verify remaining selected/disabled/error states in advanced panels do not rely on color alone.
+- [ ] Audit older nonessential transitions in advanced panels before claiming reduced-motion coverage for the entire Settings tree.
 
 ## Phase 6 — Visual and regression gate
 
