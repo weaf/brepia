@@ -132,7 +132,7 @@ export function SignUpEmailView() {
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
           <div className="mb-6 flex flex-col items-center justify-center gap-3">
             <BrepiaBrand showByNoty />
-            <h1 className="text-2xl font-semibold text-white">
+            <h1 className="text-2xl font-semibold text-adam-text-primary">
               {bootstrap ? 'Create Administrator' : 'Create Account'}
             </h1>
           </div>
@@ -140,7 +140,7 @@ export function SignUpEmailView() {
           <form onSubmit={handleSignUp} className="space-y-6">
             {!bootstrap && (
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-white">
+                <Label htmlFor="name" className="text-adam-text-primary">
                   Full Name
                 </Label>
                 <Input
@@ -148,13 +148,13 @@ export function SignUpEmailView() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="border-gray-700 bg-adam-bg-dark px-4 text-white"
+                  className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary"
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-white">
+              <Label htmlFor="identifier" className="text-adam-text-primary">
                 {bootstrap ? 'Username or email' : 'Email'}
               </Label>
               <Input
@@ -165,7 +165,7 @@ export function SignUpEmailView() {
                 required
                 minLength={bootstrap ? 3 : undefined}
                 autoComplete="username"
-                className="border-gray-700 bg-adam-bg-dark px-4 text-white"
+                className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary"
               />
               {bootstrap && (
                 <p className="text-xs text-adam-text-secondary">
@@ -176,7 +176,7 @@ export function SignUpEmailView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-white">
+              <Label htmlFor="password" className="text-adam-text-primary">
                 Password
               </Label>
               <Input
@@ -187,11 +187,14 @@ export function SignUpEmailView() {
                 required
                 minLength={6}
                 autoComplete="new-password"
-                className="border-gray-700 bg-adam-bg-dark px-4 text-white"
+                className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-white">
+              <Label
+                htmlFor="confirmPassword"
+                className="text-adam-text-primary"
+              >
                 Confirm Password
               </Label>
               <Input
@@ -202,7 +205,7 @@ export function SignUpEmailView() {
                 required
                 minLength={6}
                 autoComplete="new-password"
-                className="border-gray-700 bg-adam-bg-dark px-4 text-white"
+                className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary"
               />
             </div>
 
@@ -236,7 +239,7 @@ export function SignUpEmailView() {
               )}
             </Button>
 
-            <div className="text-center text-sm text-white">
+            <div className="text-center text-sm text-adam-text-primary">
               <Link to="/signin" className="text-adam-blue hover:underline">
                 Back to sign in
               </Link>
