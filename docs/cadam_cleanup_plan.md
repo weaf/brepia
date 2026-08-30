@@ -44,7 +44,7 @@ The root application route already exists as the `_layout` index route, so the f
 - [x] update OpenSCAD WASM development serving to the root-based path;
 - [x] keep `/cadam` and `/cadam/...` as HTTP 308 compatibility redirects to the corresponding root path in both Vite dev and preview servers;
 - [ ] run typecheck/lint/build;
-- [ ] smoke-test stable runtime at `http://<host>:3000/` without `/cadam`;
+- [x] smoke-test stable runtime at `http://<host>:3000/` without `/cadam` — user verified 2026-08-30;
 - [ ] verify an old `/cadam` bookmark redirects to `/`;
 - [ ] verify a nested old URL such as `/cadam/signin` redirects to `/signin`;
 - [ ] verify auth, API, Supabase proxy, OpenSCAD WASM and stable-runtime behavior remain functional.
@@ -111,4 +111,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Run the Phase 1 automated and browser gate on the current branch. If green, mark the root-path migration complete before beginning internal `dist/cadam` or persistent Supabase identity cleanup.
+Complete the remaining Phase 1 gate (automated checks plus old `/cadam` redirect smoke), then continue with Phase 2 safe internal naming cleanup. Persistent Supabase identity remains deferred until its migration/rollback behavior is understood.
