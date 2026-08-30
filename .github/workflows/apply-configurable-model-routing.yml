@@ -1,4 +1,4 @@
-name: Apply configurable model routing
+name: Finalize configurable model routing
 
 on:
   push:
@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  apply:
-    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'Make runtime model routing configurable')
+  finalize:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -24,11 +24,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-
-      - name: Apply model routing migration
-        run: |
-          python3 scripts/apply-configurable-model-routing.py
-          python3 scripts/fix-configurable-model-routing.py
 
       - name: Install dependencies
         run: npm ci
@@ -45,17 +40,20 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Remove temporary tooling and unrelated generated diff
+        run: |
+          git checkout origin/chore/history-build-cleanup -- src/routeTree.gen.ts
+          rm .github/workflows/apply-configurable-model-routing.yml
+          rm scripts/apply-configurable-model-routing.py
+          rm scripts/fix-configurable-model-routing.py
+
       - name: Diff check
         run: git diff --check
 
-      - name: Commit verified changes
+      - name: Commit clean final state
         run: |
-          if git diff --quiet; then
-            echo 'Migration produced no changes.' >&2
-            exit 1
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Make runtime model routing configurable'
+          git commit -m 'Finalize configurable model routing'
           git push origin HEAD:feature/configurable-model-routing
