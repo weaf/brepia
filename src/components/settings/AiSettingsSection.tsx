@@ -105,7 +105,11 @@ export function AiSettingsSection() {
             aria-label="AI settings sections"
             className="hidden h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl bg-adam-neutral-800 p-1 md:flex"
           >
-            <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400">
+            <div
+              role="presentation"
+              aria-hidden="true"
+              className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400"
+            >
               Common
             </div>
             {COMMON_AI_SETTINGS_SECTIONS.map((section) => (
@@ -118,7 +122,11 @@ export function AiSettingsSection() {
               </TabsTrigger>
             ))}
 
-            <div className="mt-2 border-t border-adam-neutral-700 px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400">
+            <div
+              role="presentation"
+              aria-hidden="true"
+              className="mt-2 border-t border-adam-neutral-700 px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400"
+            >
               Advanced
             </div>
             {ADVANCED_AI_SETTINGS_SECTIONS.map((section) => (
