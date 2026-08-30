@@ -1,8 +1,6 @@
 # Brepia branding maintenance
 
-This note defines the current presentation rules for the Brepia product identity.
-It complements `docs/brepia_remake_plan.md` and `docs/cadam_cleanup_plan.md` and is intentionally short enough to
-serve as a maintenance reference for future contributors and coding agents.
+This note defines the current presentation and naming rules for the Brepia product identity.
 
 ## Product hierarchy
 
@@ -20,8 +18,7 @@ Use the open node-based wireframe / B-Rep cube implemented by:
 
 Do not recreate the mark ad hoc in feature components. Reuse the shared component or asset.
 
-The mark should remain legible in monochrome. The current blue/violet treatment is a working
-accent direction rather than a requirement for every context.
+The mark should remain legible in monochrome. The current blue/violet treatment is a working accent direction rather than a requirement for every context.
 
 ## Wordmark
 
@@ -42,28 +39,24 @@ Do not replace meaningful determinate progress bars or percentages with an indet
 
 ## Icons
 
-Use the existing Lucide outline icon language for normal product actions. Brepia branding should
-not introduce a parallel icon library.
+Use the existing Lucide outline icon language for normal product actions. Brepia branding should not introduce a parallel icon library.
 
-Avoid generic AI identity marks such as robot heads, brains, gears or sparkle clusters. A sparkle
-or wand icon may still describe a specific AI action.
+Avoid generic AI identity marks such as robot heads, brains, gears or sparkle clusters. A sparkle or wand icon may still describe a specific AI action.
 
 ## Naming boundaries
 
-Do not globally replace every occurrence of `CADAM`, `Adam` or `pCAD`.
+Current user-facing product presentation and safe local implementation artifacts should use Brepia naming.
 
-Rename current user-facing product presentation and safe local implementation artifacts to Brepia, but preserve or separately migrate:
+The following names remain compatibility-sensitive and require an explicit migration before they are changed:
 
-- compatibility-sensitive `PCAD_*` environment identifiers;
-- `pcad.invalid` synthetic auth addresses until their database/auth compatibility is explicitly migrated;
-- database/storage/local-state identifiers when renaming would require migration;
-- external integration IDs such as Sentry project names;
-- `CADAM Original` prompt/profile lineage;
-- historical/upstream documentation and URLs where the old name is part of the record.
+- the `/cadam` legacy redirect; `/` is the canonical application base;
+- `PCAD_*` environment identifiers;
+- compatibility-sensitive `pcad_*` and `pcad.invalid` auth/database identifiers;
+- external integration identifiers such as the Sentry `adamcad` project;
+- the active `CADAM Original` built-in prompt/profile lineage;
+- internal `adam-*` Tailwind/CSS compatibility tokens.
 
-Internal CSS tokens such as `adam-*` are implementation details. They may be renamed later as a dedicated mechanical cleanup only if the repository-wide replacement can be proven behavior-neutral.
-
-The active staged cleanup and classification rules live in `docs/cadam_cleanup_plan.md`.
+Do not recreate removed transition/checkpoint documentation merely to preserve old naming history. Git history is the archive for completed migration work.
 
 ## Public assets
 
@@ -73,18 +66,16 @@ Preferred current assets:
 - `public/brepia-watermark.svg`
 - `public/site.webmanifest`
 
-Legacy Adam/CADAM assets may remain temporarily while old consumers or historical README material
-still reference them. Delete them only after repository-wide reference verification.
+New user-facing assets should use Brepia naming unless a compatibility requirement says otherwise.
 
 ## Copy
 
-Start-page prompt copy lives in `src/lib/homePromptCopy.ts`. Keep it distinct from inherited CADAM
-copy and avoid wording that implies a particular generation mode unless that mode is actually active.
+Start-page prompt copy lives in `src/lib/homePromptCopy.ts`. Keep it product-neutral where possible and avoid wording that implies a particular generation mode unless that mode is actually active.
 
 ## Repository and deployment names
 
 The product is Brepia while the repository remains `weaf/pCAD` for now.
 
-The application no longer requires the inherited `/cadam` deployment base. Its canonical application base is `/`; `/cadam` and `/cadam/...` are retained only as compatibility redirects during the cleanup period.
+The canonical application base is `/`. The `/cadam` and `/cadam/...` routes exist only as compatibility redirects.
 
-Repository renaming, `PCAD_*` environment-variable deprecation, Supabase project identity and external integration renames are separate migration checkpoints and must not be bundled into cosmetic changes.
+Repository renaming, `PCAD_*` deprecation, auth/database identifier migration, design-token migration and external integration renames must be handled as explicit compatibility changes rather than cosmetic edits.
