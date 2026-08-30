@@ -73,7 +73,10 @@ export function AiRuntimeSettings() {
   });
   const [drafts, setDrafts] = useState<DraftValues>({});
 
-  const overrides = preferencesQuery.data?.runtimeOverrides ?? {};
+  const overrides = useMemo(
+    () => preferencesQuery.data?.runtimeOverrides ?? {},
+    [preferencesQuery.data?.runtimeOverrides],
+  );
 
   useEffect(() => {
     if (!preferencesQuery.data) return;
