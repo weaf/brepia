@@ -49,7 +49,7 @@ export function AiSettingsSection() {
         <h2 className="text-lg font-semibold text-adam-neutral-50">
           AI Settings
         </h2>
-        <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
+        <p className="mt-1 text-xs leading-relaxed text-adam-neutral-300">
           Start with your default models and AI profile. Advanced sections
           control model visibility, runtimes, providers, prompts and vision.
         </p>
@@ -108,7 +108,7 @@ export function AiSettingsSection() {
             <div
               role="presentation"
               aria-hidden="true"
-              className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400"
+              className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-300"
             >
               Common
             </div>
@@ -116,7 +116,7 @@ export function AiSettingsSection() {
               <TabsTrigger
                 key={section.value}
                 value={section.value}
-                className="w-full justify-start px-3 py-2 text-left"
+                className="min-h-10 w-full justify-start px-3 py-2 text-left motion-reduce:transition-none"
               >
                 {section.label}
               </TabsTrigger>
@@ -125,7 +125,7 @@ export function AiSettingsSection() {
             <div
               role="presentation"
               aria-hidden="true"
-              className="mt-2 border-t border-adam-neutral-700 px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-400"
+              className="mt-2 border-t border-adam-neutral-700 px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.14em] text-adam-neutral-300"
             >
               Advanced
             </div>
@@ -133,7 +133,7 @@ export function AiSettingsSection() {
               <TabsTrigger
                 key={section.value}
                 value={section.value}
-                className="w-full justify-start px-3 py-2 text-left"
+                className="min-h-10 w-full justify-start px-3 py-2 text-left motion-reduce:transition-none"
               >
                 {section.label}
               </TabsTrigger>
@@ -157,9 +157,24 @@ export function AiSettingsSection() {
             <TabsContent value="prompts" className="mt-0 min-w-0">
               <Tabs defaultValue="generative" className="min-w-0">
                 <TabsList className="mb-4 h-auto w-full flex-wrap justify-start gap-1 sm:w-max">
-                  <TabsTrigger value="generative">Generative</TabsTrigger>
-                  <TabsTrigger value="creative">Creative</TabsTrigger>
-                  <TabsTrigger value="instructions">Instructions</TabsTrigger>
+                  <TabsTrigger
+                    value="generative"
+                    className="min-h-10 motion-reduce:transition-none"
+                  >
+                    Generative
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="creative"
+                    className="min-h-10 motion-reduce:transition-none"
+                  >
+                    Creative
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="instructions"
+                    className="min-h-10 motion-reduce:transition-none"
+                  >
+                    Instructions
+                  </TabsTrigger>
                 </TabsList>
                 <TabsContent value="generative" className="min-w-0">
                   <PrimaryPromptProfilesSettings scope="parametric" />
