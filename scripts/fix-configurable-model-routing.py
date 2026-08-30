@@ -31,4 +31,10 @@ for path in ['src/server/imageGen.ts', 'src/server/falMesh.ts']:
     text = text.replace('gpt-image-2', 'configured OpenAI image model')
     write(path, text)
 
+replace_once(
+    'src/server/imageGen.ts',
+    '// const response = await openAI.responses.create({',
+    'const response = await openAI.responses.create({',
+)
+
 print('Applied routing verification fixes')
