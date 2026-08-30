@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import {
-  TrackballControls,
+  ArcballControls,
   Stage,
   Environment,
   OrthographicCamera,
@@ -150,12 +150,10 @@ export function ThreeScene({
           followCamera={false}
           infiniteGrid={true}
         /> */}
-          <TrackballControls
+          <ArcballControls
             makeDefault
-            rotateSpeed={2.0}
-            zoomSpeed={1.2}
-            panSpeed={0.6}
-            dynamicDampingFactor={0.12}
+            minZoom={0.01}
+            maxZoom={1000}
           />
           {!initialIsMobile && <ViewGizmo />}
         </Canvas>
