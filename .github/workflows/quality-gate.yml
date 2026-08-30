@@ -10,6 +10,51 @@ permissions:
   contents: read
 
 jobs:
+  remove-obsolete-image-history:
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: chore/history-build-cleanup
+
+      - name: Remove dead rollback implementations
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/server/imageGen.ts')
+          text = path.read_text()
+          patterns = [
+              r'/\* DEPRECATED: Gemini 2\.0 Flash discontinued March 2026.*?\*/\n\n(?=export type GptImageQuality)',
+              r'/\* DEPRECATED: Replaced by generateImageWithFalFlux.*?\*/\n?',
+          ]
+          for pattern in patterns:
+              text, count = re.subn(pattern, '', text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'imageGen.ts: expected exactly one match for {pattern}')
+          path.write_text(text)
+          PY
+          git diff --check
+
+      - name: Commit history cleanup
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server/imageGen.ts
+          git commit -m "chore: remove dead image generation rollback history"
+          git push origin HEAD:chore/history-build-cleanup
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
