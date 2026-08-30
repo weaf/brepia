@@ -4,7 +4,7 @@ globs: *.sql,supabase.ts,supabase/*
 alwaysApply: false
 ---
 # Database Workflow Rules
-version: 1.1.0
+version: 1.2.0
 
 ## Database Schema Changes
 
@@ -21,18 +21,37 @@ version: 1.1.0
 
 ## Local Supabase Lifecycle
 
-The pCAD/Brepia workstation currently uses an external lifecycle manager documented as **NOx**. The exact workstation-side NOx implementation is intentionally reviewed separately in `docs/local_supabase_lifecycle.md`.
+The pCAD/Brepia local stack is managed by the repository-local Supabase CLI through `npx`.
 
-- Do NOT run `supabase start`, `supabase stop`, `npx supabase start`, or `npx supabase stop` as part of the normal repository workflow.
+A previous note incorrectly referred to `NOx`; workstation inspection found no such lifecycle manager. The active containers are the normal Supabase CLI/Compose project `cadam`.
+
 - Do NOT assume a globally installed `supabase` binary exists.
-- Use the repository-local CLI through `npx` after the local stack is already running.
-- `./start.sh` is the normal application preflight: it configures the Podman socket/shim and refuses to continue when the local Supabase stack is unavailable.
-- If the stack is missing, do not silently substitute another lifecycle manager. Follow `docs/local_supabase_lifecycle.md` and inspect the workstation lifecycle first.
+- Use `npx supabase ...` from the repository.
+- `./start.sh` configures the rootless Podman socket/shim and automatically runs `npx supabase start` if the local stack is not already running.
+- Explicit `start`, `status`, and `stop` commands must use the same rootless Podman environment/shim as `start.sh` on this workstation.
 
 ## Migration Generation Process
 
-### Step 1: Ensure the local stack is already running
-Start the local Supabase stack through the workstation lifecycle manager. For normal Brepia startup, `./start.sh` performs a read-only availability check.
+### Step 1: Ensure the local stack is running
+For normal Brepia startup:
+
+```bash
+./start.sh
+```
+
+`start.sh` starts the local Supabase stack through `npx supabase start` when needed.
+
+For explicit CLI lifecycle work, configure the same Podman environment first:
+
+```bash
+systemctl --user enable podman.socket --now
+export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+export PATH="$PWD/scripts/podman:$PATH"
+
+npx supabase status
+# npx supabase start
+# npx supabase stop
+```
 
 ### Step 2: Edit the declarative schema
 Modify `supabase/schemas/` only.
@@ -67,7 +86,7 @@ Never hand-edit `shared/database.ts`.
 
 ## Workflow Summary
 
-1. **Lifecycle**: ensure the workstation-managed local Supabase stack is running.
+1. **Lifecycle**: ensure the rootless Podman socket is available and the local `cadam` stack is running; `./start.sh` handles this for normal app startup.
 2. **Edit Schema**: modify `supabase/schemas/`.
 3. **Generate Migration**: `npx supabase db diff -f <name>`.
 4. **Review Migration**: inspect the generated SQL.
@@ -78,17 +97,17 @@ Never hand-edit `shared/database.ts`.
 ## Common Commands Reference
 
 ```bash
-# Repository-local database workflow; local stack must already be running.
+# Repository-local Supabase CLI
+npx supabase start
+npx supabase status
+npx supabase stop
 npx supabase db diff -f <migration_name>
 npx supabase migration up
 npx supabase gen types typescript --local > shared/database.ts
-
-# Lifecycle is external to this repository's normal CLI workflow.
-# Do NOT substitute these automatically:
-# npx supabase start
-# npx supabase stop
 
 # NEVER use these in the normal local workflow:
 # npx supabase db push
 # npx supabase db pull
 ```
+
+On the current rootless Podman workstation, lifecycle/status commands need the `DOCKER_HOST` and `scripts/podman` compatibility environment shown above. `./start.sh` configures that environment automatically.
