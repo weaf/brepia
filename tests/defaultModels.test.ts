@@ -31,17 +31,15 @@ describe('default model resolution', () => {
   it('uses the first enabled Creative backend instead of a hard-coded fallback', () => {
     const resolved = resolveCreativeDefaultModel('not-a-creative-model', [
       { id: 'quality' },
-      { id: 'local/trellis2' },
+      { id: 'local/native' },
     ]);
     expect(resolved).toBe('quality');
   });
 
   it('normalizes retired local Creative IDs then respects the selectable catalog', () => {
     expect(
-      resolveCreativeDefaultModel('local/trellis-v1', [
-        { id: 'local/trellis2' },
-      ]),
-    ).toBe('local/trellis2');
+      resolveCreativeDefaultModel('local/trellis-v1', [{ id: 'local/native' }]),
+    ).toBe('local/native');
   });
 
   it('returns an explicit unconfigured sentinel when no Creative backend exists', () => {

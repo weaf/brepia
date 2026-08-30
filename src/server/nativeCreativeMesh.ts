@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import {
-  NATIVE_TRELLIS2_MODEL_ID,
+  NATIVE_CREATIVE_MESH_MODEL_ID,
   type CreativeMeshModelId,
 } from '@shared/creativeMeshModels';
 import { imageIdFromFilename } from '@shared/imageRefs';
@@ -32,8 +32,8 @@ type NativeCreativeStage =
   | 'llama-swap-health'
   | 'job-create'
   | 'image-download'
-  | 'z-image-generate'
-  | 'trellis-generate'
+  | 'conditioning-image-generate'
+  | 'mesh-generate'
   | 'storage-persist';
 
 type NativeCreativeMeshRequestBody = {
@@ -322,8 +322,8 @@ async function generateConditioningImage(
   model: string,
 ): Promise<ImageInput> {
   nativeCreativeLog(
-    'z-image-generate',
-    'generating TRELLIS conditioning image',
+    'conditioning-image-generate',
+    'generating native conditioning image',
     {
       model,
       size: zImageSize(),
@@ -373,7 +373,7 @@ async function generateConditioningImage(
   };
 }
 
-async function generateTrellisGlb(
+async function generateNativeMeshGlb(
   image: ImageInput,
   runtime: NativeCreativeRuntime,
   model: string,
@@ -387,7 +387,7 @@ async function generateTrellisGlb(
   form.append('resolution', runtime.trellisResolution);
 
   const url = `${llamaSwapUrl()}/upstream/${encodedModelPath(model)}/generate`;
-  nativeCreativeLog('trellis-generate', 'starting TRELLIS.2 generation', {
+  nativeCreativeLog('mesh-generate', 'starting TRELLIS.2 generation', {
     model,
     resolution: runtime.trellisResolution,
     via: url,
@@ -454,7 +454,7 @@ async function persistMeshResult({
     .eq('conversation_id', conversationId);
   if (updateError) {
     throw new Error(
-      `Failed to finalize TRELLIS.2 mesh: ${updateError.message}`,
+      `Failed to finalize native Creative mesh: ${updateError.message}`,
     );
   }
 }
@@ -480,7 +480,7 @@ async function markFailure(
     conversationId,
     additionalContext: {
       meshId,
-      model: NATIVE_TRELLIS2_MODEL_ID,
+      model: NATIVE_CREATIVE_MESH_MODEL_ID,
       stage,
     },
   });
@@ -499,8 +499,8 @@ export async function handleNativeCreativeMeshRequest(
   const body = (
     isRecord(parsedBody) ? parsedBody : await request.json().catch(() => null)
   ) as NativeCreativeMeshRequestBody | null;
-  if (!body) return localError('Invalid TRELLIS.2 request body');
-  if (body.model !== NATIVE_TRELLIS2_MODEL_ID) {
+  if (!body) return localError('Invalid native Creative request body');
+  if (body.model !== NATIVE_CREATIVE_MESH_MODEL_ID) {
     return localError('Unknown native Creative mesh backend');
   }
   if (body.mesh) {
@@ -565,11 +565,13 @@ export async function handleNativeCreativeMeshRequest(
     attachedImageIds,
   );
   if (!text && imageIds.length === 0) {
-    return localError('Text or a reference image is required for TRELLIS.2');
+    return localError(
+      'Text or a reference image is required for native Creative generation',
+    );
   }
   if (imageIds.length > 1) {
     return localError(
-      'TRELLIS.2 currently accepts one reference image per generation. Attach or select a single image.',
+      'The native Creative backend currently accepts one reference image per generation. Attach or select a single image.',
       422,
     );
   }
@@ -615,7 +617,7 @@ export async function handleNativeCreativeMeshRequest(
       prompt: {
         ...(text ? { text } : {}),
         ...(imageIds.length > 0 ? { images: imageIds } : {}),
-        model: NATIVE_TRELLIS2_MODEL_ID as CreativeMeshModelId,
+        model: NATIVE_CREATIVE_MESH_MODEL_ID as CreativeMeshModelId,
       },
     })
     .select()
@@ -623,7 +625,7 @@ export async function handleNativeCreativeMeshRequest(
 
   if (meshError || !meshData) {
     return localError(
-      meshError?.message ?? 'Failed to create TRELLIS.2 mesh job',
+      meshError?.message ?? 'Failed to create native Creative mesh job',
       500,
     );
   }
@@ -650,7 +652,7 @@ export async function handleNativeCreativeMeshRequest(
         );
       }
     } else {
-      stage = 'z-image-generate';
+      stage = 'conditioning-image-generate';
       conditioningImage = await generateConditioningImage(
         text as string,
         runtime.imageGenerationTimeoutMs,
@@ -658,8 +660,8 @@ export async function handleNativeCreativeMeshRequest(
       );
     }
 
-    stage = 'trellis-generate';
-    const glb = await generateTrellisGlb(
+    stage = 'mesh-generate';
+    const glb = await generateNativeMeshGlb(
       conditioningImage,
       runtime,
       nativeMeshModel,

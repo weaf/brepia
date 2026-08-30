@@ -34,5 +34,14 @@ SET default_parametric_model_id = 'openai/gpt-5.6-sol'
 WHERE default_parametric_model_id IS NULL;
 
 UPDATE public.user_ai_preferences
-SET default_creative_model_id = 'local/trellis2'
+SET default_creative_model_id = 'local/native'
 WHERE default_creative_model_id IS NULL;
+
+UPDATE public.user_ai_preferences
+SET default_creative_model_id = 'local/native'
+WHERE default_creative_model_id IN (
+  'local/trellis2',
+  'local/trellis-v1',
+  'local/hunyuan3d-2',
+  'local/hunyuan3d-2.1'
+);

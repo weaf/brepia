@@ -32,3 +32,9 @@ No concrete upstream model ID may be selected implicitly by runtime source code.
 ## Guardrail
 
 `tests/modelRoutingHardcoding.test.ts` prevents the historical concrete model IDs from being reintroduced into runtime source files.
+
+## Native backend identity
+
+The selectable built-in Creative backend is `local/native`. Historical model-specific backend IDs such as `local/trellis2` are compatibility aliases only. The actual local conditioning-image and mesh runtime model IDs come from `modelRouting` settings, so changing the upstream model does not require changing conversation/backend identity.
+
+The low-level Settings control is a model-ID combobox. Provider-specific APIs use different namespaces, so values are entered/selected explicitly rather than borrowing incompatible IDs from the chat/Parametric model catalog. Provider discovery can supply candidates to the same control later without adding runtime defaults.

@@ -1,7 +1,7 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { ActivityIndicator } from '@/components/brand';
-import { ProviderLogo } from '@/components/ProviderLogo';
 import { Button } from '@/components/ui/button';
 import {
   Command,
@@ -24,14 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFullParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
   getAiPreferences,
   updateModelRoutingPreferences,
 } from '@/services/aiPreferencesService';
-import type { CatalogEntry } from '@/server/modelCatalog';
 import type {
   CreativeImageProvider,
   CreativeRuntimeModelKey,
@@ -157,22 +155,16 @@ function ProviderSelect({
 
 function RuntimeModelPicker({
   value,
-  models,
   disabled,
   onChange,
 }: {
   value: string | null;
-  models: CatalogEntry[];
   disabled: boolean;
   onChange: (value: string | null) => void;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState('');
-  const selected = models.find((model) => model.id === value);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const customCandidate = query.trim();
-  const customMatchesCatalog = models.some(
-    (model) => model.id === customCandidate,
-  );
 
   const choose = (next: string | null) => {
     onChange(next);
@@ -191,25 +183,27 @@ function RuntimeModelPicker({
           disabled={disabled}
           className="w-full justify-between font-normal"
         >
-          <span className="min-w-0 truncate">
-            {selected?.name ?? value ?? 'Not configured'}
-          </span>
+          <span className="min-w-0 truncate">{value ?? 'Not configured'}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+      >
         <Command shouldFilter>
           <CommandInput
-            placeholder="Search catalog or enter model ID…"
+            placeholder="Enter model ID…"
             value={query}
             onValueChange={setQuery}
           />
           <CommandList>
-            <CommandEmpty>
-              Type a model ID to use a provider-specific model.
-            </CommandEmpty>
+            <CommandEmpty>Type a model ID and choose it below.</CommandEmpty>
             <CommandGroup heading="Selection">
-              <CommandItem value="not configured none" onSelect={() => choose(null)}>
+              <CommandItem
+                value="not configured none"
+                onSelect={() => choose(null)}
+              >
                 <Check
                   className={cn(
                     'mr-2 h-4 w-4',
@@ -218,41 +212,14 @@ function RuntimeModelPicker({
                 />
                 Not configured
               </CommandItem>
-              {value && !selected && (
+              {value && (
                 <CommandItem value={value} onSelect={() => choose(value)}>
                   <Check className="mr-2 h-4 w-4 opacity-100" />
                   <span className="truncate">{value}</span>
                 </CommandItem>
               )}
             </CommandGroup>
-            {models.length > 0 && (
-              <>
-                <CommandSeparator />
-                <CommandGroup heading="Model catalog">
-                  {models.map((model) => (
-                    <CommandItem
-                      key={model.id}
-                      value={`${model.id} ${model.name} ${model.provider ?? ''}`}
-                      disabled={!model.enabled || !model.available}
-                      onSelect={() => choose(model.id)}
-                    >
-                      <Check
-                        className={cn(
-                          'mr-2 h-4 w-4',
-                          value === model.id ? 'opacity-100' : 'opacity-0',
-                        )}
-                      />
-                      <ProviderLogo provider={model.provider} className="mr-2" />
-                      <span className="min-w-0 flex-1 truncate">{model.name}</span>
-                      <span className="ml-2 max-w-[45%] truncate text-xs text-adam-neutral-400">
-                        {model.id}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </>
-            )}
-            {customCandidate && !customMatchesCatalog && customCandidate !== value && (
+            {customCandidate && customCandidate !== value && (
               <>
                 <CommandSeparator />
                 <CommandGroup heading="Custom model ID">
@@ -260,7 +227,8 @@ function RuntimeModelPicker({
                     value={`${customCandidate} custom model id`}
                     onSelect={() => choose(customCandidate)}
                   >
-                    Use <span className="ml-1 font-mono">{customCandidate}</span>
+                    Use{' '}
+                    <span className="ml-1 font-mono">{customCandidate}</span>
                   </CommandItem>
                 </CommandGroup>
               </>
@@ -275,11 +243,6 @@ function RuntimeModelPicker({
 export function CreativeRuntimeModelSettings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const {
-    models: catalogModels,
-    isLoading: catalogLoading,
-    error: catalogError,
-  } = useFullParametricModelCatalog();
   const {
     data: preferences,
     isLoading,
@@ -343,12 +306,6 @@ export function CreativeRuntimeModelSettings() {
           enter a provider-specific model ID. Empty roles fail closed instead of
           falling back to a hidden model.
         </p>
-        {catalogError && (
-          <p className="mt-2 text-xs text-amber-400">
-            Model catalog suggestions are unavailable: {catalogError}. Custom
-            model IDs can still be configured.
-          </p>
-        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -386,8 +343,7 @@ export function CreativeRuntimeModelSettings() {
               </div>
               <RuntimeModelPicker
                 value={value}
-                models={catalogModels}
-                disabled={mutation.isPending || catalogLoading}
+                disabled={mutation.isPending}
                 onChange={(next) => {
                   if (next !== value) save({ [field.key]: next });
                 }}

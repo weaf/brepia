@@ -18,20 +18,24 @@ afterEach(() => {
 });
 
 describe('Creative mesh provider registry', () => {
-  it('keeps TRELLIS.2 enabled as the core provider', () => {
+  it('keeps the neutral native backend enabled as the core provider', () => {
     process.env.PCAD_CREATIVE_MESH_PROVIDERS = 'none';
-    const resolved = resolveCreativeMeshProvider('local/trellis2');
+    const resolved = resolveCreativeMeshProvider('local/native');
     expect(resolved?.provider.id).toBe('local');
-    expect(resolved?.modelId).toBe('local/trellis2');
+    expect(resolved?.modelId).toBe('local/native');
     expect(resolved?.enabled).toBe(true);
   });
 
-  it('normalizes retired local IDs to TRELLIS.2', () => {
+  it('normalizes legacy model-specific local IDs to the native backend', () => {
     process.env.PCAD_CREATIVE_MESH_PROVIDERS = 'none';
-    const resolved = resolveCreativeMeshProvider('local/trellis-v1');
+    const resolved = resolveCreativeMeshProvider('local/trellis2');
     expect(resolved?.provider.id).toBe('local');
-    expect(resolved?.modelId).toBe('local/trellis2');
+    expect(resolved?.modelId).toBe('local/native');
     expect(resolved?.enabled).toBe(true);
+  });
+
+  it('does not resolve an unknown model to a hidden provider fallback', () => {
+    expect(resolveCreativeMeshProvider('not-configured')).toBeNull();
   });
 
   it('requires both provider opt-in and credentials for fal.ai', () => {

@@ -2,7 +2,6 @@ import { corsHeaders } from './api';
 import { scheduleActiveGenerationCancellation } from './activeGeneration';
 import { syncConversationGeneratedMeshes } from './conversationWorkspaceGeneratedMeshes';
 import {
-  getCreativeMeshProviderAdapter,
   resolveCreativeMeshProvider,
   type CreativeMeshProviderAdapter,
 } from './creativeMeshProviderRegistry';
@@ -62,7 +61,7 @@ function localMeshRequestKey(
   // Local Creative generation is intentionally single-flight per
   // conversation/backend. Android/Chrome can lose only the client stream while
   // the native job keeps running; reconnects must join that same job instead of
-  // starting a second expensive TRELLIS.2 generation.
+  // starting a second expensive native Creative generation.
   return `${authorization}\n${conversationId}\n${model}`;
 }
 
@@ -125,10 +124,10 @@ async function executeProviderRequest(
 /**
  * Stable entry point for Creative mesh generation.
  *
- * TRELLIS.2 is the built-in backend. Hosted services are optional provider
- * adapters selected by configuration. Retired local model IDs are normalized
- * forward to TRELLIS.2 so old conversations stay usable without reviving the
- * removed Python gateway.
+ * The built-in local backend is a model-neutral product mode. Hosted services
+ * are optional provider adapters selected by configuration. Retired model-specific
+ * local backend IDs are normalized forward to the neutral native mode so old
+ * conversations stay usable without selecting a concrete runtime model in code.
  */
 export async function handleMeshRequest(request: Request): Promise<Response> {
   if (request.method === 'OPTIONS') {
@@ -138,7 +137,10 @@ export async function handleMeshRequest(request: Request): Promise<Response> {
     return jsonError('Method not allowed', 405);
   }
 
-  const body = await request.clone().json().catch(() => null);
+  const body = await request
+    .clone()
+    .json()
+    .catch(() => null);
   const requestedModel = requestModel(body);
   if (!requestedModel) {
     return jsonError('Creative mesh model is required.', 400);
@@ -203,16 +205,14 @@ export async function handleMeshRequest(request: Request): Promise<Response> {
     ),
   );
   if (reused) {
-    console.info('[creative-mesh] reusing in-flight generation after reconnect', {
-      conversationId,
-      model: resolved.modelId,
-      provider: resolved.provider.id,
-    });
+    console.info(
+      '[creative-mesh] reusing in-flight generation after reconnect',
+      {
+        conversationId,
+        model: resolved.modelId,
+        provider: resolved.provider.id,
+      },
+    );
   }
   return responseFromSnapshot(await promise);
-}
-
-export function creativeMeshProviderForModel(model: string) {
-  const resolved = resolveCreativeMeshProvider(model);
-  return resolved?.provider ?? getCreativeMeshProviderAdapter('local');
 }
