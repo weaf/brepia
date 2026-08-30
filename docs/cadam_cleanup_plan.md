@@ -45,8 +45,8 @@ The root application route already exists as the `_layout` index route, so the f
 - [x] keep `/cadam` and `/cadam/...` as HTTP 308 compatibility redirects to the corresponding root path in both Vite dev and preview servers;
 - [ ] run typecheck/lint/build;
 - [x] smoke-test stable runtime at `http://<host>:3000/` without `/cadam` — user verified 2026-08-30;
-- [ ] verify an old `/cadam` bookmark redirects to `/`;
-- [ ] verify a nested old URL such as `/cadam/signin` redirects to `/signin`;
+- [x] verify an old `/cadam` bookmark redirects to `/` — user verified 2026-08-30;
+- [x] verify a nested old URL such as `/cadam/signin` redirects to `/signin` — user verified 2026-08-30;
 - [ ] verify auth, API, Supabase proxy, OpenSCAD WASM and stable-runtime behavior remain functional.
 
 ## Phase 2 — internal build/runtime naming
@@ -111,4 +111,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Complete the remaining Phase 1 gate (automated checks plus old `/cadam` redirect smoke), then continue with Phase 2 safe internal naming cleanup. Persistent Supabase identity remains deferred until its migration/rollback behavior is understood.
+Complete the remaining Phase 1 automated/regression gate, then continue with Phase 2 safe internal naming cleanup. Persistent Supabase identity remains deferred until its migration/rollback behavior is understood.
