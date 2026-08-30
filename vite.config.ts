@@ -7,9 +7,42 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
-const appBase = '/cadam';
-const normalizedAppBase = appBase.replace(/\/$/, '');
+const appBase = '/';
+const legacyAppBase = '/cadam';
 const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
+
+function legacyCadamRedirectPlugin(): Plugin {
+  const redirectLegacyPath = (
+    req: Parameters<Parameters<Plugin['configureServer']>[0]['middlewares']['use']>[0],
+    res: Parameters<Parameters<Plugin['configureServer']>[0]['middlewares']['use']>[1],
+    next: Parameters<Parameters<Plugin['configureServer']>[0]['middlewares']['use']>[2],
+  ) => {
+    if (!req.url) return next();
+
+    const url = new URL(req.url, 'http://localhost');
+    if (
+      url.pathname !== legacyAppBase &&
+      !url.pathname.startsWith(`${legacyAppBase}/`)
+    ) {
+      return next();
+    }
+
+    const pathname = url.pathname.slice(legacyAppBase.length) || '/';
+    res.statusCode = 308;
+    res.setHeader('Location', `${pathname}${url.search}`);
+    res.end();
+  };
+
+  return {
+    name: 'legacy-cadam-base-redirect',
+    configureServer(server) {
+      server.middlewares.use(redirectLegacyPath);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(redirectLegacyPath);
+    },
+  };
+}
 
 function supabaseProxyPlugin(): Plugin {
   return {
@@ -93,10 +126,7 @@ function serveOpenScadWasmInDev(): Plugin {
         if (!req.url) return next();
 
         const url = new URL(req.url, 'http://localhost');
-        if (
-          url.pathname !==
-          `${normalizedAppBase}/src/vendor/openscad-wasm/openscad.wasm`
-        ) {
+        if (url.pathname !== '/src/vendor/openscad-wasm/openscad.wasm') {
           return next();
         }
 
@@ -114,20 +144,21 @@ function serveOpenScadWasmInDev(): Plugin {
 export default defineConfig({
   base: appBase,
   plugins: [
+    legacyCadamRedirectPlugin(),
     serveOpenScadWasmInDev(),
     supabaseProxyPlugin(),
     tanstackStart({
       router: {
-        basepath: normalizedAppBase,
+        basepath: appBase,
         semicolons: true,
       },
       spa: {
         enabled: true,
-        maskPath: normalizedAppBase,
+        maskPath: appBase,
       },
     }),
     nitro({
-      baseURL: normalizedAppBase,
+      baseURL: appBase,
       inlineDynamicImports: true,
     }),
     react(),
