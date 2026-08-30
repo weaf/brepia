@@ -69,28 +69,42 @@ Completed:
 - [x] `npm run build` passed after Phase 2 — user verified 2026-08-30;
 - [x] normal `./start.sh` stable startup passed after Phase 2 — user verified 2026-08-30.
 
-## Phase 3 — Supabase project identity and persistent data — INVENTORY ACTIVE
+## Phase 3 — Supabase project identity and persistent data — MIGRATION PREPARED
 
-Current local Supabase project id is `cadam`, producing `supabase_*_cadam` containers.
+Current local Supabase project id is `cadam`. Workstation inspection on 2026-08-30 established the actual identity coupling:
 
-Treat this as migration-sensitive because changing the project id can affect container/volume/network identity and local persisted development data.
+- [x] all running Supabase service containers are named `supabase_*_cadam` and carry both `com.supabase.cli.project=cadam` and `com.docker.compose.project=cadam`;
+- [x] the active PostgreSQL data mount is the named volume `supabase_db_cadam` at `/var/lib/postgresql/data`;
+- [x] the active Storage object mount is the named volume `supabase_storage_cadam` at `/mnt`;
+- [x] other service containers reported no persistent project-id-keyed mounts relevant to application data;
+- [x] Edge Runtime currently uses a repository bind mount under `supabase/.temp/start-secrets/...`, so the separately listed `supabase_edge_runtime_cadam` volume is not mounted by the active Edge Runtime container;
+- [x] project networking includes `supabase_network_cadam`; it is recreateable runtime infrastructure rather than application data;
+- [x] the generic `supabase_db-config` volume and `supabase_default` network are not keyed to the current project id;
+- [x] repository-local Supabase CLI 2.114.0 detects the current stack successfully.
 
-Before any change:
+Current Supabase documentation confirms that `project_id` distinguishes local projects on the same host, `supabase stop` preserves local data unless `--no-backup` is used, and config changes require a stop/start cycle. This supports a controlled local identity migration rather than recreating the database from seed.
 
-- [ ] determine exactly which volumes/containers/networks are keyed by project id;
-- [ ] identify whether changing `project_id` creates a parallel empty stack;
-- [ ] define backup/export/rollback steps;
-- [ ] decide whether renaming the local Supabase project provides enough value to justify migration risk.
+Migration strategy:
 
-A read-only workstation inventory is available:
+1. stop `cadam` normally — never use `--no-backup`;
+2. archive the two active persistent volumes;
+3. rename the existing DB and Storage volumes from `_cadam` to `_brepia` so the live data itself is preserved rather than logically rebuilt;
+4. change `supabase/config.toml` to `project_id = "brepia"`;
+5. start the new `brepia` stack and verify it mounts the renamed DB and Storage volumes;
+6. keep safety archives and any stale `cadam` runtime resources until application regression is green;
+7. only then remove proven-unused `cadam` network/volume leftovers.
 
-```bash
-bash scripts/inspect-supabase-project-identity.sh
-```
+Prepared tooling:
 
-It reports the current project id, matching Supabase containers, their mounts, candidate Podman volumes/networks and repository-local Supabase state filenames. It does not start, stop, rename, export, import or delete anything.
+- [x] `scripts/inspect-supabase-project-identity.sh` — read-only identity/mount inventory;
+- [x] `scripts/migrate-supabase-project-id.sh` — dry-run by default; `--execute` performs stop/archive/volume-rename/config/start with automatic rollback attempt on failure;
+- [ ] run the migration on the workstation;
+- [ ] verify the `brepia` stack has the existing auth/users/conversations/messages/storage objects;
+- [ ] verify `./start.sh` and normal application operation against `project_id = "brepia"`;
+- [ ] commit the final `supabase/config.toml` project-id change after workstation success;
+- [ ] inspect and remove only confirmed stale `cadam` Podman resources after the rollback window.
 
-Do not rename the Supabase project until those items are resolved.
+Do not manually delete or recreate the current persistent volumes before this migration is verified.
 
 ## Phase 4 — source/config naming inventory — ACTIVE
 
@@ -111,9 +125,9 @@ Current classification:
 - [x] `PCAD_*` variables are operator/API compatibility contracts; do not mass-rename;
 - [x] `pcad.invalid` and `pcad_*` auth/bootstrap/database identifiers are compatibility-sensitive and require a separate auth/database migration decision;
 - [x] active contributor/branding guidance was updated to point at this staged cleanup and no longer describes `/cadam` as the canonical deployment path;
-- [x] `public/` was inspected on the cleanup branch and already contains only current Brepia branding assets plus generic runtime assets; there are no legacy CADAM/Adam public files to delete;
-- [x] `scripts/load-prod-snapshot.mjs` is an unreferenced one-off historical migration utility; its `/tmp/cadam_load` and original contributor paths are not active application/runtime dependencies, so it is left as historical tooling rather than rewritten silently;
 - [ ] local seed identity `test@adamcad.com` should be changed to a Brepia synthetic address; connector write is currently blocked because the seed file contains a literal local test password, so this remains a small manual/tooling follow-up;
+- [x] `scripts/load-prod-snapshot.mjs` classified as an unreferenced historical one-off production snapshot loader; preserve as historical migration tooling rather than editing its workstation-specific source paths or `/tmp/cadam_load` scratch directory;
+- [x] `public/` currently contains only Brepia/current generic assets (`brepia-*`, Geist, HDR, libraries, manifest); no legacy Adam/CADAM public asset remains to delete;
 - [ ] inspect internal `adam-*` CSS/Tailwind token names separately; rename only if a complete mechanical replacement can be proven behavior-neutral.
 
 Only category 1 should be renamed automatically. Categories 2–5 require an explicit decision.
@@ -142,4 +156,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Run the read-only Supabase project-identity inventory on the workstation. Use that evidence to decide whether `project_id = "cadam"` should be migrated to a Brepia identity or retained as an internal compatibility name. Continue to preserve the working `/cadam` redirect, `CADAM Original`, external Sentry identity and `PCAD_*` contracts unless separate migrations are approved.
+Run the prepared Supabase project-id migration in dry-run mode first, review its reported source/target volume state and approximate size, then execute it. Do not proceed with CSS-token or auth/database identifier renames until the Supabase identity migration has passed its application smoke gate.
