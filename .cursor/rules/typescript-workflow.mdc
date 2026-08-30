@@ -1,10 +1,10 @@
 ---
-description: 
+description:
 globs: *.ts,*.tsx
 alwaysApply: false
 ---
 # TypeScript Workflow Rules
-version: 1.1.0
+version: 1.2.0
 
 ## Type Checking
 
@@ -23,7 +23,7 @@ npm run typecheck
 ```
 
 #### Supabase Edge Functions (Deno)
-For files in `supabase/functions/`, you must cd into each function directory:
+For files in `supabase/functions/`, cd into each function directory:
 ```bash
 cd supabase/functions/[function-name]
 deno check index.ts
@@ -35,15 +35,12 @@ cd supabase/functions/chat
 deno check index.ts
 ```
 
-You can also run the npm command
-```bash
-npm run lint:supabase
-```
+If a repository npm script exists for the relevant Supabase lint/check scope, use that script as well.
 
 ## When to Run Type Check
 
 ### Database Schema Changes
-- After running `supabase gen types typescript --local`
+- After running `npx supabase gen types typescript --local > shared/database.ts`
 - After applying migrations that change table structures
 - When adding new columns, tables, or modifying existing ones
 
@@ -62,26 +59,30 @@ npm run lint:supabase
 ## Workflow Integration
 
 ### With Database Changes
-1. Edit schema files in `supabase/schemas/`
-2. Generate migration: `supabase db diff -f <name>`
-3. Apply migration: `supabase start && supabase migration up`
-4. Regenerate types: `supabase gen types typescript --local > shared/database.ts`
-5. **Run type check**: 
-   - Frontend: `npx tsc -b`
-   - Edge Functions: `cd supabase/functions/[function-name] && deno check index.ts`
-6. Fix any type errors in the codebase
+The local Supabase stack must already be running through the workstation lifecycle described in `AGENTS.md` and `docs/local_supabase_lifecycle.md`. Do not insert `supabase start/stop` into this workflow.
+
+1. Edit schema files in `supabase/schemas/`.
+2. Generate migration: `npx supabase db diff -f <name>`.
+3. Review the generated migration.
+4. Apply migration: `npx supabase migration up`.
+5. Regenerate types: `npx supabase gen types typescript --local > shared/database.ts`.
+6. Run frontend typecheck: `npm run typecheck`.
+7. If relevant edge functions changed, run `deno check index.ts` from the affected function directories.
+8. Fix all type errors before proceeding.
+
+For the complete schema/migration rules, follow `.cursor/rules/database-workflow.mdc`.
 
 ### With Frontend Changes
-1. Modify TypeScript files in `src/` or `shared/`
-2. **Run type check**: `npx tsc -b`
-3. Fix any type errors
-4. Continue with implementation
+1. Modify TypeScript files in `src/` or `shared/`.
+2. Run typecheck: `npm run typecheck`.
+3. Fix any type errors.
+4. Continue with implementation.
 
 ### With Supabase Edge Function Changes
-1. Modify TypeScript files in `supabase/functions/`
-2. **Run type check**: `cd supabase/functions/[function-name] && deno check index.ts`
-3. Fix any type errors
-4. Continue with implementation
+1. Modify TypeScript files in `supabase/functions/`.
+2. Run typecheck: `cd supabase/functions/[function-name] && deno check index.ts`.
+3. Fix any type errors.
+4. Continue with implementation.
 
 ## Error Resolution
 
@@ -92,28 +93,28 @@ npm run lint:supabase
 - Missing imports for type definitions
 
 ### Resolution Steps
-1. Run appropriate type check command based on file location:
-   - Frontend: `npx tsc -b`
+1. Run the appropriate type check based on file location:
+   - Frontend: `npm run typecheck`
    - Edge Functions: `cd supabase/functions/[function-name] && deno check index.ts`
-2. Fix errors systematically, starting with the most critical
-3. Re-run type check after each fix
-4. Ensure all type errors are resolved before proceeding
+2. Fix errors systematically, starting with the most critical.
+3. Re-run the type check after each fix.
+4. Ensure all type errors are resolved before proceeding.
 
 ## Best Practices
 
 ### Type Safety
-- Avoid using `any` types unless absolutely necessary
-- Use proper TypeScript interfaces and types
-- Leverage the generated Supabase types
-- Maintain type consistency across the codebase
+- Avoid using `any` types unless absolutely necessary.
+- Use proper TypeScript interfaces and types.
+- Leverage the generated Supabase types.
+- Maintain type consistency across the codebase.
 
 ### Development Workflow
-- Run type checks frequently during development
-- Fix type errors immediately when they appear
-- Use TypeScript strict mode settings
-- Keep type definitions up to date with schema changes
+- Run type checks frequently during development.
+- Fix type errors immediately when they appear.
+- Use the repository scripts rather than inventing parallel compiler commands when an equivalent script already exists.
+- Keep type definitions up to date with schema changes.
 
 ### Environment-Specific Considerations
-- **Frontend**: Uses Node.js TypeScript compiler, supports all standard TypeScript features
-- **Edge Functions**: Uses Deno's TypeScript compiler, may have different import/export requirements
-- **Shared Types**: Files in `shared/` are used by both environments, ensure compatibility
+- **Frontend**: Uses Node.js TypeScript compiler, supports all standard TypeScript features.
+- **Edge Functions**: Uses Deno's TypeScript compiler and may have different import/export requirements.
+- **Shared Types**: Files in `shared/` are used by both environments; ensure compatibility.
