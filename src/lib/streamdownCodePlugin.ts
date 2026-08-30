@@ -4,10 +4,10 @@ import {
   type SpecialLanguage,
   type ThemeRegistrationAny,
   type TokensResult,
-} from 'shiki/core';
-import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
-import { bundledLanguages, bundledLanguagesInfo } from 'shiki/langs';
-import { bundledThemes } from 'shiki/themes';
+} from '@shikijs/core';
+import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript';
+import { bundledLanguages, bundledLanguagesInfo } from '@shikijs/langs';
+import { bundledThemes } from '@shikijs/themes';
 
 type BundledLanguage = keyof typeof bundledLanguages;
 type BundledTheme = keyof typeof bundledThemes;
