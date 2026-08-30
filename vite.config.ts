@@ -186,11 +186,12 @@ const reactThreeChunkTest = (id: string) =>
 
 const streamdownChunkTest = (id: string) =>
   id.includes('/node_modules/streamdown/') ||
-  id.includes('/node_modules/@streamdown/') ||
+  id.includes('/node_modules/@streamdown/');
+
+const shikiChunkTest = (id: string) =>
+  id.includes('/node_modules/shiki/dist/') ||
   id.includes('/node_modules/@shikijs/core/') ||
   id.includes('/node_modules/@shikijs/engine-javascript/');
-
-const mermaidChunkTest = (id: string) => id.includes('/node_modules/mermaid/');
 
 export default defineConfig({
   base: appBase,
@@ -254,7 +255,7 @@ export default defineConfig({
                 { name: 'three', test: threeChunkTest },
                 { name: 'react-three', test: reactThreeChunkTest },
                 { name: 'streamdown', test: streamdownChunkTest },
-                { name: 'mermaid', test: mermaidChunkTest },
+                { name: 'shiki', test: shikiChunkTest },
               ],
             },
           },
