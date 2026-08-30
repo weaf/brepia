@@ -10,6 +10,105 @@ permissions:
   contents: read
 
 jobs:
+  apply-lint-cleanup:
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: chore/history-build-cleanup
+
+      - name: Apply exact cleanup edits
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              if new in text:
+                  return
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path}: expected exactly one cleanup match')
+              file.write_text(text.replace(old, new, 1))
+
+          message_path = Path('src/components/chat/MessageBubble.tsx')
+          message = message_path.read_text()
+          for name in ('imageParts', 'meshContextParts', 'meshPreferencesParts'):
+              pattern = re.compile(
+                  rf'(const {name} = useMemo\(.*?)(\[message\.parts\])(\s*,\n\s*\);)',
+                  re.S,
+              )
+              message, count = pattern.subn(r'\1[message]\3', message, count=1)
+              if count != 1 and f'const {name} = useMemo' in message and '[message]' not in message:
+                  raise SystemExit(f'MessageBubble.tsx: failed to update {name}')
+          old_deps = '[conversation.type, message.parts, lastParametricBuildIndex]'
+          new_deps = '[conversation.type, lastParametricBuildIndex, message]'
+          if old_deps in message:
+              message = message.replace(old_deps, new_deps, 1)
+          elif new_deps not in message:
+              raise SystemExit('MessageBubble.tsx: assistant text dependencies not found')
+          message_path.write_text(message)
+
+          for path in (
+              'src/components/settings/AuxiliaryInstructionProfilesSettings.tsx',
+              'src/components/settings/CreativePromptProfilesSettings.tsx',
+              'src/components/settings/PrimaryPromptProfilesSettings.tsx',
+          ):
+              replace_once(
+                  path,
+                  '  const profiles = profilesQuery.data ?? [];',
+                  '  const profiles = useMemo(\n    () => profilesQuery.data ?? [],\n    [profilesQuery.data],\n  );',
+              )
+
+          replace_once(
+              'src/components/settings/PromptProfilesSettings.tsx',
+              '      builtinDetailFromApi,\n    ],',
+              '      builtinDetailFromApi,\n      isBuiltInEdit,\n    ],',
+          )
+
+          replace_once(
+              'src/hooks/useOpenSCAD.ts',
+              '    return () => {\n      teardownTimeoutRef.current = globalThis.setTimeout(() => {\n        clientRef.current?.reset();\n        clientRef.current = null;\n        activeCompileRef.current = null;\n        cachedFilesRef.current.clear();',
+              '    const cachedFiles = cachedFilesRef.current;\n\n    return () => {\n      teardownTimeoutRef.current = globalThis.setTimeout(() => {\n        clientRef.current?.reset();\n        clientRef.current = null;\n        activeCompileRef.current = null;\n        cachedFiles.clear();',
+          )
+
+          b8 = Path('tests/b8_integration.test.ts')
+          b8_text = b8.read_text()
+          mock = """vi.mock('../src/server/opencode', () => ({\n  opencodeModels: vi.fn(async () => []),\n}));\n\n"""
+          if mock not in b8_text:
+              marker = '// ===========================================================================\n// Authenticated request helper / route behavior'
+              if marker not in b8_text:
+                  raise SystemExit('b8_integration.test.ts: insertion marker not found')
+              b8.write_text(b8_text.replace(marker, mock + marker, 1))
+          PY
+
+          git diff --check
+
+      - name: Commit cleanup edits
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/chat/MessageBubble.tsx \
+            src/components/settings/AuxiliaryInstructionProfilesSettings.tsx \
+            src/components/settings/CreativePromptProfilesSettings.tsx \
+            src/components/settings/PrimaryPromptProfilesSettings.tsx \
+            src/components/settings/PromptProfilesSettings.tsx \
+            src/hooks/useOpenSCAD.ts \
+            tests/b8_integration.test.ts
+          git commit -m "chore: resolve remaining core lint warnings"
+          git push origin HEAD:chore/history-build-cleanup
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
