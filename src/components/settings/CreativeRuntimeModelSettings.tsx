@@ -302,9 +302,9 @@ export function CreativeRuntimeModelSettings() {
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-adam-neutral-400">
           Low-level Creative model IDs are explicit user settings. Product modes
           such as Fast, Quality and Ultra stay stable, but no upstream model is
-          silently selected in runtime code. Pick a discovered catalog model or
-          enter a provider-specific model ID. Empty roles fail closed instead of
-          falling back to a hidden model.
+          silently selected in runtime code. Select or enter the exact
+          provider-specific model ID for each role. Empty roles fail closed
+          instead of falling back to a hidden model.
         </p>
       </div>
 
