@@ -2,6 +2,7 @@ export interface InitOptions {
     noInitialRun: boolean;
     print?: (text: string) => void;
     printErr?: (text: string) => void;
+    locateFile?: (path: string, prefix: string) => string;
 }
 export interface OpenSCAD {
     callMain(args: Array<string>): number;
