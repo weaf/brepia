@@ -132,7 +132,7 @@ stop_project_for_migration() {
   remove_stopped_project_containers "${project}"
 
   if [ -n "$(project_containers "${project}")" ]; then
-    echo "Old project containers still exist after cleanup; refusing to rename volumes." >&2
+    echo "Old project containers still exist after cleanup; refusing to copy volumes." >&2
     print_project_container_states "${project}" >&2
     return 1
   fi
@@ -187,9 +187,54 @@ ensure_old_stack_ready() {
   fi
 
   section "Restore ${OLD_ID} stack for preflight"
-  echo "The previous stop attempt left the project stopped. Restarting it so the database can be fingerprinted before migration."
+  echo "The previous migration attempt left the project stopped. Restarting it so the database can be fingerprinted before migration."
   "${SUPABASE_BIN}" start
   "${SUPABASE_BIN}" status >/dev/null
+}
+
+create_target_volume() {
+  local source="$1"
+  local target="$2"
+  local label
+  local -a label_args=()
+
+  # Preserve any existing volume labels while rewriting project-scoped labels
+  # to the new identity. Ensure the Supabase project label is always present so
+  # future CLI lifecycle commands can discover the new persistent volumes.
+  while IFS= read -r label; do
+    [ -n "${label}" ] || continue
+    label_args+=(--label "${label}")
+  done < <(
+    podman volume inspect "${source}" \
+      | node --input-type=module -e '
+          let input = "";
+          for await (const chunk of process.stdin) input += chunk;
+          const targetProject = process.argv[1];
+          const parsed = JSON.parse(input);
+          const labels = { ...(parsed[0]?.Labels ?? {}) };
+          labels["com.supabase.cli.project"] = targetProject;
+          labels["com.docker.compose.project"] = targetProject;
+          for (const [key, value] of Object.entries(labels)) {
+            process.stdout.write(`${key}=${String(value)}\n`);
+          }
+        ' "${NEW_ID}"
+  )
+
+  podman volume create "${label_args[@]}" "${target}" >/dev/null
+
+  local project_label
+  project_label="$(podman volume inspect --format '{{index .Labels "com.supabase.cli.project"}}' "${target}" 2>/dev/null || true)"
+  if [ "${project_label}" != "${NEW_ID}" ]; then
+    echo "Target volume ${target} is missing the expected Supabase project label." >&2
+    return 1
+  fi
+}
+
+import_archive_into_volume() {
+  local archive="$1"
+  local target="$2"
+  echo "Importing ${archive} -> ${target}"
+  gzip -dc "${archive}" | podman volume import "${target}" -
 }
 
 require_prerequisites() {
@@ -200,10 +245,15 @@ require_prerequisites() {
     exit 1
   }
   command -v podman >/dev/null 2>&1 || { echo "podman not found" >&2; exit 1; }
+  command -v node >/dev/null 2>&1 || { echo "node not found" >&2; exit 1; }
   command -v gzip >/dev/null 2>&1 || { echo "gzip not found" >&2; exit 1; }
   command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum not found" >&2; exit 1; }
-  podman volume rename --help >/dev/null 2>&1 || {
-    echo "This Podman version does not support 'podman volume rename'." >&2
+  podman volume export --help >/dev/null 2>&1 || {
+    echo "This Podman version does not support 'podman volume export'." >&2
+    exit 1
+  }
+  podman volume import --help >/dev/null 2>&1 || {
+    echo "This Podman version does not support 'podman volume import'." >&2
     exit 1
   }
 }
@@ -243,16 +293,15 @@ Execution will:
   2. stop local Supabase project '${OLD_ID}' and verify actual container state;
   3. remove only stopped '${OLD_ID}' container objects, preserving named volumes;
   4. export compressed safety archives of the DB and Storage volumes;
-  5. rename the existing persistent volumes to the '${NEW_ID}' names;
+  5. create new '${NEW_ID}' DB/Storage volumes with project labels and import the archives;
   6. change supabase/config.toml project_id to '${NEW_ID}';
   7. start Supabase and verify the '${NEW_ID}' stack, volume mounts and database fingerprint.
 
-The migration does not delete backup archives or named data volumes.
+The original '${OLD_ID}' DB/Storage volumes remain untouched as an additional rollback copy.
 A non-zero Supabase stop exit is tolerated only when Podman confirms that every
 '${OLD_ID}' project container is stopped. Running containers always abort the migration.
-If a migration step fails after the volumes are renamed, the script attempts to
-stop '${NEW_ID}', restore project_id='${OLD_ID}', rename the volumes back, and
-restart the original stack.
+If a later migration step fails, the script removes only the newly-created '${NEW_ID}'
+container/volume copies, restores project_id='${OLD_ID}', and restarts the original stack.
 
 Dry-run only. Run with --execute to perform the migration.
 EOF
@@ -270,8 +319,6 @@ rollback() {
   echo "Migration failed; attempting rollback to '${OLD_ID}'..." >&2
   "${SUPABASE_BIN}" stop --project-id "${NEW_ID}" >/dev/null 2>&1 || true
 
-  # Free renamed volumes from any partially-created Brepia containers. This
-  # removes container objects only; named volumes are deliberately preserved.
   brepia_containers="$(project_containers "${NEW_ID}")"
   if [ -n "${brepia_containers}" ]; then
     while IFS= read -r container; do
@@ -282,17 +329,20 @@ rollback() {
 
   set_project_id "${OLD_ID}" || true
 
-  if volume_exists "${NEW_DB_VOLUME}" && ! volume_exists "${OLD_DB_VOLUME}"; then
-    podman volume rename "${NEW_DB_VOLUME}" "${OLD_DB_VOLUME}" || true
+  # These target volumes are copies created by this migration. Preflight refuses
+  # to run when they already exist, so removing them during rollback cannot
+  # destroy pre-existing user data. The original cadam volumes stay untouched.
+  if volume_exists "${NEW_DB_VOLUME}"; then
+    podman volume rm "${NEW_DB_VOLUME}" >/dev/null 2>&1 || true
   fi
-  if volume_exists "${NEW_STORAGE_VOLUME}" && ! volume_exists "${OLD_STORAGE_VOLUME}"; then
-    podman volume rename "${NEW_STORAGE_VOLUME}" "${OLD_STORAGE_VOLUME}" || true
+  if volume_exists "${NEW_STORAGE_VOLUME}"; then
+    podman volume rm "${NEW_STORAGE_VOLUME}" >/dev/null 2>&1 || true
   fi
 
   if "${SUPABASE_BIN}" start >/dev/null 2>&1; then
-    echo "Rollback: original '${OLD_ID}' stack restarted." >&2
+    echo "Rollback: original '${OLD_ID}' stack restarted from untouched source volumes." >&2
   else
-    echo "Rollback WARNING: automatic restart failed. Backup archives remain under ${BACKUP_ROOT}." >&2
+    echo "Rollback WARNING: automatic restart failed. Original volumes and backup archives remain intact." >&2
   fi
   exit "${exit_code}"
 }
@@ -344,27 +394,34 @@ fi
 
 BACKUP_DIR="${BACKUP_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "${BACKUP_DIR}"
+DB_ARCHIVE="${BACKUP_DIR}/${OLD_DB_VOLUME}.tar.gz"
+STORAGE_ARCHIVE="${BACKUP_DIR}/${OLD_STORAGE_VOLUME}.tar.gz"
 
 section "Stop ${OLD_ID} Supabase"
 stop_project_for_migration "${OLD_ID}"
 
 section "Archive persistent volumes"
-for volume in "${OLD_DB_VOLUME}" "${OLD_STORAGE_VOLUME}"; do
-  archive="${BACKUP_DIR}/${volume}.tar.gz"
-  echo "Backing up ${volume} -> ${archive}"
-  podman volume export "${volume}" | gzip -1 > "${archive}"
-  [ -s "${archive}" ] || { echo "Backup archive is empty: ${archive}" >&2; exit 1; }
-done
-sha256sum "${BACKUP_DIR}"/*.tar.gz > "${BACKUP_DIR}/SHA256SUMS"
+echo "Backing up ${OLD_DB_VOLUME} -> ${DB_ARCHIVE}"
+podman volume export "${OLD_DB_VOLUME}" | gzip -1 > "${DB_ARCHIVE}"
+[ -s "${DB_ARCHIVE}" ] || { echo "Backup archive is empty: ${DB_ARCHIVE}" >&2; exit 1; }
+
+echo "Backing up ${OLD_STORAGE_VOLUME} -> ${STORAGE_ARCHIVE}"
+podman volume export "${OLD_STORAGE_VOLUME}" | gzip -1 > "${STORAGE_ARCHIVE}"
+[ -s "${STORAGE_ARCHIVE}" ] || { echo "Backup archive is empty: ${STORAGE_ARCHIVE}" >&2; exit 1; }
+
+sha256sum "${DB_ARCHIVE}" "${STORAGE_ARCHIVE}" > "${BACKUP_DIR}/SHA256SUMS"
 printf 'old_project_id=%s\nnew_project_id=%s\n' "${OLD_ID}" "${NEW_ID}" > "${BACKUP_DIR}/migration.txt"
 printf 'database_fingerprint=%s\n' "${OLD_FINGERPRINT}" >> "${BACKUP_DIR}/migration.txt"
-
 echo "Backup manifest: ${BACKUP_DIR}/SHA256SUMS"
 
-section "Rename persistent volumes"
+section "Create and import ${NEW_ID} persistent volumes"
 rollback_needed=1
-podman volume rename "${OLD_DB_VOLUME}" "${NEW_DB_VOLUME}"
-podman volume rename "${OLD_STORAGE_VOLUME}" "${NEW_STORAGE_VOLUME}"
+create_target_volume "${OLD_DB_VOLUME}" "${NEW_DB_VOLUME}"
+create_target_volume "${OLD_STORAGE_VOLUME}" "${NEW_STORAGE_VOLUME}"
+import_archive_into_volume "${DB_ARCHIVE}" "${NEW_DB_VOLUME}"
+import_archive_into_volume "${STORAGE_ARCHIVE}" "${NEW_STORAGE_VOLUME}"
+printf 'database copy size: %s\n' "$(volume_size "${NEW_DB_VOLUME}")"
+printf 'storage copy size:  %s\n' "$(volume_size "${NEW_STORAGE_VOLUME}")"
 
 section "Change project_id"
 set_project_id "${NEW_ID}"
@@ -407,6 +464,7 @@ printf 'storage volume:   %s\n' "${STORAGE_MOUNT}"
 printf 'backup directory: %s\n' "${BACKUP_DIR}"
 
 echo
-echo "The old data has been moved by volume rename and separately archived."
-echo "Do not delete the backup archives or any remaining cadam-named stale resources until Brepia has passed the application smoke/regression gate."
+echo "The Brepia data volumes are verified copies of the original CADAM volumes."
+echo "The original ${OLD_DB_VOLUME} and ${OLD_STORAGE_VOLUME} volumes are intentionally retained for rollback."
+echo "Do not delete the original volumes or backup archives until Brepia has passed the application smoke/regression gate."
 echo "supabase/config.toml is now modified locally to project_id='${NEW_ID}'."
