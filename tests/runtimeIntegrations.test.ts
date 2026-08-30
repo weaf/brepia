@@ -2,9 +2,14 @@
  * B4 — Runtime integrations discovery tests.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+vi.mock('@/server/opencode', () => ({
+  opencodeApiUrl: () => 'http://127.0.0.1:4096',
+  opencodeModels: vi.fn(async () => []),
+}));
 
 // ---------------------------------------------------------------------------
 // Mock fetch (for network probes in OpenCode / Local OpenAI)
@@ -159,7 +164,7 @@ describe('RuntimeIntegrationStatus DTO shape', () => {
 describe('API endpoint auth requirement', () => {
   it('route file uses requireUser for auth', async () => {
     const routeSource = readFileSync(
-      join(__dirname, '../src/routes/api/settings/runtimeIntegrations.ts'),
+      join(import.meta.dirname, '../src/routes/api/settings/runtimeIntegrations.ts'),
       'utf-8',
     );
     expect(routeSource).toContain('requireUser');
@@ -167,7 +172,7 @@ describe('API endpoint auth requirement', () => {
 
   it('route is defined with GET handler', async () => {
     const routeSource = readFileSync(
-      join(__dirname, '../src/routes/api/settings/runtimeIntegrations.ts'),
+      join(import.meta.dirname, '../src/routes/api/settings/runtimeIntegrations.ts'),
       'utf-8',
     );
     expect(routeSource).toContain('GET');
