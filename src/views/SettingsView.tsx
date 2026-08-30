@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppearance } from '@/contexts/AppearanceContext';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +14,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import * as Sentry from '@sentry/react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useProfile, useUpdateProfile } from '@/services/profileService';
 import { AvatarUpdateDialog } from '@/components/auth/AvatarUpdateDialog';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
@@ -29,8 +31,15 @@ const lifecycleDiagnosticsEnabled =
 
 type SettingsTab = 'account' | 'ai' | 'administration' | 'debug';
 
+const appearanceOptions = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+] as const;
+
 export default function SettingsView() {
   const { user, resetPassword } = useAuth();
+  const { appearance, setAppearance } = useAppearance();
   const { data: profile } = useProfile();
   const { data: access } = useQuery({
     queryKey: ['account-access'],
@@ -315,6 +324,45 @@ export default function SettingsView() {
                   onCheckedChange={handleUpdateNotifications}
                 />
               </div>
+            </section>
+
+            <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
+              <h2 className="text-sm font-medium text-adam-neutral-50">
+                Appearance
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-adam-neutral-200">
+                Choose how Brepia looks on this device. This does not change the
+                3D viewer background brightness.
+              </p>
+              <div
+                className="mt-4 grid grid-cols-3 gap-2"
+                aria-label="Application appearance"
+              >
+                {appearanceOptions.map((option) => {
+                  const Icon = option.icon;
+                  const selected = appearance === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setAppearance(option.value)}
+                      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-adam-blue focus-visible:ring-offset-2 focus-visible:ring-offset-adam-background-2 ${
+                        selected
+                          ? 'border-adam-blue bg-adam-neutral-900 text-adam-neutral-50'
+                          : 'border-adam-neutral-800 bg-adam-background-1 text-adam-neutral-200 hover:text-adam-neutral-50'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-adam-neutral-400">
+                System follows your operating system and updates automatically.
+              </p>
             </section>
 
             {!ssoManaged && (
