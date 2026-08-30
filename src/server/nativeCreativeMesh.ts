@@ -5,6 +5,10 @@ import {
 } from '@shared/creativeMeshModels';
 import { imageIdFromFilename } from '@shared/imageRefs';
 import type { AiPreferencesDto } from '@shared/aiSettings';
+import {
+  requireCreativeRuntimeModel,
+  type CreativeRuntimeModelRouting,
+} from '@shared/modelRouting';
 import type { MeshFileType } from '@shared/types';
 import { corsHeaders, isRecord } from './api';
 import {
@@ -20,8 +24,6 @@ import {
 } from './supabaseClient';
 
 const DEFAULT_LLAMA_SWAP_URL = 'http://127.0.0.1:9292';
-const DEFAULT_Z_IMAGE_MODEL_ID = 'creative/z-image-turbo';
-const DEFAULT_TRELLIS2_MODEL_ID = 'creative/trellis2';
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const IMAGE_ALIAS_RE = /^image-(\d+)(?:\.[^.]+)?$/i;
@@ -85,14 +87,6 @@ function llamaSwapUrl(): string {
   );
 }
 
-function zImageModelId(): string {
-  return env('PCAD_Z_IMAGE_MODEL_ID') || DEFAULT_Z_IMAGE_MODEL_ID;
-}
-
-function trellis2ModelId(): string {
-  return env('PCAD_TRELLIS2_MODEL_ID') || DEFAULT_TRELLIS2_MODEL_ID;
-}
-
 function llamaSwapHeaders(json = false): Record<string, string> {
   const headers: Record<string, string> = {};
   const apiKey = env('PCAD_LLAMA_SWAP_API_KEY').trim();
@@ -108,7 +102,8 @@ function encodedModelPath(modelId: string): string {
 function configuredTrellisResolution(
   preferences: AiPreferencesDto,
 ): '512' | '1024' | '1536' {
-  const userOverride = preferences.runtimeOverrides['creative.trellisResolution'];
+  const userOverride =
+    preferences.runtimeOverrides['creative.trellisResolution'];
   if (
     userOverride === '512' ||
     userOverride === '1024' ||
@@ -324,12 +319,16 @@ async function downloadReferenceImage(
 async function generateConditioningImage(
   prompt: string,
   timeoutMs: number,
+  model: string,
 ): Promise<ImageInput> {
-  const model = zImageModelId();
-  nativeCreativeLog('z-image-generate', 'generating TRELLIS conditioning image', {
-    model,
-    size: zImageSize(),
-  });
+  nativeCreativeLog(
+    'z-image-generate',
+    'generating TRELLIS conditioning image',
+    {
+      model,
+      size: zImageSize(),
+    },
+  );
 
   const response = await fetch(`${llamaSwapUrl()}/v1/images/generations`, {
     method: 'POST',
@@ -377,8 +376,8 @@ async function generateConditioningImage(
 async function generateTrellisGlb(
   image: ImageInput,
   runtime: NativeCreativeRuntime,
+  model: string,
 ): Promise<ArrayBuffer> {
-  const model = trellis2ModelId();
   const form = new FormData();
   form.append(
     'image',
@@ -454,7 +453,9 @@ async function persistMeshResult({
     .eq('user_id', userId)
     .eq('conversation_id', conversationId);
   if (updateError) {
-    throw new Error(`Failed to finalize TRELLIS.2 mesh: ${updateError.message}`);
+    throw new Error(
+      `Failed to finalize TRELLIS.2 mesh: ${updateError.message}`,
+    );
   }
 }
 
@@ -516,16 +517,21 @@ export async function handleNativeCreativeMeshRequest(
   if (!token) return localError('Unauthorized', 401);
 
   const supabase = getServiceRoleSupabaseClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  const { data: userData, error: userError } =
+    await supabase.auth.getUser(token);
   if (userError || !userData.user?.id) return localError('Unauthorized', 401);
 
   let runtime: NativeCreativeRuntime;
+  let modelRouting: CreativeRuntimeModelRouting;
   try {
-    runtime = resolveNativeCreativeRuntime(
-      await loadUserAiPreferences(userData.user.id),
-    );
+    const preferences = await loadUserAiPreferences(userData.user.id);
+    runtime = resolveNativeCreativeRuntime(preferences);
+    modelRouting = preferences.modelRouting;
   } catch (error) {
-    return localError(`Invalid Creative runtime settings: ${errorMessage(error)}`, 500);
+    return localError(
+      `Invalid Creative runtime settings: ${errorMessage(error)}`,
+      500,
+    );
   }
 
   const conversationId = body.conversationId;
@@ -554,7 +560,10 @@ export async function handleNativeCreativeMeshRequest(
   }
 
   const requestedImageIds = Array.isArray(body.images) ? body.images : [];
-  const imageIds = resolveRequestedImageIds(requestedImageIds, attachedImageIds);
+  const imageIds = resolveRequestedImageIds(
+    requestedImageIds,
+    attachedImageIds,
+  );
   if (!text && imageIds.length === 0) {
     return localError('Text or a reference image is required for TRELLIS.2');
   }
@@ -565,8 +574,25 @@ export async function handleNativeCreativeMeshRequest(
     );
   }
 
-  const requiredRuntimeModels = [trellis2ModelId()];
-  if (imageIds.length === 0) requiredRuntimeModels.unshift(zImageModelId());
+  let nativeImageModel: string | null = null;
+  let nativeMeshModel: string;
+  try {
+    nativeMeshModel = requireCreativeRuntimeModel(
+      modelRouting,
+      'nativeMeshModelId',
+    );
+    if (imageIds.length === 0) {
+      nativeImageModel = requireCreativeRuntimeModel(
+        modelRouting,
+        'nativeImageModelId',
+      );
+    }
+  } catch (error) {
+    return localError(errorMessage(error), 422);
+  }
+
+  const requiredRuntimeModels = [nativeMeshModel];
+  if (nativeImageModel) requiredRuntimeModels.unshift(nativeImageModel);
   try {
     await ensureLlamaSwapModels(requiredRuntimeModels, runtime.healthTimeoutMs);
   } catch (error) {
@@ -596,7 +622,10 @@ export async function handleNativeCreativeMeshRequest(
     .single();
 
   if (meshError || !meshData) {
-    return localError(meshError?.message ?? 'Failed to create TRELLIS.2 mesh job', 500);
+    return localError(
+      meshError?.message ?? 'Failed to create TRELLIS.2 mesh job',
+      500,
+    );
   }
 
   let stage: NativeCreativeStage = 'image-download';
@@ -625,11 +654,16 @@ export async function handleNativeCreativeMeshRequest(
       conditioningImage = await generateConditioningImage(
         text as string,
         runtime.imageGenerationTimeoutMs,
+        nativeImageModel as string,
       );
     }
 
     stage = 'trellis-generate';
-    const glb = await generateTrellisGlb(conditioningImage, runtime);
+    const glb = await generateTrellisGlb(
+      conditioningImage,
+      runtime,
+      nativeMeshModel,
+    );
 
     stage = 'storage-persist';
     await persistMeshResult({

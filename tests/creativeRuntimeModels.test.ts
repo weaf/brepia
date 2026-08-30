@@ -21,19 +21,26 @@ const validCreativeAgent: CatalogEntry = {
 describe('native Creative runtime model isolation', () => {
   it('recognizes raw and local-prefixed runtime IDs', () => {
     for (const id of [
-      'creative/z-image-turbo',
-      'creative/trellis2',
-      'local/creative/z-image-turbo',
-      'local/creative/trellis2',
+      'creative/image-runtime-a',
+      'creative/mesh-runtime-b',
+      'local/creative/image-runtime-a',
+      'local/creative/mesh-runtime-b',
     ]) {
       assert.equal(isInternalCreativeRuntimeModelId(id), true, id);
     }
-    assert.equal(isInternalCreativeRuntimeModelId('local/qwen-tool-model'), false);
+    assert.equal(
+      isInternalCreativeRuntimeModelId('local/qwen-tool-model'),
+      false,
+    );
   });
 
   it('removes Creative generation runtimes from discovered local chat models', () => {
     const discovered = applyLocalModelMetadata(
-      ['creative/z-image-turbo', 'creative/trellis2', 'qwen-tool-model'],
+      [
+        'creative/image-runtime-a',
+        'creative/mesh-runtime-b',
+        'qwen-tool-model',
+      ],
       new Map(),
     );
 
@@ -45,7 +52,7 @@ describe('native Creative runtime model isolation', () => {
 
   it('self-heals an accidentally pinned TRELLIS runtime by choosing a real chat model', () => {
     const result = selectCreativeAgentModel(
-      { settings: { creativeAgentModel: 'local/creative/trellis2' } },
+      { settings: { creativeAgentModel: 'local/creative/mesh-runtime-b' } },
       undefined,
       [validCreativeAgent],
     );
@@ -59,15 +66,14 @@ describe('native Creative runtime model isolation', () => {
   it('never chooses a Creative runtime from catalog fallback', () => {
     const runtimeEntry: CatalogEntry = {
       ...validCreativeAgent,
-      id: 'local/creative/trellis2',
+      id: 'local/creative/mesh-runtime-b',
       name: 'TRELLIS.2 runtime',
     };
 
-    const result = selectCreativeAgentModel(
-      { settings: null },
-      undefined,
-      [runtimeEntry, validCreativeAgent],
-    );
+    const result = selectCreativeAgentModel({ settings: null }, undefined, [
+      runtimeEntry,
+      validCreativeAgent,
+    ]);
 
     assert.equal(result?.modelId, 'local/qwen-tool-model');
   });

@@ -22,8 +22,10 @@ import {
 } from '@shared/aiInstructionSettings';
 import {
   UpdateDefaultModelsSchema,
+  UpdateModelRoutingSchema,
   UpdateVisionModelsSchema,
 } from '@shared/aiSettings';
+import { CreativeRuntimeModelRoutingSchema } from '@shared/modelRouting';
 
 function preferenceResponse(data: Record<string, unknown>) {
   const instructionProfile = AiInstructionProfileIdSchema.safeParse(
@@ -44,6 +46,9 @@ function preferenceResponse(data: Record<string, unknown>) {
     defaultCreativeModelId: data.default_creative_model_id ?? null,
     visionFastModelId: data.vision_fast_model_id ?? null,
     visionDeepModelId: data.vision_deep_model_id ?? null,
+    modelRouting: CreativeRuntimeModelRoutingSchema.parse(
+      data.model_routing ?? {},
+    ),
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
@@ -54,10 +59,7 @@ function isSelectablePromptProfile(
   scope: string,
 ): boolean {
   return Boolean(
-    profile &&
-      profile.scope === scope &&
-      profile.editable &&
-      !profile.archived,
+    profile && profile.scope === scope && profile.editable && !profile.archived,
   );
 }
 
@@ -97,7 +99,10 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
               body.defaultInstructionProfileId,
             );
             if (!parsed.success) {
-              return json({ error: 'invalid_default_instruction_profile' }, 400);
+              return json(
+                { error: 'invalid_default_instruction_profile' },
+                400,
+              );
             }
             updates.default_instruction_profile_id = parsed.data;
           }
@@ -118,7 +123,10 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
 
           if (body.defaultCreativePromptProfileId !== undefined) {
             if (body.defaultCreativePromptProfileId === null) {
-              return json({ error: 'creative_prompt_reset_not_supported' }, 400);
+              return json(
+                { error: 'creative_prompt_reset_not_supported' },
+                400,
+              );
             }
             const profile = await getPromptProfile(
               user.id,
@@ -139,7 +147,10 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
               body.instructionProfileDefaults,
             );
             if (!parsed.success) {
-              return json({ error: 'invalid_instruction_profile_defaults' }, 400);
+              return json(
+                { error: 'invalid_instruction_profile_defaults' },
+                400,
+              );
             }
 
             for (const [scope, profileId] of Object.entries(parsed.data)) {
@@ -169,7 +180,9 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
           }
 
           if (body.runtimeOverrides !== undefined) {
-            const parsed = RuntimeOverridesSchema.safeParse(body.runtimeOverrides);
+            const parsed = RuntimeOverridesSchema.safeParse(
+              body.runtimeOverrides,
+            );
             if (!parsed.success) {
               return json({ error: 'invalid_runtime_overrides' }, 400);
             }
@@ -198,8 +211,7 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
               const selectableCatalog = await buildSelectableCatalog(user);
               if (
                 !selectableCatalog.some(
-                  (entry) =>
-                    entry.id === parsed.data.defaultParametricModelId,
+                  (entry) => entry.id === parsed.data.defaultParametricModelId,
                 )
               ) {
                 return json(
@@ -235,6 +247,19 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
               updates.default_creative_model_id =
                 parsed.data.defaultCreativeModelId;
             }
+          }
+
+          if (body.modelRouting !== undefined) {
+            const parsed = UpdateModelRoutingSchema.safeParse(
+              body.modelRouting,
+            );
+            if (!parsed.success) {
+              return json({ error: 'invalid_model_routing_settings' }, 400);
+            }
+            updates.model_routing = CreativeRuntimeModelRoutingSchema.parse({
+              ...prefs.modelRouting,
+              ...parsed.data,
+            });
           }
 
           if (

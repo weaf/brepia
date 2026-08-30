@@ -7,6 +7,10 @@
 
 import { z } from 'zod';
 import {
+  CreativeRuntimeModelRoutingSchema,
+  UpdateCreativeRuntimeModelRoutingSchema,
+} from './modelRouting.ts';
+import {
   AiInstructionKeySchema,
   AiInstructionProfileIdSchema,
   DEFAULT_INSTRUCTION_PROFILE_ID,
@@ -70,6 +74,7 @@ export const AiPreferencesSchema = z.object({
   defaultCreativeModelId: nullableModelIdSchema.default(null),
   visionFastModelId: nullableModelIdSchema.default(null),
   visionDeepModelId: nullableModelIdSchema.default(null),
+  modelRouting: CreativeRuntimeModelRoutingSchema.default({}),
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
 });
@@ -305,6 +310,8 @@ export const UpdateVisionModelsSchema = z.object({
   visionDeepModelId: nullableModelIdSchema,
 });
 
+export const UpdateModelRoutingSchema = UpdateCreativeRuntimeModelRoutingSchema;
+
 export const TestProviderRequestSchema = z.object({
   id: z.string().uuid().optional(),
   draftConfig: CreateProviderSchema.partial().optional(),
@@ -330,5 +337,8 @@ export type UpdateProviderModelInput = z.infer<
 >;
 export type UpdateHiddenModelsInput = z.infer<typeof UpdateHiddenModelsSchema>;
 export type SetDefaultPromptInput = z.infer<typeof SetDefaultPromptSchema>;
-export type UpdateDefaultModelsInput = z.infer<typeof UpdateDefaultModelsSchema>;
+export type UpdateDefaultModelsInput = z.infer<
+  typeof UpdateDefaultModelsSchema
+>;
 export type UpdateVisionModelsInput = z.infer<typeof UpdateVisionModelsSchema>;
+export type UpdateModelRoutingInput = z.infer<typeof UpdateModelRoutingSchema>;

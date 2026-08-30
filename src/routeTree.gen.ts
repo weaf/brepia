@@ -9,81 +9,50 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root';
-import { Route as UpdatePasswordRouteImport } from './routes/update-password';
-import { Route as TermsOfServiceRouteImport } from './routes/terms-of-service';
-import { Route as SignupEmailRouteImport } from './routes/signup-email';
-import { Route as SignupRouteImport } from './routes/signup';
-import { Route as SigninRouteImport } from './routes/signin';
-import { Route as ResetPasswordRouteImport } from './routes/reset-password';
-import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy';
-import { Route as ConfirmEmailRouteImport } from './routes/confirm-email';
 import { Route as LayoutRouteImport } from './routes/_layout';
+import { Route as ConfirmEmailRouteImport } from './routes/confirm-email';
+import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy';
+import { Route as ResetPasswordRouteImport } from './routes/reset-password';
+import { Route as SigninRouteImport } from './routes/signin';
+import { Route as SignupRouteImport } from './routes/signup';
+import { Route as SignupEmailRouteImport } from './routes/signup-email';
+import { Route as TermsOfServiceRouteImport } from './routes/terms-of-service';
+import { Route as UpdatePasswordRouteImport } from './routes/update-password';
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index';
-import { Route as AssetsSplatRouteImport } from './routes/assets.$';
-import { Route as ApiTitleGeneratorRouteImport } from './routes/api/title-generator';
-import { Route as ApiParametricChatRouteImport } from './routes/api/parametric-chat';
-import { Route as ApiMeshRouteImport } from './routes/api/mesh';
-import { Route as ApiFalWebhookRouteImport } from './routes/api/fal-webhook';
-import { Route as ApiDeleteUserRouteImport } from './routes/api/delete-user';
-import { Route as ApiCreativeChatRouteImport } from './routes/api/creative-chat';
-import { Route as LayoutAuthRouteImport } from './routes/_layout/_auth';
 import { Route as LayoutSplatRouteImport } from './routes/_layout/$';
-import { Route as ApiSettingsRuntimeIntegrationsRouteImport } from './routes/api/settings/runtimeIntegrations';
-import { Route as ApiSettingsInstanceIdentityRouteImport } from './routes/api/settings/instanceIdentity';
-import { Route as ApiScadImportGithubRouteImport } from './routes/api/scad-import.github';
-import { Route as ApiOpencodeModelsRouteImport } from './routes/api/opencode/models';
-import { Route as ApiModelsCatalogRouteImport } from './routes/api/models/catalog';
-import { Route as ApiJacksonPollockSplatRouteImport } from './routes/api/jackson-pollock/$';
-import { Route as ApiExportStepRouteImport } from './routes/api/export.step';
-import { Route as ApiAiSettingsProvidersRouteImport } from './routes/api/ai-settings/providers';
-import { Route as ApiAiSettingsProfilesRouteImport } from './routes/api/ai-settings/profiles';
-import { Route as ApiAiSettingsPreferencesRouteImport } from './routes/api/ai-settings/preferences';
-import { Route as LayoutShareIdRouteImport } from './routes/_layout/share/$id';
-import { Route as LayoutAuthSettingsRouteImport } from './routes/_layout/_auth/settings';
+import { Route as LayoutAuthRouteImport } from './routes/_layout/_auth';
+import { Route as ApiCreativeChatRouteImport } from './routes/api/creative-chat';
+import { Route as ApiDeleteUserRouteImport } from './routes/api/delete-user';
+import { Route as ApiFalWebhookRouteImport } from './routes/api/fal-webhook';
+import { Route as ApiMeshRouteImport } from './routes/api/mesh';
+import { Route as ApiParametricChatRouteImport } from './routes/api/parametric-chat';
+import { Route as ApiTitleGeneratorRouteImport } from './routes/api/title-generator';
+import { Route as AssetsSplatRouteImport } from './routes/assets.$';
 import { Route as LayoutAuthHistoryRouteImport } from './routes/_layout/_auth/history';
-import { Route as ApiModelsCatalogAllRouteImport } from './routes/api/models/catalog/all';
-import { Route as ApiInternalAccountDeleteRouteImport } from './routes/api/internal/account/delete';
-import { Route as ApiAiSettingsProvidersTestRouteImport } from './routes/api/ai-settings/providers/test';
-import { Route as ApiAiSettingsProvidersBuiltinsRouteImport } from './routes/api/ai-settings/providers/builtins';
-import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId';
-import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api/ai-settings/profiles/$profileId';
+import { Route as LayoutAuthSettingsRouteImport } from './routes/_layout/_auth/settings';
+import { Route as LayoutShareIdRouteImport } from './routes/_layout/share/$id';
+import { Route as ApiAiSettingsPreferencesRouteImport } from './routes/api/ai-settings/preferences';
+import { Route as ApiAiSettingsProfilesRouteImport } from './routes/api/ai-settings/profiles';
+import { Route as ApiAiSettingsProvidersRouteImport } from './routes/api/ai-settings/providers';
+import { Route as ApiExportStepRouteImport } from './routes/api/export.step';
+import { Route as ApiJacksonPollockSplatRouteImport } from './routes/api/jackson-pollock/$';
+import { Route as ApiModelsCatalogRouteImport } from './routes/api/models/catalog';
+import { Route as ApiOpencodeModelsRouteImport } from './routes/api/opencode/models';
+import { Route as ApiScadImportGithubRouteImport } from './routes/api/scad-import.github';
+import { Route as ApiSettingsInstanceIdentityRouteImport } from './routes/api/settings/instanceIdentity';
+import { Route as ApiSettingsRuntimeIntegrationsRouteImport } from './routes/api/settings/runtimeIntegrations';
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id';
+import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api/ai-settings/profiles/$profileId';
+import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId';
+import { Route as ApiAiSettingsProvidersBuiltinsRouteImport } from './routes/api/ai-settings/providers/builtins';
+import { Route as ApiAiSettingsProvidersTestRouteImport } from './routes/api/ai-settings/providers/test';
+import { Route as ApiInternalAccountDeleteRouteImport } from './routes/api/internal/account/delete';
+import { Route as ApiModelsCatalogAllRouteImport } from './routes/api/models/catalog/all';
 import { Route as ApiAiSettingsProvidersProviderIdModelsRouteImport } from './routes/api/ai-settings/providers/$providerId/models';
 import { Route as ApiAiSettingsProvidersProviderIdModelsModelIdRouteImport } from './routes/api/ai-settings/providers/$providerId/models/$modelId';
 
-const UpdatePasswordRoute = UpdatePasswordRouteImport.update({
-  id: '/update-password',
-  path: '/update-password',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const TermsOfServiceRoute = TermsOfServiceRouteImport.update({
-  id: '/terms-of-service',
-  path: '/terms-of-service',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SignupEmailRoute = SignupEmailRouteImport.update({
-  id: '/signup-email',
-  path: '/signup-email',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SigninRoute = SigninRouteImport.update({
-  id: '/signin',
-  path: '/signin',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
-  id: '/privacy-policy',
-  path: '/privacy-policy',
+const LayoutRoute = LayoutRouteImport.update({
+  id: '/_layout',
   getParentRoute: () => rootRouteImport,
 } as any);
 const ConfirmEmailRoute = ConfirmEmailRouteImport.update({
@@ -91,8 +60,39 @@ const ConfirmEmailRoute = ConfirmEmailRouteImport.update({
   path: '/confirm-email',
   getParentRoute: () => rootRouteImport,
 } as any);
-const LayoutRoute = LayoutRouteImport.update({
-  id: '/_layout',
+const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
+  id: '/privacy-policy',
+  path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SignupEmailRoute = SignupEmailRouteImport.update({
+  id: '/signup-email',
+  path: '/signup-email',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const TermsOfServiceRoute = TermsOfServiceRouteImport.update({
+  id: '/terms-of-service',
+  path: '/terms-of-service',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const UpdatePasswordRoute = UpdatePasswordRouteImport.update({
+  id: '/update-password',
+  path: '/update-password',
   getParentRoute: () => rootRouteImport,
 } as any);
 const LayoutIndexRoute = LayoutIndexRouteImport.update({
@@ -100,29 +100,18 @@ const LayoutIndexRoute = LayoutIndexRouteImport.update({
   path: '/',
   getParentRoute: () => LayoutRoute,
 } as any);
-const AssetsSplatRoute = AssetsSplatRouteImport.update({
-  id: '/assets/$',
-  path: '/assets/$',
-  getParentRoute: () => rootRouteImport,
+const LayoutSplatRoute = LayoutSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => LayoutRoute,
 } as any);
-const ApiTitleGeneratorRoute = ApiTitleGeneratorRouteImport.update({
-  id: '/api/title-generator',
-  path: '/api/title-generator',
-  getParentRoute: () => rootRouteImport,
+const LayoutAuthRoute = LayoutAuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => LayoutRoute,
 } as any);
-const ApiParametricChatRoute = ApiParametricChatRouteImport.update({
-  id: '/api/parametric-chat',
-  path: '/api/parametric-chat',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiMeshRoute = ApiMeshRouteImport.update({
-  id: '/api/mesh',
-  path: '/api/mesh',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiFalWebhookRoute = ApiFalWebhookRouteImport.update({
-  id: '/api/fal-webhook',
-  path: '/api/fal-webhook',
+const ApiCreativeChatRoute = ApiCreativeChatRouteImport.update({
+  id: '/api/creative-chat',
+  path: '/api/creative-chat',
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiDeleteUserRoute = ApiDeleteUserRouteImport.update({
@@ -130,66 +119,45 @@ const ApiDeleteUserRoute = ApiDeleteUserRouteImport.update({
   path: '/api/delete-user',
   getParentRoute: () => rootRouteImport,
 } as any);
-const ApiCreativeChatRoute = ApiCreativeChatRouteImport.update({
-  id: '/api/creative-chat',
-  path: '/api/creative-chat',
+const ApiFalWebhookRoute = ApiFalWebhookRouteImport.update({
+  id: '/api/fal-webhook',
+  path: '/api/fal-webhook',
   getParentRoute: () => rootRouteImport,
 } as any);
-const LayoutAuthRoute = LayoutAuthRouteImport.update({
-  id: '/_auth',
+const ApiMeshRoute = ApiMeshRouteImport.update({
+  id: '/api/mesh',
+  path: '/api/mesh',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiParametricChatRoute = ApiParametricChatRouteImport.update({
+  id: '/api/parametric-chat',
+  path: '/api/parametric-chat',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiTitleGeneratorRoute = ApiTitleGeneratorRouteImport.update({
+  id: '/api/title-generator',
+  path: '/api/title-generator',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AssetsSplatRoute = AssetsSplatRouteImport.update({
+  id: '/assets/$',
+  path: '/assets/$',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const LayoutAuthHistoryRoute = LayoutAuthHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => LayoutAuthRoute,
+} as any);
+const LayoutAuthSettingsRoute = LayoutAuthSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => LayoutAuthRoute,
+} as any);
+const LayoutShareIdRoute = LayoutShareIdRouteImport.update({
+  id: '/share/$id',
+  path: '/share/$id',
   getParentRoute: () => LayoutRoute,
-} as any);
-const LayoutSplatRoute = LayoutSplatRouteImport.update({
-  id: '/$',
-  path: '/$',
-  getParentRoute: () => LayoutRoute,
-} as any);
-const ApiSettingsRuntimeIntegrationsRoute =
-  ApiSettingsRuntimeIntegrationsRouteImport.update({
-    id: '/api/settings/runtimeIntegrations',
-    path: '/api/settings/runtimeIntegrations',
-    getParentRoute: () => rootRouteImport,
-  } as any);
-const ApiSettingsInstanceIdentityRoute =
-  ApiSettingsInstanceIdentityRouteImport.update({
-    id: '/api/settings/instanceIdentity',
-    path: '/api/settings/instanceIdentity',
-    getParentRoute: () => rootRouteImport,
-  } as any);
-const ApiScadImportGithubRoute = ApiScadImportGithubRouteImport.update({
-  id: '/api/scad-import/github',
-  path: '/api/scad-import/github',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiOpencodeModelsRoute = ApiOpencodeModelsRouteImport.update({
-  id: '/api/opencode/models',
-  path: '/api/opencode/models',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiModelsCatalogRoute = ApiModelsCatalogRouteImport.update({
-  id: '/api/models/catalog',
-  path: '/api/models/catalog',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiJacksonPollockSplatRoute = ApiJacksonPollockSplatRouteImport.update({
-  id: '/api/jackson-pollock/$',
-  path: '/api/jackson-pollock/$',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiExportStepRoute = ApiExportStepRouteImport.update({
-  id: '/api/export/step',
-  path: '/api/export/step',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiAiSettingsProvidersRoute = ApiAiSettingsProvidersRouteImport.update({
-  id: '/api/ai-settings/providers',
-  path: '/api/ai-settings/providers',
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiAiSettingsProfilesRoute = ApiAiSettingsProfilesRouteImport.update({
-  id: '/api/ai-settings/profiles',
-  path: '/api/ai-settings/profiles',
-  getParentRoute: () => rootRouteImport,
 } as any);
 const ApiAiSettingsPreferencesRoute =
   ApiAiSettingsPreferencesRouteImport.update({
@@ -197,36 +165,68 @@ const ApiAiSettingsPreferencesRoute =
     path: '/api/ai-settings/preferences',
     getParentRoute: () => rootRouteImport,
   } as any);
-const LayoutShareIdRoute = LayoutShareIdRouteImport.update({
-  id: '/share/$id',
-  path: '/share/$id',
-  getParentRoute: () => LayoutRoute,
+const ApiAiSettingsProfilesRoute = ApiAiSettingsProfilesRouteImport.update({
+  id: '/api/ai-settings/profiles',
+  path: '/api/ai-settings/profiles',
+  getParentRoute: () => rootRouteImport,
 } as any);
-const LayoutAuthSettingsRoute = LayoutAuthSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => LayoutAuthRoute,
+const ApiAiSettingsProvidersRoute = ApiAiSettingsProvidersRouteImport.update({
+  id: '/api/ai-settings/providers',
+  path: '/api/ai-settings/providers',
+  getParentRoute: () => rootRouteImport,
 } as any);
-const LayoutAuthHistoryRoute = LayoutAuthHistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => LayoutAuthRoute,
+const ApiExportStepRoute = ApiExportStepRouteImport.update({
+  id: '/api/export/step',
+  path: '/api/export/step',
+  getParentRoute: () => rootRouteImport,
 } as any);
-const ApiModelsCatalogAllRoute = ApiModelsCatalogAllRouteImport.update({
-  id: '/all',
-  path: '/all',
-  getParentRoute: () => ApiModelsCatalogRoute,
+const ApiJacksonPollockSplatRoute = ApiJacksonPollockSplatRouteImport.update({
+  id: '/api/jackson-pollock/$',
+  path: '/api/jackson-pollock/$',
+  getParentRoute: () => rootRouteImport,
 } as any);
-const ApiInternalAccountDeleteRoute =
-  ApiInternalAccountDeleteRouteImport.update({
-    id: '/api/internal/account/delete',
-    path: '/api/internal/account/delete',
+const ApiModelsCatalogRoute = ApiModelsCatalogRouteImport.update({
+  id: '/api/models/catalog',
+  path: '/api/models/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiOpencodeModelsRoute = ApiOpencodeModelsRouteImport.update({
+  id: '/api/opencode/models',
+  path: '/api/opencode/models',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiScadImportGithubRoute = ApiScadImportGithubRouteImport.update({
+  id: '/api/scad-import/github',
+  path: '/api/scad-import/github',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiSettingsInstanceIdentityRoute =
+  ApiSettingsInstanceIdentityRouteImport.update({
+    id: '/api/settings/instanceIdentity',
+    path: '/api/settings/instanceIdentity',
     getParentRoute: () => rootRouteImport,
   } as any);
-const ApiAiSettingsProvidersTestRoute =
-  ApiAiSettingsProvidersTestRouteImport.update({
-    id: '/test',
-    path: '/test',
+const ApiSettingsRuntimeIntegrationsRoute =
+  ApiSettingsRuntimeIntegrationsRouteImport.update({
+    id: '/api/settings/runtimeIntegrations',
+    path: '/api/settings/runtimeIntegrations',
+    getParentRoute: () => rootRouteImport,
+  } as any);
+const LayoutAuthEditorIdRoute = LayoutAuthEditorIdRouteImport.update({
+  id: '/editor/$id',
+  path: '/editor/$id',
+  getParentRoute: () => LayoutAuthRoute,
+} as any);
+const ApiAiSettingsProfilesProfileIdRoute =
+  ApiAiSettingsProfilesProfileIdRouteImport.update({
+    id: '/$profileId',
+    path: '/$profileId',
+    getParentRoute: () => ApiAiSettingsProfilesRoute,
+  } as any);
+const ApiAiSettingsProvidersProviderIdRoute =
+  ApiAiSettingsProvidersProviderIdRouteImport.update({
+    id: '/$providerId',
+    path: '/$providerId',
     getParentRoute: () => ApiAiSettingsProvidersRoute,
   } as any);
 const ApiAiSettingsProvidersBuiltinsRoute =
@@ -235,22 +235,22 @@ const ApiAiSettingsProvidersBuiltinsRoute =
     path: '/builtins',
     getParentRoute: () => ApiAiSettingsProvidersRoute,
   } as any);
-const ApiAiSettingsProvidersProviderIdRoute =
-  ApiAiSettingsProvidersProviderIdRouteImport.update({
-    id: '/$providerId',
-    path: '/$providerId',
+const ApiAiSettingsProvidersTestRoute =
+  ApiAiSettingsProvidersTestRouteImport.update({
+    id: '/test',
+    path: '/test',
     getParentRoute: () => ApiAiSettingsProvidersRoute,
   } as any);
-const ApiAiSettingsProfilesProfileIdRoute =
-  ApiAiSettingsProfilesProfileIdRouteImport.update({
-    id: '/$profileId',
-    path: '/$profileId',
-    getParentRoute: () => ApiAiSettingsProfilesRoute,
+const ApiInternalAccountDeleteRoute =
+  ApiInternalAccountDeleteRouteImport.update({
+    id: '/api/internal/account/delete',
+    path: '/api/internal/account/delete',
+    getParentRoute: () => rootRouteImport,
   } as any);
-const LayoutAuthEditorIdRoute = LayoutAuthEditorIdRouteImport.update({
-  id: '/editor/$id',
-  path: '/editor/$id',
-  getParentRoute: () => LayoutAuthRoute,
+const ApiModelsCatalogAllRoute = ApiModelsCatalogAllRouteImport.update({
+  id: '/all',
+  path: '/all',
+  getParentRoute: () => ApiModelsCatalogRoute,
 } as any);
 const ApiAiSettingsProvidersProviderIdModelsRoute =
   ApiAiSettingsProvidersProviderIdModelsRouteImport.update({
@@ -551,53 +551,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/update-password': {
-      id: '/update-password';
-      path: '/update-password';
-      fullPath: '/update-password';
-      preLoaderRoute: typeof UpdatePasswordRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/terms-of-service': {
-      id: '/terms-of-service';
-      path: '/terms-of-service';
-      fullPath: '/terms-of-service';
-      preLoaderRoute: typeof TermsOfServiceRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/signup-email': {
-      id: '/signup-email';
-      path: '/signup-email';
-      fullPath: '/signup-email';
-      preLoaderRoute: typeof SignupEmailRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/signup': {
-      id: '/signup';
-      path: '/signup';
-      fullPath: '/signup';
-      preLoaderRoute: typeof SignupRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/signin': {
-      id: '/signin';
-      path: '/signin';
-      fullPath: '/signin';
-      preLoaderRoute: typeof SigninRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/reset-password': {
-      id: '/reset-password';
-      path: '/reset-password';
-      fullPath: '/reset-password';
-      preLoaderRoute: typeof ResetPasswordRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/privacy-policy': {
-      id: '/privacy-policy';
-      path: '/privacy-policy';
-      fullPath: '/privacy-policy';
-      preLoaderRoute: typeof PrivacyPolicyRouteImport;
+    '/_layout': {
+      id: '/_layout';
+      path: '';
+      fullPath: '/';
+      preLoaderRoute: typeof LayoutRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/confirm-email': {
@@ -607,11 +565,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfirmEmailRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/_layout': {
-      id: '/_layout';
-      path: '';
-      fullPath: '/';
-      preLoaderRoute: typeof LayoutRouteImport;
+    '/privacy-policy': {
+      id: '/privacy-policy';
+      path: '/privacy-policy';
+      fullPath: '/privacy-policy';
+      preLoaderRoute: typeof PrivacyPolicyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/reset-password': {
+      id: '/reset-password';
+      path: '/reset-password';
+      fullPath: '/reset-password';
+      preLoaderRoute: typeof ResetPasswordRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/signin': {
+      id: '/signin';
+      path: '/signin';
+      fullPath: '/signin';
+      preLoaderRoute: typeof SigninRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/signup': {
+      id: '/signup';
+      path: '/signup';
+      fullPath: '/signup';
+      preLoaderRoute: typeof SignupRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/signup-email': {
+      id: '/signup-email';
+      path: '/signup-email';
+      fullPath: '/signup-email';
+      preLoaderRoute: typeof SignupEmailRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/terms-of-service': {
+      id: '/terms-of-service';
+      path: '/terms-of-service';
+      fullPath: '/terms-of-service';
+      preLoaderRoute: typeof TermsOfServiceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/update-password': {
+      id: '/update-password';
+      path: '/update-password';
+      fullPath: '/update-password';
+      preLoaderRoute: typeof UpdatePasswordRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/_layout/': {
@@ -621,39 +621,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutIndexRouteImport;
       parentRoute: typeof LayoutRoute;
     };
-    '/assets/$': {
-      id: '/assets/$';
-      path: '/assets/$';
-      fullPath: '/assets/$';
-      preLoaderRoute: typeof AssetsSplatRouteImport;
-      parentRoute: typeof rootRouteImport;
+    '/_layout/$': {
+      id: '/_layout/$';
+      path: '/$';
+      fullPath: '/$';
+      preLoaderRoute: typeof LayoutSplatRouteImport;
+      parentRoute: typeof LayoutRoute;
     };
-    '/api/title-generator': {
-      id: '/api/title-generator';
-      path: '/api/title-generator';
-      fullPath: '/api/title-generator';
-      preLoaderRoute: typeof ApiTitleGeneratorRouteImport;
-      parentRoute: typeof rootRouteImport;
+    '/_layout/_auth': {
+      id: '/_layout/_auth';
+      path: '';
+      fullPath: '/';
+      preLoaderRoute: typeof LayoutAuthRouteImport;
+      parentRoute: typeof LayoutRoute;
     };
-    '/api/parametric-chat': {
-      id: '/api/parametric-chat';
-      path: '/api/parametric-chat';
-      fullPath: '/api/parametric-chat';
-      preLoaderRoute: typeof ApiParametricChatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/mesh': {
-      id: '/api/mesh';
-      path: '/api/mesh';
-      fullPath: '/api/mesh';
-      preLoaderRoute: typeof ApiMeshRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/fal-webhook': {
-      id: '/api/fal-webhook';
-      path: '/api/fal-webhook';
-      fullPath: '/api/fal-webhook';
-      preLoaderRoute: typeof ApiFalWebhookRouteImport;
+    '/api/creative-chat': {
+      id: '/api/creative-chat';
+      path: '/api/creative-chat';
+      fullPath: '/api/creative-chat';
+      preLoaderRoute: typeof ApiCreativeChatRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/api/delete-user': {
@@ -663,81 +649,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDeleteUserRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/api/creative-chat': {
-      id: '/api/creative-chat';
-      path: '/api/creative-chat';
-      fullPath: '/api/creative-chat';
-      preLoaderRoute: typeof ApiCreativeChatRouteImport;
+    '/api/fal-webhook': {
+      id: '/api/fal-webhook';
+      path: '/api/fal-webhook';
+      fullPath: '/api/fal-webhook';
+      preLoaderRoute: typeof ApiFalWebhookRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/_layout/_auth': {
-      id: '/_layout/_auth';
-      path: '';
-      fullPath: '/';
-      preLoaderRoute: typeof LayoutAuthRouteImport;
+    '/api/mesh': {
+      id: '/api/mesh';
+      path: '/api/mesh';
+      fullPath: '/api/mesh';
+      preLoaderRoute: typeof ApiMeshRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/parametric-chat': {
+      id: '/api/parametric-chat';
+      path: '/api/parametric-chat';
+      fullPath: '/api/parametric-chat';
+      preLoaderRoute: typeof ApiParametricChatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/title-generator': {
+      id: '/api/title-generator';
+      path: '/api/title-generator';
+      fullPath: '/api/title-generator';
+      preLoaderRoute: typeof ApiTitleGeneratorRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/assets/$': {
+      id: '/assets/$';
+      path: '/assets/$';
+      fullPath: '/assets/$';
+      preLoaderRoute: typeof AssetsSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/_layout/_auth/history': {
+      id: '/_layout/_auth/history';
+      path: '/history';
+      fullPath: '/history';
+      preLoaderRoute: typeof LayoutAuthHistoryRouteImport;
+      parentRoute: typeof LayoutAuthRoute;
+    };
+    '/_layout/_auth/settings': {
+      id: '/_layout/_auth/settings';
+      path: '/settings';
+      fullPath: '/settings';
+      preLoaderRoute: typeof LayoutAuthSettingsRouteImport;
+      parentRoute: typeof LayoutAuthRoute;
+    };
+    '/_layout/share/$id': {
+      id: '/_layout/share/$id';
+      path: '/share/$id';
+      fullPath: '/share/$id';
+      preLoaderRoute: typeof LayoutShareIdRouteImport;
       parentRoute: typeof LayoutRoute;
     };
-    '/_layout/$': {
-      id: '/_layout/$';
-      path: '/$';
-      fullPath: '/$';
-      preLoaderRoute: typeof LayoutSplatRouteImport;
-      parentRoute: typeof LayoutRoute;
-    };
-    '/api/settings/runtimeIntegrations': {
-      id: '/api/settings/runtimeIntegrations';
-      path: '/api/settings/runtimeIntegrations';
-      fullPath: '/api/settings/runtimeIntegrations';
-      preLoaderRoute: typeof ApiSettingsRuntimeIntegrationsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/settings/instanceIdentity': {
-      id: '/api/settings/instanceIdentity';
-      path: '/api/settings/instanceIdentity';
-      fullPath: '/api/settings/instanceIdentity';
-      preLoaderRoute: typeof ApiSettingsInstanceIdentityRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/scad-import/github': {
-      id: '/api/scad-import/github';
-      path: '/api/scad-import/github';
-      fullPath: '/api/scad-import/github';
-      preLoaderRoute: typeof ApiScadImportGithubRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/opencode/models': {
-      id: '/api/opencode/models';
-      path: '/api/opencode/models';
-      fullPath: '/api/opencode/models';
-      preLoaderRoute: typeof ApiOpencodeModelsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/models/catalog': {
-      id: '/api/models/catalog';
-      path: '/api/models/catalog';
-      fullPath: '/api/models/catalog';
-      preLoaderRoute: typeof ApiModelsCatalogRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/jackson-pollock/$': {
-      id: '/api/jackson-pollock/$';
-      path: '/api/jackson-pollock/$';
-      fullPath: '/api/jackson-pollock/$';
-      preLoaderRoute: typeof ApiJacksonPollockSplatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/export/step': {
-      id: '/api/export/step';
-      path: '/api/export/step';
-      fullPath: '/api/export/step';
-      preLoaderRoute: typeof ApiExportStepRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    '/api/ai-settings/providers': {
-      id: '/api/ai-settings/providers';
-      path: '/api/ai-settings/providers';
-      fullPath: '/api/ai-settings/providers';
-      preLoaderRoute: typeof ApiAiSettingsProvidersRouteImport;
+    '/api/ai-settings/preferences': {
+      id: '/api/ai-settings/preferences';
+      path: '/api/ai-settings/preferences';
+      fullPath: '/api/ai-settings/preferences';
+      preLoaderRoute: typeof ApiAiSettingsPreferencesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/api/ai-settings/profiles': {
@@ -747,53 +719,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiSettingsProfilesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/api/ai-settings/preferences': {
-      id: '/api/ai-settings/preferences';
-      path: '/api/ai-settings/preferences';
-      fullPath: '/api/ai-settings/preferences';
-      preLoaderRoute: typeof ApiAiSettingsPreferencesRouteImport;
+    '/api/ai-settings/providers': {
+      id: '/api/ai-settings/providers';
+      path: '/api/ai-settings/providers';
+      fullPath: '/api/ai-settings/providers';
+      preLoaderRoute: typeof ApiAiSettingsProvidersRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/_layout/share/$id': {
-      id: '/_layout/share/$id';
-      path: '/share/$id';
-      fullPath: '/share/$id';
-      preLoaderRoute: typeof LayoutShareIdRouteImport;
-      parentRoute: typeof LayoutRoute;
-    };
-    '/_layout/_auth/settings': {
-      id: '/_layout/_auth/settings';
-      path: '/settings';
-      fullPath: '/settings';
-      preLoaderRoute: typeof LayoutAuthSettingsRouteImport;
-      parentRoute: typeof LayoutAuthRoute;
-    };
-    '/_layout/_auth/history': {
-      id: '/_layout/_auth/history';
-      path: '/history';
-      fullPath: '/history';
-      preLoaderRoute: typeof LayoutAuthHistoryRouteImport;
-      parentRoute: typeof LayoutAuthRoute;
-    };
-    '/api/models/catalog/all': {
-      id: '/api/models/catalog/all';
-      path: '/all';
-      fullPath: '/api/models/catalog/all';
-      preLoaderRoute: typeof ApiModelsCatalogAllRouteImport;
-      parentRoute: typeof ApiModelsCatalogRoute;
-    };
-    '/api/internal/account/delete': {
-      id: '/api/internal/account/delete';
-      path: '/api/internal/account/delete';
-      fullPath: '/api/internal/account/delete';
-      preLoaderRoute: typeof ApiInternalAccountDeleteRouteImport;
+    '/api/export/step': {
+      id: '/api/export/step';
+      path: '/api/export/step';
+      fullPath: '/api/export/step';
+      preLoaderRoute: typeof ApiExportStepRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/api/ai-settings/providers/test': {
-      id: '/api/ai-settings/providers/test';
-      path: '/test';
-      fullPath: '/api/ai-settings/providers/test';
-      preLoaderRoute: typeof ApiAiSettingsProvidersTestRouteImport;
+    '/api/jackson-pollock/$': {
+      id: '/api/jackson-pollock/$';
+      path: '/api/jackson-pollock/$';
+      fullPath: '/api/jackson-pollock/$';
+      preLoaderRoute: typeof ApiJacksonPollockSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/models/catalog': {
+      id: '/api/models/catalog';
+      path: '/api/models/catalog';
+      fullPath: '/api/models/catalog';
+      preLoaderRoute: typeof ApiModelsCatalogRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/opencode/models': {
+      id: '/api/opencode/models';
+      path: '/api/opencode/models';
+      fullPath: '/api/opencode/models';
+      preLoaderRoute: typeof ApiOpencodeModelsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/scad-import/github': {
+      id: '/api/scad-import/github';
+      path: '/api/scad-import/github';
+      fullPath: '/api/scad-import/github';
+      preLoaderRoute: typeof ApiScadImportGithubRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/settings/instanceIdentity': {
+      id: '/api/settings/instanceIdentity';
+      path: '/api/settings/instanceIdentity';
+      fullPath: '/api/settings/instanceIdentity';
+      preLoaderRoute: typeof ApiSettingsInstanceIdentityRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/settings/runtimeIntegrations': {
+      id: '/api/settings/runtimeIntegrations';
+      path: '/api/settings/runtimeIntegrations';
+      fullPath: '/api/settings/runtimeIntegrations';
+      preLoaderRoute: typeof ApiSettingsRuntimeIntegrationsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/_layout/_auth/editor/$id': {
+      id: '/_layout/_auth/editor/$id';
+      path: '/editor/$id';
+      fullPath: '/editor/$id';
+      preLoaderRoute: typeof LayoutAuthEditorIdRouteImport;
+      parentRoute: typeof LayoutAuthRoute;
+    };
+    '/api/ai-settings/profiles/$profileId': {
+      id: '/api/ai-settings/profiles/$profileId';
+      path: '/$profileId';
+      fullPath: '/api/ai-settings/profiles/$profileId';
+      preLoaderRoute: typeof ApiAiSettingsProfilesProfileIdRouteImport;
+      parentRoute: typeof ApiAiSettingsProfilesRoute;
+    };
+    '/api/ai-settings/providers/$providerId': {
+      id: '/api/ai-settings/providers/$providerId';
+      path: '/$providerId';
+      fullPath: '/api/ai-settings/providers/$providerId';
+      preLoaderRoute: typeof ApiAiSettingsProvidersProviderIdRouteImport;
       parentRoute: typeof ApiAiSettingsProvidersRoute;
     };
     '/api/ai-settings/providers/builtins': {
@@ -803,26 +803,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiSettingsProvidersBuiltinsRouteImport;
       parentRoute: typeof ApiAiSettingsProvidersRoute;
     };
-    '/api/ai-settings/providers/$providerId': {
-      id: '/api/ai-settings/providers/$providerId';
-      path: '/$providerId';
-      fullPath: '/api/ai-settings/providers/$providerId';
-      preLoaderRoute: typeof ApiAiSettingsProvidersProviderIdRouteImport;
+    '/api/ai-settings/providers/test': {
+      id: '/api/ai-settings/providers/test';
+      path: '/test';
+      fullPath: '/api/ai-settings/providers/test';
+      preLoaderRoute: typeof ApiAiSettingsProvidersTestRouteImport;
       parentRoute: typeof ApiAiSettingsProvidersRoute;
     };
-    '/api/ai-settings/profiles/$profileId': {
-      id: '/api/ai-settings/profiles/$profileId';
-      path: '/$profileId';
-      fullPath: '/api/ai-settings/profiles/$profileId';
-      preLoaderRoute: typeof ApiAiSettingsProfilesProfileIdRouteImport;
-      parentRoute: typeof ApiAiSettingsProfilesRoute;
+    '/api/internal/account/delete': {
+      id: '/api/internal/account/delete';
+      path: '/api/internal/account/delete';
+      fullPath: '/api/internal/account/delete';
+      preLoaderRoute: typeof ApiInternalAccountDeleteRouteImport;
+      parentRoute: typeof rootRouteImport;
     };
-    '/_layout/_auth/editor/$id': {
-      id: '/_layout/_auth/editor/$id';
-      path: '/editor/$id';
-      fullPath: '/editor/$id';
-      preLoaderRoute: typeof LayoutAuthEditorIdRouteImport;
-      parentRoute: typeof LayoutAuthRoute;
+    '/api/models/catalog/all': {
+      id: '/api/models/catalog/all';
+      path: '/all';
+      fullPath: '/api/models/catalog/all';
+      preLoaderRoute: typeof ApiModelsCatalogAllRouteImport;
+      parentRoute: typeof ApiModelsCatalogRoute;
     };
     '/api/ai-settings/providers/$providerId/models': {
       id: '/api/ai-settings/providers/$providerId/models';

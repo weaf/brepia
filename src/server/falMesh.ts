@@ -3,7 +3,7 @@ import { fal } from '@fal-ai/client';
 import OpenAI from 'openai';
 import {
   generateImageWithFalFlux,
-  generateImageWithGptImage2,
+  generateImageWithOpenAiImageTool,
   INSTRUCTIONS_3D as instructions3D,
   type GptImageQuality,
 } from './imageGen';
@@ -16,6 +16,12 @@ import { reformatSignedUrl } from './messageUtils';
 import { logApiError, logError } from './serverLog';
 import { Buffer } from 'node:buffer';
 import { env, requiredEnv, webhookBaseUrl } from './env';
+import { getPreferencesByUserId } from './aiSettings';
+import {
+  requireCreativeRuntimeModel,
+  type CreativeImageProvider,
+  type CreativeRuntimeModelKey,
+} from '@shared/modelRouting';
 
 // Initialize Sentry for error logging
 
@@ -50,20 +56,20 @@ function runBackgroundTask(task: Promise<unknown>) {
   void loggedTask;
 }
 
-// Returns the image_generation_call_id to thread into the next gpt-image-2
+// Returns the image_generation_call_id to thread into the next configured OpenAI image model
 // call, or null when the prior image was produced by a fallback (Gemini/Flux)
 // and has no call ID.
 //
 // Branch-aware: when the user is editing a specific mesh (via the `mesh`
 // request param), we prefer that mesh's latest image — otherwise a global
 // "most recent in conversation" lookup would grab a sibling-branch image the
-// user isn't looking at, and gpt-image-2 would silently edit the wrong
+// user isn't looking at, and configured OpenAI image model would silently edit the wrong
 // output. Without a specific mesh in focus, fall back to conversation-wide
 // latest (linear editing flow).
 //
 // We do NOT filter for non-null call IDs: if the last turn fell back,
-// skipping its null row and surfacing an older gpt-image-2 call ID would
-// make gpt-image-2 edit an image two turns ago while the user is looking
+// skipping its null row and surfacing an older configured OpenAI image model call ID would
+// make configured OpenAI image model edit an image two turns ago while the user is looking
 // at the fallback output.
 async function getPriorImageCallId(
   supabaseClient: SupabaseClient,
@@ -76,7 +82,7 @@ async function getPriorImageCallId(
     // from the untrusted request body, and the service-role client bypasses
     // RLS. Without this filter, a user could pass another user's mesh UUID
     // to thread the victim's OpenAI multi-turn continuity ID into their own
-    // gpt-image-2 call.
+    // configured OpenAI image model call.
     const { data: meshRow } = await supabaseClient
       .from('meshes')
       .select('images')
@@ -116,13 +122,13 @@ async function getPriorImageCallId(
 }
 
 // Unified mesh-image generation. Every mesh mode goes through this helper:
-//   1. Primary: gpt-image-2 via OpenAI Responses API (canonical per OpenAI
+//   1. Primary: configured OpenAI image model via OpenAI Responses API (canonical per OpenAI
 //      docs, supports multi-turn via image_generation_call id)
 //   2. Fallback: Flux (fal-ai)
 //
 // Flux is also the sole provider for mesh previews (see submitPreviewJob),
 // which intentionally does not go through this chain.
-// Per-mode gpt-image-2 quality. fast mode defaults to `low` ($0.006/image,
+// Per-mode configured OpenAI image model quality. fast mode defaults to `low` ($0.006/image,
 // cheaper than the Flux it replaced) since fast-mode output is inherently
 // draft quality. quality/ultra use `high` ($0.21/image) for final seed
 // fidelity. See https://developers.openai.com/api/docs/guides/image-generation
@@ -157,7 +163,7 @@ async function generateMeshImage(
   const supabaseClient = getSupabaseClient();
   const hasFreshUserImages = freshUserImages.length > 0;
   // Skip the call-id lookup when the user is providing fresh reference
-  // material — we want gpt-image-2 to anchor on the new upload, not a
+  // material — we want configured OpenAI image model to anchor on the new upload, not a
   // prior turn's output.
   let priorImageCallId: string | null;
   // Tri-state for observability so Sentry breadcrumbs distinguish
@@ -165,9 +171,7 @@ async function generateMeshImage(
   // and "prior existed but we suppressed it because the user uploaded
   // fresh reference material this turn".
   let priorImageCallIdStatus:
-    | 'threaded'
-    | 'none_available'
-    | 'suppressed_by_fresh_upload';
+    'threaded' | 'none_available' | 'suppressed_by_fresh_upload';
   if (hasFreshUserImages) {
     priorImageCallId = null;
     priorImageCallIdStatus = 'suppressed_by_fresh_upload';
@@ -192,76 +196,80 @@ async function generateMeshImage(
     conversationId,
   };
 
-  let provider: 'gpt-image-2' | 'flux';
-  let result: {
-    imageBytes: Buffer;
-    imageCallId: string | null;
-    contentType: 'image/jpeg' | 'image/png';
-  };
-
-  try {
-    result = await generateImageWithGptImage2(
-      supabaseClient,
-      getOpenAI(),
-      userId,
-      conversationId,
-      prompt,
-      gptImageReferenceImages,
-      priorImageCallId,
-      QUALITY_BY_MESH_MODEL[sentryStage.meshModel],
+  const routing = (await getPreferencesByUserId(userId)).modelRouting;
+  const configuredProviders = [
+    routing.creativeImagePrimaryProvider,
+    routing.creativeImageFallbackProvider,
+  ].filter((value): value is CreativeImageProvider => value !== null);
+  const providers = [...new Set(configuredProviders)];
+  if (providers.length === 0) {
+    throw new Error(
+      'No Creative image provider is configured. Select one in AI Settings > Model routing.',
     );
-    provider = 'gpt-image-2';
-  } catch (gptImageError) {
-    logError(gptImageError, {
-      ...sentryContext,
-      additionalContext: {
-        stage: 'gpt_image_2_fallback',
-        hasFreshUserImages,
-        priorImageCallIdStatus,
-        ...sentryStage,
-      },
-    });
-    try {
-      const imageBytes = await generateImageWithFalFlux(
+  }
+
+  const runProvider = async (provider: CreativeImageProvider) => {
+    if (provider === 'openai') {
+      return generateImageWithOpenAiImageTool(
         supabaseClient,
+        getOpenAI(),
         userId,
         conversationId,
         prompt,
         gptImageReferenceImages,
+        priorImageCallId,
+        requireCreativeRuntimeModel(routing, 'openAiOrchestratorModelId'),
+        requireCreativeRuntimeModel(routing, 'openAiImageModelId'),
+        QUALITY_BY_MESH_MODEL[sentryStage.meshModel],
       );
-      // Flux returns png per its output_format config.
-      result = { imageBytes, imageCallId: null, contentType: 'image/png' };
-      provider = 'flux';
-    } catch (fluxError) {
-      logError(fluxError, {
+    }
+
+    const imageBytes = await generateImageWithFalFlux(
+      supabaseClient,
+      userId,
+      conversationId,
+      prompt,
+      gptImageReferenceImages,
+      requireCreativeRuntimeModel(routing, 'falImageTextModelId'),
+      requireCreativeRuntimeModel(routing, 'falImageReferenceModelId'),
+    );
+    return {
+      imageBytes,
+      imageCallId: null,
+      contentType: 'image/png' as const,
+    };
+  };
+
+  let lastError: unknown;
+  for (const provider of providers) {
+    try {
+      const result = await runProvider(provider);
+      debugLog(
+        `[mesh] image_gen provider=${provider} meshModel=${sentryStage.meshModel}` +
+          (sentryStage.subStage ? ` subStage=${sentryStage.subStage}` : '') +
+          (provider === 'openai'
+            ? ` quality=${QUALITY_BY_MESH_MODEL[sentryStage.meshModel]}`
+            : '') +
+          ` contentType=${result.contentType}` +
+          ` callId=${result.imageCallId ?? 'none'}`,
+      );
+      return result;
+    } catch (providerError) {
+      lastError = providerError;
+      logError(providerError, {
         ...sentryContext,
         additionalContext: {
-          stage: 'flux_fallback',
+          stage: 'configured_image_provider_failed',
+          provider,
           hasFreshUserImages,
           priorImageCallIdStatus,
           ...sentryStage,
         },
       });
-      throw fluxError;
     }
   }
 
-  // Diagnostic log — gated on DEBUG_LOGS. In prod, ground truth comes from:
-  //   - images.image_generation_call_id (null = fallback ran, non-null = gpt-image-2)
-  //   - Sentry events tagged stage=gpt_image_2_fallback / flux_fallback
-  //     with full meshModel + subStage context
-  // This line stays opt-in for live debugging without polluting prod logs.
-  debugLog(
-    `[mesh] image_gen provider=${provider} meshModel=${sentryStage.meshModel}` +
-      (sentryStage.subStage ? ` subStage=${sentryStage.subStage}` : '') +
-      (provider === 'gpt-image-2'
-        ? ` quality=${QUALITY_BY_MESH_MODEL[sentryStage.meshModel]}`
-        : '') +
-      ` contentType=${result.contentType}` +
-      ` callId=${result.imageCallId ?? 'none'}`,
-  );
-
-  return result;
+  throw lastError ?? new Error('Configured Creative image providers failed');
 }
 
 // Helper function to get the most recent mesh preview from the conversation
@@ -319,6 +327,14 @@ function getOpenAI() {
 
 function getSupabaseClient() {
   return getServiceRoleSupabaseClient();
+}
+
+async function configuredRuntimeModel(
+  userId: string,
+  key: CreativeRuntimeModelKey,
+): Promise<string> {
+  const routing = (await getPreferencesByUserId(userId)).modelRouting;
+  return requireCreativeRuntimeModel(routing, key);
 }
 
 export async function handleMeshRequest(req: Request) {
@@ -1017,10 +1033,13 @@ async function submitMeshJob(
         enable_pbr: true, // Max quality feature
       };
 
-      await fal.queue.submit('fal-ai/meshy/v6-preview/image-to-3d', {
-        input: meshyInput,
-        webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${meshId}`,
-      });
+      await fal.queue.submit(
+        await configuredRuntimeModel(userId, 'falUltraMeshModelId'),
+        {
+          input: meshyInput,
+          webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${meshId}`,
+        },
+      );
 
       debugLog('Successfully submitted to Meshy v6 Preview');
 
@@ -1058,7 +1077,7 @@ async function submitMeshJob(
         debugLog('Step 1: Captioning image with Moondream3 (long only)...');
 
         const longResult = await fal.subscribe(
-          'fal-ai/moondream3-preview/caption',
+          await configuredRuntimeModel(userId, 'falCaptionModelId'),
           {
             input: { length: 'long', image_url: imageUrl },
           },
@@ -1071,7 +1090,6 @@ async function submitMeshJob(
         }
 
         debugLog('Moondream3 caption:', longCaption?.substring(0, 100) + '...');
-
       } catch (error) {
         debugLog('Error getting Moondream3 caption:', error);
       }
@@ -1084,14 +1102,17 @@ async function submitMeshJob(
       const tryPrompt = async (name: string, prompt: string) => {
         try {
           debugLog(`Trying prompt "${name}":`, prompt);
-          const result = await fal.subscribe('fal-ai/sam-3/image', {
-            input: {
-              image_url: imageUrl,
-              prompt: prompt,
-              apply_mask: false,
-              include_scores: true,
+          const result = await fal.subscribe(
+            await configuredRuntimeModel(userId, 'falSegmentationModelId'),
+            {
+              input: {
+                image_url: imageUrl,
+                prompt: prompt,
+                apply_mask: false,
+                include_scores: true,
+              },
             },
-          });
+          );
 
           const data = result.data;
           if (!data || typeof data !== 'object') {
@@ -1181,10 +1202,13 @@ async function submitMeshJob(
 
       debugLog('SAM 3D input:', JSON.stringify(sam3dInput, null, 2));
 
-      await fal.queue.submit('fal-ai/sam-3/3d-objects', {
-        input: sam3dInput,
-        webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${meshId}`,
-      });
+      await fal.queue.submit(
+        await configuredRuntimeModel(userId, 'falQualityMeshModelId'),
+        {
+          input: sam3dInput,
+          webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${meshId}`,
+        },
+      );
 
       debugLog('Successfully submitted to SAM 3D');
 
@@ -1218,10 +1242,13 @@ async function submitMeshJob(
           : { face_limit: TEXTURELESS_MAX_POLYGONS }),
       };
       try {
-        await fal.queue.submit('tripo3d/tripo/v2.5/image-to-3d', {
-          input: tripoInput,
-          webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${meshId}`,
-        });
+        await fal.queue.submit(
+          await configuredRuntimeModel(userId, 'falFastMeshModelId'),
+          {
+            input: tripoInput,
+            webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${meshId}`,
+          },
+        );
         debugLog(
           'Successfully submitted to Tripo v2.5 textureless with conversational context',
         );
@@ -1388,6 +1415,8 @@ async function submitPreviewJob(
         conversationId,
         newPrompt,
         allImages,
+        await configuredRuntimeModel(userId, 'falImageTextModelId'),
+        await configuredRuntimeModel(userId, 'falImageReferenceModelId'),
       );
 
       const imageId = crypto.randomUUID();
@@ -1444,12 +1473,15 @@ async function submitPreviewJob(
       throw new Error('No valid images for 3D generation');
     }
 
-    await fal.queue.submit('fal-ai/hunyuan3d/v2/mini/turbo', {
-      input: {
-        input_image_url: imageInputs[0],
+    await fal.queue.submit(
+      await configuredRuntimeModel(userId, 'falPreviewMeshModelId'),
+      {
+        input: {
+          input_image_url: imageInputs[0],
+        },
+        webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${previewId}&mode=preview`,
       },
-      webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${previewId}&mode=preview`,
-    });
+    );
   } catch (error) {
     logApiError(error, {
       functionName: 'mesh',
@@ -1499,12 +1531,15 @@ async function createHunyuanPreview(
 
     if (previewData) {
       // Hunyuan3D Mini Turbo for fast preview generation
-      await fal.queue.submit('fal-ai/hunyuan3d/v2/mini/turbo', {
-        input: {
-          input_image_url: imageUrl,
+      await fal.queue.submit(
+        await configuredRuntimeModel(userId, 'falPreviewMeshModelId'),
+        {
+          input: {
+            input_image_url: imageUrl,
+          },
+          webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${previewData.id}&mode=preview`,
         },
-        webhookUrl: `${appBaseUrl}/cadam/api/fal-webhook?id=${previewData.id}&mode=preview`,
-      });
+      );
       debugLog(`Successfully submitted ${description} to Hunyuan3D Mini Turbo`);
     }
   } catch (error) {

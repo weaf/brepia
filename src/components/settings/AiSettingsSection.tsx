@@ -13,6 +13,7 @@ import { AiModelsSettings } from './AiModelsSettings';
 import { AiRuntimeSettings } from './AiRuntimeSettings';
 import { AuxiliaryInstructionProfilesSettings } from './AuxiliaryInstructionProfilesSettings';
 import { DefaultModelSettings } from './DefaultModelSettings';
+import { CreativeRuntimeModelSettings } from './CreativeRuntimeModelSettings';
 import { InstructionProfileSettings } from './InstructionProfileSettings';
 import { LocalModelsSettings } from './LocalModelsSettings';
 import { PrimaryPromptProfilesSettings } from './PrimaryPromptProfilesSettings';
@@ -25,6 +26,7 @@ const COMMON_AI_SETTINGS_SECTIONS = [
 
 const ADVANCED_AI_SETTINGS_SECTIONS = [
   { value: 'model-catalog', label: 'Model catalog' },
+  { value: 'model-routing', label: 'Model routing' },
   { value: 'local-models', label: 'Local Models' },
   { value: 'prompts', label: 'Prompts' },
   { value: 'runtime', label: 'Runtime' },
@@ -37,8 +39,7 @@ type AiSettingsTab =
   | (typeof ADVANCED_AI_SETTINGS_SECTIONS)[number]['value'];
 
 export function AiSettingsSection() {
-  const [activeSection, setActiveSection] =
-    useState<AiSettingsTab>('general');
+  const [activeSection, setActiveSection] = useState<AiSettingsTab>('general');
 
   return (
     <section className="min-w-0 rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 text-adam-neutral-100 sm:p-6">
@@ -147,6 +148,9 @@ export function AiSettingsSection() {
             </TabsContent>
             <TabsContent value="model-catalog" className="mt-0 min-w-0">
               <AiModelsSettings />
+            </TabsContent>
+            <TabsContent value="model-routing" className="mt-0 min-w-0">
+              <CreativeRuntimeModelSettings />
             </TabsContent>
             <TabsContent value="local-models" className="mt-0 min-w-0">
               <LocalModelsSettings />

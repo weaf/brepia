@@ -39,7 +39,7 @@ import { getRegistrationSettings } from '@/services/accountAdminService';
 import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { getAiPreferences } from '@/services/aiPreferencesService';
 import {
-  FALLBACK_PARAMETRIC_MODEL_ID,
+  UNCONFIGURED_MODEL_ID,
   resolveCreativeDefaultModel,
   resolveParametricDefaultModel,
 } from '@/lib/defaultModels';
@@ -111,7 +111,7 @@ export function PromptView() {
     [aiPreferences?.defaultCreativeModelId],
   );
 
-  const [model, setModel] = useState<Model>(FALLBACK_PARAMETRIC_MODEL_ID);
+  const [model, setModel] = useState<Model>(UNCONFIGURED_MODEL_ID);
   const [instructionProfileId, setInstructionProfileId] =
     useState<AiInstructionProfileId>(DEFAULT_AI_INSTRUCTION_PROFILE_ID);
   const initialDefaultAppliedRef = useRef(false);

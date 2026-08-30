@@ -94,13 +94,12 @@ export function DefaultModelSettings() {
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
           Choose which model is preselected when you start a new Parametric or
-          Creative conversation. Existing conversations keep their pinned
-          model.
+          Creative conversation. Existing conversations keep their pinned model.
         </p>
       </div>
 
       {error ? (
-        <div className="text-sm text-adam-red-400">
+        <div className="text-adam-red-400 text-sm">
           Failed to load default model settings: {error}
         </div>
       ) : isLoading ? (
@@ -131,7 +130,7 @@ export function DefaultModelSettings() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={AUTOMATIC_VALUE}>
-                  Automatic fallback
+                  Automatic first available
                 </SelectItem>
                 {parametricModels.map((model) => (
                   <SelectItem key={model.id} value={model.id}>
@@ -141,9 +140,10 @@ export function DefaultModelSettings() {
               </SelectContent>
             </Select>
             {parametricDefaultUnavailable ? (
-              <p className="text-xs leading-relaxed text-adam-amber">
+              <p className="text-adam-amber text-xs leading-relaxed">
                 The saved Parametric default is currently hidden or unavailable.
-                Brepia will use a safe fallback until you select another model.
+                Brepia will use the first available model until you select
+                another one.
               </p>
             ) : null}
           </div>
@@ -170,7 +170,7 @@ export function DefaultModelSettings() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={AUTOMATIC_VALUE}>
-                  Automatic fallback
+                  Automatic first available
                 </SelectItem>
                 {CREATIVE_MODELS.map((model) => (
                   <SelectItem key={model.id} value={model.id}>
@@ -180,9 +180,10 @@ export function DefaultModelSettings() {
               </SelectContent>
             </Select>
             {creativeDefaultUnavailable ? (
-              <p className="text-xs leading-relaxed text-adam-amber">
+              <p className="text-adam-amber text-xs leading-relaxed">
                 The saved Creative default is currently unavailable. Brepia will
-                use TRELLIS.2 until you select another model.
+                use the first available Creative backend until you select
+                another one.
               </p>
             ) : null}
           </div>

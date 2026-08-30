@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS "public"."user_ai_preferences" (
     "default_creative_model_id" "text" NULL,
     "vision_fast_model_id" "text" NULL,
     "vision_deep_model_id" "text" NULL,
+    "model_routing" "jsonb" NOT NULL DEFAULT '{}'::"jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
@@ -23,6 +24,8 @@ COMMENT ON COLUMN "public"."user_ai_preferences"."vision_fast_model_id" IS
     'Model catalog id used for normal pCAD vision fallback analysis.';
 COMMENT ON COLUMN "public"."user_ai_preferences"."vision_deep_model_id" IS
     'Model catalog id used for difficult/render inspection pCAD vision fallback analysis.';
+COMMENT ON COLUMN "public"."user_ai_preferences"."model_routing" IS
+    'User-configurable low-level runtime model IDs and provider routing. Runtime code must not inject hidden model defaults.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS "user_ai_preferences_pkey" ON "public"."user_ai_preferences" USING btree ("user_id");
 ALTER TABLE "public"."user_ai_preferences" ADD CONSTRAINT "user_ai_preferences_pkey" PRIMARY KEY USING INDEX "user_ai_preferences_pkey";
