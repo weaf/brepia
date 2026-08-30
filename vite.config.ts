@@ -185,7 +185,7 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000,
 
-    outDir: 'dist/cadam',
+    outDir: 'dist/brepia',
     emptyOutDir: true,
 
     sourcemap: true,
@@ -193,7 +193,7 @@ export default defineConfig({
   environments: {
     client: {
       build: {
-        outDir: 'dist/cadam',
+        outDir: 'dist/brepia',
         rollupOptions: {
           output: {
             manualChunks(id) {
