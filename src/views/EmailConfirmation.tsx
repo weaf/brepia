@@ -72,17 +72,19 @@ function EmailConfirmation() {
           {/* Icon and Header */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-adam-neutral-800">
-              <Mail className="h-6 w-6 text-white" />
+              <Mail className="h-6 w-6 text-adam-text-primary" />
             </div>
-            <h1 className="mb-4 text-2xl font-semibold text-white">
+            <h1 className="mb-4 text-2xl font-semibold text-adam-text-primary">
               Check Your Email
             </h1>
-            <p className="text-gray-400">
+            <p className="text-adam-text-secondary">
               We've sent a verification link to{' '}
-              <span className="text-white">{email || 'your email'}</span>. Click
-              the link to verify your account.
+              <span className="text-adam-text-primary">
+                {email || 'your email'}
+              </span>
+              . Click the link to verify your account.
             </p>
-            <p className="mt-2 text-center text-gray-400">
+            <p className="mt-2 text-center text-adam-text-secondary">
               (Make sure to check your spam folder)
             </p>
           </div>
@@ -91,7 +93,10 @@ function EmailConfirmation() {
           <div className="space-y-6">
             {showEmailInput && (
               <div className="space-y-2">
-                <Label htmlFor="resend-email" className="text-white">
+                <Label
+                  htmlFor="resend-email"
+                  className="text-adam-text-primary"
+                >
                   Email
                 </Label>
                 <Input
@@ -100,14 +105,14 @@ function EmailConfirmation() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="Enter your email"
-                  className="border-gray-700 bg-adam-bg-dark px-4 text-white placeholder:text-gray-400 max-[430px]:text-base"
+                  className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary placeholder:text-adam-text-secondary max-[430px]:text-base"
                 />
               </div>
             )}
 
             {/* Alert for spam warning and sign in link */}
             <Alert className="border-adam-neutral-700 bg-adam-neutral-800">
-              <AlertDescription className="text-center text-gray-400">
+              <AlertDescription className="text-center text-adam-text-secondary">
                 Already verified your email?{' '}
                 <Link
                   to="/signin"
