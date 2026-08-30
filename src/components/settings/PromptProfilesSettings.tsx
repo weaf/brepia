@@ -770,6 +770,10 @@ export function PromptProfilesSettings() {
     setShowEditor(true);
   }, []);
 
+  const isBuiltInEdit = useCallback(() => {
+    return editorMode === 'create' && pendingMode !== null;
+  }, [editorMode, pendingMode]);
+
   const handleSave = useCallback(
     (input: {
       name: string;
@@ -818,10 +822,6 @@ export function PromptProfilesSettings() {
     archiveMutation.mutate(selectedDetail.id);
     setSelectedProfileId(null);
   }, [selectedDetail, archiveMutation]);
-
-  const isBuiltInEdit = useCallback(() => {
-    return editorMode === 'create' && pendingMode !== null;
-  }, [editorMode, pendingMode]);
 
   // Loading state
   const isLoading = isProfilesLoading;
