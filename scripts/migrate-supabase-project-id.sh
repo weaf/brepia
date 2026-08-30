@@ -399,6 +399,7 @@ STORAGE_ARCHIVE="${BACKUP_DIR}/${OLD_STORAGE_VOLUME}.tar.gz"
 
 section "Stop ${OLD_ID} Supabase"
 stop_project_for_migration "${OLD_ID}"
+rollback_needed=1
 
 section "Archive persistent volumes"
 echo "Backing up ${OLD_DB_VOLUME} -> ${DB_ARCHIVE}"
@@ -415,7 +416,6 @@ printf 'database_fingerprint=%s\n' "${OLD_FINGERPRINT}" >> "${BACKUP_DIR}/migrat
 echo "Backup manifest: ${BACKUP_DIR}/SHA256SUMS"
 
 section "Create and import ${NEW_ID} persistent volumes"
-rollback_needed=1
 create_target_volume "${OLD_DB_VOLUME}" "${NEW_DB_VOLUME}"
 create_target_volume "${OLD_STORAGE_VOLUME}" "${NEW_STORAGE_VOLUME}"
 import_archive_into_volume "${DB_ARCHIVE}" "${NEW_DB_VOLUME}"
