@@ -162,23 +162,40 @@ Follow-up tasks:
 
 This review is infrastructure/documentation cleanup and should remain separate from the AI profile/prompt evaluation work unless it blocks the required local migration/regression gate.
 
-## Future 3D viewer interaction — free rotation
+## 3D viewer interaction — free rotation (completed)
 
-The current model viewer rotation should be replaced or extended so the user can rotate a model **freely in all directions**, without being constrained by the present rotation behavior or by an inconvenient model origin.
+The primary Parametric/OpenSCAD viewer now uses unrestricted trackball-style rotation instead of the previous constrained orbit behavior.
 
-Follow-up goals:
+Completed outcomes:
 
-- [ ] support unrestricted orbit/trackball-style rotation around all axes;
-- [ ] make rotation intuitive on both mouse/desktop and touch/mobile;
-- [ ] avoid making usability depend on the generated model having a convenient OpenSCAD origin;
-- [ ] evaluate whether the viewer should orbit around the model bounds/visual center, a user-selected pivot, or both;
-- [ ] preserve pan/zoom behavior and existing stable-runtime/mobile recovery behavior;
-- [ ] add focused desktop/mobile interaction tests before replacing the current controls.
+- [x] unrestricted rotation around all axes;
+- [x] pan and zoom preserved;
+- [x] model bounds/visual center remains the practical rotation target, so usability no longer depends on a convenient OpenSCAD origin;
+- [x] desktop ViewGizmo can still snap back to canonical views after free rotation;
+- [x] the control change was isolated from prompt/profile and stable-runtime behavior;
+- [x] manual functional review confirmed the new rotation behavior works as intended.
 
-This is a viewer/UI improvement and must remain independent from prompt-profile optimization. Prompt quality may still influence model origin, but viewer navigation should remain usable regardless of where the model origin is placed.
+Focused automated pointer/touch interaction coverage was not added before the control replacement. Add it later only if viewer-control regressions justify dedicated browser interaction tests.
+
+## Settings UX and appearance — active
+
+The next active UI/UX workstream is documented in:
+
+- `docs/settings_ux_plan.md`
+
+The plan covers:
+
+- responsive Settings width and stable top alignment;
+- responsive desktop/mobile Settings navigation;
+- application-level `System / Light / Dark` appearance;
+- optional information-hierarchy cleanup for advanced AI settings;
+- contrast, focus, target-size, reflow, and reduced-motion review;
+- desktop/mobile visual and repository regression gates.
+
+This work must remain cosmetic/interaction-focused and must not alter Parametric, Creative, AI routing/profile semantics, Supabase contracts, or the stable-runtime recovery architecture.
 
 ## Completion
 
 The native Creative replacement is complete. TRELLIS.2 is the sole built-in Creative backend, the project gate is green, both native generation paths have been proven, and the superseded Python runtime has been removed from both the repository and the workstation.
 
-Remaining work on this branch should proceed independently from the completed Creative runtime migration.
+The free-rotation viewer improvement is also complete and manually verified. The active user-facing follow-up on this branch is now the Settings UX and appearance plan, with the local Supabase/NOx lifecycle review remaining a separate infrastructure/documentation task.
