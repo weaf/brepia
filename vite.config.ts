@@ -169,6 +169,29 @@ const vendorChunkTest = (id: string) =>
   id.includes('/node_modules/@tanstack/react-start/') ||
   id.includes('/node_modules/lucide-react/');
 
+const radixChunkTest = (id: string) =>
+  id.includes('/node_modules/@radix-ui/');
+
+const aiSdkChunkTest = (id: string) =>
+  id.includes('/node_modules/ai/') || id.includes('/node_modules/@ai-sdk/');
+
+const supabaseChunkTest = (id: string) =>
+  id.includes('/node_modules/@supabase/');
+
+const threeChunkTest = (id: string) => id.includes('/node_modules/three/');
+
+const reactThreeChunkTest = (id: string) =>
+  id.includes('/node_modules/@react-three/') ||
+  id.includes('/node_modules/three-stdlib/');
+
+const streamdownChunkTest = (id: string) =>
+  id.includes('/node_modules/streamdown/') ||
+  id.includes('/node_modules/@streamdown/') ||
+  id.includes('/node_modules/@shikijs/core/') ||
+  id.includes('/node_modules/@shikijs/engine-javascript/');
+
+const mermaidChunkTest = (id: string) => id.includes('/node_modules/mermaid/');
+
 export default defineConfig({
   base: appBase,
   plugins: [
@@ -224,10 +247,14 @@ export default defineConfig({
           output: {
             codeSplitting: {
               groups: [
-                {
-                  name: 'vendor',
-                  test: vendorChunkTest,
-                },
+                { name: 'vendor', test: vendorChunkTest },
+                { name: 'radix-ui', test: radixChunkTest },
+                { name: 'ai-sdk', test: aiSdkChunkTest },
+                { name: 'supabase', test: supabaseChunkTest },
+                { name: 'three', test: threeChunkTest },
+                { name: 'react-three', test: reactThreeChunkTest },
+                { name: 'streamdown', test: streamdownChunkTest },
+                { name: 'mermaid', test: mermaidChunkTest },
               ],
             },
           },
