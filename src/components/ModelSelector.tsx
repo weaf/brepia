@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,13 @@ import { Model } from '@shared/types';
 import { ModelConfig } from '../types/misc.ts';
 import { useConversation } from '@/contexts/ConversationContext';
 import { registerConversationModelPicker } from '@/lib/modelPickerBridge';
+import { useParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
+import {
+  creativeAgentCandidates,
+  readPreferredCreativeAgentModel,
+  resolvePreferredCreativeAgentModel,
+  writePreferredCreativeAgentModel,
+} from '@/lib/creativeAgentSelection';
 
 interface ModelSelectorProps {
   models: ModelConfig[];
@@ -26,21 +33,28 @@ interface ModelSelectorProps {
   registerBinding?: boolean;
 }
 
-export function ModelSelector({
+type ModelDropdownProps = ModelSelectorProps & {
+  currentType: 'parametric' | 'creative';
+  emptyLabel?: string;
+};
+
+/**
+ * Shared single-model dropdown. Creative mode composes two of these: the
+ * public 3D backend selector and a separate controller-LLM selector.
+ */
+function ModelDropdown({
   models,
   selectedModel,
   onModelChange,
   className,
   disabled,
-  type,
   focused = false,
   registerBinding = true,
-}: ModelSelectorProps) {
+  currentType,
+  emptyLabel = 'Select model',
+}: ModelDropdownProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { conversation } = useConversation();
-
-  // Use provided type prop or fall back to conversation context
-  const currentType = type || conversation.type;
 
   useEffect(() => {
     if (!registerBinding) return;
@@ -65,12 +79,25 @@ export function ModelSelector({
   // conversation points at a retired local backend or an optional provider
   // that is no longer enabled, move it to the first selectable Creative model
   // (TRELLIS.2 in the core catalog) instead of rendering a blank selector and
-  // submitting an unavailable backend ID.
+  // submitting an unavailable backend ID. This applies only to the public 3D
+  // selector; the Creative controller uses its own validation/pinning logic.
   useEffect(() => {
-    if (currentType !== 'creative' || models.length === 0) return;
+    if (
+      !registerBinding ||
+      currentType !== 'creative' ||
+      models.length === 0
+    ) {
+      return;
+    }
     if (models.some((model) => model.id === selectedModel)) return;
     onModelChange(models[0].id);
-  }, [currentType, models, onModelChange, selectedModel]);
+  }, [
+    currentType,
+    models,
+    onModelChange,
+    registerBinding,
+    selectedModel,
+  ]);
 
   // Track previous model name for slide animation
   const [prevModelName, setPrevModelName] = useState<string | null>(null);
@@ -78,9 +105,10 @@ export function ModelSelector({
   const [slideDirection, setSlideDirection] = useState<'up' | 'down'>('up');
 
   const selectedModelConfig = models.find((m) => m.id === selectedModel);
+  const selectedModelName = selectedModelConfig?.name || selectedModel || emptyLabel;
 
   // Store previous selected model name and type
-  const prevNameRef = useRef<string | undefined>(selectedModelConfig?.name);
+  const prevNameRef = useRef<string | undefined>(selectedModelName);
   const prevTypeRef = useRef<'parametric' | 'creative' | undefined>(
     currentType,
   );
@@ -91,40 +119,28 @@ export function ModelSelector({
   // ---------------------------------------------------------------------------
   // Radix will always move focus back to the trigger after the dropdown closes.
   // When the user opened the menu via *keyboard* this is great for accessibility
-  // because they can keep tabbing.  But when the user opened the menu with a
+  // because they can keep tabbing. But when the user opened the menu with a
   // *pointer* (mouse / touch), that behaviour leaves an unwanted focus outline
-  // "stuck" on the button.  We therefore:
-  //   1. Track *how* the menu was opened (pointer vs. keyboard).
-  //   2. If it was opened via pointer, cancel the automatic focus-return and
-  //      blur the trigger so no outline is shown.
+  // "stuck" on the button.
   // ---------------------------------------------------------------------------
   const openedWithPointerRef = useRef(false);
-
-  // Ref to the trigger button so we can blur it if needed.
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Trigger slide animation when selected model changes
   useEffect(() => {
-    if (
-      prevNameRef.current &&
-      prevNameRef.current !== selectedModelConfig?.name
-    ) {
+    if (prevNameRef.current && prevNameRef.current !== selectedModelName) {
       setPrevModelName(prevNameRef.current);
       setIsSliding(true);
 
-      // Check if type changed (mode switch)
       const typeChanged = prevTypeRef.current !== currentType;
       const now = Date.now();
-      const recentTypeChange = now - recentTypeChangeRef.current < 100; // Within 100ms
+      const recentTypeChange = now - recentTypeChangeRef.current < 100;
 
       if (typeChanged) {
-        // Mode switching logic: parametric = down, creative = up
         const direction = currentType === 'parametric' ? 'down' : 'up';
         setSlideDirection(direction);
         recentTypeChangeRef.current = now;
       } else if (!recentTypeChange) {
-        // Within same mode: preserve existing index-based logic
-        // But only if we haven't had a recent type change
         const prevIndex = models.findIndex(
           (m) => m.name === prevNameRef.current,
         );
@@ -136,9 +152,9 @@ export function ModelSelector({
       }
     }
 
-    prevNameRef.current = selectedModelConfig?.name;
+    prevNameRef.current = selectedModelName;
     prevTypeRef.current = currentType;
-  }, [selectedModelConfig?.name, currentType, models, selectedModel]);
+  }, [currentType, models, selectedModel, selectedModelName]);
 
   const handleSlideEnd = () => {
     setPrevModelName(null);
@@ -150,18 +166,15 @@ export function ModelSelector({
       <DropdownMenuTrigger asChild>
         <Button
           ref={triggerRef}
-          // Record that the menu was opened with a pointer so we can adjust
-          // focus handling on close.
           onPointerDown={() => {
             openedWithPointerRef.current = true;
           }}
-          // Keyboard interaction should *not* suppress the focus outline.
           onKeyDown={() => {
             openedWithPointerRef.current = false;
           }}
           variant="ghost"
           className={cn(
-            'flex h-8 w-auto items-center gap-1.5 rounded-lg px-3 text-sm transition-all duration-200 hover:border-[#333333] hover:bg-adam-neutral-800',
+            'flex h-8 min-w-0 w-auto items-center gap-1.5 rounded-lg px-3 text-sm transition-all duration-200 hover:border-[#333333] hover:bg-adam-neutral-800',
             focused
               ? 'text-white hover:text-white'
               : 'text-adam-text-secondary hover:text-adam-text-primary',
@@ -171,14 +184,13 @@ export function ModelSelector({
                 : 'bg-adam-neutral-800 text-adam-text-primary'),
             className,
           )}
-          disabled={!!disabled}
+          disabled={!!disabled || models.length === 0}
         >
-          <span className="relative inline-grid items-center overflow-hidden text-right font-normal">
-            {/* Previous name sliding out */}
+          <span className="relative inline-grid min-w-0 items-center overflow-hidden text-right font-normal">
             {prevModelName && (
               <span
                 style={{ gridColumn: 1, gridRow: 1 }}
-                className={`block ${
+                className={`block truncate ${
                   slideDirection === 'up' ? 'slide-out-up' : 'slide-out-down'
                 }`}
                 onAnimationEnd={handleSlideEnd}
@@ -187,18 +199,18 @@ export function ModelSelector({
               </span>
             )}
 
-            {/* Current name sliding in */}
             <span
               style={{ gridColumn: 1, gridRow: 1 }}
-              className={
+              className={cn(
+                'block truncate',
                 isSliding
                   ? slideDirection === 'up'
-                    ? 'slide-in-up block'
-                    : 'slide-in-down block'
-                  : 'block'
-              }
+                    ? 'slide-in-up'
+                    : 'slide-in-down'
+                  : '',
+              )}
             >
-              {selectedModelConfig?.name}
+              {selectedModelName}
             </span>
           </span>
           <ChevronDown
@@ -211,11 +223,6 @@ export function ModelSelector({
       <DropdownMenuContent
         className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-1 overflow-y-auto rounded-lg bg-adam-neutral-700 p-1 [max-height:min(340px,var(--radix-dropdown-menu-content-available-height))]"
         align="end"
-        // Radix fires this just before it tries to refocus the trigger.
-        // We intercept the event: if the menu was opened with a pointer we
-        //   – call `event.preventDefault()` to stop the refocus
-        //   – blur the trigger to clear any outline.
-        // For keyboard users we leave the default behaviour untouched.
         onCloseAutoFocus={(event) => {
           if (openedWithPointerRef.current) {
             event.preventDefault();
@@ -305,5 +312,147 @@ export function ModelSelector({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function CreativeAgentSelector({
+  disabled,
+  className,
+  focused,
+}: Pick<ModelSelectorProps, 'disabled' | 'className' | 'focused'>) {
+  const { conversation, updateConversation } = useConversation();
+  const { models: catalogModels, isLoading } = useParametricModelCatalog();
+  const agentModels = useMemo(
+    () => creativeAgentCandidates(catalogModels),
+    [catalogModels],
+  );
+  const pinnedAgentModel = conversation.settings?.creativeAgentModel;
+  const [selectedAgentModel, setSelectedAgentModel] = useState<Model>(() =>
+    pinnedAgentModel ?? readPreferredCreativeAgentModel() ?? '',
+  );
+
+  useEffect(() => {
+    if (pinnedAgentModel) {
+      setSelectedAgentModel(pinnedAgentModel);
+      writePreferredCreativeAgentModel(pinnedAgentModel);
+      return;
+    }
+
+    const preferred = resolvePreferredCreativeAgentModel(agentModels);
+    if (!preferred) return;
+
+    setSelectedAgentModel(preferred);
+    writePreferredCreativeAgentModel(preferred);
+
+    // Existing legacy Creative conversations may not have a controller pinned.
+    // Pin the same deterministic fallback the picker shows so subsequent turns
+    // do not depend on catalog ordering.
+    if (conversation.id && updateConversation) {
+      updateConversation({
+        ...conversation,
+        settings: {
+          ...(typeof conversation.settings === 'object' &&
+          conversation.settings !== null
+            ? conversation.settings
+            : {}),
+          creativeAgentModel: preferred,
+        },
+      });
+    }
+  }, [
+    agentModels,
+    conversation,
+    pinnedAgentModel,
+    updateConversation,
+  ]);
+
+  const handleAgentModelChange = (modelId: Model) => {
+    setSelectedAgentModel(modelId);
+    writePreferredCreativeAgentModel(modelId);
+
+    if (!conversation.id || !updateConversation) return;
+    updateConversation({
+      ...conversation,
+      settings: {
+        ...(typeof conversation.settings === 'object' &&
+        conversation.settings !== null
+          ? conversation.settings
+          : {}),
+        creativeAgentModel: modelId,
+      },
+    });
+  };
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-adam-text-secondary/70">
+        AI
+      </span>
+      <ModelDropdown
+        models={agentModels}
+        selectedModel={selectedAgentModel}
+        onModelChange={handleAgentModelChange}
+        disabled={disabled || isLoading}
+        className={className}
+        currentType="parametric"
+        focused={focused}
+        registerBinding={false}
+        emptyLabel={isLoading ? 'Loading AI…' : 'No AI model'}
+      />
+    </div>
+  );
+}
+
+export function ModelSelector({
+  models,
+  selectedModel,
+  onModelChange,
+  className,
+  disabled,
+  type,
+  focused = false,
+  registerBinding = true,
+}: ModelSelectorProps) {
+  const { conversation } = useConversation();
+  const currentType = type || conversation.type;
+
+  if (currentType === 'creative' && registerBinding) {
+    return (
+      <div className="flex max-w-full flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-adam-text-secondary/70">
+            3D
+          </span>
+          <ModelDropdown
+            models={models}
+            selectedModel={selectedModel}
+            onModelChange={onModelChange}
+            disabled={disabled}
+            className={className}
+            currentType="creative"
+            focused={focused}
+            registerBinding
+          />
+        </div>
+        <CreativeAgentSelector
+          disabled={disabled}
+          className={className}
+          focused={focused}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ModelDropdown
+      models={models}
+      selectedModel={selectedModel}
+      onModelChange={onModelChange}
+      disabled={disabled}
+      className={className}
+      currentType={currentType}
+      focused={focused}
+      registerBinding={registerBinding}
+    />
   );
 }
