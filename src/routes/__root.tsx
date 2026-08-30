@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Scripts } from '@tanstack/react-router';
 import App from '@/App';
 import appCss from '@/index.css?url';
+import appearanceCss from '@/appearance.css?url';
 
 const assetUrl = (path: string) =>
   `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}${path.replace(/^\//, '')}`;
@@ -40,7 +41,10 @@ export const Route = createRootRoute({
       { name: 'theme-color', content: '#191A1A' },
       { name: 'description', content: 'AI-assisted parametric 3D design' },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'stylesheet', href: appearanceCss },
+    ],
   }),
   component: RootComponent,
   errorComponent: ({ error }) => (
