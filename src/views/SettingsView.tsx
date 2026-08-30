@@ -27,6 +27,8 @@ import { getAccountAccess } from '@/services/accountAdminService';
 const lifecycleDiagnosticsEnabled =
   import.meta.env.DEV || import.meta.env.VITE_ENABLE_LIFECYCLE_DEBUG === '1';
 
+type SettingsTab = 'account' | 'ai' | 'administration' | 'debug';
+
 export default function SettingsView() {
   const { user, resetPassword } = useAuth();
   const { data: profile } = useProfile();
@@ -39,6 +41,7 @@ export default function SettingsView() {
   const { toast } = useToast();
   const [newName, setNewName] = useState(profile?.full_name || '');
   const [editingName, setEditingName] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('account');
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -113,10 +116,11 @@ export default function SettingsView() {
 
   const localAccount = user?.email?.endsWith('@pcad.invalid') ?? false;
   const isAdmin = access?.role === 'admin';
+  const settingsWidth = activeTab === 'account' ? 'max-w-2xl' : 'max-w-5xl';
 
   return (
-    <div className="flex min-h-full w-full min-w-0 items-center justify-center overflow-x-hidden bg-adam-background-1 px-4 py-8 sm:px-6 sm:py-10">
-      <div className="w-full min-w-0 max-w-xl">
+    <div className="flex min-h-full w-full min-w-0 items-start justify-center overflow-x-hidden bg-adam-background-1 px-4 py-8 sm:px-6 sm:py-10">
+      <div className={`w-full min-w-0 ${settingsWidth}`}>
         <header className="mb-6 sm:mb-8">
           <h1 className="text-2xl font-medium tracking-tight text-adam-neutral-50">
             Settings
@@ -126,7 +130,11 @@ export default function SettingsView() {
           </p>
         </header>
 
-        <Tabs defaultValue="account" className="w-full min-w-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as SettingsTab)}
+          className="w-full min-w-0"
+        >
           <div className="sticky top-0 z-20 -mx-2 mb-4 min-w-0 bg-adam-background-1/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
             <div className="hide-scrollbar w-full min-w-0 max-w-full overflow-x-auto">
               <TabsList className="h-auto w-max min-w-full justify-start gap-1">
