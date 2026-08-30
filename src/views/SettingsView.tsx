@@ -146,13 +146,33 @@ export default function SettingsView() {
         >
           <div className="sticky top-0 z-20 -mx-2 mb-4 min-w-0 bg-adam-background-1/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
             <TabsList className="h-auto w-full flex-wrap justify-start gap-1 sm:w-max">
-              <TabsTrigger value="account">Account</TabsTrigger>
-              <TabsTrigger value="ai">AI</TabsTrigger>
+              <TabsTrigger
+                value="account"
+                className="min-h-10 motion-reduce:transition-none"
+              >
+                Account
+              </TabsTrigger>
+              <TabsTrigger
+                value="ai"
+                className="min-h-10 motion-reduce:transition-none"
+              >
+                AI
+              </TabsTrigger>
               {isAdmin && (
-                <TabsTrigger value="administration">Administration</TabsTrigger>
+                <TabsTrigger
+                  value="administration"
+                  className="min-h-10 motion-reduce:transition-none"
+                >
+                  Administration
+                </TabsTrigger>
               )}
               {lifecycleDiagnosticsEnabled && (
-                <TabsTrigger value="debug">Debug</TabsTrigger>
+                <TabsTrigger
+                  value="debug"
+                  className="min-h-10 motion-reduce:transition-none"
+                >
+                  Debug
+                </TabsTrigger>
               )}
             </TabsList>
           </div>
@@ -198,7 +218,7 @@ export default function SettingsView() {
                     >
                       <Button
                         variant="dark"
-                        className="rounded-full font-light"
+                        className="min-h-10 rounded-full font-light"
                       >
                         Manage account
                       </Button>
@@ -214,7 +234,7 @@ export default function SettingsView() {
                         <Input
                           ref={nameInputRef}
                           value={newName}
-                          className="h-9 w-full max-w-xs"
+                          className="h-10 w-full max-w-xs"
                           onChange={(e) => setNewName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
@@ -235,7 +255,7 @@ export default function SettingsView() {
                           onClick={() => handleUpdateName()}
                           variant="light"
                           disabled={isUpdateLoading}
-                          className="rounded-full font-light"
+                          className="min-h-10 rounded-full font-light"
                         >
                           {isUpdateLoading ? (
                             <ActivityIndicator label="Saving name" size="sm" />
@@ -249,7 +269,7 @@ export default function SettingsView() {
                             setNewName(profile?.full_name || '');
                           }}
                           variant="dark"
-                          className="rounded-full font-light"
+                          className="min-h-10 rounded-full font-light"
                         >
                           Cancel
                         </Button>
@@ -258,7 +278,7 @@ export default function SettingsView() {
                       <Button
                         onClick={() => setEditingName(true)}
                         variant="dark"
-                        className="flex-shrink-0 rounded-full font-light"
+                        className="min-h-10 flex-shrink-0 rounded-full font-light"
                       >
                         Edit
                       </Button>
@@ -290,7 +310,7 @@ export default function SettingsView() {
                         onClick={() => handleResetPassword()}
                         disabled={isResetLoading}
                         variant="dark"
-                        className="flex-shrink-0 rounded-full font-light"
+                        className="min-h-10 flex-shrink-0 rounded-full font-light"
                       >
                         {isResetLoading ? (
                           <ActivityIndicator
@@ -313,15 +333,25 @@ export default function SettingsView() {
               </h2>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-adam-neutral-50">Responses</div>
-                  <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
+                  <div
+                    id="notification-responses-label"
+                    className="text-sm text-adam-neutral-50"
+                  >
+                    Responses
+                  </div>
+                  <div
+                    id="notification-responses-description"
+                    className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200"
+                  >
                     Get notified when Brepia finishes a long-running request.
                   </div>
                 </div>
                 <Switch
-                  className="mt-0.5"
+                  className="mt-0.5 motion-reduce:transition-none"
                   checked={profile?.notifications_enabled ?? false}
                   onCheckedChange={handleUpdateNotifications}
+                  aria-labelledby="notification-responses-label"
+                  aria-describedby="notification-responses-description"
                 />
               </div>
             </section>
@@ -336,6 +366,7 @@ export default function SettingsView() {
               </p>
               <div
                 className="mt-4 grid grid-cols-3 gap-2"
+                role="group"
                 aria-label="Application appearance"
               >
                 {appearanceOptions.map((option) => {
@@ -348,7 +379,7 @@ export default function SettingsView() {
                       type="button"
                       aria-pressed={selected}
                       onClick={() => setAppearance(option.value)}
-                      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-adam-blue focus-visible:ring-offset-2 focus-visible:ring-offset-adam-background-2 ${
+                      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-adam-blue focus-visible:ring-offset-2 focus-visible:ring-offset-adam-background-2 motion-reduce:transition-none ${
                         selected
                           ? 'border-adam-blue bg-adam-neutral-900 text-adam-neutral-50'
                           : 'border-adam-neutral-800 bg-adam-background-1 text-adam-neutral-200 hover:text-adam-neutral-50'
@@ -360,7 +391,7 @@ export default function SettingsView() {
                   );
                 })}
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-adam-neutral-400">
+              <p className="mt-3 text-xs leading-relaxed text-adam-neutral-300">
                 System follows your operating system and updates automatically.
               </p>
             </section>
@@ -381,7 +412,7 @@ export default function SettingsView() {
                   </div>
                   <DeleteAccountDialog>
                     <Button
-                      className="flex-shrink-0 rounded-full font-light"
+                      className="min-h-10 flex-shrink-0 rounded-full font-light"
                       variant="destructive"
                     >
                       Delete
