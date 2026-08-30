@@ -8,8 +8,8 @@
 export function createDXFProjectionCode(code: string): string {
   const { imports, body } = extractTopLevelLibraryImports(code);
   const importBlock = imports.join('\n');
-  const sourceModule = `module __cadam_dxf_source__() {\n${body.trim()}\n}`;
-  const projection = 'projection(cut = false) __cadam_dxf_source__();';
+  const sourceModule = `module __brepia_dxf_source__() {\n${body.trim()}\n}`;
+  const projection = 'projection(cut = false) __brepia_dxf_source__();';
 
   return [importBlock, sourceModule, projection].filter(Boolean).join('\n\n');
 }
@@ -79,7 +79,7 @@ function fromDxfPairs(pairs: DxfPair[]): string {
  * Extracts the entity body from an OpenSCAD DXF, converting LWPOLYLINE
  * entities to plain LINE pairs along the way. The surrounding HEADER,
  * TABLES, and EOF markers are dropped because we regenerate them.
- * @param pairs Full DXF pair list from OpenSCAD
+ * @param pairs Full DXF pair list
  * @returns Entity pairs only (no SECTION/ENDSEC wrappers)
  */
 function extractEntityPairs(pairs: DxfPair[]): DxfPair[] {
@@ -362,33 +362,78 @@ function buildR12Dxf(entityPairs: DxfPair[], extents: Extents): string {
 /**
  * Separates top-level OpenSCAD library directives from projectable body code.
  * Uses a line-aligned comment-stripped scan so import detection ignores `use<>`
- * tokens that appear inside line or block comments while preserving the original
- * source verbatim in the returned body.
- * @param source OpenSCAD source code
- * @returns Global imports and the remaining source body
+ * or `include<>` text inside comments while preserving the original directives.
+ * @param code Original OpenSCAD source
+ * @returns Top-level import lines plus the remaining body code
  */
-function extractTopLevelLibraryImports(source: string): {
+function extractTopLevelLibraryImports(code: string): {
   imports: string[];
   body: string;
 } {
-  const normalizedSource = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const sourceLines = normalizedSource.split('\n');
-  const scanLines = normalizedSource
-    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''))
-    .replace(/\/\/[^\n]*/g, '')
-    .split('\n');
-
-  const importRegex = /^[ \t]*(?:use|include)\s*<[^>]+>\s*;?\s*$/;
+  const normalized = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = normalized.split('\n');
+  const stripped = stripCommentsPreserveLines(normalized).split('\n');
   const imports: string[] = [];
-  const body: string[] = [];
+  const bodyLines = [...lines];
 
-  for (let index = 0; index < sourceLines.length; index += 1) {
-    if (importRegex.test(scanLines[index])) {
-      imports.push(sourceLines[index].trim());
-    } else {
-      body.push(sourceLines[index]);
+  for (let index = 0; index < lines.length; index += 1) {
+    const candidate = stripped[index]?.trim() ?? '';
+    if (/^(?:use|include)\s*</.test(candidate)) {
+      imports.push(lines[index]);
+      bodyLines[index] = '';
     }
   }
 
-  return { imports, body: body.join('\n') };
+  return { imports, body: bodyLines.join('\n') };
+}
+
+/**
+ * Removes line and block comments while keeping newline positions intact so
+ * the stripped scan stays aligned with the original source lines.
+ * @param source OpenSCAD source
+ * @returns Comment-stripped text with original newlines preserved
+ */
+function stripCommentsPreserveLines(source: string): string {
+  let output = '';
+  let index = 0;
+  let inBlockComment = false;
+
+  while (index < source.length) {
+    const current = source[index];
+    const next = source[index + 1];
+
+    if (inBlockComment) {
+      if (current === '*' && next === '/') {
+        inBlockComment = false;
+        output += '  ';
+        index += 2;
+        continue;
+      }
+      output += current === '\n' ? '\n' : ' ';
+      index += 1;
+      continue;
+    }
+
+    if (current === '/' && next === '*') {
+      inBlockComment = true;
+      output += '  ';
+      index += 2;
+      continue;
+    }
+
+    if (current === '/' && next === '/') {
+      output += '  ';
+      index += 2;
+      while (index < source.length && source[index] !== '\n') {
+        output += ' ';
+        index += 1;
+      }
+      continue;
+    }
+
+    output += current;
+    index += 1;
+  }
+
+  return output;
 }
