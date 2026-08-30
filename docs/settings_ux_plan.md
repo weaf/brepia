@@ -23,7 +23,7 @@ The current implementation is functional but has several UX constraints:
 - The root Settings flex layout vertically centered short pages, so the page heading moved significantly when switching between a short Account page and a long AI page.
 - AI settings already contain responsive grids, but the narrow parent prevented those layouts from making good use of desktop width.
 - Top-level Settings and AI subsection navigation used horizontally scrollable tab lists with hidden scrollbars. Phase 2 replaces those hidden-scroll dependencies with wrapping primary tabs, a mobile AI section selector, and desktop side navigation.
-- The CSS bundle already contains generic light/dark variables, but most Brepia surfaces still use fixed `adam-*` dark palette utilities, so a real light theme requires semantic application tokens rather than only toggling the existing `.dark` class.
+- The CSS bundle already contained generic light/dark variables while Brepia surfaces used fixed `adam-*` palette utilities. Phase 3 now routes the core Brepia palette through semantic appearance tokens while retaining the existing utility names as a compatibility layer.
 - Secondary text and compact controls should be checked for contrast and mobile target size rather than adjusted by visual guesswork.
 
 ## UX invariants
@@ -85,21 +85,32 @@ Acceptance — pending visual review:
 
 Goal: add a real application-level appearance preference while preserving current dark mode as the default Brepia look.
 
-- [ ] Add an `Appearance` control under Account with `System`, `Light`, and `Dark` choices.
-- [ ] Use `prefers-color-scheme` when `System` is selected.
-- [ ] Persist the preference locally without requiring a database migration unless cross-device synchronization is explicitly desired later.
-- [ ] Apply `color-scheme` appropriately so native form/browser controls match the selected theme.
-- [ ] Introduce semantic Brepia surface/text/border tokens and map the existing dark palette to them first.
-- [ ] Add a light palette with equivalent hierarchy and accessible contrast.
-- [ ] Migrate shared layout/navigation/settings components before long-tail pages.
-- [ ] Keep the 3D viewer background brightness preference independent.
+Implementation checkpoint: `d65bab77cb4b7abb49aae17e9931e40f1c30e7f1`.
 
-Acceptance:
+- [x] Add an `Appearance` control under Account with `System`, `Light`, and `Dark` choices.
+- [x] Use `prefers-color-scheme` when `System` is selected, including a live media-query listener for OS changes.
+- [x] Persist the preference locally with the `brepia-appearance` key; no database migration or account contract was introduced.
+- [x] Apply `color-scheme` to the document so native controls follow the resolved appearance.
+- [x] Introduce semantic Brepia surface/text/border tokens and map the existing dark palette to them first. Existing `adam-*` utilities remain as compatibility aliases rather than forcing a broad component rewrite.
+- [x] Add a light palette with corresponding surface/text hierarchy. Formal contrast verification remains part of Phase 5.
+- [x] Route shared layout/navigation/settings palette aliases through the semantic tokens so existing shared surfaces can follow appearance without changing their functional components.
+- [x] Keep the 3D viewer background brightness preference independent. Appearance changes only document/UI theme state; viewer brightness continues through the existing viewer-specific brightness props/state.
 
-- Dark appearance remains visually consistent with the current Brepia baseline.
-- Light appearance is complete enough that no major application surface remains accidentally dark-only.
-- System mode updates when the operating-system preference changes.
-- Reloading the app preserves an explicit Light/Dark choice.
+Implementation notes:
+
+- The default for users with no stored preference remains `Dark`, preserving the Brepia baseline.
+- `src/routes/__root.tsx` applies the stored/resolved appearance before the application stylesheet paints to avoid a light/dark flash on reload.
+- The React provider deliberately starts from the same dark server snapshot and reconciles stored state after hydration, avoiding a server/client Settings-selection mismatch.
+- `tests/appearance.test.ts` covers accepted preference values and explicit/System resolution logic.
+- The semantic compatibility layer intentionally does not change AI settings values, model/profile behavior, Creative/Parametric behavior, Supabase contracts, or stable-runtime logic.
+
+Acceptance — pending visual/runtime review:
+
+- [ ] Dark appearance remains visually consistent with the current Brepia baseline.
+- [ ] Light appearance is complete enough that no major application surface remains accidentally dark-only or low-contrast.
+- [ ] System mode visibly updates when the operating-system preference changes.
+- [ ] Reloading the app preserves an explicit Light/Dark choice without a theme flash.
+- [ ] Application appearance remains visually and behaviorally independent from viewer background brightness.
 
 ## Phase 4 — Settings information hierarchy
 
@@ -159,6 +170,8 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+The GitHub connector used for the implementation does not provide a local dependency/runtime environment, and this branch currently has no GitHub Actions run for the appearance checkpoint. Keep the repository gate unchecked until those commands are run in the normal project environment.
 
 ## Execution rule
 
