@@ -1,6 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import { ActivityIndicator } from '@/components/brand';
-import { Input } from '@/components/ui/input';
+import { ProviderLogo } from '@/components/ProviderLogo';
+import { Button } from '@/components/ui/button';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -8,11 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useFullParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import {
   getAiPreferences,
   updateModelRoutingPreferences,
 } from '@/services/aiPreferencesService';
+import type { CatalogEntry } from '@/server/modelCatalog';
 import type {
   CreativeImageProvider,
   CreativeRuntimeModelKey,
@@ -30,19 +49,19 @@ const MODEL_FIELDS: Array<{
     key: 'nativeImageModelId',
     label: 'Native conditioning image',
     description:
-      'Local llama-swap image model used before the native mesh runtime when no reference image is supplied.',
+      'Local image model used before the native mesh runtime when no reference image is supplied.',
   },
   {
     key: 'nativeMeshModelId',
     label: 'Native mesh runtime',
     description:
-      'Local llama-swap upstream model that produces the final native Creative GLB.',
+      'Local upstream model that produces the final native Creative GLB.',
   },
   {
     key: 'openAiOrchestratorModelId',
     label: 'OpenAI image orchestrator',
     description:
-      'Responses API model used to orchestrate the OpenAI image-generation tool.',
+      'Responses API model used to orchestrate the configured OpenAI image-generation tool.',
   },
   {
     key: 'openAiImageModelId',
@@ -136,9 +155,131 @@ function ProviderSelect({
   );
 }
 
+function RuntimeModelPicker({
+  value,
+  models,
+  disabled,
+  onChange,
+}: {
+  value: string | null;
+  models: CatalogEntry[];
+  disabled: boolean;
+  onChange: (value: string | null) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState('');
+  const selected = models.find((model) => model.id === value);
+  const customCandidate = query.trim();
+  const customMatchesCatalog = models.some(
+    (model) => model.id === customCandidate,
+  );
+
+  const choose = (next: string | null) => {
+    onChange(next);
+    setQuery('');
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between font-normal"
+        >
+          <span className="min-w-0 truncate">
+            {selected?.name ?? value ?? 'Not configured'}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command shouldFilter>
+          <CommandInput
+            placeholder="Search catalog or enter model ID…"
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            <CommandEmpty>
+              Type a model ID to use a provider-specific model.
+            </CommandEmpty>
+            <CommandGroup heading="Selection">
+              <CommandItem value="not configured none" onSelect={() => choose(null)}>
+                <Check
+                  className={cn(
+                    'mr-2 h-4 w-4',
+                    value === null ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+                Not configured
+              </CommandItem>
+              {value && !selected && (
+                <CommandItem value={value} onSelect={() => choose(value)}>
+                  <Check className="mr-2 h-4 w-4 opacity-100" />
+                  <span className="truncate">{value}</span>
+                </CommandItem>
+              )}
+            </CommandGroup>
+            {models.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="Model catalog">
+                  {models.map((model) => (
+                    <CommandItem
+                      key={model.id}
+                      value={`${model.id} ${model.name} ${model.provider ?? ''}`}
+                      disabled={!model.enabled || !model.available}
+                      onSelect={() => choose(model.id)}
+                    >
+                      <Check
+                        className={cn(
+                          'mr-2 h-4 w-4',
+                          value === model.id ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
+                      <ProviderLogo provider={model.provider} className="mr-2" />
+                      <span className="min-w-0 flex-1 truncate">{model.name}</span>
+                      <span className="ml-2 max-w-[45%] truncate text-xs text-adam-neutral-400">
+                        {model.id}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+            {customCandidate && !customMatchesCatalog && customCandidate !== value && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="Custom model ID">
+                  <CommandItem
+                    value={`${customCandidate} custom model id`}
+                    onSelect={() => choose(customCandidate)}
+                  >
+                    Use <span className="ml-1 font-mono">{customCandidate}</span>
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function CreativeRuntimeModelSettings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const {
+    models: catalogModels,
+    isLoading: catalogLoading,
+    error: catalogError,
+  } = useFullParametricModelCatalog();
   const {
     data: preferences,
     isLoading,
@@ -151,7 +292,8 @@ export function CreativeRuntimeModelSettings() {
 
   const mutation = useMutation({
     mutationFn: updateModelRoutingPreferences,
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['ai-preferences', 'model-routing'], updated);
       queryClient.invalidateQueries({ queryKey: ['ai-preferences'] });
       toast({
         title: 'Model routing saved',
@@ -196,10 +338,17 @@ export function CreativeRuntimeModelSettings() {
         </h3>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-adam-neutral-400">
           Low-level Creative model IDs are explicit user settings. Product modes
-          such as Fast, Quality and Ultra stay stable, but no upstream provider
-          model is silently selected in runtime code. Empty fields fail closed
-          instead of falling back to a hidden model.
+          such as Fast, Quality and Ultra stay stable, but no upstream model is
+          silently selected in runtime code. Pick a discovered catalog model or
+          enter a provider-specific model ID. Empty roles fail closed instead of
+          falling back to a hidden model.
         </p>
+        {catalogError && (
+          <p className="mt-2 text-xs text-amber-400">
+            Model catalog suggestions are unavailable: {catalogError}. Custom
+            model IDs can still be configured.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -228,25 +377,18 @@ export function CreativeRuntimeModelSettings() {
               className="space-y-2 rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-4"
             >
               <div>
-                <label
-                  htmlFor={`model-routing-${field.key}`}
-                  className="text-sm font-medium text-adam-neutral-50"
-                >
+                <div className="text-sm font-medium text-adam-neutral-50">
                   {field.label}
-                </label>
+                </div>
                 <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
                   {field.description}
                 </p>
               </div>
-              <Input
-                key={`${field.key}-${value ?? ''}`}
-                id={`model-routing-${field.key}`}
-                defaultValue={value ?? ''}
-                disabled={mutation.isPending}
-                placeholder="Not configured"
-                autoComplete="off"
-                onBlur={(event) => {
-                  const next = event.currentTarget.value.trim() || null;
+              <RuntimeModelPicker
+                value={value}
+                models={catalogModels}
+                disabled={mutation.isPending || catalogLoading}
+                onChange={(next) => {
                   if (next !== value) save({ [field.key]: next });
                 }}
               />
