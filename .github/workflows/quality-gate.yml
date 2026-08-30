@@ -1,58 +1,13 @@
 name: Quality Gate
 
 on:
-  push:
-    branches:
-      - chore/history-build-cleanup
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  sync-lock:
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout branch
-        uses: actions/checkout@v6
-        with:
-          ref: chore/history-build-cleanup
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Refresh npm lockfile
-        run: npm install --package-lock-only --ignore-scripts
-
-      - name: Verify Oniguruma is absent
-        shell: bash
-        run: |
-          if grep -q 'node_modules/@shikijs/engine-oniguruma' package-lock.json; then
-            echo 'Oniguruma still present in package-lock.json' >&2
-            exit 1
-          fi
-
-      - name: Commit lockfile
-        shell: bash
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "chore: remove Shiki Oniguruma dependency"
-          git push origin HEAD:chore/history-build-cleanup
-
   quality:
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
