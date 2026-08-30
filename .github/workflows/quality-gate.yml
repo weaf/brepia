@@ -1,89 +1,13 @@
 name: Quality Gate
 
 on:
-  push:
-    branches:
-      - chore/history-build-cleanup
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  generate-shiki-bundles:
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout branch
-        uses: actions/checkout@v6
-        with:
-          ref: chore/history-build-cleanup
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Shiki bundle registries
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import path from 'node:path';
-
-          const readPackage = (name) =>
-            JSON.parse(fs.readFileSync(path.join('node_modules', ...name.split('/'), 'package.json'), 'utf8'));
-          const exportNames = (pkg) => Object.keys(pkg.exports)
-            .filter((key) => key !== '.' && key.startsWith('./'))
-            .map((key) => key.slice(2))
-            .sort();
-          const quote = (value) => JSON.stringify(value);
-
-          const languages = exportNames(readPackage('@shikijs/langs'));
-          const themes = exportNames(readPackage('@shikijs/themes'));
-          const languageEntries = languages
-            .map((name) => `  ${quote(name)}: () => import(${quote(`@shikijs/langs/${name}`)}),`)
-            .join('\n');
-          const themeEntries = themes
-            .map((name) => `  ${quote(name)}: () => import(${quote(`@shikijs/themes/${name}`)}),`)
-            .join('\n');
-
-          const content = `// Generated from installed @shikijs/langs and @shikijs/themes export maps.\n// Regenerate when the Shiki package versions change.\nimport type { LanguageRegistration, ThemeRegistration } from '@shikijs/core';\n\ntype LanguageLoader = () => Promise<{ default: LanguageRegistration[] }>;\ntype ThemeLoader = () => Promise<{ default: ThemeRegistration }>;\n\nexport const bundledLanguages: Record<string, LanguageLoader> = {\n${languageEntries}\n};\n\nexport const bundledLanguageNames = Object.freeze(Object.keys(bundledLanguages));\n\nexport const bundledThemes: Record<string, ThemeLoader> = {\n${themeEntries}\n};\n`;
-
-          fs.mkdirSync('src/generated', { recursive: true });
-          fs.writeFileSync('src/generated/shikiBundles.ts', content);
-          NODE
-          git diff --check
-
-      - name: Verify Oniguruma is absent
-        shell: bash
-        run: |
-          if grep -q 'node_modules/@shikijs/engine-oniguruma' package-lock.json; then
-            echo 'Oniguruma unexpectedly present in package-lock.json' >&2
-            exit 1
-          fi
-
-      - name: Commit generated registry
-        shell: bash
-        run: |
-          if [ -z "$(git status --porcelain -- src/generated/shikiBundles.ts)" ]; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/generated/shikiBundles.ts
-          git commit -m "chore: generate WASM-free Shiki registry"
-          git push origin HEAD:chore/history-build-cleanup
-
   quality:
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
