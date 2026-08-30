@@ -19,9 +19,9 @@ This plan covers usability, responsiveness, appearance, and accessibility improv
 
 The current implementation is functional but has several UX constraints:
 
-- `SettingsView` uses a single `max-w-xl` content width for Account, AI, Administration, and Debug. This is reasonable for Account but unnecessarily constrains AI and administration controls on desktop.
-- The root Settings flex layout vertically centers short pages, so the page heading moves significantly when switching between a short Account page and a long AI page.
-- AI settings already contain responsive grids, but the narrow parent prevents those layouts from making good use of desktop width.
+- `SettingsView` used a single `max-w-xl` content width for Account, AI, Administration, and Debug. This was reasonable for Account but unnecessarily constrained AI and administration controls on desktop.
+- The root Settings flex layout vertically centered short pages, so the page heading moved significantly when switching between a short Account page and a long AI page.
+- AI settings already contain responsive grids, but the narrow parent prevented those layouts from making good use of desktop width.
 - Top-level Settings and AI subsection navigation use horizontally scrollable tab lists with hidden scrollbars. This prevents overflow but can hide undiscovered options on narrow screens.
 - The CSS bundle already contains generic light/dark variables, but most Brepia surfaces still use fixed `adam-*` dark palette utilities, so a real light theme requires semantic application tokens rather than only toggling the existing `.dark` class.
 - Secondary text and compact controls should be checked for contrast and mobile target size rather than adjusted by visual guesswork.
@@ -40,19 +40,21 @@ The current implementation is functional but has several UX constraints:
 
 Goal: fix the desktop width/top-alignment problem before changing navigation or theme.
 
-- [ ] Keep all Settings sections aligned to a stable top position when switching tabs.
-- [ ] Keep Account content at a comfortable reading width.
-- [ ] Allow AI, Administration, and Debug content to use a wider desktop workspace (roughly 960–1050 px maximum).
-- [ ] Keep full-width mobile behavior with safe 16 px side padding.
-- [ ] Ensure no new horizontal document overflow is introduced.
+Implementation checkpoint: `a708226a649a663b303ac1a46b8514e9a49d3fce`.
+
+- [x] Keep all Settings sections aligned to a stable top position when switching tabs.
+- [x] Keep Account content at a comfortable reading width.
+- [x] Allow AI, Administration, and Debug content to use a wider desktop workspace (roughly 960–1050 px maximum).
+- [x] Keep full-width mobile behavior with safe 16 px side padding.
+- [ ] Ensure no new horizontal document overflow is introduced in real desktop/mobile review.
 - [ ] Verify existing Account actions and AI controls still render correctly.
 
-Acceptance:
+Acceptance — pending visual review:
 
-- Account and AI headings do not jump vertically when switching tabs.
-- Long model names/selects gain useful desktop width.
-- Account does not become excessively wide.
-- 320–390 px mobile widths remain usable without document-level horizontal scrolling.
+- [ ] Account and AI headings do not jump vertically when switching tabs.
+- [ ] Long model names/selects gain useful desktop width.
+- [ ] Account does not become excessively wide.
+- [ ] 320–390 px mobile widths remain usable without document-level horizontal scrolling.
 
 ## Phase 2 — Responsive Settings navigation
 
