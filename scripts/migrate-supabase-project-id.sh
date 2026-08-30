@@ -69,12 +69,86 @@ volume_size() {
   fi
 }
 
+project_containers() {
+  local project="$1"
+  podman ps -a --format '{{.Names}}' 2>/dev/null \
+    | grep -E "^supabase_.*_${project}$" || true
+}
+
+running_project_containers() {
+  local project="$1"
+  podman ps --format '{{.Names}}' 2>/dev/null \
+    | grep -E "^supabase_.*_${project}$" || true
+}
+
+print_project_container_states() {
+  local project="$1"
+  podman ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null \
+    | grep -E "^supabase_.*_${project}[[:space:]]" || true
+}
+
+remove_stopped_project_containers() {
+  local project="$1"
+  local running containers
+  running="$(running_project_containers "${project}")"
+  if [ -n "${running}" ]; then
+    echo "Refusing to remove '${project}' containers because some are still running:" >&2
+    printf '%s\n' "${running}" >&2
+    return 1
+  fi
+
+  containers="$(project_containers "${project}")"
+  if [ -z "${containers}" ]; then
+    return 0
+  fi
+
+  echo "Removing stopped '${project}' containers while preserving named volumes..."
+  while IFS= read -r container; do
+    [ -n "${container}" ] || continue
+    podman rm "${container}"
+  done <<< "${containers}"
+}
+
+stop_project_for_migration() {
+  local project="$1"
+  local stop_rc=0 running
+
+  set +e
+  "${SUPABASE_BIN}" stop --project-id "${project}"
+  stop_rc=$?
+  set -e
+
+  running="$(running_project_containers "${project}")"
+  if [ -n "${running}" ]; then
+    echo "Supabase stop left '${project}' containers running; aborting before touching volumes." >&2
+    print_project_container_states "${project}" >&2
+    return 1
+  fi
+
+  if [ "${stop_rc}" -ne 0 ]; then
+    echo "Supabase CLI stop returned ${stop_rc}, but all '${project}' containers are stopped; continuing with verified stopped state."
+  fi
+
+  remove_stopped_project_containers "${project}"
+
+  if [ -n "$(project_containers "${project}")" ]; then
+    echo "Old project containers still exist after cleanup; refusing to rename volumes." >&2
+    print_project_container_states "${project}" >&2
+    return 1
+  fi
+}
+
 db_fingerprint() {
   local project="$1"
   local container="supabase_db_${project}"
 
   if ! podman container exists "${container}" >/dev/null 2>&1; then
     echo "Database container not found: ${container}" >&2
+    return 1
+  fi
+
+  if [ "$(podman inspect --format '{{.State.Running}}' "${container}" 2>/dev/null || true)" != "true" ]; then
+    echo "Database container is not running: ${container}" >&2
     return 1
   fi
 
@@ -98,6 +172,24 @@ print_fingerprint() {
   printf 'messages:            %s\n' "${messages:-?}"
   printf 'storage.objects:     %s\n' "${storage_objects:-?}"
   printf 'storage.buckets:     %s\n' "${storage_buckets:-?}"
+}
+
+ensure_old_stack_ready() {
+  local db_container="supabase_db_${OLD_ID}"
+  local running="false"
+
+  if podman container exists "${db_container}" >/dev/null 2>&1; then
+    running="$(podman inspect --format '{{.State.Running}}' "${db_container}" 2>/dev/null || echo false)"
+  fi
+
+  if [ "${running}" = "true" ]; then
+    return 0
+  fi
+
+  section "Restore ${OLD_ID} stack for preflight"
+  echo "The previous stop attempt left the project stopped. Restarting it so the database can be fingerprinted before migration."
+  "${SUPABASE_BIN}" start
+  "${SUPABASE_BIN}" status >/dev/null
 }
 
 require_prerequisites() {
@@ -133,7 +225,7 @@ print_plan() {
     fi
   done
 
-  if podman container exists "supabase_db_${OLD_ID}" >/dev/null 2>&1; then
+  if [ "$(podman inspect --format '{{.State.Running}}' "supabase_db_${OLD_ID}" 2>/dev/null || true)" = "true" ]; then
     echo
     echo "Current database fingerprint:"
     current_fingerprint="$(db_fingerprint "${OLD_ID}" 2>/dev/null || true)"
@@ -147,14 +239,17 @@ print_plan() {
   cat <<EOF
 
 Execution will:
-  1. record a database fingerprint for the running '${OLD_ID}' stack;
-  2. stop local Supabase project '${OLD_ID}' without --no-backup;
-  3. export compressed safety archives of the DB and Storage volumes;
-  4. rename the existing persistent volumes to the '${NEW_ID}' names;
-  5. change supabase/config.toml project_id to '${NEW_ID}';
-  6. start Supabase and verify the '${NEW_ID}' stack, volume mounts and database fingerprint.
+  1. ensure the existing '${OLD_ID}' stack is running and record a database fingerprint;
+  2. stop local Supabase project '${OLD_ID}' and verify actual container state;
+  3. remove only stopped '${OLD_ID}' container objects, preserving named volumes;
+  4. export compressed safety archives of the DB and Storage volumes;
+  5. rename the existing persistent volumes to the '${NEW_ID}' names;
+  6. change supabase/config.toml project_id to '${NEW_ID}';
+  7. start Supabase and verify the '${NEW_ID}' stack, volume mounts and database fingerprint.
 
-The migration does not delete backup archives or unrelated volumes/networks.
+The migration does not delete backup archives or named data volumes.
+A non-zero Supabase stop exit is tolerated only when Podman confirms that every
+'${OLD_ID}' project container is stopped. Running containers always abort the migration.
 If a migration step fails after the volumes are renamed, the script attempts to
 stop '${NEW_ID}', restore project_id='${OLD_ID}', rename the volumes back, and
 restart the original stack.
@@ -174,6 +269,16 @@ rollback() {
   echo
   echo "Migration failed; attempting rollback to '${OLD_ID}'..." >&2
   "${SUPABASE_BIN}" stop --project-id "${NEW_ID}" >/dev/null 2>&1 || true
+
+  # Free renamed volumes from any partially-created Brepia containers. This
+  # removes container objects only; named volumes are deliberately preserved.
+  brepia_containers="$(project_containers "${NEW_ID}")"
+  if [ -n "${brepia_containers}" ]; then
+    while IFS= read -r container; do
+      [ -n "${container}" ] || continue
+      podman rm -f "${container}" >/dev/null 2>&1 || true
+    done <<< "${brepia_containers}"
+  fi
 
   set_project_id "${OLD_ID}" || true
 
@@ -221,6 +326,8 @@ for volume in "${NEW_DB_VOLUME}" "${NEW_STORAGE_VOLUME}"; do
   fi
 done
 
+ensure_old_stack_ready
+
 OLD_FINGERPRINT="$(db_fingerprint "${OLD_ID}")"
 [ -n "${OLD_FINGERPRINT}" ] || { echo "Could not fingerprint the existing database." >&2; exit 1; }
 
@@ -239,12 +346,7 @@ BACKUP_DIR="${BACKUP_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "${BACKUP_DIR}"
 
 section "Stop ${OLD_ID} Supabase"
-"${SUPABASE_BIN}" stop --project-id "${OLD_ID}"
-
-if podman ps -a --format '{{.Names}}' | grep -Eq "^supabase_.*_${OLD_ID}$"; then
-  echo "Old project containers still exist after stop; refusing to rename mounted resources." >&2
-  exit 1
-fi
+stop_project_for_migration "${OLD_ID}"
 
 section "Archive persistent volumes"
 for volume in "${OLD_DB_VOLUME}" "${OLD_STORAGE_VOLUME}"; do
