@@ -71,7 +71,7 @@ jobs:
       - name: Commit generated registry
         shell: bash
         run: |
-          if git diff --quiet -- src/generated/shikiBundles.ts; then
+          if [ -z "$(git status --porcelain -- src/generated/shikiBundles.ts)" ]; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
