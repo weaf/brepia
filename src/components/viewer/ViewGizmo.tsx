@@ -39,23 +39,15 @@ function isControlsWithTarget(value: unknown): value is ControlsWithTarget {
   );
 }
 
-// Drei's <GizmoHelper> animates the main camera toward a face/edge orientation
-// frame-by-frame, stopping once the angle delta falls below ~0.01 rad. During
-// the animation it temporarily rotates camera.up and then resets it on
-// completion, leaving camera.up, camera.position, and camera.quaternion subtly
-// out of sync. After an orbit, OrbitControls.update() — invoked every animation
-// frame and ending in camera.lookAt(target) with the transient rotated up —
-// bakes that drift into the camera state. The next click of the same face
-// either short-circuits at the threshold (no movement, drift preserved) or
-// animates toward the still-tilted state instead of the canonical
-// orthographic orientation (issue #128).
+// Drei's <GizmoHelper> animates the main camera toward a face/edge orientation.
+// That animation can leave camera.up and the active camera controls subtly out
+// of sync, especially after free trackball rotation where camera.up is allowed
+// to roll with the view.
 //
-// Fix: bypass drei's animation. Provide a custom onClick to GizmoViewcube that
-// snaps the main camera directly to focus + direction * radius with up reset
-// to a non-degenerate canonical axis, then runs camera.lookAt(target) and
-// controls.update() so OrbitControls' internal spherical state is reconciled.
-// Every click lands at the same canonical orientation regardless of orbit
-// history, in both orthographic and perspective modes.
+// Bypass the helper animation and snap directly to a canonical face/edge view.
+// Reset camera.up to a non-degenerate axis, look at the controls target, then
+// update the active controls. This keeps view-cube snaps deterministic while
+// still allowing unrestricted trackball rotation between snaps.
 export function ViewGizmo({
   alignment = 'bottom-right',
   margin = [80, 80],

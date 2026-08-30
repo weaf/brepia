@@ -5,6 +5,7 @@ import { fal } from '@fal-ai/client';
 import OpenAI from 'openai';
 import { reformatSignedUrl } from './messageUtils';
 import { env, requiredEnv } from './env';
+import { resolveUserInstruction } from './aiInstructionRuntime';
 
 const DEBUG_LOGS =
   env('ENVIRONMENT') === 'local' || env('DEBUG_LOGS') === 'true';
@@ -12,9 +13,31 @@ const debugLog = (...args: unknown[]) => {
   if (DEBUG_LOGS) console.log(...args);
 };
 
-// Shared 3D model generation instructions for consistency across all image generation services
-export const INSTRUCTIONS_3D =
-  'You are generating a fully textured and rendered 3D model. Output one centered 3D model or multiple centered objects, no text. Plain white background (or an empty background which provides optimal contrast with the textures of the 3D model), neutral lighting, and a soft shadow directly under the 3D model. Keep the entire object fully in-frame with 5–10% padding; no cropping. Make sure the description strongly impacts the form and shape of the 3D Model not just the surface texture';
+/**
+ * Compatibility marker used by the optional legacy fal.ai pipeline. The
+ * actual conditioning text is resolved from the user's instruction profile
+ * immediately before a provider request is sent.
+ */
+export const INSTRUCTIONS_3D = '[[PCAD_FAL_IMAGE_CONDITIONING]]';
+
+const LEGACY_IMAGE_GUIDANCE =
+  /You are generating a fully textured and rendered 3D model\. Output one centered 3D model or multiple centered objects, no text\.\s*Plain white background \(or an empty background which provides optimal contrast with the textures of the 3D model\)\s*,?\s*neutral lighting, and a soft shadow directly under the 3D model\. Keep the entire object fully in-frame with 5[–-]10% padding; no cropping\. Make sure the description strongly impacts the form and shape of the 3D Model not just the surface texture/gi;
+
+async function resolveFalImagePrompt(
+  userId: string,
+  prompt: string,
+): Promise<string> {
+  const conditioning = await resolveUserInstruction(
+    userId,
+    'provider.fal.image_conditioning',
+  );
+  const resolved = prompt
+    .split(INSTRUCTIONS_3D)
+    .join(conditioning)
+    .replace(LEGACY_IMAGE_GUIDANCE, conditioning)
+    .trim();
+  return resolved || conditioning;
+}
 
 let falConfigured = false;
 function ensureFalConfig() {
@@ -144,10 +167,11 @@ export const generateImageWithGptImage2 = async (
   // seeds. 'medium' also available (~$0.053).
   quality: GptImageQuality,
 ): Promise<GptImage2Result> => {
+  const resolvedPrompt = await resolveFalImagePrompt(userId, prompt);
   debugLog('Generating image with gpt-image-2 via Responses API', {
     userId,
     conversationId,
-    prompt,
+    prompt: resolvedPrompt,
     imagesCount: images.length,
     priorImageCallId,
   });
@@ -155,7 +179,7 @@ export const generateImageWithGptImage2 = async (
   const content: Array<
     | { type: 'input_text'; text: string }
     | { type: 'input_image'; image_url: string; detail: 'auto' }
-  > = [{ type: 'input_text', text: prompt || 'Generate an image' }];
+  > = [{ type: 'input_text', text: resolvedPrompt }];
 
   // Base64 path is only used when we have no prior gpt-image-2 call to
   // reference (e.g. a freshly uploaded user image).
@@ -256,10 +280,11 @@ export const generateImageWithGeminiMultiTurn = async (
   prompt: string,
   images: string[],
 ): Promise<Buffer> => {
+  const resolvedPrompt = await resolveFalImagePrompt(userId, prompt);
   debugLog('Generating image with Gemini Multi-Turn', {
     userId,
     conversationId,
-    prompt,
+    prompt: resolvedPrompt,
     imagesCount: images.length,
   });
 
@@ -309,7 +334,7 @@ export const generateImageWithGeminiMultiTurn = async (
   const messageContent: {
     text?: string;
     inlineData?: { mimeType: string; data: string };
-  }[] = [{ text: prompt || 'Generate an image' }];
+  }[] = [{ text: resolvedPrompt }];
   if (imagePart) {
     messageContent.push(imagePart);
   }
@@ -373,11 +398,7 @@ export const generateImageWithFalFlux = async (
     );
   }
 
-  // Enhance the prompt with 3D instructions and context
-  const enhancedPrompt =
-    contextImages.length > 0
-      ? `${INSTRUCTIONS_3D} Based on the provided image(s), ${promptText}. Maintain visual consistency and style with the reference image(s).`
-      : `${INSTRUCTIONS_3D} ${promptText}`;
+  const enhancedPrompt = await resolveFalImagePrompt(userId, promptText);
 
   let imageInputs: string[] = [];
   if (contextImages.length > 0) {

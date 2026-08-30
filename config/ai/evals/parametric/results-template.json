@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "scope": "parametric",
+  "applicationRevision": "",
+  "model": "",
+  "runtimeNotes": "",
+  "runs": [
+    {
+      "caseId": "",
+      "candidate": "cadam|standard-v1",
+      "run": 1,
+      "buildCalls": 0,
+      "compileSucceeded": null,
+      "hardGateFailure": "",
+      "scores": {
+        "constraintFidelity": null,
+        "artifactCorrectness": null,
+        "visualTaskCompletion": null,
+        "editPreservation": null,
+        "parameterQuality": null,
+        "iterationEfficiency": null,
+        "responseDiscipline": null
+      },
+      "artifactNotes": "",
+      "visualNotes": "",
+      "finalReply": ""
+    }
+  ]
+}

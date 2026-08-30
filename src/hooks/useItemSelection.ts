@@ -1,9 +1,50 @@
 import { useSelectedItems } from '@/contexts/SelectedItemsContext';
+import { useConversation } from '@/contexts/ConversationContext';
+import {
+  NATIVE_TRELLIS2_MODEL_ID,
+  getCreativeMeshModelDefinition,
+  normalizeCreativeMeshModelId,
+} from '@shared/creativeMeshModels';
 import { MessageItem } from '../types/misc.ts';
-import { useCallback } from 'react';
+import {
+  useCallback,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 
 export function useItemSelection() {
-  const { images, setImages, mesh, setMesh } = useSelectedItems();
+  const { images, setImages: setImagesRaw, mesh, setMesh } = useSelectedItems();
+  const { conversation } = useConversation();
+
+  const selectedCreativeModel =
+    conversation.type === 'creative'
+      ? (normalizeCreativeMeshModelId(conversation.settings?.model) ??
+        NATIVE_TRELLIS2_MODEL_ID)
+      : null;
+  const maxReferenceImages = selectedCreativeModel
+    ? getCreativeMeshModelDefinition(selectedCreativeModel)?.maxReferenceImages
+    : undefined;
+
+  const setImages: Dispatch<SetStateAction<MessageItem[]>> = useCallback(
+    (action) => {
+      setImagesRaw((current) => {
+        const next = typeof action === 'function' ? action(current) : action;
+        if (
+          conversation.type !== 'creative' ||
+          maxReferenceImages === undefined ||
+          next.length <= maxReferenceImages
+        ) {
+          return next;
+        }
+
+        // Keep selection deterministic and never let a transient over-limit
+        // array trigger legacy model-switching behavior. The submit validator
+        // remains the second line of defense for externally constructed parts.
+        return next.slice(0, maxReferenceImages);
+      });
+    },
+    [conversation.type, maxReferenceImages, setImagesRaw],
+  );
 
   const selectItem = useCallback(
     (item: MessageItem, type: 'image' | 'mesh') => {

@@ -11,18 +11,35 @@ import {
   buildFullCatalog,
   buildSelectableCatalog,
 } from '@/server/modelCatalog';
+import { resolveCreativeMeshProvider } from '@/server/creativeMeshProviderRegistry';
+import { getPromptProfile } from '@/server/promptProfiles';
 import { getServiceRoleSupabaseClient } from '@/server/supabaseClient';
+import {
+  AiInstructionProfileIdSchema,
+  DEFAULT_INSTRUCTION_PROFILE_ID,
+  InstructionProfileDefaultsSchema,
+  RuntimeOverridesSchema,
+} from '@shared/aiInstructionSettings';
 import {
   UpdateDefaultModelsSchema,
   UpdateVisionModelsSchema,
 } from '@shared/aiSettings';
-import { isCreativeMeshModelId } from '@shared/creativeMeshModels';
 
 function preferenceResponse(data: Record<string, unknown>) {
+  const instructionProfile = AiInstructionProfileIdSchema.safeParse(
+    data.default_instruction_profile_id,
+  );
   return {
     userId: data.user_id,
     hiddenModelIds: data.hidden_model_ids ?? [],
+    defaultInstructionProfileId: instructionProfile.success
+      ? instructionProfile.data
+      : DEFAULT_INSTRUCTION_PROFILE_ID,
     defaultPromptProfileId: data.default_prompt_profile_id ?? null,
+    defaultCreativePromptProfileId:
+      data.default_creative_prompt_profile_id ?? null,
+    instructionProfileDefaults: data.instruction_profile_defaults ?? {},
+    runtimeOverrides: data.runtime_overrides ?? {},
     defaultParametricModelId: data.default_parametric_model_id ?? null,
     defaultCreativeModelId: data.default_creative_model_id ?? null,
     visionFastModelId: data.vision_fast_model_id ?? null,
@@ -30,6 +47,18 @@ function preferenceResponse(data: Record<string, unknown>) {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
+}
+
+function isSelectablePromptProfile(
+  profile: Awaited<ReturnType<typeof getPromptProfile>>,
+  scope: string,
+): boolean {
+  return Boolean(
+    profile &&
+      profile.scope === scope &&
+      profile.editable &&
+      !profile.archived,
+  );
 }
 
 export const Route = createFileRoute('/api/ai-settings/preferences')({
@@ -63,8 +92,88 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
             updates.hidden_model_ids = body.hiddenModelIds;
           }
 
+          if (body.defaultInstructionProfileId !== undefined) {
+            const parsed = AiInstructionProfileIdSchema.safeParse(
+              body.defaultInstructionProfileId,
+            );
+            if (!parsed.success) {
+              return json({ error: 'invalid_default_instruction_profile' }, 400);
+            }
+            updates.default_instruction_profile_id = parsed.data;
+          }
+
           if (body.defaultPromptProfileId !== undefined) {
+            if (body.defaultPromptProfileId === null) {
+              return json({ error: 'prompt_reset_not_supported' }, 400);
+            }
+            const profile = await getPromptProfile(
+              user.id,
+              body.defaultPromptProfileId,
+            );
+            if (!isSelectablePromptProfile(profile, 'parametric')) {
+              return json({ error: 'invalid_default_prompt_profile' }, 400);
+            }
             updates.default_prompt_profile_id = body.defaultPromptProfileId;
+          }
+
+          if (body.defaultCreativePromptProfileId !== undefined) {
+            if (body.defaultCreativePromptProfileId === null) {
+              return json({ error: 'creative_prompt_reset_not_supported' }, 400);
+            }
+            const profile = await getPromptProfile(
+              user.id,
+              body.defaultCreativePromptProfileId,
+            );
+            if (!isSelectablePromptProfile(profile, 'creative')) {
+              return json(
+                { error: 'invalid_default_creative_prompt_profile' },
+                400,
+              );
+            }
+            updates.default_creative_prompt_profile_id =
+              body.defaultCreativePromptProfileId;
+          }
+
+          if (body.instructionProfileDefaults !== undefined) {
+            const parsed = InstructionProfileDefaultsSchema.safeParse(
+              body.instructionProfileDefaults,
+            );
+            if (!parsed.success) {
+              return json({ error: 'invalid_instruction_profile_defaults' }, 400);
+            }
+
+            for (const [scope, profileId] of Object.entries(parsed.data)) {
+              if (profileId == null) {
+                return json(
+                  {
+                    error: 'instruction_prompt_reset_not_supported',
+                    scope,
+                  },
+                  400,
+                );
+              }
+              const profile = await getPromptProfile(user.id, profileId);
+              if (!isSelectablePromptProfile(profile, scope)) {
+                return json(
+                  {
+                    error: 'invalid_instruction_profile_default',
+                    scope,
+                    profileId,
+                  },
+                  400,
+                );
+              }
+            }
+
+            updates.instruction_profile_defaults = parsed.data;
+          }
+
+          if (body.runtimeOverrides !== undefined) {
+            const parsed = RuntimeOverridesSchema.safeParse(body.runtimeOverrides);
+            if (!parsed.success) {
+              return json({ error: 'invalid_runtime_overrides' }, 400);
+            }
+            updates.runtime_overrides = parsed.data;
           }
 
           if (
@@ -103,17 +212,19 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
               }
             }
 
-            if (
-              parsed.data.defaultCreativeModelId &&
-              !isCreativeMeshModelId(parsed.data.defaultCreativeModelId)
-            ) {
-              return json(
-                {
-                  error: 'invalid_default_creative_model',
-                  modelId: parsed.data.defaultCreativeModelId,
-                },
-                400,
+            if (parsed.data.defaultCreativeModelId) {
+              const creativeProvider = resolveCreativeMeshProvider(
+                parsed.data.defaultCreativeModelId,
               );
+              if (!creativeProvider?.enabled) {
+                return json(
+                  {
+                    error: 'invalid_default_creative_model',
+                    modelId: parsed.data.defaultCreativeModelId,
+                  },
+                  400,
+                );
+              }
             }
 
             if (parsed.data.defaultParametricModelId !== undefined) {
@@ -177,8 +288,8 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
           const supabase = getServiceRoleSupabaseClient();
           const { data, error } = await supabase
             .from('user_ai_preferences')
-            // The generated DB type may lag this migration until Supabase types
-            // are regenerated; the API schema above is the authoritative guard.
+            // New preference columns can briefly lead generated DB types after
+            // a migration; request validation above remains authoritative.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .update({ ...updates, updated_at: new Date().toISOString() } as any)
             .eq('user_id', user.id)

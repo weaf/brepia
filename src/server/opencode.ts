@@ -8,6 +8,10 @@ import type {
   LanguageModelV3Usage,
 } from '@ai-sdk/provider';
 import { spawn } from 'node:child_process';
+import {
+  getAiRuntimeLimitDefinition,
+  loadBundledInstruction,
+} from '@shared/aiInstructionCatalog';
 import { env } from './env';
 import {
   buildAgentOutputContract,
@@ -36,9 +40,32 @@ const USAGE = (): LanguageModelV3Usage => ({
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
 const PCAD_OPENCODE_AGENT = 'pcad-builder';
 
-// Opencode serve HTTP API base URL.
-// Priority: OPENCODE_BASE_URL (full URL) → OPENCODE_PORT (legacy) → default.
-// start.sh normally exports the dynamically selected pCAD-owned port.
+export type OpenCodeRuntimeOptions = {
+  transportInstruction?: string;
+  timeoutMs?: number;
+  validationAttempts?: number;
+};
+
+function bundledRuntimeNumber(key: string): number {
+  const definition = getAiRuntimeLimitDefinition(key);
+  if (!definition || typeof definition.defaultValue !== 'number') {
+    throw new Error(`Missing numeric AI runtime definition: ${key}`);
+  }
+  return definition.defaultValue;
+}
+
+function resolveOpenCodeRuntime(options: OpenCodeRuntimeOptions = {}) {
+  return {
+    transportInstruction:
+      options.transportInstruction ?? loadBundledInstruction('transport.opencode'),
+    timeoutMs:
+      options.timeoutMs ?? bundledRuntimeNumber('transport.openCodeTimeoutMs'),
+    validationAttempts:
+      options.validationAttempts ??
+      bundledRuntimeNumber('transport.openCodeValidationAttempts'),
+  };
+}
+
 export function opencodeApiUrl(): string {
   const baseUrl = env('OPENCODE_BASE_URL').trim();
   if (baseUrl) return baseUrl.replace(/\/+$/, '');
@@ -66,13 +93,6 @@ export function buildOpenCodeAttachCommand(
   ].join(' ');
 }
 
-/**
- * Build the HTTP headers required by an authenticated `opencode serve`.
- * OpenCode uses HTTP Basic Auth when OPENCODE_SERVER_PASSWORD is set; the
- * username defaults to `opencode` unless OPENCODE_SERVER_USERNAME overrides it.
- * Existing Authorization headers are preserved so callers can explicitly
- * override this behavior when needed.
- */
 export function opencodeAuthHeaders(headers?: HeadersInit): Headers {
   const result = new Headers(headers);
   const password = env('OPENCODE_SERVER_PASSWORD');
@@ -86,7 +106,6 @@ export function opencodeAuthHeaders(headers?: HeadersInit): Headers {
   return result;
 }
 
-/** Central HTTP transport for every pCAD → OpenCode server request. */
 async function opencodeFetch(
   input: string | URL,
   init: RequestInit = {},
@@ -98,10 +117,8 @@ async function opencodeFetch(
 }
 
 export type OpenCodeModelInfo = {
-  /** Full `provider/model` id as `opencode models` prints it. */
   cliId: string;
   providerID: string;
-  /** Id without the provider prefix. */
   bareID: string;
   name: string;
 };
@@ -116,17 +133,12 @@ function humanName(bareID: string): string {
     .join(' ');
 }
 
-/**
- * Fetch models from `GET /api/model` (opencode serve HTTP API).
- * The API only returns models from providers active in the project
- * (e.g. llama-swap, morph, opencode). CLI `opencode models` returns
- * ALL registered providers. `listModels()` merges both: API models by ID
- * (rich names), then CLI models that aren't already present.
- *
- * NOTE: This function returns [] on error rather than falling back to CLI.
- * The caller `listModels()` always merges API + CLI — returning CLI here
- * would cause duplicates and lose API names for the API's own models.
- */
+interface OpenCodeModelItem {
+  id: string;
+  providerID: string;
+  name?: string;
+}
+
 async function listModelsViaApi(): Promise<OpenCodeModelInfo[]> {
   try {
     const url = `${opencodeApiUrl()}/api/model`;
@@ -140,8 +152,6 @@ async function listModelsViaApi(): Promise<OpenCodeModelInfo[]> {
         cliId: `${m.providerID}/${m.id}`,
         providerID: m.providerID,
         bareID: m.id,
-        // Prefer the real name from opencode's /api/model response.
-        // Falls back to humanName() for providers that don't include a name.
         name: m.name || humanName(m.id),
       }));
   } catch (err) {
@@ -153,21 +163,12 @@ async function listModelsViaApi(): Promise<OpenCodeModelInfo[]> {
   }
 }
 
-interface OpenCodeModelItem {
-  id: string;
-  providerID: string;
-  name?: string;
-}
-
 async function listModels(): Promise<OpenCodeModelInfo[]> {
   if (modelsCache && Date.now() - modelsCache.at < MODELS_CACHE_TTL_MS) {
     return modelsCache.models;
   }
-  // API gives us models with rich names; CLI gives us all providers.
   const apiModels = await listModelsViaApi();
   const cliModels = await listModelsViaCli();
-  // Use API models as the primary source (they have proper names).
-  // Supplement with CLI models that aren't already covered by the API.
   const apiCliIds = new Set(apiModels.map((m) => m.cliId));
   const merged = [
     ...apiModels,
@@ -203,7 +204,6 @@ export async function opencodeModels(): Promise<OpenCodeModelInfo[]> {
   return listModels();
 }
 
-/** Minimal CLI runner for `opencode models` fallback (reads stdout). */
 function runOpenCode(
   args: string[],
   opts?: { timeoutMs?: number },
@@ -261,22 +261,16 @@ function promptTextParts(
   return textParts;
 }
 
-/**
- * Build a plain-text prompt from the AI SDK v3 prompt array. This remains the
- * fallback for legacy one-shot OpenCode model IDs. Persistent pCAD/OpenCode
- * sessions use `buildPersistentOpenCodePrompt` below so history is not sent
- * again on every turn.
- */
-export function formatPrompt(prompt: LanguageModelV3Prompt): string {
-  const lines: string[] = [
-    '<environment instructions>',
-    'You are an AI assistant reached from a CAD generation web app.',
-    'Use the supplied CADAM modeling context to answer the user request.',
-    'Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
-    'The pCAD agent may use only pcad_validate to check an OpenSCAD candidate.',
-    'pCAD, not you, converts a completed CAD artifact into its build_parametric_model tool call.',
-    '</environment instructions>',
-  ];
+export function formatPrompt(
+  prompt: LanguageModelV3Prompt,
+  transportInstruction = loadBundledInstruction('transport.opencode'),
+): string {
+  const lines: string[] = [];
+  if (transportInstruction.trim()) {
+    lines.push(
+      `<pcad_transport_instructions>\n${transportInstruction.trim()}\n</pcad_transport_instructions>`,
+    );
+  }
   for (const message of prompt) {
     const textParts = promptTextParts(message);
     if (!textParts.length) continue;
@@ -292,18 +286,14 @@ export function formatPrompt(prompt: LanguageModelV3Prompt): string {
   return lines.join('\n\n');
 }
 
-/**
- * Give pCAD-created OpenCode sessions a deterministic, searchable identity.
- * The formatted prompt is already available here, so use only the first line
- * of the latest user turn and never expose system/context text in the title.
- */
 export function buildOpenCodeSessionTitle(
   modelId: string,
   prompt: string,
 ): string {
   const marker = '\n\nUser: ';
   const markerIndex = prompt.lastIndexOf(marker);
-  const rawUser = markerIndex >= 0 ? prompt.slice(markerIndex + marker.length) : '';
+  const rawUser =
+    markerIndex >= 0 ? prompt.slice(markerIndex + marker.length) : '';
   const firstLine = (rawUser.split('\n')[0] ?? '').replace(/\s+/g, ' ').trim();
   const summary =
     firstLine.length > 60
@@ -341,15 +331,11 @@ export function buildOpenCodeSessionIdentity(
   };
 }
 
-/**
- * One OpenCode session belongs to one pCAD conversation, independent of which
- * underlying model is currently selected. OpenCode only requires session IDs
- * to start with `ses`, so the pCAD UUID can safely provide a stable identity
- * across browser/server restarts without another persistence table.
- */
 export function buildOpenCodeSessionId(conversationId: string): string {
   const compact = conversationId.replace(/[^A-Za-z0-9]/g, '');
-  if (!compact) throw new Error('Cannot build OpenCode session ID without conversation ID');
+  if (!compact) {
+    throw new Error('Cannot build OpenCode session ID without conversation ID');
+  }
   return `ses_pcad_${compact}`;
 }
 
@@ -366,7 +352,9 @@ type ParametricArtifactSnapshot = {
   code: string;
 };
 
-function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefined {
+function parseArtifactInput(
+  value: unknown,
+): ParametricArtifactSnapshot | undefined {
   let candidate = value;
   if (typeof candidate === 'string') {
     try {
@@ -379,7 +367,9 @@ function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefi
     return undefined;
   }
   const record = candidate as Record<string, unknown>;
-  if (typeof record['code'] !== 'string' || !record['code'].trim()) return undefined;
+  if (typeof record['code'] !== 'string' || !record['code'].trim()) {
+    return undefined;
+  }
   return {
     title:
       typeof record['title'] === 'string' && record['title'].trim()
@@ -393,11 +383,14 @@ function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefi
   };
 }
 
-/** Find the authoritative current OpenSCAD artifact in the AI SDK branch. */
 export function currentParametricArtifactFromPrompt(
   prompt: LanguageModelV3Prompt,
 ): ParametricArtifactSnapshot | undefined {
-  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = prompt.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = prompt[messageIndex];
     const parts = Array.isArray(message.content)
       ? message.content
@@ -448,7 +441,11 @@ function toolOutputText(value: unknown): string {
 }
 
 function latestBuildResultFromPrompt(prompt: LanguageModelV3Prompt): string {
-  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = prompt.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = prompt[messageIndex];
     const parts = Array.isArray(message.content)
       ? message.content
@@ -486,29 +483,18 @@ function systemPromptText(prompt: LanguageModelV3Prompt): string {
     .trim();
 }
 
-/**
- * Build only the NEW turn for a persistent OpenCode session. OpenCode owns its
- * conversation history; pCAD owns the authoritative CAD state. Therefore each
- * turn carries the current complete OpenSCAD artifact plus the new instruction
- * or compile feedback, instead of replaying the entire pCAD chat history.
- *
- * If the OpenCode session had to be recreated during a client-tool continuation
- * (for example after an OpenCode restart), the latest user request is included
- * once so the reconstructed session still knows the original intent.
- */
 export function buildPersistentOpenCodePrompt(
   prompt: LanguageModelV3Prompt,
   sessionCreated: boolean,
+  transportInstruction = loadBundledInstruction('transport.opencode'),
 ): string {
-  const lines: string[] = [
-    '<environment instructions>',
-    'You are the persistent OpenCode worker for one pCAD conversation.',
-    'Treat <current_pcad_artifact> as the authoritative model currently shown by pCAD.',
-    'Do NOT use OpenCode filesystem, shell, network, web, or external tools.',
-    'The pCAD agent may use only pcad_validate to check an OpenSCAD candidate.',
-    'pCAD, not you, converts a completed CAD artifact into its build_parametric_model tool call.',
-    '</environment instructions>',
-  ];
+  const lines: string[] = [];
+
+  if (transportInstruction.trim()) {
+    lines.push(
+      `<pcad_transport_instructions>\n${transportInstruction.trim()}\n</pcad_transport_instructions>`,
+    );
+  }
 
   const system = systemPromptText(prompt);
   if (system) {
@@ -540,33 +526,15 @@ export function buildPersistentOpenCodePrompt(
   }
 
   if (isBuildContinuation) {
-    lines.push(
-      [
-        '<pcad_build_result>',
-        buildResult,
-        '</pcad_build_result>',
-        '<continuation_instruction>',
-        'Continue the same CAD task using the authoritative current artifact above.',
-        'If another geometry revision is needed, return a corrected complete artifact.',
-        'If the current artifact already satisfies the task, return the concise final message.',
-        '</continuation_instruction>',
-      ].join('\n'),
-    );
+    lines.push(`<pcad_build_result>\n${buildResult}\n</pcad_build_result>`);
   } else if (!latestUser) {
-    lines.push(
-      '<continuation_instruction>Continue the current pCAD task from the authoritative artifact above.</continuation_instruction>',
-    );
+    lines.push('<pcad_continuation />');
   }
 
   lines.push(buildAgentOutputContract());
   return lines.join('\n\n');
 }
 
-/**
- * OpenCode versions have differed in how reliably POST /session preserves a
- * supplied title. Apply it through the dedicated update endpoint before the
- * first prompt so the TUI never starts its automatic "New session" title flow.
- */
 export async function updateOpenCodeSessionTitle(
   apiUrl: string,
   sessionId: string,
@@ -608,7 +576,9 @@ type OpenCodeSessionData = {
 };
 
 function sessionDataFromJson(value: unknown): OpenCodeSessionData | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
   const data = (value as Record<string, unknown>)['data'];
   if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
   const record = data as Record<string, unknown>;
@@ -793,7 +763,9 @@ async function submitOpenCodePrompt(
 
   const json = (await response.json()) as Record<string, unknown>;
   const data =
-    json['data'] && typeof json['data'] === 'object' && !Array.isArray(json['data'])
+    json['data'] &&
+    typeof json['data'] === 'object' &&
+    !Array.isArray(json['data'])
       ? (json['data'] as Record<string, unknown>)
       : undefined;
   return typeof data?.['admittedSeq'] === 'number'
@@ -872,28 +844,18 @@ function usageFromOpenCodeTokens(
   return {
     inputTokens: {
       total: input,
-      // OpenCode does not currently tell pCAD whether `input` includes cache
-      // reads, so do not invent a no-cache count.
       noCache: undefined,
       cacheRead,
       cacheWrite,
     },
     outputTokens: {
       total: output,
-      // `output` and `reasoning` are separate provider counters. Without an
-      // explicit text-only counter, keep text undefined rather than guessing.
       text: undefined,
       reasoning,
     },
   };
 }
 
-/**
- * OpenCode HTTP API event parser.
- *
- * Opencode serve streams SSE events on GET /api/session/{id}/event.
- * We parse: step.started → step.failed (error) / step.ended → message.updated (text).
- */
 export interface SSEEvent {
   type: string;
   data: Record<string, unknown>;
@@ -928,16 +890,6 @@ export function parseSSE(text: string): SSEEvent[] {
   return events;
 }
 
-/**
- * Incremental SSE reader for long-lived OpenCode `/api/session/{id}/event`
- * subscriptions.
- *
- * The endpoint is a persistent SSE stream. Reading the entire response body
- * with `Response.text()` blocks until EOF which never arrives while the
- * session is active. This function reads `eventRes.body` incrementally,
- * decodes chunks, buffers incomplete SSE frames between chunks, and yields a
- * batch of complete `SSEEvent[]` as soon as they are available.
- */
 function createIncrementalSseReader(
   eventRes: Response,
   ac: AbortController,
@@ -992,17 +944,13 @@ function createIncrementalSseReader(
     try {
       await reader.cancel();
     } catch {
-      /* ignore */
+      // ignore
     }
   };
 
   return gen;
 }
 
-/**
- * Extract incremental text, reasoning and native AI SDK v3 usage from an
- * accumulated OpenCode event batch.
- */
 export function extractText(events: SSEEvent[]): {
   text: string;
   reasoning: string;
@@ -1030,15 +978,6 @@ export function extractText(events: SSEEvent[]): {
   return { text, reasoning, tokens };
 }
 
-/**
- * Process one OpenCode event batch and yield the corresponding native AI SDK
- * v3 stream parts, updating the internal lifecycle state in place.
- *
- * LanguageModelV3 invariant:
- *   text-start → text-delta* → text-end
- *   reasoning-start → reasoning-delta* → reasoning-end
- * Ends are emitted only after all events in the terminal batch are processed.
- */
 export function processBatch(
   state: {
     cursor: number;
@@ -1067,7 +1006,9 @@ export function processBatch(
   const newParts: LanguageModelV3StreamPart[] = [];
 
   for (const evt of events) {
-    const legacyDurable = evt.data['durable'] as Record<string, unknown> | undefined;
+    const legacyDurable = evt.data['durable'] as
+      | Record<string, unknown>
+      | undefined;
     const durableSeq =
       evt.durable?.seq ??
       (legacyDurable && typeof legacyDurable['seq'] === 'number'
@@ -1085,7 +1026,6 @@ export function processBatch(
         action,
         resources,
       });
-      if (!state.permissionRequests) state.permissionRequests = [];
       state.permissionRequests.push({
         action,
         resources,
@@ -1187,11 +1127,6 @@ export function processBatch(
   return { newParts };
 }
 
-/**
- * Convert a fully accepted OpenCode terminal envelope into pCAD's semantic
- * native AI SDK v3 stream. The agent's {code,message} JSON is an internal
- * transport contract and must never be emitted as ordinary assistant text.
- */
 export function finalizeAcceptedAgentResult(
   text: string,
   finishPart: Extract<LanguageModelV3StreamPart, { type: 'finish' }>,
@@ -1214,7 +1149,6 @@ export function finalizeAcceptedAgentResult(
   ];
 }
 
-/** Interrupt an active OpenCode session via the server API. */
 async function interruptSession(
   apiUrl: string,
   sessionId: string,
@@ -1225,24 +1159,19 @@ async function interruptSession(
   }).catch(() => {});
 }
 
-/**
- * Execute one request through the OpenCode HTTP API and expose it as a native
- * LanguageModelV3 stream. When `conversationId` is supplied, the same OpenCode
- * session is reused for every pCAD turn and the selected model is switched in
- * place rather than creating a new session.
- */
 async function* streamParts(
   modelId: string,
   prompt: LanguageModelV3Prompt,
   options: LanguageModelV3CallOptions,
-  conversationId?: string,
+  conversationId: string | undefined,
+  runtime: ReturnType<typeof resolveOpenCodeRuntime>,
 ): AsyncGenerator<LanguageModelV3StreamPart> {
   yield { type: 'stream-start', warnings: [] };
   const ac = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const apiUrl = opencodeApiUrl();
-    const formattedPrompt = formatPrompt(prompt);
+    const formattedPrompt = formatPrompt(prompt, runtime.transportInstruction);
     const identity = buildOpenCodeSessionIdentity(modelId, formattedPrompt);
     const { providerID, id: bareId } = identity.model;
 
@@ -1250,7 +1179,7 @@ async function* streamParts(
     timeout = setTimeout(async () => {
       ac.abort();
       if (sessionId) await interruptSession(apiUrl, sessionId);
-    }, 8 * 60_000);
+    }, runtime.timeoutMs);
     options.abortSignal?.addEventListener(
       'abort',
       async () => {
@@ -1307,7 +1236,11 @@ async function* streamParts(
     }
 
     const turnPrompt = conversationId
-      ? buildPersistentOpenCodePrompt(prompt, sessionCreated)
+      ? buildPersistentOpenCodePrompt(
+          prompt,
+          sessionCreated,
+          runtime.transportInstruction,
+        )
       : formattedPrompt;
     const admittedSeq = await submitOpenCodePrompt(
       apiUrl,
@@ -1374,8 +1307,6 @@ async function* streamParts(
         for await (const events of eventReader) {
           const { newParts } = processBatch(state, events);
           for (const part of newParts) {
-            // Hold text/reasoning until a candidate is accepted. Otherwise
-            // the browser could display or parse a known-invalid draft.
             if (
               part.type !== 'text-start' &&
               part.type !== 'text-delta' &&
@@ -1396,7 +1327,7 @@ async function* streamParts(
       }
 
       if (!state.isTerminal) {
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         continue;
       }
 
@@ -1411,18 +1342,22 @@ async function* streamParts(
       if (validation.valid) break;
 
       validationAttempts += 1;
-      if (validationAttempts >= 3) {
+      if (validationAttempts >= runtime.validationAttempts) {
         state.totalText = JSON.stringify({
           code: '',
-          message: `OpenSCAD validation failed after 3 attempts: ${validation.diagnostics ?? 'unknown compiler error'}`,
+          message: `OpenSCAD validation failed after ${runtime.validationAttempts} attempts: ${validation.diagnostics ?? 'unknown compiler error'}`,
         });
         break;
       }
 
       const repairPrompt = [
-        `Your OpenSCAD candidate did not compile (attempt ${validationAttempts} of 3).`,
-        'Return a corrected complete JSON artifact. Do not explain the failed draft.',
-        `Compiler diagnostics: ${validation.diagnostics ?? 'none supplied'}`,
+        '<pcad_validation_failure>',
+        `attempt: ${validationAttempts}`,
+        `maxAttempts: ${runtime.validationAttempts}`,
+        '<compiler_diagnostics>',
+        validation.diagnostics ?? 'none supplied',
+        '</compiler_diagnostics>',
+        '</pcad_validation_failure>',
       ].join('\n');
       const repairSeq = await submitOpenCodePrompt(
         apiUrl,
@@ -1465,9 +1400,6 @@ async function* streamParts(
       yield part;
     }
   } catch (err) {
-    // Explicit stop (or a replacement run) aborts the generation controller.
-    // End the provider stream normally instead of forwarding that expected
-    // cancellation as an error chunk that aiChat would report as HTTP 500.
     if (options.abortSignal && isRequestAbort(err, options.abortSignal)) {
       return;
     }
@@ -1544,7 +1476,9 @@ async function generateFromStream(
 function createOpencodeLanguageModel(
   appModelId: string,
   conversationId?: string,
+  runtimeOptions: OpenCodeRuntimeOptions = {},
 ): LanguageModelV3 {
+  const runtime = resolveOpenCodeRuntime(runtimeOptions);
   return {
     specificationVersion: 'v3',
     provider: 'opencode',
@@ -1556,6 +1490,7 @@ function createOpencodeLanguageModel(
         options.prompt,
         options,
         conversationId,
+        runtime,
       );
       const stream = new ReadableStream<LanguageModelV3StreamPart>({
         async start(controller) {
@@ -1581,15 +1516,21 @@ function createOpencodeLanguageModel(
   };
 }
 
-/** Legacy OpenCode model factory retained for persisted model IDs. */
-export function opencodeChatModel(appModelId: string): LanguageModelV3 {
-  return createOpencodeLanguageModel(appModelId);
+export function opencodeChatModel(
+  appModelId: string,
+  runtimeOptions: OpenCodeRuntimeOptions = {},
+): LanguageModelV3 {
+  return createOpencodeLanguageModel(appModelId, undefined, runtimeOptions);
 }
 
-/** OpenCode HTTP/SSE transport used by the explicit Streaming execution mode. */
 export function streamingOpencodeChatModel(
   appModelId: string,
   conversationId?: string,
+  runtimeOptions: OpenCodeRuntimeOptions = {},
 ): LanguageModelV3 {
-  return createOpencodeLanguageModel(appModelId, conversationId);
+  return createOpencodeLanguageModel(
+    appModelId,
+    conversationId,
+    runtimeOptions,
+  );
 }

@@ -73,11 +73,38 @@ type MessageBubbleProps = {
 };
 
 export function MessageBubble(props: MessageBubbleProps) {
-  return props.message.role === 'user' ? (
-    <UserBubble {...props} />
-  ) : (
-    <AssistantBubble {...props} />
-  );
+  const { conversation } = useConversation();
+
+  if (props.message.role === 'user') {
+    const showPreparingModel =
+      conversation.type === 'parametric' &&
+      props.isLoading &&
+      props.isLastMessage === true;
+
+    return (
+      <>
+        <UserBubble {...props} />
+        {showPreparingModel ? (
+          <div className="flex min-w-0 max-w-full justify-start overflow-hidden">
+            <div className="mr-2 mt-1 shrink-0">
+              <Avatar className="flex h-9 w-9 items-center justify-center border border-adam-neutral-700 bg-adam-neutral-950 p-1.5">
+                <BrepiaMark title="Brepia" className="h-full w-full" />
+              </Avatar>
+            </div>
+            <div className="flex min-h-9 items-center gap-2 text-sm text-adam-text-secondary">
+              <span
+                className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-adam-blue"
+                aria-hidden="true"
+              />
+              <span>Preparing model...</span>
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  return <AssistantBubble {...props} />;
 }
 
 function isRecord(value: unknown): value is Record<PropertyKey, unknown> {

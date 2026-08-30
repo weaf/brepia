@@ -38,7 +38,9 @@ export function InstanceLegalNotice({ kind }: { kind: LegalKind }) {
       <div className="w-full max-w-2xl rounded-xl border border-adam-neutral-800 bg-adam-bg-secondary-dark p-8 shadow-md">
         <div className="mb-8 flex flex-col items-center text-center">
           <BrepiaBrand showByNoty className="mb-5" />
-          <h1 className="text-3xl font-semibold text-white">{copy.title}</h1>
+          <h1 className="text-3xl font-semibold text-adam-text-primary">
+            {copy.title}
+          </h1>
         </div>
 
         {isLoading ? (
@@ -46,7 +48,7 @@ export function InstanceLegalNotice({ kind }: { kind: LegalKind }) {
             <ActivityIndicator label="Loading instance information" />
           </div>
         ) : (
-          <div className="space-y-6 text-sm leading-relaxed text-gray-300">
+          <div className="space-y-6 text-sm leading-relaxed text-adam-text-secondary">
             <p>{copy.description}</p>
 
             {publishedUrl ? (
@@ -72,7 +74,7 @@ export function InstanceLegalNotice({ kind }: { kind: LegalKind }) {
 
             {(data?.operatorName || data?.contactEmail) && (
               <div className="border-t border-adam-neutral-800 pt-5">
-                <h2 className="mb-2 font-medium text-white">
+                <h2 className="mb-2 font-medium text-adam-text-primary">
                   Instance contact
                 </h2>
                 {data?.operatorName && <p>{data.operatorName}</p>}

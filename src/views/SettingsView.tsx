@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppearance } from '@/contexts/AppearanceContext';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +14,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import * as Sentry from '@sentry/react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useProfile, useUpdateProfile } from '@/services/profileService';
 import { AvatarUpdateDialog } from '@/components/auth/AvatarUpdateDialog';
 import { accountUrl, ssoManaged } from '@/lib/supabase';
@@ -27,8 +29,17 @@ import { getAccountAccess } from '@/services/accountAdminService';
 const lifecycleDiagnosticsEnabled =
   import.meta.env.DEV || import.meta.env.VITE_ENABLE_LIFECYCLE_DEBUG === '1';
 
+type SettingsTab = 'account' | 'ai' | 'administration' | 'debug';
+
+const appearanceOptions = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+] as const;
+
 export default function SettingsView() {
   const { user, resetPassword } = useAuth();
+  const { appearance, setAppearance } = useAppearance();
   const { data: profile } = useProfile();
   const { data: access } = useQuery({
     queryKey: ['account-access'],
@@ -39,6 +50,7 @@ export default function SettingsView() {
   const { toast } = useToast();
   const [newName, setNewName] = useState(profile?.full_name || '');
   const [editingName, setEditingName] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('account');
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -113,10 +125,11 @@ export default function SettingsView() {
 
   const localAccount = user?.email?.endsWith('@pcad.invalid') ?? false;
   const isAdmin = access?.role === 'admin';
+  const settingsWidth = activeTab === 'account' ? 'max-w-2xl' : 'max-w-5xl';
 
   return (
-    <div className="flex min-h-full w-full min-w-0 items-center justify-center overflow-x-hidden bg-adam-background-1 px-4 py-8 sm:px-6 sm:py-10">
-      <div className="w-full min-w-0 max-w-xl">
+    <div className="flex min-h-full w-full min-w-0 items-start justify-center overflow-x-hidden bg-adam-background-1 px-4 py-8 sm:px-6 sm:py-10">
+      <div className={`w-full min-w-0 ${settingsWidth}`}>
         <header className="mb-6 sm:mb-8">
           <h1 className="text-2xl font-medium tracking-tight text-adam-neutral-50">
             Settings
@@ -126,22 +139,42 @@ export default function SettingsView() {
           </p>
         </header>
 
-        <Tabs defaultValue="account" className="w-full min-w-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as SettingsTab)}
+          className="w-full min-w-0"
+        >
           <div className="sticky top-0 z-20 -mx-2 mb-4 min-w-0 bg-adam-background-1/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
-            <div className="hide-scrollbar w-full min-w-0 max-w-full overflow-x-auto">
-              <TabsList className="h-auto w-max min-w-full justify-start gap-1">
-                <TabsTrigger value="account">Account</TabsTrigger>
-                <TabsTrigger value="ai">AI</TabsTrigger>
-                {isAdmin && (
-                  <TabsTrigger value="administration">
-                    Administration
-                  </TabsTrigger>
-                )}
-                {lifecycleDiagnosticsEnabled && (
-                  <TabsTrigger value="debug">Debug</TabsTrigger>
-                )}
-              </TabsList>
-            </div>
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 sm:w-max">
+              <TabsTrigger
+                value="account"
+                className="min-h-10 motion-reduce:transition-none"
+              >
+                Account
+              </TabsTrigger>
+              <TabsTrigger
+                value="ai"
+                className="min-h-10 motion-reduce:transition-none"
+              >
+                AI
+              </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger
+                  value="administration"
+                  className="min-h-10 motion-reduce:transition-none"
+                >
+                  Administration
+                </TabsTrigger>
+              )}
+              {lifecycleDiagnosticsEnabled && (
+                <TabsTrigger
+                  value="debug"
+                  className="min-h-10 motion-reduce:transition-none"
+                >
+                  Debug
+                </TabsTrigger>
+              )}
+            </TabsList>
           </div>
 
           <TabsContent
@@ -185,7 +218,7 @@ export default function SettingsView() {
                     >
                       <Button
                         variant="dark"
-                        className="rounded-full font-light"
+                        className="min-h-10 rounded-full font-light"
                       >
                         Manage account
                       </Button>
@@ -201,7 +234,7 @@ export default function SettingsView() {
                         <Input
                           ref={nameInputRef}
                           value={newName}
-                          className="h-9 w-full max-w-xs"
+                          className="h-10 w-full max-w-xs"
                           onChange={(e) => setNewName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
@@ -222,7 +255,7 @@ export default function SettingsView() {
                           onClick={() => handleUpdateName()}
                           variant="light"
                           disabled={isUpdateLoading}
-                          className="rounded-full font-light"
+                          className="min-h-10 rounded-full font-light"
                         >
                           {isUpdateLoading ? (
                             <ActivityIndicator label="Saving name" size="sm" />
@@ -236,7 +269,7 @@ export default function SettingsView() {
                             setNewName(profile?.full_name || '');
                           }}
                           variant="dark"
-                          className="rounded-full font-light"
+                          className="min-h-10 rounded-full font-light"
                         >
                           Cancel
                         </Button>
@@ -245,7 +278,7 @@ export default function SettingsView() {
                       <Button
                         onClick={() => setEditingName(true)}
                         variant="dark"
-                        className="flex-shrink-0 rounded-full font-light"
+                        className="min-h-10 flex-shrink-0 rounded-full font-light"
                       >
                         Edit
                       </Button>
@@ -277,7 +310,7 @@ export default function SettingsView() {
                         onClick={() => handleResetPassword()}
                         disabled={isResetLoading}
                         variant="dark"
-                        className="flex-shrink-0 rounded-full font-light"
+                        className="min-h-10 flex-shrink-0 rounded-full font-light"
                       >
                         {isResetLoading ? (
                           <ActivityIndicator
@@ -300,17 +333,67 @@ export default function SettingsView() {
               </h2>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-adam-neutral-50">Responses</div>
-                  <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
+                  <div
+                    id="notification-responses-label"
+                    className="text-sm text-adam-neutral-50"
+                  >
+                    Responses
+                  </div>
+                  <div
+                    id="notification-responses-description"
+                    className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200"
+                  >
                     Get notified when Brepia finishes a long-running request.
                   </div>
                 </div>
                 <Switch
-                  className="mt-0.5"
+                  className="mt-0.5 motion-reduce:transition-none"
                   checked={profile?.notifications_enabled ?? false}
                   onCheckedChange={handleUpdateNotifications}
+                  aria-labelledby="notification-responses-label"
+                  aria-describedby="notification-responses-description"
                 />
               </div>
+            </section>
+
+            <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
+              <h2 className="text-sm font-medium text-adam-neutral-50">
+                Appearance
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-adam-neutral-200">
+                Choose how Brepia looks on this device. This does not change the
+                3D viewer background brightness.
+              </p>
+              <div
+                className="mt-4 grid grid-cols-3 gap-2"
+                role="group"
+                aria-label="Application appearance"
+              >
+                {appearanceOptions.map((option) => {
+                  const Icon = option.icon;
+                  const selected = appearance === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setAppearance(option.value)}
+                      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-adam-blue focus-visible:ring-offset-2 focus-visible:ring-offset-adam-background-2 motion-reduce:transition-none ${
+                        selected
+                          ? 'border-adam-blue bg-adam-neutral-900 text-adam-neutral-50'
+                          : 'border-adam-neutral-800 bg-adam-background-1 text-adam-neutral-200 hover:text-adam-neutral-50'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-adam-neutral-300">
+                System follows your operating system and updates automatically.
+              </p>
             </section>
 
             {!ssoManaged && (
@@ -329,7 +412,7 @@ export default function SettingsView() {
                   </div>
                   <DeleteAccountDialog>
                     <Button
-                      className="flex-shrink-0 rounded-full font-light"
+                      className="min-h-10 flex-shrink-0 rounded-full font-light"
                       variant="destructive"
                     >
                       Delete

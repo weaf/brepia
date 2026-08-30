@@ -1,254 +1,240 @@
 # Post-merge functionality improvement plan
 
-Status: **DEFERRED UNTIL AFTER `feature/brepia-remake` IS MERGED INTO `master`**
+Status: **COMPLETE on `feature/post-merge-functionality`**
 
-This plan captures functional/runtime improvements discovered while finishing the Brepia remake. It is deliberately separated from the cosmetic/rebrand branch so the current branch can be validated and merged without continuously expanding scope.
+The Brepia stable-runtime and persistence architecture remains the protected baseline. `CADAM Original` lineage remains unchanged.
 
-The implementation work in this document must start from the then-current `master` on a new feature branch after the Brepia remake merge.
+## Creative 3D — completed native migration
 
-## Goals
-
-1. Keep the current Creative workflow stable while improving local 3D generation reliability, installability and resource usage.
-2. Evaluate simpler GGML/GGUF/native runtimes where they provide a real operational advantage.
-3. Add local text-to-3D alternatives without silently changing the model selected by the user.
-4. Reduce dependence on fragile Python/CUDA-extension stacks where a validated native replacement exists.
-5. Keep output/persistence contracts compatible with the existing pCAD/Brepia Creative workflow.
-6. Preserve hosted fal.ai compatibility and historical Creative model IDs.
-
-## Current baseline after the remake branch
-
-The intended local Creative catalog is:
-
-- `local/trellis-v1` — text + image to 3D;
-- `local/hunyuan3d-2` — image required;
-- `local/hunyuan3d-2.1` — image required.
-
-Stable Fast 3D is retired and must not be reintroduced merely for compatibility with old installer assumptions.
-
-The existing local gateway architecture remains the baseline until a replacement is proven:
+TRELLIS.2 is the only built-in Creative 3D backend:
 
 ```text
-Brepia/pCAD
-  -> local mesh provider
-  -> loopback mesh gateway
-  -> one local 3D worker at a time
-  -> GLB
-  -> Supabase mesh persistence
-  -> conversation workspace mirror
+local/trellis2 -> TRELLIS.2
 ```
 
-GPU arbitration with llama-swap remains important on a single-GPU workstation. A new backend must not assume that it may permanently occupy VRAM.
-
-## Non-goals
-
-- Do not reopen the Brepia visual redesign in this work.
-- Do not change `CADAM Original` prompt lineage as part of local 3D runtime work.
-- Do not rename compatibility-sensitive `PCAD_*`, database/storage identifiers or existing external integration IDs merely because a backend changes.
-- Do not remove working Hunyuan/TRELLIS paths before a replacement has passed real end-to-end validation.
-- Do not silently substitute one Creative backend for another.
-- Do not couple image-to-3D support to `llama.cpp` terminology when the actual runtime is another GGML/GGUF-native project.
-
-# Phase 0 — Establish a post-merge baseline
-
-Start from the updated `master` after the Brepia remake merge.
-
-- [ ] Create a new dedicated functionality branch.
-- [ ] Read `AGENTS.md`, this plan, `docs/local_creative_mesh_backends.md` and the relevant runtime handover/checkpoint documents.
-- [ ] Verify current Creative catalog and local gateway behavior.
-- [ ] Run the normal project validation gate before implementation.
-- [ ] Record a small benchmark set of representative text and image prompts.
-- [ ] Record baseline latency, VRAM behavior, output size and failure modes for the currently retained local backends.
-
-Acceptance criterion: the post-merge branch begins from a known-good baseline rather than treating failures inherited from the remake branch as new-backend regressions.
-
-# Phase 1 — LLaMA-Mesh feasibility spike
-
-Evaluate LLaMA-Mesh as an **additional** local text-to-3D backend using the existing llama.cpp/llama-swap ecosystem where practical.
-
-The architectural attraction is that the model emits mesh representation through an LLM-style inference path instead of requiring a separate heavy Python 3D pipeline.
-
-Questions to answer before product integration:
-
-- [ ] Confirm the exact upstream/model license and redistribution constraints.
-- [ ] Confirm current GGUF availability and the exact llama.cpp feature path required.
-- [ ] Verify output representation and a deterministic conversion path into a mesh format Brepia can consume.
-- [ ] Measure usable quantization on the target workstation.
-- [ ] Measure cold-start time, inference time and peak VRAM.
-- [ ] Test representative CAD-like prompts, not only demo objects.
-- [ ] Inspect topology quality, manifoldness, scale/orientation consistency and export compatibility.
-- [ ] Determine whether output should enter the existing mesh gateway contract or a llama-swap-specific provider adapter.
-- [ ] Verify that running it through llama-swap does not disturb normal Qwen/OpenCode/Codex model selection.
-
-Do not expose LLaMA-Mesh in the normal model picker until the spike can reliably produce an artifact accepted by the existing Creative persistence/viewer path.
-
-## Experimental integration boundary
-
-Preferred first implementation:
+Image-to-3D:
 
 ```text
-Creative request
-  -> experimental LLaMA-Mesh adapter
-  -> llama-swap / llama.cpp
-  -> mesh text/representation
-  -> strict parser + validation
-  -> OBJ/GLB conversion
-  -> existing mesh persistence contract
+reference image
+-> pCAD create_mesh
+-> llama-swap /upstream/creative/trellis2/generate
+-> trellis.cpp / TRELLIS.2
+-> PBR GLB
+-> Supabase + viewer + conversation workspace
 ```
 
-Required safety properties:
-
-- malformed generated mesh text must fail explicitly;
-- parser must not execute arbitrary generated content;
-- generated file paths remain conversation-scoped;
-- no model auto-switching;
-- failed generation must not create a false-success mesh row.
-
-# Phase 2 — `trellis.cpp` feasibility spike
-
-Evaluate `trellis.cpp` as a possible native GGML/GGUF replacement for part or all of the current Python TRELLIS image-to-3D runtime.
-
-This is a separate runtime from llama.cpp even when both use the GGML/GGUF ecosystem. Keep that distinction explicit in code and documentation.
-
-- [ ] Verify current upstream maturity, license, supported platforms and model formats.
-- [ ] Build with the workstation's preferred GPU backend.
-- [ ] Test supported quantizations and record disk/VRAM requirements.
-- [ ] Verify image-to-textured-GLB end-to-end.
-- [ ] Test model quality against the retained Python TRELLIS/Hunyuan paths.
-- [ ] Test cold-start behavior and whether the process can be started/stopped cleanly for GPU arbitration.
-- [ ] Check whether its HTTP/server mode is stable enough to sit behind the existing pCAD mesh provider contract.
-- [ ] Verify errors/timeouts are machine-readable and can be surfaced without generic `fetch failed` messages.
-- [ ] Evaluate text-to-image-to-3D capability separately from direct text-conditioned 3D generation; do not present the two as equivalent.
-
-Preferred first architecture:
+Text-to-3D:
 
 ```text
-Brepia local mesh provider
-  -> pCAD gateway/adapter
-  -> trellis.cpp server/process
-  -> textured GLB
+text prompt
+-> pCAD create_mesh
+-> llama-swap /v1/images/generations
+-> stable-diffusion.cpp / Z-Image-Turbo
+-> conditioning image
+-> llama-swap /upstream/creative/trellis2/generate
+-> trellis.cpp / TRELLIS.2
+-> PBR GLB
+-> Supabase + viewer + conversation workspace
 ```
 
-Avoid rewriting the main application around a prototype-specific API. Adapt the prototype to the existing provider boundary where possible.
+llama-swap owns model lifecycle/GPU arbitration. No separate local mesh gateway is required.
 
-# Phase 3 — Comparative benchmark and decision gate
-
-Do not choose a replacement based only on installation simplicity.
-
-For every candidate retained after the spikes, compare:
-
-- [ ] geometry quality;
-- [ ] texture quality where applicable;
-- [ ] prompt adherence;
-- [ ] topology/manifoldness;
-- [ ] CAD/viewer/export interoperability;
-- [ ] generation latency;
-- [ ] cold-start latency;
-- [ ] peak VRAM;
-- [ ] host RAM;
-- [ ] disk footprint including model snapshots;
-- [ ] installation reproducibility;
-- [ ] upgrade/rebuild risk;
-- [ ] error observability;
-- [ ] process shutdown/VRAM release behavior;
-- [ ] compatibility with llama-swap GPU arbitration;
-- [ ] license/deployment constraints.
-
-Decision outcomes are allowed to be different by capability. For example, one backend may be best for text-to-3D while another remains best for image-to-3D.
-
-# Phase 4 — Creative backend contract hardening
-
-Before adding more selectable models, make capability and runtime behavior explicit.
-
-- [ ] Keep one authoritative Creative backend catalog.
-- [ ] Preserve explicit capabilities such as `Text + image` and `Image required`.
-- [ ] Add enough backend metadata for runtime/provider routing without hardcoding UI assumptions.
-- [ ] Keep early validation for image-required models.
-- [ ] Never silently switch a selected model.
-- [ ] Return backend-specific, actionable errors from gateway to UI.
-- [ ] Improve gateway health so `installed=true` means more than “repo directory and Python executable exist”.
-- [ ] Add backend readiness/import/model-file checks appropriate to each runtime.
-- [ ] Keep one-heavy-worker-at-a-time policy unless measured evidence supports concurrency.
-
-# Phase 5 — Installer and model-storage improvements
-
-The installer must treat model snapshots as real runtime assets, not disposable cosmetic cache.
-
-- [ ] Document which cache directories contain actual model weights.
-- [ ] Make installer output distinguish code, environments, model snapshots and disposable temporary/build cache.
-- [ ] Preserve valid downloaded model snapshots across environment rebuilds.
-- [ ] Avoid redownloading large weights unnecessarily.
-- [ ] Add optional selective backend installation if the local catalog grows.
-- [ ] Add an explicit uninstall/cleanup command or script for retired backends.
-- [ ] Do not store secrets in repository files or terminal output.
-- [ ] Ensure rerunning the installer cannot silently erase unrelated authentication configuration.
-- [ ] Verify critical imports/runtime probes before writing an environment as ready.
-
-# Phase 6 — Product integration of validated candidates
-
-Only candidates that pass Phase 3 should enter normal product selection.
-
-For each accepted backend:
-
-- [ ] Add a stable model ID.
-- [ ] Add capability metadata and user-facing description.
-- [ ] Add provider routing.
-- [ ] Add focused validation tests.
-- [ ] Add loading/progress semantics that do not invent determinate progress.
-- [ ] Verify persistence to Supabase and conversation workspace.
-- [ ] Verify GLB/OBJ conversion and viewer behavior as applicable.
-- [ ] Verify desktop/mobile model selection and error presentation.
-- [ ] Verify cancellation/reload/background behavior does not duplicate generation.
-
-Historical model IDs already persisted in conversations must remain loadable where required.
-
-# Phase 7 — Retire superseded runtime pieces only after proof
-
-A native backend may replace a Python backend only after real comparative validation.
-
-- [ ] Identify Python environments/repositories no longer required.
-- [ ] Remove only dead installer/runtime code.
-- [ ] Provide cleanup instructions for local disk state.
-- [ ] Keep migration/backward-compatibility handling for persisted conversation metadata.
-- [ ] Rerun the complete validation gate.
-- [ ] Perform real Creative runtime tests before merge.
-
-Potential end state if validation supports it:
+Runtime IDs:
 
 ```text
-llama-swap / llama.cpp
-  -> normal LLM/VLM models
-  -> optional LLaMA-Mesh text-to-3D
-
-pCAD/Brepia local mesh gateway
-  -> native trellis.cpp image-to-3D
-  -> retained Hunyuan backend(s) only where they still provide value
+creative/z-image-turbo
+creative/trellis2
 ```
 
-This is a target hypothesis, not a predetermined migration.
+## Verified runtime proof
 
-# Deferred functional items to revisit in the same post-merge program
+The native replacement has been exercised successfully in Brepia:
 
-The following functionality topics should remain separate work items even if they share the Creative stack:
+- [x] llama-swap exposes both Creative runtime IDs.
+- [x] image -> TRELLIS.2 produced a real viewable 3D model.
+- [x] text -> Z-Image-Turbo -> TRELLIS.2 produced a real viewable 3D model.
+- [x] Creative model output remains downloadable through the model viewer.
+- [x] native Creative generation remains behind the existing reconnect/single-flight protection.
+- [x] `npm test` reported green after the final Creative cleanup.
+- [x] `npm run typecheck` reported green after the final Creative cleanup.
+- [x] `npm run lint` reported green after the final Creative cleanup.
+- [x] `npm run build` reported green after the final Creative cleanup.
+- [x] native installer shell syntax reported green.
+- [x] legacy cleanup script shell syntax reported green.
+- [x] the legacy workstation runtime was removed with `scripts/remove-legacy-creative-backends.sh`.
 
-- [ ] Local Creative follow-up / semantic mesh editing.
-- [ ] Better persisted progress/state for long local mesh jobs where the backend can expose real stages.
-- [ ] Remaining mobile/background recovery edge cases only when the paused issue is deliberately reopened.
-- [ ] Better backend diagnostics and operator-facing health/status information.
-- [ ] Repository/deployment renames only as an independent decision.
+## Retired local backends
 
-# Completion criteria
+The previous Python/CUDA product backends are no longer selectable or routable:
 
-This post-merge improvement program is complete only when:
+```text
+local/trellis-v1
+local/hunyuan3d-2
+local/hunyuan3d-2.1
+```
 
-1. every newly exposed backend has passed real end-to-end generation;
-2. the preferred local text-to-3D and image-to-3D paths are documented with measured tradeoffs;
-3. the installer can reproduce the selected runtime stack from a clean environment;
-4. model weights/cache semantics are documented so required snapshots are not mistaken for disposable cache;
-5. failed workers produce actionable errors rather than generic transport failures;
-6. GPU arbitration with normal local LLM/VLM use remains stable;
-7. obsolete backend code/environments are removed only after their replacement is proven;
-8. the normal project test/typecheck/lint/build gate is green before merge.
+Removed from the active repository runtime:
 
-## Governing rule
+- [x] `src/server/localMesh.ts`
+- [x] `scripts/install-local-mesh-backends.sh`
+- [x] `scripts/local-mesh/gateway.py`
+- [x] `scripts/local-mesh/worker.py`
+- [x] old model configuration and loading-time entries
 
-> **Finish and merge the Brepia remake first. Then improve functionality from a clean master baseline, introducing new local 3D runtimes only when they measurably improve quality, reliability or operational simplicity.**
+Historical conversations are not rewritten. The retired local IDs are read-compatibility aliases and normalize forward to:
+
+```text
+local/trellis2
+```
+
+The legacy workstation installation has also been removed. The cleanup was limited to the retired `pcad-mesh-gateway.service` and old `PCAD_MESH_HOME` tree (default `~/.local/share/pcad-mesh`) and did not touch the llama-swap TRELLIS.2/Z-Image model storage.
+
+## Optional hosted Creative providers
+
+Hosted 3D services are no longer part of the Creative core. They are registered as optional provider adapters.
+
+The existing fal.ai integration is the first optional adapter. It is disabled by default and can be enabled with:
+
+```env
+VITE_PCAD_CREATIVE_MESH_PROVIDERS=fal
+FAL_KEY=...
+```
+
+Removing `fal` from the provider list removes its models from the picker and disables server routing for that provider after restart/rebuild.
+
+Provider extension points:
+
+```text
+shared/creativeMeshModels.ts
+src/server/creativeMeshProviderRegistry.ts
+```
+
+A future service adds model metadata plus one provider adapter. The main `src/server/mesh.ts` route resolves the adapter through the registry rather than accumulating provider-specific model switches.
+
+## Native installation
+
+Installer:
+
+```bash
+bash ./scripts/install-native-creative-backends.sh
+```
+
+It installs/configures:
+
+- stable-diffusion.cpp + Z-Image-Turbo;
+- Qwen text encoder and VAE required by Z-Image;
+- trellis.cpp + TRELLIS.2 Q8;
+- llama-swap entries for both runtimes.
+
+The native installer does not depend on the retired Python Creative stack.
+
+## Creative UI rules
+
+- TRELLIS.2 is the fallback/default Creative model.
+- TRELLIS.2 supports text or one reference image.
+- reference-image limits come from Creative model metadata.
+- unavailable/removed Creative selections repair to the first selectable model instead of leaving a blank picker.
+- downloads are exposed from the opened model viewer, not through generated asset links in chat text.
+- follow-up semantic editing of a TRELLIS.2 mesh remains unsupported and is rejected explicitly.
+
+## Invariants
+
+- Preserve the stable-runtime/mobile recovery architecture.
+- Preserve existing Supabase/storage contracts.
+- Preserve `CADAM Original` identity and prompt lineage.
+- Do not restore Stable Fast 3D.
+- Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
+- Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
+
+## Local Supabase lifecycle — completed
+
+The lifecycle review is complete. The earlier references to a workstation manager named **NOx** were incorrect; the user identified the likely source as a typo where `npx` was intended.
+
+Repository and workstation evidence agree:
+
+- [x] no `nox` or `NOx` executable was found;
+- [x] no NOx service, launcher or configuration was found;
+- [x] no global `supabase` binary is required;
+- [x] the repository contains Supabase CLI `^2.114.0` as a dev dependency;
+- [x] rootless `podman.socket` is active on the workstation;
+- [x] the running containers are the standard Supabase CLI/Compose project `cadam`;
+- [x] inspected containers carry `com.supabase.cli.project=cadam` and `com.docker.compose.project=cadam`;
+- [x] repository-local Supabase CLI `2.114.0` detects the running stack;
+- [x] the failed generated `postgres.service` is not the owner of the healthy `cadam` stack;
+- [x] `~/.config/supabase.env` contains legacy/local Supabase credential configuration but does not establish a separate lifecycle manager;
+- [x] `.cursor/rules/database-workflow.mdc`, `.cursor/rules/typescript-workflow.mdc`, `AGENTS.md` and `README.md` are reconciled to the repository-local `npx supabase` workflow;
+- [x] `docs/local_supabase_lifecycle.md` records the final evidence and canonical commands;
+- [x] `scripts/inspect-local-supabase-lifecycle.sh` remains available as read-only troubleshooting inventory;
+- [x] `start.sh` now configures the rootless Podman socket/shim, checks `npx supabase status`, and automatically runs `npx supabase start` when the local stack is not already running.
+
+Canonical lifecycle:
+
+```text
+./start.sh
+  -> ensure rootless Podman socket
+  -> configure DOCKER_HOST + Podman compatibility shim
+  -> npx supabase status
+  -> npx supabase start when needed
+  -> read local Supabase env without printing credentials
+  -> continue Brepia startup
+```
+
+Explicit lifecycle commands remain:
+
+```bash
+npx supabase start
+npx supabase status
+npx supabase stop
+```
+
+On the current rootless-Podman workstation those direct lifecycle/status commands use the same `DOCKER_HOST` and `scripts/podman` compatibility environment documented in `docs/local_supabase_lifecycle.md`.
+
+Supabase is intentionally left running when Brepia exits.
+
+## 3D viewer interaction — free rotation (completed)
+
+The primary Parametric/OpenSCAD viewer now uses unrestricted arcball-style rotation. The earlier TrackballControls implementation was replaced after final UX testing exposed an orthographic zoom-out regression; the current ArcballControls implementation restores bidirectional wheel zoom while retaining free rotation.
+
+Completed outcomes:
+
+- [x] unrestricted rotation around all axes;
+- [x] pan and bidirectional zoom preserved;
+- [x] model bounds/visual center remains the practical rotation target, so usability no longer depends on a convenient OpenSCAD origin;
+- [x] desktop ViewGizmo can still snap back to canonical views after free rotation;
+- [x] the control change was isolated from prompt/profile and stable-runtime behavior;
+- [x] manual functional review confirmed the final rotation/zoom behavior works as intended.
+
+Focused automated pointer/touch interaction coverage was not added before the control replacement. Add it later only if viewer-control regressions justify dedicated browser interaction tests.
+
+## Settings UX and appearance — completed
+
+The completed workstream is documented in:
+
+- `docs/settings_ux_plan.md`
+
+Completed outcomes include:
+
+- [x] responsive Settings width and stable top alignment;
+- [x] responsive desktop/mobile Settings navigation;
+- [x] application-level `System / Light / Dark` appearance with persistence and live System behavior;
+- [x] theme-aware shared/app surfaces including the final Light-theme conversation/sidebar regressions;
+- [x] clearer Common/Advanced AI settings information hierarchy;
+- [x] contrast, focus, target-size, reflow, and reduced-motion improvements;
+- [x] desktop/mobile visual verification;
+- [x] responsive/reflow verification including narrow phones and 200% zoom;
+- [x] appearance/reload/viewer-independence verification;
+- [x] keyboard/accessibility spot checks;
+- [x] final repository regression gate user-confirmed complete.
+
+Phase 6 is closed as implemented and tested. Future Settings changes should be treated as new requirements or concrete regressions rather than continuation of this UX plan.
+
+## Completion
+
+All workstreams tracked by this post-merge functionality plan are complete:
+
+- [x] native Creative backend migration and cleanup;
+- [x] final free-rotation/bidirectional-zoom viewer behavior;
+- [x] Settings UX/appearance implementation and Phase 6 verification;
+- [x] local Supabase lifecycle reconciliation and correction from erroneous NOx wording to repository-local `npx supabase` ownership.
+
+Other deferred/future work remains governed by its dedicated plan/status documents and must not be reopened implicitly as part of this completed plan.

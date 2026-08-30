@@ -5,8 +5,11 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Monitor,
+  Moon,
   Plus,
   Settings,
+  Sun,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppearance } from '@/contexts/AppearanceContext';
 import { supabase, ssoProvider } from '@/lib/supabase';
 import {
   Sheet,
@@ -50,9 +54,16 @@ interface SidebarProps {
 
 type SidebarPath = '/' | '/history';
 
+const appearanceOptions = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+] as const;
+
 function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { appearance, setAppearance } = useAppearance();
   const isMobile = useIsMobile();
   const { data: profile } = useProfile();
   const { data: instanceIdentity } = useQuery({
@@ -460,6 +471,28 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                       <span>Settings</span>
                     </Link>
                   </DropdownMenuItem>
+                  <div className="flex items-center justify-between gap-3 bg-adam-background-2 px-2 py-2">
+                    <span className="text-sm text-adam-text-primary">Appearance</span>
+                    <div className="flex items-center gap-1" role="group" aria-label="Appearance">
+                      {appearanceOptions.map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          title={label}
+                          aria-label={`${label} appearance`}
+                          aria-pressed={appearance === value}
+                          onClick={() => setAppearance(value)}
+                          className={cn(
+                            'flex h-8 w-8 items-center justify-center rounded-md text-adam-text-tertiary transition-colors hover:bg-adam-neutral-800 hover:text-adam-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                            appearance === value &&
+                              'bg-adam-neutral-800 text-adam-text-primary ring-1 ring-adam-neutral-700',
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
@@ -494,10 +527,7 @@ function MobileSidebar({
           <Menu className="h-5 w-5 text-adam-text-primary" />
         </Button>
       </SheetTrigger>
-      <SheetContent
-        side="left"
-        className="bg-adam-bg-dark p-0 [&>button]:text-white"
-      >
+      <SheetContent side="left" className="bg-adam-bg-dark p-0">
         {/* For aria stuff */}
         <SheetHeader className="hidden">
           <SheetTitle className="text-adam-text-primary">Brepia</SheetTitle>

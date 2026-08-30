@@ -20,13 +20,25 @@ import { Share as ShareIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShareContent } from '@/components/ui/ShareContent';
-import { ActivityIndicator } from '@/components/brand';
-import { supabase } from '@/lib/supabase';
-import { useQuery } from '@tanstack/react-query';
+import {
+  DEFAULT_AI_INSTRUCTION_PROFILE_ID,
+  getAiInstructionProfileDefinition,
+} from '@shared/aiInstructionCatalog';
 
 interface ChatTitleProps {
   activeMeshId?: string | null;
   activeOpenscadCode?: string | null;
+}
+
+function InstructionProfileBadge({ label }: { label: string }) {
+  return (
+    <span
+      className="shrink-0 rounded-full border border-adam-neutral-700 px-2 py-0.5 text-[10px] font-medium leading-none text-adam-neutral-300"
+      title={`AI profile: ${label}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 export function ChatTitle({
@@ -40,28 +52,12 @@ export function ChatTitle({
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const isParametric = conversation.type === 'parametric';
-
-  // Creative mesh generation outlives the browser stream. The meshes row is
-  // inserted with status=pending before the expensive local generation starts,
-  // so it is the durable source of truth for "work is still happening" after
-  // navigation, Android backgrounding, reconnects, or a full page reload.
-  const { data: pendingMeshCount = 0 } = useQuery({
-    queryKey: ['creative-generation-activity', conversation.id],
-    enabled: conversation.type === 'creative',
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('meshes')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversation_id', conversation.id)
-        .eq('status', 'pending');
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-    refetchInterval: 2500,
-    refetchOnWindowFocus: true,
-  });
-  const hasPendingMesh = pendingMeshCount > 0;
+  const instructionProfileId =
+    conversation.settings?.instructionProfileId ??
+    DEFAULT_AI_INSTRUCTION_PROFILE_ID;
+  const instructionProfileLabel =
+    getAiInstructionProfileDefinition(instructionProfileId)?.label ??
+    instructionProfileId;
 
   // Keep local state in sync when switching conversations quickly
   useEffect(() => {
@@ -115,7 +111,7 @@ export function ChatTitle({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <div className="min-w-0 flex-1">
         <AnimatePresence mode="wait" initial={false}>
           {isEditingTitle ? (
@@ -170,7 +166,7 @@ export function ChatTitle({
                         <DropdownMenuTrigger asChild>
                           <div
                             className={cn(
-                              'flex h-8 w-fit cursor-pointer items-center justify-center gap-1 overflow-hidden rounded p-0 px-2 text-[17px] font-medium tracking-tight text-adam-neutral-10 transition-colors duration-200',
+                              'flex h-8 w-fit max-w-full cursor-pointer items-center justify-center gap-1 overflow-hidden rounded p-0 px-2 text-[17px] font-medium tracking-tight text-adam-neutral-10 transition-colors duration-200',
                               isMenuOpen
                                 ? 'bg-black text-adam-neutral-0'
                                 : 'hover:bg-black hover:text-adam-neutral-0',
@@ -178,13 +174,16 @@ export function ChatTitle({
                           >
                             <span
                               className={cn(
-                                'line-clamp-1 select-text',
+                                'min-w-0 line-clamp-1 select-text',
                                 isParametric && 'text-center',
                               )}
                             >
                               {conversation.title || 'Chat'}
                             </span>
                             <ChevronDown className="h-4 w-4 min-w-4" />
+                            <InstructionProfileBadge
+                              label={instructionProfileLabel}
+                            />
                           </div>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
@@ -224,50 +223,38 @@ export function ChatTitle({
                     </Dialog>
                   ) : (
                     // Desktop view: Click to edit
-                    <div className="flex h-8 w-fit items-center rounded font-medium tracking-tight text-adam-neutral-10 transition-colors duration-200 hover:bg-black hover:text-adam-neutral-0">
+                    <div className="flex h-8 w-fit max-w-full items-center gap-2 rounded font-medium tracking-tight text-adam-neutral-10 transition-colors duration-200 hover:bg-black hover:text-adam-neutral-0">
                       <span
                         className={cn(
-                          'line-clamp-1 cursor-pointer px-2 text-left text-[17px]',
+                          'min-w-0 line-clamp-1 cursor-pointer px-2 text-left text-[17px]',
                           isParametric && 'text-center',
                         )}
                         onClick={() => setIsEditingTitle(true)}
                       >
                         {conversation.title || 'Chat'}
                       </span>
+                      <InstructionProfileBadge label={instructionProfileLabel} />
                     </div>
                   )}
                 </>
               ) : (
                 // Fallback if no updateConversation (e.g., view-only mode)
-                <div className="flex h-8 w-fit items-center rounded font-medium tracking-tight text-adam-neutral-10">
+                <div className="flex h-8 w-fit max-w-full items-center gap-2 rounded font-medium tracking-tight text-adam-neutral-10">
                   <span
                     className={cn(
-                      'line-clamp-1 px-2 text-left text-[17px]',
+                      'min-w-0 line-clamp-1 px-2 text-left text-[17px]',
                       isParametric && 'text-center',
                     )}
                   >
                     {conversation.title || 'Chat'}
                   </span>
+                  <InstructionProfileBadge label={instructionProfileLabel} />
                 </div>
               )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      {hasPendingMesh && (
-        <div className="w-fit shrink-0 rounded-full border border-adam-neutral-700 bg-adam-neutral-900/70 px-2.5 py-1 text-xs text-adam-text-secondary">
-          <ActivityIndicator
-            label={
-              pendingMeshCount === 1
-                ? 'Generating 3D model'
-                : `Generating ${pendingMeshCount} 3D models`
-            }
-            showLabel
-            size="sm"
-          />
-        </div>
-      )}
     </div>
   );
 }

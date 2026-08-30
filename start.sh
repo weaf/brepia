@@ -33,15 +33,24 @@ curl -sf -m 2 "${LLAMA_HEALTH}" > /dev/null 2>&1 && echo "llama-swap: up" || ech
 
 # podman <5 cannot parse {{.Label "key"}} in ps --format templates, which the
 # Supabase CLI relies on to find project containers. Prepend a shim for local
-# status/credential reads. NOx owns the Supabase container lifecycle.
+# lifecycle, status and credential reads through the repository-local CLI.
 export PATH="${SCRIPT_DIR}/scripts/podman:${PATH}"
 
-echo "=== Checking Supabase (NOx-managed) ==="
-if ! npx supabase status > /dev/null 2>&1; then
-  echo "Supabase: ERROR - local stack is not running. Start it via NOx, then rerun ./start.sh."
-  exit 1
+echo "=== Checking Supabase ==="
+if npx supabase status > /dev/null 2>&1; then
+  echo "Supabase: up"
+else
+  echo "Supabase: local stack is not running - starting via repository-local CLI"
+  if ! npx supabase start; then
+    echo "Supabase: ERROR - npx supabase start failed"
+    exit 1
+  fi
+  if ! npx supabase status > /dev/null 2>&1; then
+    echo "Supabase: ERROR - local stack did not become available after start"
+    exit 1
+  fi
+  echo "Supabase: up (started via npx)"
 fi
-echo "Supabase: up (NOx-managed)"
 
 # Make the running local Supabase credentials available to the TanStack/Vite
 # server process. Recent Supabase CLI pretty output shows publishable/secret

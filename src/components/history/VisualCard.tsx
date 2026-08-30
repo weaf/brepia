@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   Clock,
@@ -10,6 +10,7 @@ import {
   LockKeyhole,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +41,7 @@ import {
   getBuildParametricModelOutput,
 } from '@shared/parametricParts';
 import type { MeshFileType } from '@shared/types';
+import { cn } from '@/lib/utils';
 
 interface VisualCardProps {
   conversation: HistoryConversation;
@@ -49,6 +51,9 @@ interface VisualCardProps {
     conversationId: string,
     newPrivacy: 'public' | 'private',
   ) => void;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onSelect?: (conversationId: string) => void;
 }
 
 type VisualPreview =
@@ -61,6 +66,9 @@ export function VisualCard({
   onDelete,
   onRename,
   onTogglePrivacy,
+  selectionMode = false,
+  selected = false,
+  onSelect,
 }: VisualCardProps) {
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -125,12 +133,28 @@ export function VisualCard({
     },
   });
 
+  const handleSelectionClick = (event: MouseEvent) => {
+    if (!selectionMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect?.(conversation.id);
+  };
+
   return (
     <div
       ref={cardRef}
-      className="group relative overflow-hidden rounded-xl border-2 border-adam-neutral-700 bg-adam-background-2 transition-all duration-200 hover:border-adam-blue hover:shadow-[0_0_20px_rgba(0,166,255,0.3)]"
+      className={cn(
+        'group relative overflow-hidden rounded-xl border-2 bg-adam-background-2 transition-all duration-200',
+        selected
+          ? 'border-adam-blue shadow-[0_0_20px_rgba(0,166,255,0.3)]'
+          : 'border-adam-neutral-700 hover:border-adam-blue hover:shadow-[0_0_20px_rgba(0,166,255,0.3)]',
+      )}
     >
-      <Link to="/editor/$id" params={{ id: conversation.id }}>
+      <Link
+        to="/editor/$id"
+        params={{ id: conversation.id }}
+        onClick={handleSelectionClick}
+      >
         <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-br from-adam-background-1 to-adam-background-2">
           {thumbnailUrl ? (
             <img
@@ -173,87 +197,109 @@ export function VisualCard({
         </div>
       </Link>
 
-      <div className="absolute right-2 top-2">
-        <AlertDialog>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="h-8 w-8 rounded-full bg-adam-background-1/80 p-0 backdrop-blur-sm transition-colors duration-200 hover:bg-adam-neutral-950"
-                onClick={(e) => e.stopPropagation()}
+      {selectionMode && (
+        <div
+          className="absolute left-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-adam-background-1/85 backdrop-blur-sm"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onSelect?.(conversation.id)}
+            aria-label={`${selected ? 'Deselect' : 'Select'} ${conversation.title}`}
+            className="h-5 w-5 border-adam-neutral-50"
+          />
+        </div>
+      )}
+
+      {!selectionMode && (
+        <div className="absolute right-2 top-2">
+          <AlertDialog>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-8 w-8 rounded-full bg-adam-background-1/80 p-0 backdrop-blur-sm transition-colors duration-200 hover:bg-adam-neutral-950"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical className="h-4 w-4 text-adam-neutral-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="bg-adam-background-2"
               >
-                <MoreVertical className="h-4 w-4 text-adam-neutral-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-[#191A1A]">
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRename(conversation.id, conversation.title);
-                }}
-                className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 focus:bg-adam-neutral-950"
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Rename
-              </DropdownMenuItem>
-              {conversation.privacy === 'private' ? (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    onTogglePrivacy(conversation.id, 'public');
+                    onRename(conversation.id, conversation.title);
                   }}
                   className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 focus:bg-adam-neutral-950"
                 >
-                  <GoodEarth className="mr-2 h-4 w-4" />
-                  Make Public
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Rename
                 </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem
+                {conversation.privacy === 'private' ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePrivacy(conversation.id, 'public');
+                    }}
+                    className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 focus:bg-adam-neutral-950"
+                  >
+                    <GoodEarth className="mr-2 h-4 w-4" />
+                    Make Public
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePrivacy(conversation.id, 'private');
+                    }}
+                    className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 focus:bg-adam-neutral-950"
+                  >
+                    <LockKeyhole className="mr-2 h-4 w-4" />
+                    Make Private
+                  </DropdownMenuItem>
+                )}
+                <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 hover:text-red-500 focus:bg-adam-neutral-950 focus:text-red-500">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <AlertDialogContent className="border-[2px] border-adam-neutral-700 bg-adam-background-1">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-adam-neutral-100">
+                  Delete Creation
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this creation? This action
+                  cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={(e) => e.stopPropagation()}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
                   onClick={(e) => {
                     e.stopPropagation();
-                    onTogglePrivacy(conversation.id, 'private');
+                    onDelete(conversation.id);
                   }}
-                  className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 focus:bg-adam-neutral-950"
+                  className="bg-red-600 hover:bg-red-700"
                 >
-                  <LockKeyhole className="mr-2 h-4 w-4" />
-                  Make Private
-                </DropdownMenuItem>
-              )}
-              <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <DropdownMenuItem className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 hover:text-red-500 focus:bg-adam-neutral-950 focus:text-red-500">
-                  <Trash2 className="mr-2 h-4 w-4" />
                   Delete
-                </DropdownMenuItem>
-              </AlertDialogTrigger>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <AlertDialogContent className="border-[2px] border-adam-neutral-700 bg-adam-background-1">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-adam-neutral-100">
-                Delete Creation
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete this creation? This action
-                cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={(e) => e.stopPropagation()}>
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(conversation.id);
-                }}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
     </div>
   );
 }

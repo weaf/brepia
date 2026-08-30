@@ -2,6 +2,8 @@
 
 Updated: 2026-08-27
 
+> Historical correction (2026-08-30): references in the original handover to a Supabase lifecycle manager named `NOx` were based on a typo where `npx` was intended. The canonical local lifecycle is the repository-local `npx supabase` CLI with the rootless Podman environment documented in `AGENTS.md` and `docs/local_supabase_lifecycle.md`.
+
 This handover supplements `docs/brepia_phase6_checkpoint.md` and captures the browser lifecycle/stable-runtime work completed after that checkpoint.
 
 ## Branch
@@ -13,11 +15,17 @@ This handover supplements `docs/brepia_phase6_checkpoint.md` and captures the br
 
 ## Local environment
 
-Supabase lifecycle is owned by **NOx**.
+The local Supabase stack is managed through the repository-local CLI:
 
-`start.sh` must not start or stop Supabase. It checks that the NOx-managed local stack is already running and reads the local credentials from it.
+```bash
+npx supabase start
+npx supabase status
+npx supabase stop
+```
 
-After NOx starts the stack, repository-local operations remain:
+On the current workstation, `start.sh` configures the rootless Podman socket/shim, checks the local `cadam` stack and starts it with `npx supabase start` when needed.
+
+Repository-local database operations remain:
 
 ```bash
 npx supabase migration up
@@ -50,7 +58,7 @@ An attempted custom `/@vite/client` stub was reverted after it broke the TanStac
 
 Normal `./start.sh` now uses a production-like runtime instead of Vite dev mode:
 
-1. check the NOx-managed Supabase stack;
+1. configure the rootless Podman environment and ensure the local Supabase `cadam` stack is running through the repository-local CLI;
 2. start the existing supporting services/OpenCode flow;
 3. run `npm run build`;
 4. choose a free internal loopback port dynamically;

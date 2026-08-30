@@ -6,10 +6,20 @@
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import type { AiPreferencesDto } from '@shared/aiSettings';
+import {
+  AiInstructionProfileIdSchema,
+  DEFAULT_INSTRUCTION_PROFILE_ID,
+  InstructionProfileDefaultsSchema,
+  RuntimeOverridesSchema,
+} from '@shared/aiInstructionSettings';
 
 const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   hiddenModelIds: [],
+  defaultInstructionProfileId: DEFAULT_INSTRUCTION_PROFILE_ID,
   defaultPromptProfileId: null,
+  defaultCreativePromptProfileId: null,
+  instructionProfileDefaults: {},
+  runtimeOverrides: {},
   defaultParametricModelId: null,
   defaultCreativeModelId: null,
   visionFastModelId: null,
@@ -19,7 +29,11 @@ const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
 type PreferenceRow = {
   user_id: string;
   hidden_model_ids: string[];
+  default_instruction_profile_id?: string | null;
   default_prompt_profile_id: string | null;
+  default_creative_prompt_profile_id?: string | null;
+  instruction_profile_defaults?: unknown;
+  runtime_overrides?: unknown;
   default_parametric_model_id?: string | null;
   default_creative_model_id?: string | null;
   vision_fast_model_id?: string | null;
@@ -28,11 +42,35 @@ type PreferenceRow = {
   updated_at: string;
 };
 
+function parseInstructionProfileId(value: unknown) {
+  const parsed = AiInstructionProfileIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_INSTRUCTION_PROFILE_ID;
+}
+
+function parseInstructionProfileDefaults(value: unknown) {
+  const parsed = InstructionProfileDefaultsSchema.safeParse(value ?? {});
+  return parsed.success ? parsed.data : {};
+}
+
+function parseRuntimeOverrides(value: unknown) {
+  const parsed = RuntimeOverridesSchema.safeParse(value ?? {});
+  return parsed.success ? parsed.data : {};
+}
+
 function toDto(row: PreferenceRow): AiPreferencesDto {
   return {
     userId: row.user_id,
     hiddenModelIds: row.hidden_model_ids,
+    defaultInstructionProfileId: parseInstructionProfileId(
+      row.default_instruction_profile_id,
+    ),
     defaultPromptProfileId: row.default_prompt_profile_id,
+    defaultCreativePromptProfileId:
+      row.default_creative_prompt_profile_id ?? null,
+    instructionProfileDefaults: parseInstructionProfileDefaults(
+      row.instruction_profile_defaults,
+    ),
+    runtimeOverrides: parseRuntimeOverrides(row.runtime_overrides),
     defaultParametricModelId: row.default_parametric_model_id ?? null,
     defaultCreativeModelId: row.default_creative_model_id ?? null,
     visionFastModelId: row.vision_fast_model_id ?? null,
@@ -64,8 +102,6 @@ async function loadPreferences(userId: string): Promise<AiPreferencesDto> {
     .single();
 
   if (insertErr) {
-    // Race-safe: another request may have inserted between our select and
-    // insert. Try a second select before giving up.
     const { data: retry } = await supabase
       .from('user_ai_preferences')
       .select('*')
@@ -73,27 +109,22 @@ async function loadPreferences(userId: string): Promise<AiPreferencesDto> {
       .maybeSingle();
 
     if (retry) return toDto(retry as PreferenceRow);
-
-    // Keep the settings UI usable if persistence is temporarily unavailable.
     return { userId, ...DEFAULT_PREFERENCES };
   }
 
   return toDto(inserted as PreferenceRow);
 }
 
-/** Get (or lazily create) preferences for an authenticated Supabase user. */
 export async function getPreferences(user: User): Promise<AiPreferencesDto> {
   return loadPreferences(user.id);
 }
 
-/** Server-internal variant for request paths that already have a user id. */
 export async function getPreferencesByUserId(
   userId: string,
 ): Promise<AiPreferencesDto> {
   return loadPreferences(userId);
 }
 
-/** Update hidden_model_ids for the given user. */
 export async function updateHiddenModelIds(
   user: User,
   hiddenModelIds: string[],
@@ -118,7 +149,6 @@ export async function updateHiddenModelIds(
   return toDto(data as PreferenceRow);
 }
 
-/** Set the default prompt profile reference. Pass null to reset. */
 export async function setDefaultPromptProfileId(
   user: User,
   defaultPromptProfileId: string | null,

@@ -2,11 +2,22 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { MotionProps } from 'framer-motion';
-import { MessageSquare, Plus, LayoutGrid, List } from 'lucide-react';
+import { MessageSquare, Plus, LayoutGrid, List, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -43,6 +54,10 @@ export function HistoryView() {
     useState<Conversation | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [open, setOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<
+    Set<string>
+  >(new Set());
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -107,53 +122,71 @@ export function HistoryView() {
     }
   }, [conversationQuery.isError, toast]);
 
-  const deleteConversation = useMutation({
-    mutationFn: async (conversationId: string) => {
+  const deleteConversations = useMutation({
+    mutationFn: async (conversationIds: string[]) => {
+      if (conversationIds.length === 0) return;
+
       const { error } = await supabase
         .from('conversations')
         .delete()
-        .eq('id', conversationId);
+        .in('id', conversationIds);
 
       if (error) throw error;
 
-      supabase.storage
-        .from('images')
-        .list(`${user?.id}/${conversationId}`)
-        .then(({ data: list }) => {
-          if (list) {
-            const filesToRemove = list.map(
-              (file) => `${user?.id}/${conversationId}/${file.name}`,
-            );
-            supabase.storage.from('images').remove(filesToRemove);
-          }
-        });
+      const userId = user?.id;
+      if (!userId) return;
+
+      // Preserve the existing non-blocking image cleanup semantics for each
+      // deleted conversation. Database deletion remains the authoritative
+      // operation; storage cleanup must not make a successful delete look
+      // failed to the user.
+      void Promise.all(
+        conversationIds.map(async (conversationId) => {
+          const { data: list } = await supabase.storage
+            .from('images')
+            .list(`${userId}/${conversationId}`);
+          if (!list?.length) return;
+          const filesToRemove = list.map(
+            (file) => `${userId}/${conversationId}/${file.name}`,
+          );
+          await supabase.storage.from('images').remove(filesToRemove);
+        }),
+      );
     },
-    onMutate: async (conversationId) => {
+    onMutate: async (conversationIds) => {
       await queryClient.cancelQueries({ queryKey: ['conversations'] });
-      const previousConversations = queryClient.getQueryData(['conversations']);
+      const previousConversations = queryClient.getQueryData<
+        HistoryConversation[]
+      >(['conversations']);
+      const deletedIds = new Set(conversationIds);
       queryClient.setQueryData(
         ['conversations'],
-        (old: HistoryConversation[]) =>
-          old.filter((conv) => conv.id !== conversationId),
+        (old: HistoryConversation[] | undefined) =>
+          old?.filter((conv) => !deletedIds.has(conv.id)) ?? [],
       );
       return { previousConversations };
     },
-    onSuccess: () => {
+    onSuccess: (_data, conversationIds) => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setSelectedConversationIds(new Set());
+      setSelectionMode(false);
       toast({
         title: 'Success',
-        description: 'Conversation deleted successfully',
+        description:
+          conversationIds.length === 1
+            ? 'Creation deleted successfully'
+            : `${conversationIds.length} creations deleted successfully`,
       });
     },
-    onError: (error: unknown, _conversationId: string, context) => {
-      console.error('Error deleting conversation:', error);
+    onError: (error: unknown, _conversationIds: string[], context) => {
+      console.error('Error deleting conversations:', error);
       queryClient.setQueryData(
         ['conversations'],
         context?.previousConversations,
       );
       toast({
         title: 'Error',
-        description: 'Failed to delete conversation',
+        description: 'Failed to delete selected creations',
         variant: 'destructive',
       });
     },
@@ -286,6 +319,42 @@ export function HistoryView() {
       );
     }) ?? [];
 
+  const toggleConversationSelection = (conversationId: string) => {
+    setSelectedConversationIds((current) => {
+      const next = new Set(current);
+      if (next.has(conversationId)) next.delete(conversationId);
+      else next.add(conversationId);
+      return next;
+    });
+  };
+
+  const leaveSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedConversationIds(new Set());
+  };
+
+  const allVisibleSelected =
+    filteredConversations.length > 0 &&
+    filteredConversations.every((conversation) =>
+      selectedConversationIds.has(conversation.id),
+    );
+
+  const toggleSelectAllVisible = () => {
+    setSelectedConversationIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        for (const conversation of filteredConversations) {
+          next.delete(conversation.id);
+        }
+      } else {
+        for (const conversation of filteredConversations) {
+          next.add(conversation.id);
+        }
+      }
+      return next;
+    });
+  };
+
   const groupConversationsByDate = () => {
     const groups: { [key: string]: HistoryConversation[] } = {};
 
@@ -311,54 +380,67 @@ export function HistoryView() {
     <>
       <div className="flex h-full min-w-0 flex-1 flex-col bg-adam-background-1 pt-8 md:pt-0">
         <div className="mx-auto w-full max-w-6xl px-6 pb-4 pt-10 md:px-20 md:py-4">
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between gap-3 py-3">
             <h1 className="flex items-center gap-2 px-2 text-2xl font-medium text-adam-neutral-10">
               Past Creations
             </h1>
 
-            {/* View Toggle */}
-            <div
-              role="group"
-              aria-label="View mode"
-              className="relative grid grid-cols-2 items-center rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-1"
-            >
-              <span
-                className={cn(
-                  'pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-md bg-adam-neutral-950 shadow-[0_1px_10px_rgba(0,0,0,0.22)] transition-transform ease-out',
-                  shouldReduceMotion ? 'duration-0' : 'duration-300',
-                  viewMode === 'visual' && 'translate-x-full',
-                )}
-              />
+            <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                aria-pressed={viewMode === 'list'}
-                aria-label="List view"
-                onClick={() => setViewMode('list')}
-                className={`relative z-10 h-8 px-3 transition-colors duration-200 ${
-                  viewMode === 'list'
-                    ? 'text-adam-neutral-50 hover:bg-transparent hover:text-adam-neutral-50'
-                    : 'text-adam-neutral-400 hover:bg-adam-neutral-950/40 hover:text-adam-neutral-50'
-                }`}
+                onClick={() =>
+                  selectionMode ? leaveSelectionMode() : setSelectionMode(true)
+                }
+                className="h-8 px-3 text-adam-neutral-300 hover:bg-adam-neutral-950/40 hover:text-adam-neutral-50"
               >
-                <List className="mr-2 h-4 w-4" />
-                List
+                {selectionMode ? 'Cancel' : 'Select'}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-pressed={viewMode === 'visual'}
-                aria-label="Visual view"
-                onClick={() => setViewMode('visual')}
-                className={`relative z-10 h-8 px-3 transition-colors duration-200 ${
-                  viewMode === 'visual'
-                    ? 'text-adam-neutral-50 hover:bg-transparent hover:text-adam-neutral-50'
-                    : 'text-adam-neutral-400 hover:bg-adam-neutral-950/40 hover:text-adam-neutral-50'
-                }`}
+
+              {/* View Toggle */}
+              <div
+                role="group"
+                aria-label="View mode"
+                className="relative grid grid-cols-2 items-center rounded-lg border border-adam-neutral-700 bg-adam-background-2 p-1"
               >
-                <LayoutGrid className="mr-2 h-4 w-4" />
-                Visual
-              </Button>
+                <span
+                  className={cn(
+                    'pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-md bg-adam-neutral-950 shadow-[0_1px_10px_rgba(0,0,0,0.22)] transition-transform ease-out',
+                    shouldReduceMotion ? 'duration-0' : 'duration-300',
+                    viewMode === 'visual' && 'translate-x-full',
+                  )}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={viewMode === 'list'}
+                  aria-label="List view"
+                  onClick={() => setViewMode('list')}
+                  className={`relative z-10 h-8 px-3 transition-colors duration-200 ${
+                    viewMode === 'list'
+                      ? 'text-adam-neutral-50 hover:bg-transparent hover:text-adam-neutral-50'
+                      : 'text-adam-neutral-400 hover:bg-adam-neutral-950/40 hover:text-adam-neutral-50'
+                  }`}
+                >
+                  <List className="mr-2 h-4 w-4" />
+                  List
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={viewMode === 'visual'}
+                  aria-label="Visual view"
+                  onClick={() => setViewMode('visual')}
+                  className={`relative z-10 h-8 px-3 transition-colors duration-200 ${
+                    viewMode === 'visual'
+                      ? 'text-adam-neutral-50 hover:bg-transparent hover:text-adam-neutral-50'
+                      : 'text-adam-neutral-400 hover:bg-adam-neutral-950/40 hover:text-adam-neutral-50'
+                  }`}
+                >
+                  <LayoutGrid className="mr-2 h-4 w-4" />
+                  Visual
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -370,6 +452,67 @@ export function HistoryView() {
               className="border-0 bg-adam-background-2 pl-6 text-base shadow-[inset_0_0_10px_0_rgba(0,0,0,0.32),0_0_0_2px_rgba(0,0,0,0)] ring-0 transition-shadow duration-300 ease-in-out hover:shadow-[inset_0_0_4px_0_rgba(0,0,0,0.16),0_0_0_2px_rgba(60,60,60,1)] focus:shadow-[inset_0_0_4px_0_rgba(0,0,0,0.16),0_0_0_2px_#00A6FF] focus:outline-none sm:text-sm"
             />
           </div>
+
+          {selectionMode && filteredConversations.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-adam-neutral-700 bg-adam-background-2 px-3 py-2">
+              <span className="text-sm text-adam-neutral-300">
+                {selectedConversationIds.size} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleSelectAllVisible}
+                  className="text-adam-neutral-300 hover:bg-adam-neutral-950 hover:text-adam-neutral-50"
+                >
+                  {allVisibleSelected ? 'Deselect all' : 'Select all'}
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      disabled={
+                        selectedConversationIds.size === 0 ||
+                        deleteConversations.isPending
+                      }
+                      className="bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="border-[2px] border-adam-neutral-700 bg-adam-background-1">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-adam-neutral-100">
+                        Delete selected creations
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete{' '}
+                        {selectedConversationIds.size}{' '}
+                        {selectedConversationIds.size === 1
+                          ? 'creation'
+                          : 'creations'}
+                        ? This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() =>
+                          deleteConversations.mutate([
+                            ...selectedConversationIds,
+                          ])
+                        }
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          )}
         </div>
 
         <ScrollArea className="flex-1">
@@ -422,7 +565,7 @@ export function HistoryView() {
                       <VisualCard
                         key={conversation.id}
                         conversation={conversation}
-                        onDelete={(id) => deleteConversation.mutate(id)}
+                        onDelete={(id) => deleteConversations.mutate([id])}
                         onRename={(_id, title) => {
                           setEditingConversation(conversation);
                           setNewTitle(title);
@@ -434,6 +577,9 @@ export function HistoryView() {
                             newPrivacy: privacy,
                           })
                         }
+                        selectionMode={selectionMode}
+                        selected={selectedConversationIds.has(conversation.id)}
+                        onSelect={toggleConversationSelection}
                       />
                     ))}
                   </motion.div>
@@ -467,7 +613,9 @@ export function HistoryView() {
                               <ConversationCard
                                 key={conversation.id}
                                 conversation={conversation}
-                                onDelete={(id) => deleteConversation.mutate(id)}
+                                onDelete={(id) =>
+                                  deleteConversations.mutate([id])
+                                }
                                 onRename={(_id, title) => {
                                   setEditingConversation(conversation);
                                   setNewTitle(title);
@@ -480,6 +628,11 @@ export function HistoryView() {
                                   })
                                 }
                                 isEditing={!!editingConversation}
+                                selectionMode={selectionMode}
+                                selected={selectedConversationIds.has(
+                                  conversation.id,
+                                )}
+                                onSelect={toggleConversationSelection}
                               />
                             ))}
                           </div>
@@ -502,14 +655,16 @@ export function HistoryView() {
         onRename={handleRename}
       />
 
-      <button
-        type="button"
-        aria-label="Create new item"
-        onClick={() => navigate({ to: '/' })}
-        className="fixed bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-adam-neutral-100 text-adam-neutral-950 shadow-[0_4px_32px_rgba(0,0,0,0.48)] md:hidden"
-      >
-        <Plus className="h-10 w-10 stroke-[2px]" />
-      </button>
+      {!selectionMode && (
+        <button
+          type="button"
+          aria-label="Create new item"
+          onClick={() => navigate({ to: '/' })}
+          className="fixed bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-adam-neutral-100 text-adam-neutral-950 shadow-[0_4px_32px_rgba(0,0,0,0.48)] md:hidden"
+        >
+          <Plus className="h-10 w-10 stroke-[2px]" />
+        </button>
+      )}
     </>
   );
 }

@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "scope": "parametric",
+  "cases": [
+    {
+      "id": "P01-exact-mechanical",
+      "prompt": "Create an L-bracket 48 mm wide, 30 mm tall, 3 mm thick, with two M4 clearance holes exactly 32.0 mm center-to-center on the vertical face and a 90 degree bend. Keep those dimensions exact.",
+      "focus": ["constraintFidelity", "artifactCorrectness", "parameterQuality"],
+      "hardConstraints": ["48 mm width", "30 mm height", "3 mm thickness", "M4 clearance", "32.0 mm center-to-center", "90 degree bend"]
+    },
+    {
+      "id": "P02-literal-simple",
+      "prompt": "Make a plain cylindrical coffee mug, 90 mm tall and 80 mm outside diameter, with a simple handle and 3 mm wall thickness. No decoration, text, lid, saucer, feet, or extra features.",
+      "focus": ["constraintFidelity", "visualTaskCompletion", "responseDiscipline"]
+    },
+    {
+      "id": "P03-organic-product",
+      "prompt": "Create an ergonomic handheld grip 120 mm long with a smooth palm swell, rounded ends, a shallow index-finger groove, and a flat mounting face on one side. Keep the form continuous and printable rather than faceted or built from obvious stacked cylinders.",
+      "focus": ["visualTaskCompletion", "artifactCorrectness", "parameterQuality"]
+    },
+    {
+      "id": "P04-edit-preservation",
+      "prompt": "On the current model, increase only the existing cable opening width by 4 mm and add a 1 mm edge fillet around that opening. Preserve all other dimensions, features, parameters, and layout.",
+      "requiresExistingArtifact": true,
+      "focus": ["editPreservation", "constraintFidelity", "iterationEfficiency"]
+    },
+    {
+      "id": "P05-stl-import",
+      "prompt": "Add a rectangular mounting foot under the attached STL and cut two 4.5 mm mounting holes through the foot. Preserve the attached model itself. Orient it so its natural base sits on the foot; do not rotate it arbitrarily.",
+      "requiresAttachment": true,
+      "focus": ["artifactCorrectness", "constraintFidelity", "parameterQuality"]
+    },
+    {
+      "id": "P06-customizer",
+      "prompt": "Create a parametric storage tray with editable width, depth, height, wall thickness, corner radius, divider count, and body color. Make the parameters easy to understand in the Customizer.",
+      "focus": ["parameterQuality", "artifactCorrectness", "visualTaskCompletion"]
+    },
+    {
+      "id": "P07-compile-recovery",
+      "prompt": "Create a compact desk cable grommet with a removable split insert and a 60 mm outer flange. If the first candidate fails validation or compilation, fix it and return a complete corrected model rather than explaining the failed draft.",
+      "injectValidationFailure": true,
+      "focus": ["artifactCorrectness", "iterationEfficiency", "responseDiscipline"]
+    },
+    {
+      "id": "P08-visual-recovery",
+      "prompt": "Create a phone stand with a back support, bottom shelf, front retaining lip, charging-cable opening, and two side braces. All five requested features must be clearly visible in the rendered views before you finish.",
+      "focus": ["visualTaskCompletion", "iterationEfficiency", "constraintFidelity"]
+    }
+  ]
+}

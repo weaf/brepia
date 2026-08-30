@@ -1,16 +1,21 @@
 import { Canvas } from '@react-three/fiber';
 import {
-  OrbitControls,
+  ArcballControls,
   Stage,
   Environment,
   OrthographicCamera,
   PerspectiveCamera,
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Moon, Sun } from 'lucide-react';
 import { OrthographicPerspectiveToggle } from '@/components/viewer/OrthographicPerspectiveToggle';
 import { ViewGizmo } from '@/components/viewer/ViewGizmo';
+import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+
+const DEFAULT_VIEWER_BACKGROUND_COLOR = '#3B3B3B';
+const VIEWER_BACKGROUND_STORAGE_KEY = 'brepia.viewer.backgroundLightness';
 
 interface ThreeSceneProps {
   geometry: THREE.BufferGeometry | null;
@@ -24,17 +29,43 @@ export function ThreeScene({
   geometry,
   color,
   isMobile = false,
-  backgroundColor = '#3B3B3B',
+  backgroundColor = DEFAULT_VIEWER_BACKGROUND_COLOR,
   coloredGroup,
 }: ThreeSceneProps) {
   const [isOrthographic, setIsOrthographic] = useState(true);
+  const defaultBackgroundLightness = useMemo(
+    () => hexColorToLightness(backgroundColor),
+    [backgroundColor],
+  );
+  const [backgroundLightness, setBackgroundLightness] = useState(() => {
+    if (typeof window === 'undefined') return defaultBackgroundLightness;
+    const stored = Number(
+      window.localStorage.getItem(VIEWER_BACKGROUND_STORAGE_KEY),
+    );
+    return Number.isFinite(stored)
+      ? Math.min(100, Math.max(0, stored))
+      : defaultBackgroundLightness;
+  });
+  const viewerBackgroundColor = useMemo(
+    () => lightnessToGrayHex(backgroundLightness),
+    [backgroundLightness],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      VIEWER_BACKGROUND_STORAGE_KEY,
+      String(backgroundLightness),
+    );
+  }, [backgroundLightness]);
 
   // Store the initial isMobile value to prevent position changes during resize
   const [initialIsMobile] = useState(isMobile);
 
   // The colored group's meshes sit at their raw OpenSCAD coordinates.
   // Offset so the combined bounds are centered at origin, mirroring the
-  // STL path's geom.center() behavior.
+  // STL path's geom.center() behavior. Camera controls can then use the scene
+  // origin as a stable visual pivot regardless of the model's authored datum.
   const groupCenterOffset = useMemo(() => {
     if (!coloredGroup) return null;
     const box = new THREE.Box3().setFromObject(coloredGroup);
@@ -50,10 +81,15 @@ export function ThreeScene({
           way to <Await> inside TanStack's StartClient and tears down the
           entire app subtree. */}
       <Suspense
-        fallback={<div className="h-full w-full" style={{ backgroundColor }} />}
+        fallback={
+          <div
+            className="h-full w-full"
+            style={{ backgroundColor: viewerBackgroundColor }}
+          />
+        }
       >
         <Canvas className="block h-full w-full">
-          <color attach="background" args={[backgroundColor]} />
+          <color attach="background" args={[viewerBackgroundColor]} />
           {isOrthographic ? (
             <OrthographicCamera
               makeDefault
@@ -114,14 +150,37 @@ export function ThreeScene({
           followCamera={false}
           infiniteGrid={true}
         /> */}
-          <OrbitControls
+          <ArcballControls
             makeDefault
-            enableDamping={true}
-            dampingFactor={0.05}
+            minZoom={0.01}
+            maxZoom={1000}
           />
           {!initialIsMobile && <ViewGizmo />}
         </Canvas>
       </Suspense>
+
+      <div
+        className={cn(
+          'absolute bottom-2 left-2 z-10 flex items-center gap-2 rounded-full border border-adam-neutral-700/70 bg-adam-background-1/85 px-2 py-1 backdrop-blur-sm',
+          initialIsMobile ? 'w-36' : 'w-44',
+        )}
+        title="Viewer background"
+      >
+        <Moon className="h-3.5 w-3.5 shrink-0 text-adam-text-primary/70" />
+        <Slider
+          value={[backgroundLightness]}
+          defaultValue={[defaultBackgroundLightness]}
+          min={0}
+          max={100}
+          step={1}
+          onValueChange={(values) => setBackgroundLightness(values[0])}
+          variant="capsule"
+          defaultMarkerStyle="line"
+          className="h-6 flex-1"
+          aria-label="Viewer background brightness"
+        />
+        <Sun className="h-3.5 w-3.5 shrink-0 text-adam-text-primary/70" />
+      </div>
 
       <div
         className={cn(
@@ -138,4 +197,25 @@ export function ThreeScene({
       </div>
     </div>
   );
+}
+
+function hexColorToLightness(color: string) {
+  const normalized = color.trim().replace(/^#/, '');
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) {
+    return 23;
+  }
+
+  const value = Number.parseInt(normalized, 16);
+  const red = (value >> 16) & 0xff;
+  const green = (value >> 8) & 0xff;
+  const blue = value & 0xff;
+  return Math.round(((red + green + blue) / 3 / 255) * 100);
+}
+
+function lightnessToGrayHex(lightness: number) {
+  const clamped = Math.min(100, Math.max(0, lightness));
+  const channel = Math.round((clamped / 100) * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${channel}${channel}${channel}`;
 }

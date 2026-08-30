@@ -53,13 +53,13 @@ export function UpdatePasswordView() {
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
           <div className="mb-4 flex flex-col items-center justify-center gap-3">
             <BrepiaBrand showByNoty />
-            <h1 className="text-2xl font-semibold text-white">
+            <h1 className="text-2xl font-semibold text-adam-text-primary">
               Update Password
             </h1>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-white">
+              <Label htmlFor="password" className="text-adam-text-primary">
                 New Password
               </Label>
               <Input
@@ -69,12 +69,15 @@ export function UpdatePasswordView() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="border-gray-700 bg-adam-bg-dark text-white placeholder:text-gray-400"
+                className="border-adam-neutral-700 bg-adam-bg-dark text-adam-text-primary placeholder:text-adam-text-secondary"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-white">
+              <Label
+                htmlFor="confirmPassword"
+                className="text-adam-text-primary"
+              >
                 Confirm Password
               </Label>
               <Input
@@ -84,7 +87,7 @@ export function UpdatePasswordView() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className="border-gray-700 bg-adam-bg-dark text-white placeholder:text-gray-400"
+                className="border-adam-neutral-700 bg-adam-bg-dark text-adam-text-primary placeholder:text-adam-text-secondary"
               />
             </div>
 

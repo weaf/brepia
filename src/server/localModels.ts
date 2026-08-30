@@ -1,3 +1,4 @@
+import { isInternalCreativeRuntimeModelId } from '@shared/creativeRuntimeModels';
 import { env } from './env';
 import { loadBuiltinProviderRuntimeOverrides } from './builtinProviderOverrides';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
@@ -122,24 +123,29 @@ export function applyLocalModelMetadata(
   modelIds: string[],
   rows: Map<string, MetadataRow>,
 ): DiscoveredLocalModel[] {
-  return modelIds.map((modelId) => {
-    const row = rows.get(modelId);
-    return {
-      id: `local/${modelId}`,
-      modelId,
-      displayName: row?.display_name?.trim() || modelId,
-      provider: 'Local OpenAI / llama-swap' as const,
-      supportsTools: row?.supports_tools ?? DEFAULT_LOCAL_MODEL_METADATA.supportsTools,
-      supportsThinking:
-        row?.supports_thinking ?? DEFAULT_LOCAL_MODEL_METADATA.supportsThinking,
-      supportsVision:
-        row?.supports_vision ?? DEFAULT_LOCAL_MODEL_METADATA.supportsVision,
-      contextLimit: row?.context_limit ?? DEFAULT_LOCAL_MODEL_METADATA.contextLimit,
-      outputLimit: row?.output_limit ?? DEFAULT_LOCAL_MODEL_METADATA.outputLimit,
-      isVisible: row?.is_visible ?? DEFAULT_LOCAL_MODEL_METADATA.isVisible,
-      metadataConfigured: Boolean(row),
-    };
-  });
+  return modelIds
+    .filter((modelId) => !isInternalCreativeRuntimeModelId(modelId))
+    .map((modelId) => {
+      const row = rows.get(modelId);
+      return {
+        id: `local/${modelId}`,
+        modelId,
+        displayName: row?.display_name?.trim() || modelId,
+        provider: 'Local OpenAI / llama-swap' as const,
+        supportsTools:
+          row?.supports_tools ?? DEFAULT_LOCAL_MODEL_METADATA.supportsTools,
+        supportsThinking:
+          row?.supports_thinking ?? DEFAULT_LOCAL_MODEL_METADATA.supportsThinking,
+        supportsVision:
+          row?.supports_vision ?? DEFAULT_LOCAL_MODEL_METADATA.supportsVision,
+        contextLimit:
+          row?.context_limit ?? DEFAULT_LOCAL_MODEL_METADATA.contextLimit,
+        outputLimit:
+          row?.output_limit ?? DEFAULT_LOCAL_MODEL_METADATA.outputLimit,
+        isVisible: row?.is_visible ?? DEFAULT_LOCAL_MODEL_METADATA.isVisible,
+        metadataConfigured: Boolean(row),
+      };
+    });
 }
 
 export async function discoverLocalModels(

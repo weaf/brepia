@@ -1,10 +1,12 @@
-import { isLocalCreativeMeshModel } from '@shared/creativeMeshModels';
 import { corsHeaders } from './api';
 import { scheduleActiveGenerationCancellation } from './activeGeneration';
 import { syncConversationGeneratedMeshes } from './conversationWorkspaceGeneratedMeshes';
-import { handleMeshRequest as handleFalMeshRequest } from './falMesh';
+import {
+  getCreativeMeshProviderAdapter,
+  resolveCreativeMeshProvider,
+  type CreativeMeshProviderAdapter,
+} from './creativeMeshProviderRegistry';
 import { createInFlightRequestDeduper } from './inFlightRequestDeduper';
-import { handleLocalMeshRequest } from './localMesh';
 import { logError } from './serverLog';
 
 type ResponseSnapshot = {
@@ -42,6 +44,13 @@ function requestMeshId(body: unknown): string | null {
   return typeof meshId === 'string' && meshId ? meshId : null;
 }
 
+function jsonError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: { message } }), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 function localMeshRequestKey(
   request: Request,
   conversationId: string,
@@ -50,12 +59,10 @@ function localMeshRequestKey(
   const authorization = request.headers.get('Authorization');
   if (!authorization) return null;
 
-  // A conversation is intentionally single-flight for a selected local mesh
-  // backend. Android/Chrome can drop the SSE connection while backgrounded;
-  // the reconnect then starts the same Creative turn again before the first
-  // TRELLIS/Hunyuan call has finished. Include auth + conversation + backend
-  // so that reconnect shares the existing job without allowing another user
-  // to piggy-back on it.
+  // Local Creative generation is intentionally single-flight per
+  // conversation/backend. Android/Chrome can lose only the client stream while
+  // the native job keeps running; reconnects must join that same job instead of
+  // starting a second expensive TRELLIS.2 generation.
   return `${authorization}\n${conversationId}\n${model}`;
 }
 
@@ -80,28 +87,19 @@ function responseFromSnapshot(snapshot: ResponseSnapshot): Response {
   });
 }
 
-function localMeshEditingDeferredResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      error: {
-        message:
-          'Follow-up editing of locally generated Creative meshes is not enabled yet. Create a new local mesh generation instead.',
-      },
-    }),
-    {
-      status: 422,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    },
-  );
-}
-
-async function executeLocalMeshRequest(
+async function executeProviderRequest(
   request: Request,
   body: unknown,
-  conversationId: string,
+  conversationId: string | null,
+  provider: CreativeMeshProviderAdapter,
 ): Promise<ResponseSnapshot> {
-  const response = await handleLocalMeshRequest(request, body);
-  if (response.ok) {
+  const response = await provider.handleRequest(request, body);
+
+  if (
+    response.ok &&
+    conversationId &&
+    provider.syncGeneratedMeshesAfterSuccess
+  ) {
     try {
       await syncConversationGeneratedMeshes(request, conversationId);
     } catch (error) {
@@ -109,67 +107,112 @@ async function executeLocalMeshRequest(
         functionName: 'conversation-workspace-generated-meshes',
         statusCode: 500,
         conversationId,
-        additionalContext: { operation: 'post_local_mesh_generation_sync' },
+        additionalContext: {
+          operation: 'post_creative_mesh_generation_sync',
+          provider: provider.id,
+        },
       });
     }
-  } else {
-    // Local backend/config/runtime failures are terminal for this Creative
-    // turn. AI SDK otherwise feeds the tool error straight back to the LLM
-    // and the model can immediately call create_mesh again, creating an
-    // expensive failure loop. Let the current tool-error part finish first,
-    // then abort the active multi-step generation before another backend job
-    // can start. The user can explicitly retry after fixing the runtime.
+  } else if (!response.ok && conversationId && provider.singleFlight) {
+    // Native/local runtime failures are terminal for this Creative turn. Stop
+    // the multi-step agent before it immediately retries the expensive backend.
     scheduleActiveGenerationCancellation(conversationId);
   }
+
   return snapshotResponse(response);
 }
 
 /**
  * Stable entry point for Creative mesh generation.
  *
- * Historical `fast` / `quality` / `ultra` requests keep using the unchanged
- * fal.ai implementation in `falMesh.ts`. Local backend IDs are handled by the
- * pCAD local mesh gateway and never require FAL_KEY.
- *
- * Local Creative v1 intentionally supports generation only. The experimental
- * follow-up mesh-edit path is deferred and rejected here rather than silently
- * regenerating or claiming an edit succeeded.
+ * TRELLIS.2 is the built-in backend. Hosted services are optional provider
+ * adapters selected by configuration. Retired local model IDs are normalized
+ * forward to TRELLIS.2 so old conversations stay usable without reviving the
+ * removed Python gateway.
  */
 export async function handleMeshRequest(request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
   if (request.method !== 'POST') {
-    return handleFalMeshRequest(request);
+    return jsonError('Method not allowed', 405);
   }
 
   const body = await request.clone().json().catch(() => null);
-  const model = requestModel(body);
-  if (model && isLocalCreativeMeshModel(model)) {
-    if (requestMeshId(body)) {
-      return localMeshEditingDeferredResponse();
-    }
-
-    const conversationId = requestConversationId(body);
-    if (!conversationId) {
-      return handleLocalMeshRequest(request, body);
-    }
-
-    const key = localMeshRequestKey(request, conversationId, model);
-    if (!key) {
-      return responseFromSnapshot(
-        await executeLocalMeshRequest(request, body, conversationId),
-      );
-    }
-
-    const { promise, reused } = localMeshRequests.getOrRun(key, () =>
-      executeLocalMeshRequest(request, body, conversationId),
-    );
-    if (reused) {
-      console.info('[local-mesh] reusing in-flight generation after reconnect', {
-        conversationId,
-        model,
-      });
-    }
-    return responseFromSnapshot(await promise);
+  const requestedModel = requestModel(body);
+  if (!requestedModel) {
+    return jsonError('Creative mesh model is required.', 400);
   }
 
-  return handleFalMeshRequest(request);
+  const resolved = resolveCreativeMeshProvider(requestedModel);
+  if (!resolved) {
+    return jsonError(`Unsupported Creative mesh model: ${requestedModel}`, 400);
+  }
+  if (!resolved.enabled) {
+    return jsonError(
+      `${resolved.provider.label} is not enabled for Creative mesh generation.`,
+      503,
+    );
+  }
+
+  if (requestMeshId(body) && !resolved.definition.supportsMeshEdit) {
+    return jsonError(
+      'Follow-up editing is not supported by this Creative mesh backend. Create a new generation instead.',
+      422,
+    );
+  }
+
+  // Legacy local IDs are read-compatibility aliases only. Rewrite the parsed
+  // request before handing it to the native adapter so the removed backend can
+  // never be started again.
+  const normalizedBody = {
+    ...(recordBody(body) ?? {}),
+    model: resolved.modelId,
+  };
+  const conversationId = requestConversationId(normalizedBody);
+
+  if (!resolved.provider.singleFlight || !conversationId) {
+    return responseFromSnapshot(
+      await executeProviderRequest(
+        request,
+        normalizedBody,
+        conversationId,
+        resolved.provider,
+      ),
+    );
+  }
+
+  const key = localMeshRequestKey(request, conversationId, resolved.modelId);
+  if (!key) {
+    return responseFromSnapshot(
+      await executeProviderRequest(
+        request,
+        normalizedBody,
+        conversationId,
+        resolved.provider,
+      ),
+    );
+  }
+
+  const { promise, reused } = localMeshRequests.getOrRun(key, () =>
+    executeProviderRequest(
+      request,
+      normalizedBody,
+      conversationId,
+      resolved.provider,
+    ),
+  );
+  if (reused) {
+    console.info('[creative-mesh] reusing in-flight generation after reconnect', {
+      conversationId,
+      model: resolved.modelId,
+      provider: resolved.provider.id,
+    });
+  }
+  return responseFromSnapshot(await promise);
+}
+
+export function creativeMeshProviderForModel(model: string) {
+  const resolved = resolveCreativeMeshProvider(model);
+  return resolved?.provider ?? getCreativeMeshProviderAdapter('local');
 }

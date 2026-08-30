@@ -7,9 +7,14 @@ import { supabase, ssoProvider } from '@/lib/supabase';
 import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScadImportButton } from '@/components/ScadImportButton';
+import { InstructionProfileSelector } from '@/components/InstructionProfileSelector';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Model } from '@shared/types';
+import {
+  DEFAULT_AI_INSTRUCTION_PROFILE_ID,
+  type AiInstructionProfileId,
+} from '@shared/aiInstructionCatalog';
 import { conversationTitleFromText } from '@shared/conversationTitle';
 import { MessageItem } from '../types/misc.ts';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -39,6 +44,7 @@ import {
   resolveParametricDefaultModel,
 } from '@/lib/defaultModels';
 import { getCreativeInputValidationIssue } from '@/lib/creativeInputValidation';
+import { resolvePreferredCreativeAgentModel } from '@/lib/creativeAgentSelection';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -85,9 +91,6 @@ export function PromptView() {
     : 'Sign Up';
 
   const firstName = useMemo(() => {
-    // Wait until the profile query resolves for signed-in users so the
-    // greeting doesn't flash the email local-part before snapping to the
-    // real first name.
     if (user && isProfileLoading) return '';
     const source = profile?.full_name || user?.email?.split('@')[0] || '';
     return source.trim().split(/\s+/)[0] || '';
@@ -109,7 +112,10 @@ export function PromptView() {
   );
 
   const [model, setModel] = useState<Model>(FALLBACK_PARAMETRIC_MODEL_ID);
+  const [instructionProfileId, setInstructionProfileId] =
+    useState<AiInstructionProfileId>(DEFAULT_AI_INSTRUCTION_PROFILE_ID);
   const initialDefaultAppliedRef = useRef(false);
+  const initialInstructionProfileAppliedRef = useRef(false);
 
   useEffect(() => {
     if (
@@ -134,9 +140,18 @@ export function PromptView() {
     user,
   ]);
 
-  // I09B — draft execution mode: owned locally so the transport selector
-  // is interactive. Persisted into new conversation settings (I09C done).
-  // Does NOT alter the chat request body (I09D).
+  useEffect(() => {
+    if (
+      !user ||
+      !aiPreferences ||
+      initialInstructionProfileAppliedRef.current
+    ) {
+      return;
+    }
+    setInstructionProfileId(aiPreferences.defaultInstructionProfileId);
+    initialInstructionProfileAppliedRef.current = true;
+  }, [aiPreferences, user]);
+
   const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
     'cli',
   );
@@ -158,16 +173,13 @@ export function PromptView() {
   );
   const [homePrompt] = useState(() => pickHomePromptMessage());
 
-  // Trigger fade in on mount
   useEffect(() => {
-    // Use requestAnimationFrame to ensure the initial render is complete
     const frame = requestAnimationFrame(() => {
       setIsLoaded(true);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // Helper function to get time-based greeting (memoized for performance)
   const getTimeBasedGreeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) {
@@ -177,12 +189,8 @@ export function PromptView() {
     } else {
       return 'Good evening';
     }
-  }, []); // Empty dependency array means it only calculates once per page load
+  }, []);
 
-  // In SSO mode the provider redirect IS the sign-in: the existing signed-out
-  // affordances below fire it directly instead of navigating to the native
-  // auth routes (which bounce back to root in this mode). Same UI, same
-  // pixels — only where the click goes changes.
   const { mutate: signInWithSso } = useMutation({
     mutationFn: () => signInWithSsoProvider('/'),
     onError: (error) => {
@@ -198,6 +206,14 @@ export function PromptView() {
     mutationFn: async (parts: AppUIMessage['parts']) => {
       if (!user?.id) throw new Error('User must be authenticated');
       const conversationId = draftConversationId;
+      const creativeAgentModel =
+        type === 'creative'
+          ? resolvePreferredCreativeAgentModel(parametricModels)
+          : undefined;
+
+      if (type === 'creative' && !creativeAgentModel) {
+        throw new Error('No compatible Creative AI model is available');
+      }
 
       const text = parts
         .filter((p) => p.type === 'text')
@@ -217,27 +233,22 @@ export function PromptView() {
       posthog.capture('new_conversation', {
         type: type,
         model_name: model,
+        ...(creativeAgentModel
+          ? { creative_agent_model_name: creativeAgentModel }
+          : {}),
+        instruction_profile_id: instructionProfileId,
         text: text.trim().slice(0, 100),
         image_count: imageCount,
         mesh_count: meshCount,
         conversation_id: conversationId,
       });
 
-      // P04F: pin the user's current default prompt profile on creation.
-      // This is a normal user-owned preference read, so use the already
-      // authenticated browser Supabase client and let RLS enforce ownership.
-      // A missing preferences row is the documented default: CADAM Original.
-      const { data: aiPreferences, error: preferencesError } = await supabase
-        .from('user_ai_preferences')
-        .select('default_prompt_profile_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (preferencesError) {
-        throw new Error(
-          `Failed to load AI preferences: ${preferencesError.message}`,
-        );
-      }
-      const promptProfileId = aiPreferences?.default_prompt_profile_id ?? null;
+      // Pin the complete repository instruction package independently from the
+      // mode-specific custom prompt profile. Existing conversations therefore
+      // keep their selected CADAM/Standard lineage when defaults change.
+      const promptProfileId = aiPreferences?.defaultPromptProfileId ?? null;
+      const creativePromptProfileId =
+        aiPreferences?.defaultCreativePromptProfileId ?? null;
 
       const createConversation = (title: string) =>
         supabase
@@ -250,18 +261,17 @@ export function PromptView() {
               type: type,
               settings: {
                 model: model,
+                instructionProfileId,
                 openCodeExecutionMode: executionMode,
-                promptProfileId,
+                ...(type === 'creative'
+                  ? { creativePromptProfileId, creativeAgentModel }
+                  : { promptProfileId }),
               },
             },
           ])
           .select()
           .single();
 
-      // Prefer the deterministic local title, but naming is metadata and must
-      // never be able to block the primary prompt flow. If a live database has
-      // an unexpected title-side constraint, retry the known-good legacy
-      // insert once with "New Conversation" and refine the title afterwards.
       let conversationResult = await createConversation(initialTitle);
       if (conversationResult.error && initialTitle !== 'New Conversation') {
         console.warn(
@@ -287,15 +297,15 @@ export function PromptView() {
       });
       if (parts.length === 0) throw new Error('No message parts to send');
 
-      // Persist the user message before kicking off the chat. The
-      // `update_leaf_trigger` on `public.messages` advances the
-      // conversation's `current_message_leaf_id` to this row, which is
-      // what the server-side chat handler walks to build the model
-      // branch — so the row has to land first.
+      const messageMetadata: AppUIMessage['metadata'] = {
+        model,
+        ...(creativeAgentModel ? { agentModel: creativeAgentModel } : {}),
+      };
+
       const userMessageId = await persistUserMessage({
         conversationId: conversation.id,
         parts,
-        metadata: { model },
+        metadata: messageMetadata,
         parentMessageId: null,
       });
 
@@ -318,6 +328,7 @@ export function PromptView() {
             body: {
               conversationId: conversation.id,
               model,
+              ...(creativeAgentModel ? { agentModel: creativeAgentModel } : {}),
               openCodeExecutionMode: executionMode,
               ...(body ?? {}),
             },
@@ -326,7 +337,7 @@ export function PromptView() {
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       });
       void chat
-        .sendMessage({ id: userMessageId, parts, metadata: { model } })
+        .sendMessage({ id: userMessageId, parts, metadata: messageMetadata })
         .catch((error) => {
           Sentry.captureException(error, {
             extra: {
@@ -336,10 +347,6 @@ export function PromptView() {
           });
         });
 
-      // Title refinement is deliberately best-effort and non-blocking. Local
-      // installs keep the deterministic title when no hosted provider
-      // credential exists; if the insert had to use the legacy title, first
-      // restore the deterministic title here, then let the endpoint improve it.
       void (async () => {
         try {
           if (conversation.title !== initialTitle) {
@@ -490,6 +497,16 @@ export function PromptView() {
           </div>
           <div className="flex w-full flex-col items-center">
             <div className="w-full max-w-3xl space-y-4 pb-12">
+              {user && (
+                <div className="flex justify-end">
+                  <InstructionProfileSelector
+                    selectedProfileId={instructionProfileId}
+                    onProfileChange={setInstructionProfileId}
+                    disabled={isGenerating}
+                    className="max-w-[260px] border border-adam-neutral-700 bg-adam-background-2"
+                  />
+                </div>
+              )}
               <SelectedItemsContext.Provider
                 value={{ images, setImages, mesh, setMesh }}
               >

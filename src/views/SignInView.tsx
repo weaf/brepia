@@ -174,7 +174,7 @@ export function SignInView() {
                 setError(null);
                 setMode('password');
               }}
-              className="flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-white"
+              className="flex items-center gap-1 text-sm text-adam-text-secondary transition-colors hover:text-adam-text-primary"
             >
               <ArrowLeft className="h-4 w-4" /> Back
             </button>
@@ -182,25 +182,27 @@ export function SignInView() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-adam-blue/20">
                 <Mail className="h-6 w-6 text-adam-blue" />
               </div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-lg font-semibold text-adam-text-primary">
                 Check your email
               </h3>
-              <p className="text-center text-sm text-gray-400">
+              <p className="text-center text-sm text-adam-text-secondary">
                 We sent a sign-in email to{' '}
-                <span className="font-medium text-white">{identifier}</span>
+                <span className="font-medium text-adam-text-primary">
+                  {identifier}
+                </span>
               </p>
             </div>
             {error && (
-              <div className="rounded-md bg-red-900/50 p-3 text-sm text-red-200">
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/50 dark:text-red-200">
                 {error}
               </div>
             )}
             <div className="relative flex items-center gap-3 py-2">
-              <div className="h-px flex-1 bg-gray-700" />
-              <span className="text-xs text-gray-500">
+              <div className="h-px flex-1 bg-adam-neutral-700" />
+              <span className="text-xs text-adam-text-secondary">
                 or enter code manually
               </span>
-              <div className="h-px flex-1 bg-gray-700" />
+              <div className="h-px flex-1 bg-adam-neutral-700" />
             </div>
             <form
               onSubmit={(e) => {
@@ -217,22 +219,22 @@ export function SignInView() {
                   onComplete={() => void handleVerifyOtp()}
                   className="gap-2"
                 >
-                  <InputOTPGroup className="text-white">
+                  <InputOTPGroup className="text-adam-text-primary">
                     {[0, 1, 2].map((index) => (
                       <InputOTPSlot
                         key={index}
                         index={index}
-                        className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
+                        className="h-11 w-11 border-adam-neutral-700 bg-adam-bg-dark"
                       />
                     ))}
                   </InputOTPGroup>
-                  <InputOTPSeparator className="text-gray-500" />
-                  <InputOTPGroup className="text-white">
+                  <InputOTPSeparator className="text-adam-text-secondary" />
+                  <InputOTPGroup className="text-adam-text-primary">
                     {[3, 4, 5].map((index) => (
                       <InputOTPSlot
                         key={index}
                         index={index}
-                        className="h-11 w-11 border-gray-700 bg-adam-bg-dark"
+                        className="h-11 w-11 border-adam-neutral-700 bg-adam-bg-dark"
                       />
                     ))}
                   </InputOTPGroup>
@@ -304,7 +306,7 @@ export function SignInView() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-white">
+              <Label htmlFor="identifier" className="text-adam-text-primary">
                 {mode === 'password' ? 'Username or email' : 'Email'}
               </Label>
               <Input
@@ -319,14 +321,14 @@ export function SignInView() {
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
                 autoComplete={mode === 'password' ? 'username' : 'email'}
-                className="border-gray-700 bg-adam-bg-dark px-4 text-white placeholder:text-gray-400 max-[430px]:text-base"
+                className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary placeholder:text-adam-text-secondary max-[430px]:text-base"
               />
             </div>
 
             {mode === 'password' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-white">
+                  <Label htmlFor="password" className="text-adam-text-primary">
                     Password
                   </Label>
                   {identifier.includes('@') && (
@@ -346,7 +348,7 @@ export function SignInView() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="border-gray-700 bg-adam-bg-dark px-4 text-white placeholder:text-gray-400 max-[430px]:text-base"
+                  className="border-adam-neutral-700 bg-adam-bg-dark px-4 text-adam-text-primary placeholder:text-adam-text-secondary max-[430px]:text-base"
                 />
               </div>
             )}
@@ -370,7 +372,11 @@ export function SignInView() {
               {isLoading ? (
                 <>
                   <ActivityIndicator
-                    label={mode === 'password' ? 'Signing in' : 'Sending sign-in email'}
+                    label={
+                      mode === 'password'
+                        ? 'Signing in'
+                        : 'Sending sign-in email'
+                    }
                     size="sm"
                     className="mr-2"
                   />
@@ -384,7 +390,7 @@ export function SignInView() {
             </Button>
 
             {signupAvailable && (
-              <div className="text-center text-sm text-white">
+              <div className="text-center text-sm text-adam-text-primary">
                 {registration?.bootstrapAvailable
                   ? 'No account exists yet. '
                   : "Don't have an account? "}

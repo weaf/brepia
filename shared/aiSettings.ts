@@ -4,12 +4,15 @@
 // request validation and client-side (React Query) response parsing.
 // Provider DTOs NEVER contain decrypted secrets — only a `hasCredential`
 // boolean.
-//
-// NOTE: Types align with actual P01 database schema.
-// The prompt_profiles table does NOT have a `mode` column.
-// The ai_providers table does NOT have `preset` or `headers` columns yet.
 
 import { z } from 'zod';
+import {
+  AiInstructionKeySchema,
+  AiInstructionProfileIdSchema,
+  DEFAULT_INSTRUCTION_PROFILE_ID,
+  InstructionProfileDefaultsSchema,
+  RuntimeOverridesSchema,
+} from './aiInstructionSettings.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,7 +57,15 @@ const nonReservedSlugSchema = z
 export const AiPreferencesSchema = z.object({
   userId: z.string().uuid(),
   hiddenModelIds: z.array(z.string().min(1).max(256)).default([]),
+  defaultInstructionProfileId: AiInstructionProfileIdSchema.default(
+    DEFAULT_INSTRUCTION_PROFILE_ID,
+  ),
   defaultPromptProfileId: z.union([z.string().uuid(), z.null()]).default(null),
+  defaultCreativePromptProfileId: z
+    .union([z.string().uuid(), z.null()])
+    .default(null),
+  instructionProfileDefaults: InstructionProfileDefaultsSchema.default({}),
+  runtimeOverrides: RuntimeOverridesSchema.default({}),
   defaultParametricModelId: nullableModelIdSchema.default(null),
   defaultCreativeModelId: nullableModelIdSchema.default(null),
   visionFastModelId: nullableModelIdSchema.default(null),
@@ -66,8 +77,11 @@ export const AiPreferencesSchema = z.object({
 export type AiPreferencesDto = z.infer<typeof AiPreferencesSchema>;
 
 // ---------------------------------------------------------------------------
-// prompt_profiles (mode = 'overlay' | 'fork', stored in DB)
+// prompt_profiles
 // ---------------------------------------------------------------------------
+
+export const PromptProfileScopeSchema = AiInstructionKeySchema;
+export type PromptProfileScope = z.infer<typeof PromptProfileScopeSchema>;
 
 export const CreatePromptProfileSchema = z.object({
   name: z.string().min(1, 'name is required').max(MAX_NAME_LENGTH),
@@ -77,6 +91,7 @@ export const CreatePromptProfileSchema = z.object({
     .min(1, 'promptTemplate is required')
     .max(MAX_CONTENT_LENGTH),
   mode: z.enum(['overlay', 'fork']).optional(),
+  scope: PromptProfileScopeSchema.optional(),
   baseRevision: z.string().max(64).nullable().optional(),
 });
 
@@ -93,12 +108,13 @@ export const UpdatePromptProfileSchema = z.object({
 });
 
 export const PromptProfileSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: z.string(),
+  userId: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   promptTemplate: z.string(),
   mode: z.enum(['overlay', 'fork']),
+  scope: PromptProfileScopeSchema,
   fingerprint: z.string().nullable(),
   editable: z.boolean(),
   deletable: z.boolean(),
@@ -111,11 +127,12 @@ export const PromptProfileSchema = z.object({
 export type PromptProfileDetailDto = z.infer<typeof PromptProfileSchema>;
 
 export const PromptProfileSummarySchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: z.string(),
+  userId: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   mode: z.enum(['overlay', 'fork']),
+  scope: PromptProfileScopeSchema,
   fingerprint: z.string().nullable(),
   editable: z.boolean(),
   deletable: z.boolean(),
@@ -130,7 +147,7 @@ export type PromptProfileSummaryDto = z.infer<
 >;
 
 // ---------------------------------------------------------------------------
-// ai_providers (preset and headers NOT stored in DB yet)
+// ai_providers
 // ---------------------------------------------------------------------------
 
 export const ProviderDriverSchema = z.enum([
@@ -159,8 +176,8 @@ export const UpdateProviderSchema = z.object({
 export const ProviderSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
-  slug: z.string(),
   name: z.string(),
+  slug: z.string(),
   driver: ProviderDriverSchema,
   baseUrl: z.string().nullable(),
   hasCredential: z.boolean(),
@@ -269,7 +286,13 @@ export const UpdateHiddenModelsSchema = z.object({
 });
 
 export const SetDefaultPromptSchema = z.object({
-  defaultPromptProfileId: z.union([z.string().uuid(), z.null()]),
+  defaultInstructionProfileId: AiInstructionProfileIdSchema.optional(),
+  defaultPromptProfileId: z.union([z.string().uuid(), z.null()]).optional(),
+  defaultCreativePromptProfileId: z
+    .union([z.string().uuid(), z.null()])
+    .optional(),
+  instructionProfileDefaults: InstructionProfileDefaultsSchema.optional(),
+  runtimeOverrides: RuntimeOverridesSchema.optional(),
 });
 
 export const UpdateDefaultModelsSchema = z.object({

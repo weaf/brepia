@@ -1,0 +1,77 @@
+:root {
+  --brepia-canvas: 246 246 246;
+  --brepia-surface-1: 241 241 241;
+  --brepia-surface-2: 255 255 255;
+  --brepia-text-primary: 25 26 26;
+  --brepia-text-secondary: 69 69 69;
+  --brepia-text-tertiary: 90 90 90;
+  --brepia-border: 215 215 215;
+  --brepia-neutral-0: 17 17 17;
+  --brepia-neutral-10: 23 24 24;
+  --brepia-neutral-50: 33 33 33;
+  --brepia-neutral-100: 45 45 45;
+  --brepia-neutral-200: 69 69 69;
+  --brepia-neutral-300: 90 90 90;
+  --brepia-neutral-400: 103 103 103;
+  --brepia-neutral-500: 110 110 110;
+  --brepia-neutral-700: 215 215 215;
+  --brepia-neutral-800: 229 229 229;
+  --brepia-neutral-900: 241 241 241;
+  --brepia-neutral-950: 246 246 246;
+}
+
+.dark {
+  --brepia-canvas: 25 26 26;
+  --brepia-surface-1: 33 33 33;
+  --brepia-surface-2: 25 26 26;
+  --brepia-text-primary: 229 229 229;
+  --brepia-text-secondary: 148 148 148;
+  --brepia-text-tertiary: 132 132 132;
+  --brepia-border: 45 45 45;
+  --brepia-neutral-0: 246 246 246;
+  --brepia-neutral-10: 242 242 242;
+  --brepia-neutral-50: 229 229 229;
+  --brepia-neutral-100: 215 215 215;
+  --brepia-neutral-200: 173 173 173;
+  --brepia-neutral-300: 148 148 148;
+  --brepia-neutral-400: 140 140 140;
+  --brepia-neutral-500: 132 132 132;
+  --brepia-neutral-700: 59 59 59;
+  --brepia-neutral-800: 45 45 45;
+  --brepia-neutral-900: 23 24 24;
+  --brepia-neutral-950: 17 17 17;
+}
+
+html,
+body {
+  background-color: rgb(var(--brepia-canvas));
+  color: rgb(var(--brepia-text-primary));
+}
+
+/* The legacy user-message bubble still carries the original dark-only
+   `text-white` utility. This exact class combination is unique to UserBubble;
+   keep it readable in Light without changing intentionally white controls. */
+html[data-theme='light'] .relative.grid.w-fit.rounded-lg.text-white {
+  color: rgb(var(--brepia-text-primary));
+}
+
+a:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid #00a6ff;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,4 +1,5 @@
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { CreativeGenerationActivity } from '@/components/chat/CreativeGenerationActivity';
 import { SuggestionPills } from '@/components/chat/SuggestionPills';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -242,12 +243,8 @@ export function ChatSession({
       const chat = chatRef.current;
       if (!chat) return;
 
-      // Fresh tool call → clear any prior persist-failure pause.
       persistFailedRef.current = false;
 
-      // Prefer the SDK's live `chat.messages` — it's always current.
-      // `messagesRef.current` is a React-mirrored copy that lags one
-      // commit behind, and onToolCall can fire before that commit lands.
       const findAssistant = (msgs: readonly AppUIMessage[]) =>
         msgs.find(
           (msg) =>
@@ -267,9 +264,6 @@ export function ChatSession({
         const output = answerUserInput(toolCall.input);
         if (!output) {
           const errorText = 'answer_user input was missing a message.';
-          // Persist the error so the DB row isn't left with a dangling
-          // `input-available` tool call (which would 500 the next send before
-          // the server-side sanitizer rewrites it).
           if (assistant) {
             const nextParts = assistant.parts.map((existing) =>
               existing.type === 'tool-answer_user' &&
@@ -350,11 +344,6 @@ export function ChatSession({
         return;
       }
 
-      // Build the next parts array for `assistant`, replacing the
-      // matching tool part with `replacement` and normalising any
-      // streaming reasoning/text to `done` (some providers skip the
-      // closing chunk; persisting an intermediate snapshot leaves the
-      // UI showing "Thinking..." on refresh).
       const buildNextParts = (
         replacement: AppUIMessage['parts'][number],
       ): AppUIMessage['parts'] | null => {
@@ -364,11 +353,6 @@ export function ChatSession({
             existing.type === 'tool-build_parametric_model' &&
             existing.toolCallId === toolCall.toolCallId
           ) {
-            // Carry forward `callProviderMetadata` from the model-emitted
-            // tool-call (Gemini 3 stashes its `thoughtSignature` there).
-            // Without it the next server-side turn echoes the functionCall
-            // back to Gemini without a signature and Gemini rejects the
-            // request with "Function call is missing a thought_signature".
             return existing.callProviderMetadata
               ? {
                   ...replacement,
@@ -386,18 +370,6 @@ export function ChatSession({
         }) as AppUIMessage['parts'];
       };
 
-      // Always finish the tool — both in memory (spinner clears, SDK
-      // can auto-continue) and on disk (refresh doesn't resurrect the
-      // stuck `input-available` state, which would break every
-      // subsequent send because the server can't continue a
-      // conversation with an unresolved tool call).
-      //
-      // Persist BEFORE `addToolOutput` — same ordering as the success path.
-      // `addToolOutput` is what triggers `sendAutomaticallyWhen`, and the
-      // server continues from the DB branch, so the resolved (error) parts
-      // must be on disk before the resubmit can fire. A compile error SHOULD
-      // auto-continue (the model fixes it), so we don't pause here on a failed
-      // persist; the server-side sanitizer backstops a stale read.
       const finishWithError = async (errorText: string) => {
         if (assistant) {
           const errorPart = {
@@ -436,9 +408,6 @@ export function ChatSession({
       }
 
       try {
-        // Upload both images before auto-continuation:
-        // - preview-* is the single ISO thumbnail the chat UI displays.
-        // - inspection-preview-* is the multi-view sheet the agent receives.
         const { stl, off } = await previewScadColoredViaToolWorker(input.code);
         let inspectionUploaded = false;
         try {
@@ -524,10 +493,6 @@ export function ChatSession({
             await onToolOutput(assistant.id, nextParts);
           } catch (persistError) {
             console.warn('Failed to persist tool output to DB:', persistError);
-            // The server continues from the DB branch. If this build's output
-            // never landed, auto-resubmitting would run against a stale branch
-            // and discard a model the user can already see. Pause the loop and
-            // let them retry.
             persistFailedRef.current = true;
             toast({
               title: "Couldn't save this step",
@@ -552,36 +517,18 @@ export function ChatSession({
     [conversation.id, onToolOutput, onViewArtifact, toast, user?.id],
   );
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Chat instance — keyed by conversation.id via `useCachedAiChat` so that
-  // switching conversations reuses cached instances (or creates one), but
-  // the Chat for THIS conversation is stable across re-renders.
-  // ───────────────────────────────────────────────────────────────────────
   const chat = useCachedAiChat({
     id: conversation.id,
     messages: initialBranch,
     transport,
     onToolCall: handleToolCall,
-    // Pause the loop if a tool-output persist failed — resubmitting would run
-    // the server against a stale DB branch (see `persistFailedRef`).
     sendAutomaticallyWhen: (ctx) => {
       if (persistFailedRef.current) return false;
       return conversation.type === 'parametric'
         ? lastAssistantMessageIsCompleteWithParametricBuild(ctx)
         : lastAssistantMessageIsCompleteWithToolCalls(ctx);
     },
-    // Out-of-band conversation-level signals (title + suggestions) arrive
-    // here as transient data parts — they never land in `messages.parts`,
-    // so we patch the conversation query cache directly. See
-    // `emitConversationTitle` / `emitConversationSuggestions` in
-    // `src/server/aiChat.ts` for the producers.
     onData: (part) => {
-      // The SDK's `ChatOnDataCallback` widens `data` to `unknown` even
-      // though we typed `AppDataTypes` — `InferUIMessageData` doesn't
-      // preserve the per-key mapping through the generic. Narrow
-      // ourselves: discriminate on `type`, cast `data` to the
-      // corresponding `AppDataTypes` entry. The producer side
-      // (`writer.write({ type, data })`) is the type-checked counterpart.
       if (part.type === 'data-title-update') {
         const { title } = part.data as ConversationTitleUpdate;
         queryClient.setQueryData(
@@ -611,10 +558,6 @@ export function ChatSession({
       }
     },
     onFinish: ({ message }) => {
-      // The DB trigger has already advanced `current_message_leaf_id` to
-      // the new assistant. Push that into the conversation cache
-      // optimistically so the UI doesn't flicker; the invalidation right
-      // after re-confirms against the server.
       if (message?.id) {
         queryClient.setQueryData(
           ['conversation', conversation.id],
@@ -685,35 +628,16 @@ export function ChatSession({
     }
   }, [authHeaders, conversation.id, conversation.type, stop, toast]);
 
-  // Keep the refs in sync for callbacks that were baked at Chat-init time
-  // (`onToolCall`) — those captured `messages` at mount otherwise.
   useEffect(() => {
     chatRef.current = chat;
     messagesRef.current = messages;
   }, [chat, messages]);
 
-  // Load-time recovery for tool parts that never finished in a previous
-  // session. If the last assistant in DB has a `tool-build_parametric_model`
-  // stuck at `input-streaming` / `input-available`, the UI shows a perma-
-  // spinner AND every subsequent send 500s because the server can't
-  // continue a conversation with an unresolved tool call. Rewrite to
-  // `output-error` so the chat is in a valid state — the user can retry
-  // or send a new message. Use setMessages (not addToolOutput) so we
-  // don't trigger an unwanted auto-resubmit on load.
   const recoveredChatRef = useRef<unknown>(null);
   useEffect(() => {
     if (recoveredChatRef.current === chat) return;
     recoveredChatRef.current = chat;
 
-    // `chat.status` is read once per chat+mount on purpose: a cached Chat
-    // that is mid-generation when ChatSession (re)mounts is not "stuck from
-    // a previous session", and collectStuckToolRecovery skips it entirely.
-    //
-    // The scan is structurally typed (dependency-free for its unit tests),
-    // so its map comes back as `RecoveryPartLike[]` values. Every rewrite
-    // spreads the original part and only narrows tool/text `state`, so
-    // re-narrowing to our part union is sound — this is the one place the
-    // structural boundary is crossed.
     const stuckByMessageId = collectStuckToolRecovery({
       status: chat.status,
       messages: chat.messages,
@@ -732,10 +656,6 @@ export function ChatSession({
     for (const [messageId, nextParts] of stuckByMessageId) {
       void onToolOutput(messageId, nextParts).catch((err) => {
         if (err instanceof AssistantRowMissingError) {
-          // The interruption happened before the server's `onFinish` INSERT,
-          // so this assistant exists only in the cached in-memory chat. The
-          // DB branch (leaf = the user message) has no dangling tool call to
-          // repair, and the setMessages above already fixed the UI.
           console.info(
             'Stuck-tool recovery: assistant row was never persisted; ' +
               'nothing to repair in DB (benign).',
@@ -747,11 +667,6 @@ export function ChatSession({
     }
   }, [chat, onToolOutput, setMessages]);
 
-  // A mobile background transition can tear down only the client transport.
-  // The server continues the turn and useMessagesQuery keeps polling the DB.
-  // Preserve the same visible/loading state while that recoverable gap exists
-  // so "Preparing model..." / "Creating..." and the stop affordance do not
-  // disappear merely because the browser lost its stream connection.
   const isRecoveringInterruptedTurn =
     status === 'error' &&
     !!chatError &&
@@ -766,17 +681,6 @@ export function ChatSession({
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Sibling tree for branch nav.
-  //
-  // The tree merges DB rows (authoritative `parent_message_id` + persisted
-  // columns) with live `chat.messages` (streaming `parts` and any not-yet-
-  // persisted bubbles). For messages we've seen in DB, the merge takes the
-  // DB row's parent + rating/etc. and overlays the SDK's live parts. For
-  // chat-only messages (streaming user/assistant before the refetch lands)
-  // the parent is derived from chat order — they're a linear branch by
-  // definition.
-  // ───────────────────────────────────────────────────────────────────────
   const treeMessages = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
     for (const row of dbMessages) {
@@ -812,14 +716,6 @@ export function ChatSession({
     [messages, messageTree],
   );
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Auto-switch the preview pane to the freshest assistant output.
-  //
-  // Tracks the last preview key we've fired so clicking an OLD artifact's
-  // Eye button doesn't get clobbered by a delayed auto-switch on the next
-  // render. Only triggers when a genuinely new preview appears (key
-  // changes) — not for every state tick.
-  // ───────────────────────────────────────────────────────────────────────
   const lastAutoAppliedPreviewKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const preview = findLatestPreview(messages);
@@ -837,12 +733,6 @@ export function ChatSession({
     }
   }, [messages, onViewArtifact, onViewMesh]);
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Action handlers. Pattern: await the parent's DB write, then call the
-  // matching `chat.*` method. Each handler lives next to the operation
-  // that justifies its `chat.setMessages` / `chat.sendMessage` /
-  // `chat.regenerate` — no auto-sync effect, no prop watching.
-  // ───────────────────────────────────────────────────────────────────────
   const handleSend = useCallback(
     async (parts: AppUIMessage['parts']) => {
       const issue = getCreativeInputValidationIssue({
@@ -879,11 +769,6 @@ export function ChatSession({
       });
 
       const { userMessageId } = await onSendParts(parts);
-      // The transport closes over `model` at the time the Chat instance was
-      // created (which might be `PromptView`'s `model` for first-turn
-      // conversations created from the landing page). Always pass the
-      // current model in the per-call body so the transport's
-      // `...(body ?? {})` spread overrides any stale baked-in value.
       await sendMessage(
         { id: userMessageId, parts, metadata: { model } },
         { body: { model } },
@@ -940,11 +825,6 @@ export function ChatSession({
     [branchForLeaf, onSelectLeaf, setMessages],
   );
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Scroll-to-bottom on new content. Reads the Radix Viewport directly so
-  // the user can still scroll up to re-read older turns without us forcing
-  // them back down.
-  // ───────────────────────────────────────────────────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const viewport = scrollRef.current?.querySelector(
@@ -994,17 +874,13 @@ export function ChatSession({
               />
             );
           })}
+          {conversation.type === 'creative' && (
+            <CreativeGenerationActivity conversationId={conversation.id} />
+          )}
         </div>
       </ScrollArea>
 
       <div className="w-full shrink-0 self-center px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-4 md:pb-4">
-        {/* Suggestions are conversation-level — the server writes them
-            to `conversation.settings.suggestions` and emits a transient
-            `data-suggestions-update` on each non-tool-call assistant
-            turn (see `emitConversationSuggestions` in
-            `src/server/aiChat.ts`). We hide them while a stream is in
-            flight; the freshly-arrived pills replace the stale ones
-            when streaming finishes. */}
         {!isLoading && (
           <div className="mx-auto max-w-3xl pt-1">
             <SuggestionPills

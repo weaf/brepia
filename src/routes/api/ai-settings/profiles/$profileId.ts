@@ -7,9 +7,10 @@ import {
   requireUser,
 } from '@/server/api';
 import {
+  ActivePromptProfileError,
+  archivePromptProfile,
   getPromptProfile,
   updatePromptProfile,
-  deletePromptProfile,
 } from '@/server/promptProfiles';
 
 export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
@@ -69,9 +70,24 @@ export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
       DELETE: async ({ request, params }) => {
         try {
           const user = await requireUser(request);
-          await deletePromptProfile(user.id, params.profileId);
+          const profile = await getPromptProfile(user.id, params.profileId);
+          if (!profile) {
+            return json({ error: 'Prompt profile not found' }, 404);
+          }
+
+          await archivePromptProfile(user.id, params.profileId);
           return json({ success: true });
         } catch (err) {
+          if (err instanceof ActivePromptProfileError) {
+            return json(
+              {
+                error: 'active_prompt_profile',
+                message: err.message,
+              },
+              409,
+            );
+          }
+
           const message = err instanceof Error ? err.message : 'Unknown error';
           if (message.includes('not found')) {
             return json({ error: 'Prompt profile not found' }, 404);
@@ -80,7 +96,7 @@ export const Route = createFileRoute('/api/ai-settings/profiles/$profileId')({
             {
               error: isUnauthorizedError(err)
                 ? 'Unauthorized'
-                : 'failed_to_delete_profile',
+                : 'failed_to_archive_profile',
             },
             isUnauthorizedError(err) ? 401 : 500,
           );

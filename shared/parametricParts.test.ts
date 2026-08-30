@@ -18,4 +18,20 @@ describe('parametric assistant text cleanup', () => {
       '',
     );
   });
+
+  it('removes legacy Creative asset download lines', () => {
+    assert.equal(
+      cleanAssistantText(
+        'Here is your Christmas star mesh: [download](https://pcad.com/api/asset/b7ceeb0d-dabb-4393-a8a6-50e3d74c38fb.glb)',
+      ).trim(),
+      '',
+    );
+  });
+
+  it('preserves ordinary links', () => {
+    assert.equal(
+      cleanAssistantText('Read the [documentation](https://example.com/docs).'),
+      'Read the [documentation](https://example.com/docs).',
+    );
+  });
 });

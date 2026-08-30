@@ -8,15 +8,6 @@
  * resume the same agent session without adding database schema or server-local
  * state. This also survives a pCAD restart because tool-call IDs are stored in
  * the conversation branch.
- *
- * OpenCode runs from the pCAD project root so its project-local pcad-builder
- * agent and pcad-validation plugin are loaded. Codex keeps using the isolated
- * temporary working directory.
- *
- * The HTTP response is still an AI SDK stream, but the agent invocation itself
- * is deliberately non-streaming. pCAD needs the complete SCAD program before
- * it can compile and preview it, so token-by-token agent output has no product
- * value here.
  */
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
@@ -31,6 +22,10 @@ import type {
   LanguageModelV3StreamPart,
   LanguageModelV3Usage,
 } from '@ai-sdk/provider';
+import {
+  getAiRuntimeLimitDefinition,
+  loadBundledInstruction,
+} from '@shared/aiInstructionCatalog';
 import { env } from './env';
 import {
   buildAgentOutputContract,
@@ -39,7 +34,6 @@ import {
 } from './opencodeAgentResult';
 import { logWarning } from './serverLog';
 
-const TIMEOUT_MS = 8 * 60_000;
 const CLI_AGENT_WORKDIR = join(tmpdir(), 'pcad-cli-agent');
 const OPEN_CODE_WORKDIR = process.cwd();
 const SESSION_MARKER_PREFIX = 'cli-agent-session';
@@ -82,13 +76,6 @@ export function isCliAgentModel(modelId: string): boolean {
   );
 }
 
-/**
- * Underlying OpenCode `provider/model` ID for the canonical UI ID
- * `agent/opencode/<provider>/<model>` (the form `/api/opencode/models`
- * emits). Legacy `opencode/...` IDs pass through unchanged. Returns
- * undefined for non-OpenCode models so callers can detect the canonical
- * agent path before choosing a transport.
- */
 export function opencodeAgentUnderlyingModelId(
   modelId: string,
 ): string | undefined {
@@ -106,20 +93,6 @@ export type ChatTransport =
   | { kind: 'streaming-opencode'; underlyingModelId: string }
   | { kind: 'normal' };
 
-/**
- * Pick the chat transport for a model ID and execution mode.
- *
- * The canonical OpenCode agent ID `agent/opencode/<provider>/<model>` is the
- * single routable form: `executionMode === 'cli'` selects the CLI adapter,
- * `executionMode === 'streaming'` selects the streaming HTTP adapter. The
- * transport is never encoded in a different model ID.
- *
- * Legacy `opencode/...` IDs (possibly persisted in old conversations) keep
- * today's behavior: streaming mode routes to the streaming adapter, any other
- * mode falls through to `buildChatModel` (which resolves them via
- * `providerFor` -> `opencodeChatModel`). Non-OpenCode models always fall
- * through unchanged.
- */
 export function selectChatTransport(
   modelId: string,
   executionMode: 'cli' | 'streaming',
@@ -148,7 +121,6 @@ function displayName(id: string): string {
     .join(' ');
 }
 
-/** Codex has no supported command for enumerating account-entitled models. */
 export function configuredCodexModels(): CliAgentModel[] {
   const configured = env('CODEX_MODELS')
     .split(',')
@@ -175,11 +147,20 @@ async function ensureCliAgentWorkdir(): Promise<string> {
   return CLI_AGENT_WORKDIR;
 }
 
+function bundledCliTimeoutMs(): number {
+  const definition = getAiRuntimeLimitDefinition('transport.cliTimeoutMs');
+  if (!definition || typeof definition.defaultValue !== 'number') {
+    throw new Error('Missing transport.cliTimeoutMs runtime definition');
+  }
+  return definition.defaultValue;
+}
+
 function runCli(
   bin: string,
   args: string[],
   input: string,
   cwd: string,
+  timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -192,8 +173,8 @@ function runCli(
     };
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      fail(new Error(`${bin} timed out after ${TIMEOUT_MS / 60_000} minutes`));
-    }, TIMEOUT_MS);
+      fail(new Error(`${bin} timed out after ${timeoutMs} ms`));
+    }, timeoutMs);
     const abort = () => {
       child.kill('SIGKILL');
       fail(new Error(`${bin} request was cancelled`));
@@ -302,7 +283,9 @@ type ParametricArtifactSnapshot = {
   code: string;
 };
 
-function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefined {
+function parseArtifactInput(
+  value: unknown,
+): ParametricArtifactSnapshot | undefined {
   let candidate = value;
   if (typeof candidate === 'string') {
     try {
@@ -315,7 +298,9 @@ function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefi
     return undefined;
   }
   const record = candidate as Record<string, unknown>;
-  if (typeof record['code'] !== 'string' || !record['code'].trim()) return undefined;
+  if (typeof record['code'] !== 'string' || !record['code'].trim()) {
+    return undefined;
+  }
   return {
     title:
       typeof record['title'] === 'string' && record['title'].trim()
@@ -329,8 +314,14 @@ function parseArtifactInput(value: unknown): ParametricArtifactSnapshot | undefi
   };
 }
 
-function currentArtifact(prompt: LanguageModelV3Prompt): ParametricArtifactSnapshot | undefined {
-  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+function currentArtifact(
+  prompt: LanguageModelV3Prompt,
+): ParametricArtifactSnapshot | undefined {
+  for (
+    let messageIndex = prompt.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = prompt[messageIndex];
     const parts = Array.isArray(message.content)
       ? message.content
@@ -378,7 +369,11 @@ function toolOutputText(value: unknown): string {
 }
 
 function latestBuildResult(prompt: LanguageModelV3Prompt): string {
-  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = prompt.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = prompt[messageIndex];
     const parts = Array.isArray(message.content)
       ? message.content
@@ -416,27 +411,24 @@ function systemText(prompt: LanguageModelV3Prompt): string {
     .trim();
 }
 
-/**
- * Build only the state needed for this CLI turn. The external agent session
- * owns its conversation history while pCAD remains authoritative for the CAD
- * artifact. Every turn therefore carries the complete current OpenSCAD source
- * plus the new user request or latest browser compile/inspection result.
- */
 export function buildPersistentCliAgentPrompt(
   prompt: LanguageModelV3Prompt,
   sessionExists: boolean,
+  transportInstruction = '',
 ): string {
-  const lines: string[] = [
-    '<environment_instructions>',
-    'You are an AI CAD worker reached from pCAD.',
-    'Treat <current_pcad_artifact> as the authoritative model currently shown by pCAD.',
-    'Do not use filesystem, shell, network, or external files; work only from the supplied conversation state.',
-    '</environment_instructions>',
-  ];
+  const lines: string[] = [];
+
+  if (transportInstruction.trim()) {
+    lines.push(
+      `<pcad_transport_instructions>\n${transportInstruction.trim()}\n</pcad_transport_instructions>`,
+    );
+  }
 
   if (!sessionExists) {
     const system = systemText(prompt);
-    if (system) lines.push(`<pcad_system_context>\n${system}\n</pcad_system_context>`);
+    if (system) {
+      lines.push(`<pcad_system_context>\n${system}\n</pcad_system_context>`);
+    }
   }
 
   const artifact = currentArtifact(prompt);
@@ -456,30 +448,18 @@ export function buildPersistentCliAgentPrompt(
 
   const userText = latestUserText(prompt);
   const buildResult = latestBuildResult(prompt);
-  const isBuildContinuation = prompt[prompt.length - 1]?.role === 'tool' && Boolean(buildResult);
+  const isBuildContinuation =
+    prompt[prompt.length - 1]?.role === 'tool' && Boolean(buildResult);
 
   if (isBuildContinuation) {
     if (userText) {
       lines.push(`<task_context>\n${userText}\n</task_context>`);
     }
-    lines.push(
-      [
-        '<pcad_build_result>',
-        buildResult,
-        '</pcad_build_result>',
-        '<continuation_instruction>',
-        'Continue the same CAD task from the authoritative artifact above.',
-        'If another geometry revision is needed, return a corrected complete artifact.',
-        'If the current artifact already satisfies the task, return the concise final message.',
-        '</continuation_instruction>',
-      ].join('\n'),
-    );
+    lines.push(`<pcad_build_result>\n${buildResult}\n</pcad_build_result>`);
   } else if (userText) {
     lines.push(`<user_request>\n${userText}\n</user_request>`);
   } else {
-    lines.push(
-      '<continuation_instruction>Continue the current pCAD task from the authoritative artifact above.</continuation_instruction>',
-    );
+    lines.push('<pcad_continuation />');
   }
 
   return lines.join('\n\n');
@@ -499,24 +479,33 @@ function sessionIdFromToolCallId(
   toolCallId: string,
 ): string | undefined {
   const [prefix, encodedAgent, encodedSession] = toolCallId.split('.', 4);
-  if (prefix !== SESSION_MARKER_PREFIX || encodedAgent !== agent || !encodedSession) {
+  if (
+    prefix !== SESSION_MARKER_PREFIX ||
+    encodedAgent !== agent ||
+    !encodedSession
+  ) {
     return undefined;
   }
   try {
     const decoded = Buffer.from(encodedSession, 'base64url').toString('utf8');
-    if (agent === 'opencode') return decoded.startsWith('ses') ? decoded : undefined;
+    if (agent === 'opencode') {
+      return decoded.startsWith('ses') ? decoded : undefined;
+    }
     return /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(decoded) ? decoded : undefined;
   } catch {
     return undefined;
   }
 }
 
-/** Recover the most recent session for the same CLI agent from pCAD history. */
 export function cliAgentSessionIdFromPrompt(
   agent: AgentKind,
   prompt: LanguageModelV3Prompt,
 ): string | undefined {
-  for (let messageIndex = prompt.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = prompt.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = prompt[messageIndex];
     const parts = Array.isArray(message.content)
       ? message.content
@@ -524,7 +513,9 @@ export function cliAgentSessionIdFromPrompt(
     for (let partIndex = parts.length - 1; partIndex >= 0; partIndex -= 1) {
       const part = parts[partIndex];
       if (!part || typeof part !== 'object') continue;
-      const toolCallId = (part as unknown as Record<string, unknown>)['toolCallId'];
+      const toolCallId = (part as unknown as Record<string, unknown>)[
+        'toolCallId'
+      ];
       if (typeof toolCallId !== 'string') continue;
       const sessionId = sessionIdFromToolCallId(agent, toolCallId);
       if (sessionId) return sessionId;
@@ -533,12 +524,6 @@ export function cliAgentSessionIdFromPrompt(
   return undefined;
 }
 
-/**
- * Build CLI arguments for a new or resumed agent session. OpenCode resumes
- * with --session and always selects the project-local pcad-builder agent.
- * Codex uses `exec resume <thread-id>` and must not be ephemeral because
- * ephemeral Codex threads are intentionally not resumable.
- */
 export function buildCliAgentArgs(
   agent: AgentKind,
   model: string,
@@ -570,19 +555,11 @@ export function buildCliAgentArgs(
     : ['exec', ...common];
 }
 
-/**
- * Build the final instruction sent to a CLI agent. OpenCode uses the same
- * result contract as the streaming transport; Codex keeps the equivalent
- * strict JSON envelope.
- */
 export function buildCliAgentInstruction(
-  agent: AgentKind,
+  _agent: AgentKind,
   prompt: string,
 ): string {
-  if (agent === 'opencode') {
-    return `${prompt}\n\n${buildAgentOutputContract()}`;
-  }
-  return `${prompt}\n\nReturn only JSON with exactly these keys: {"code":"complete OpenSCAD source or empty string","message":"short user-facing status"}. For a CAD request, put the complete runnable OpenSCAD program in code. Do not use tools, network access, or files; work only from this conversation.`;
+  return `${prompt}\n\n${buildAgentOutputContract()}`;
 }
 
 function isMissingSessionError(error: unknown): boolean {
@@ -602,10 +579,12 @@ async function invokeAgent(
   agent: AgentKind,
   model: string,
   prompt: string,
+  timeoutMs: number,
   existingSessionId?: string,
   signal?: AbortSignal,
 ): Promise<AgentInvocation> {
-  const dir = agent === 'opencode' ? OPEN_CODE_WORKDIR : await ensureCliAgentWorkdir();
+  const dir =
+    agent === 'opencode' ? OPEN_CODE_WORKDIR : await ensureCliAgentWorkdir();
   const instruction = buildCliAgentInstruction(agent, prompt);
 
   const runOnce = async (sessionId?: string) => {
@@ -614,6 +593,7 @@ async function invokeAgent(
       buildCliAgentArgs(agent, model, sessionId),
       instruction,
       dir,
+      timeoutMs,
       signal,
     );
     const parsed =
@@ -663,21 +643,39 @@ async function invokeAgent(
   };
 }
 
-export function cliAgentChatModel(appModelId: string): LanguageModelV3 {
+export function cliAgentChatModel(
+  appModelId: string,
+  options: { transportInstruction?: string; timeoutMs?: number } = {},
+): LanguageModelV3 {
   const { agent, model } = parseModelId(appModelId);
+  const transportInstruction =
+    options.transportInstruction ??
+    loadBundledInstruction(
+      agent === 'opencode' ? 'transport.opencode' : 'transport.codex',
+    );
+  const timeoutMs = options.timeoutMs ?? bundledCliTimeoutMs();
+
   return {
     specificationVersion: 'v3',
     provider: `${agent}-cli`,
     modelId: appModelId,
     supportedUrls: {},
-    async doStream(options: LanguageModelV3CallOptions) {
-      const existingSessionId = cliAgentSessionIdFromPrompt(agent, options.prompt);
+    async doStream(optionsForCall: LanguageModelV3CallOptions) {
+      const existingSessionId = cliAgentSessionIdFromPrompt(
+        agent,
+        optionsForCall.prompt,
+      );
       const invocation = await invokeAgent(
         agent,
         model,
-        buildPersistentCliAgentPrompt(options.prompt, Boolean(existingSessionId)),
+        buildPersistentCliAgentPrompt(
+          optionsForCall.prompt,
+          Boolean(existingSessionId),
+          transportInstruction,
+        ),
+        timeoutMs,
         existingSessionId,
-        options.abortSignal,
+        optionsForCall.abortSignal,
       );
       const result = invocation.result;
       const parts: LanguageModelV3StreamPart[] = [
@@ -727,8 +725,8 @@ export function cliAgentChatModel(appModelId: string): LanguageModelV3 {
         response: {},
       };
     },
-    async doGenerate(options) {
-      const result = await this.doStream(options);
+    async doGenerate(optionsForCall) {
+      const result = await this.doStream(optionsForCall);
       const content: LanguageModelV3Content[] = [];
       let finalReason = finishReason('stop');
       let usage = USAGE();

@@ -83,11 +83,23 @@ export type GenerationStatus = Database['public']['Enums']['generation-status'];
 export type ConversationSettings = {
   model?: Model;
   /**
+   * Repository-backed AI instruction package pinned when the conversation is
+   * created. Model selection remains independent. Old conversations without
+   * this field fall back to the user's current package for compatibility.
+   */
+  instructionProfileId?: string;
+  /**
    * LLM/agent model used by Creative conversations. `model` remains the
    * Creative mesh backend ID in that mode, so keeping the two identities
    * separate avoids treating a mesh backend as an LLM.
    */
   creativeAgentModel?: Model;
+  /**
+   * Prompt profile ID pinned to a Creative conversation. It is independent
+   * from the Parametric/Generative prompt profile so each mode can keep a
+   * reproducible system prompt across later Settings changes.
+   */
+  creativePromptProfileId?: string | null;
   /**
    * Per-conversation follow-up suggestions rendered as pills above the
    * chat input. Regenerated server-side after each non-tool-call
@@ -101,10 +113,11 @@ export type ConversationSettings = {
    */
   openCodeExecutionMode?: 'cli' | 'streaming';
   /**
-   * Prompt profile ID pinned to this conversation. When set, the resolver
-   * fetches the profile at runtime and uses its template (or the built-in
-   * when NULL). Pinned profiles make new-conversation behavior reproducible
-   * — changing Settings later does not silently alter old conversations.
+   * Parametric/Generative prompt profile ID pinned to this conversation.
+   * When set, the resolver fetches the profile at runtime and uses its
+   * template (or the built-in when NULL). Pinned profiles make
+   * new-conversation behavior reproducible — changing Settings later does not
+   * silently alter old conversations.
    */
   promptProfileId?: string | null;
 } | null;

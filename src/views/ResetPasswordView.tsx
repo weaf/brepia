@@ -44,14 +44,14 @@ export function ResetPasswordView() {
         <div className="rounded-lg bg-adam-bg-secondary-dark p-8 shadow-md">
           <div className="mb-4 flex flex-col items-center justify-center gap-3">
             <BrepiaBrand showByNoty />
-            <h1 className="text-2xl font-semibold text-white">
+            <h1 className="text-2xl font-semibold text-adam-text-primary">
               Reset Password
             </h1>
           </div>
           {!isSuccess ? (
             <form onSubmit={handleResetPassword} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-white">
+                <Label htmlFor="email" className="text-adam-text-primary">
                   Email
                 </Label>
                 <Input
@@ -61,7 +61,7 @@ export function ResetPasswordView() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="border-gray-700 bg-adam-bg-dark text-white placeholder:text-gray-400"
+                  className="border-adam-neutral-700 bg-adam-bg-dark text-adam-text-primary placeholder:text-adam-text-secondary"
                 />
               </div>
 
@@ -90,7 +90,7 @@ export function ResetPasswordView() {
             </form>
           ) : (
             <div className="space-y-4 text-center">
-              <p className="text-green-400">
+              <p className="text-green-600 dark:text-green-400">
                 Check your email for password reset instructions.
               </p>
               <Link
