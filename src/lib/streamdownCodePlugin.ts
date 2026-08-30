@@ -6,30 +6,30 @@ import {
   type TokensResult,
 } from '@shikijs/core';
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript';
-import { bundledLanguages, bundledLanguagesInfo } from '@shikijs/langs';
-import { bundledThemes } from '@shikijs/themes';
+import {
+  bundledLanguageNames,
+  bundledLanguages,
+  bundledThemes,
+} from '@/generated/shikiBundles';
 
-type BundledLanguage = keyof typeof bundledLanguages;
-type BundledTheme = keyof typeof bundledThemes;
-type ThemeInput = BundledTheme | ThemeRegistrationAny;
-
+type ThemeInput = string | ThemeRegistrationAny;
 type HighlightResult = TokensResult;
 
 type HighlightOptions = {
   code: string;
-  language: BundledLanguage;
+  language: string;
   themes: [ThemeInput, ThemeInput];
 };
 
 export type StreamdownCodeHighlighterPlugin = {
-  getSupportedLanguages: () => BundledLanguage[];
+  getSupportedLanguages: () => string[];
   getThemes: () => [ThemeInput, ThemeInput];
   highlight: (
     options: HighlightOptions,
     callback?: (result: HighlightResult) => void,
   ) => HighlightResult | null;
   name: 'shiki';
-  supportsLanguage: (language: BundledLanguage) => boolean;
+  supportsLanguage: (language: string) => boolean;
   type: 'code-highlighter';
 };
 
@@ -43,33 +43,22 @@ const createHighlighter = createBundledHighlighter({
   engine: () => createJavaScriptRegexEngine({ forgiving: true }),
 });
 
-const languageAliases = Object.fromEntries(
-  bundledLanguagesInfo.flatMap((info) =>
-    (info.aliases ?? []).map((alias) => [alias, info.id as BundledLanguage]),
-  ),
-) as Record<string, BundledLanguage>;
-
-const languageNames = new Set<BundledLanguage>(
-  Object.keys(bundledLanguages) as BundledLanguage[],
-);
-
-const normalizeLanguage = (language: string): string => {
-  const lower = language.trim().toLowerCase();
-  return languageAliases[lower] ?? lower;
-};
-
+const languageNames = new Set(bundledLanguageNames);
 const highlighterCache = new Map<
   string,
-  Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
+  Promise<HighlighterGeneric<string, string>>
 >();
 const tokensCache = new Map<string, TokensResult>();
 const subscribers = new Map<string, Set<(result: TokensResult) => void>>();
+
+const normalizeLanguage = (language: string): string =>
+  language.trim().toLowerCase();
 
 const getThemeName = (theme: ThemeInput): string =>
   typeof theme === 'string' ? theme : (theme.name ?? 'custom');
 
 const getHighlighterCacheKey = (
-  language: BundledLanguage | SpecialLanguage,
+  language: string | SpecialLanguage,
   themes: [ThemeInput, ThemeInput],
 ) => `${language}-${getThemeName(themes[0])}-${getThemeName(themes[1])}`;
 
@@ -84,16 +73,16 @@ const getTokensCacheKey = (
 };
 
 const getHighlighter = (
-  language: BundledLanguage | SpecialLanguage,
+  language: string | SpecialLanguage,
   themes: [ThemeInput, ThemeInput],
-): Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> => {
+): Promise<HighlighterGeneric<string, string>> => {
   const cacheKey = getHighlighterCacheKey(language, themes);
   const cached = highlighterCache.get(cacheKey);
   if (cached) return cached;
 
   const highlighterPromise = createHighlighter({
     themes,
-    langs: language === 'text' ? [] : [language as BundledLanguage],
+    langs: language === 'text' ? [] : [language],
   });
   highlighterCache.set(cacheKey, highlighterPromise);
   return highlighterPromise;
@@ -112,11 +101,11 @@ export function createStreamdownCodePlugin(
     type: 'code-highlighter',
 
     supportsLanguage(language) {
-      return languageNames.has(normalizeLanguage(language) as BundledLanguage);
+      return languageNames.has(normalizeLanguage(language));
     },
 
     getSupportedLanguages() {
-      return Array.from(languageNames);
+      return [...bundledLanguageNames];
     },
 
     getThemes() {
@@ -144,19 +133,17 @@ export function createStreamdownCodePlugin(
         subscribers.set(tokensCacheKey, callbacks);
       }
 
-      const safeLanguage: BundledLanguage | SpecialLanguage = languageNames.has(
-        resolvedLanguage as BundledLanguage,
+      const safeLanguage: string | SpecialLanguage = languageNames.has(
+        resolvedLanguage,
       )
-        ? (resolvedLanguage as BundledLanguage)
+        ? resolvedLanguage
         : 'text';
 
       getHighlighter(safeLanguage, themes)
         .then((highlighter) => {
           const availableLanguages = highlighter.getLoadedLanguages();
-          const languageToUse = availableLanguages.includes(
-            resolvedLanguage as BundledLanguage,
-          )
-            ? (resolvedLanguage as BundledLanguage)
+          const languageToUse = availableLanguages.includes(resolvedLanguage)
+            ? resolvedLanguage
             : 'text';
 
           const result = highlighter.codeToTokens(code, {
