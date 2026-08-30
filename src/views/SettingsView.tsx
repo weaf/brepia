@@ -136,20 +136,16 @@ export default function SettingsView() {
           className="w-full min-w-0"
         >
           <div className="sticky top-0 z-20 -mx-2 mb-4 min-w-0 bg-adam-background-1/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
-            <div className="hide-scrollbar w-full min-w-0 max-w-full overflow-x-auto">
-              <TabsList className="h-auto w-max min-w-full justify-start gap-1">
-                <TabsTrigger value="account">Account</TabsTrigger>
-                <TabsTrigger value="ai">AI</TabsTrigger>
-                {isAdmin && (
-                  <TabsTrigger value="administration">
-                    Administration
-                  </TabsTrigger>
-                )}
-                {lifecycleDiagnosticsEnabled && (
-                  <TabsTrigger value="debug">Debug</TabsTrigger>
-                )}
-              </TabsList>
-            </div>
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 sm:w-max">
+              <TabsTrigger value="account">Account</TabsTrigger>
+              <TabsTrigger value="ai">AI</TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="administration">Administration</TabsTrigger>
+              )}
+              {lifecycleDiagnosticsEnabled && (
+                <TabsTrigger value="debug">Debug</TabsTrigger>
+              )}
+            </TabsList>
           </div>
 
           <TabsContent
