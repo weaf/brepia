@@ -20,7 +20,14 @@ Please note that this repository has a [code of conduct](CODE_OF_CONDUCT.md); fo
 
 ## Brepia compatibility boundaries
 
-Brepia contains compatibility-sensitive identifiers inherited from pCAD/CADAM. Do not rename internal `pcad`, `cadam` or `adam` identifiers solely for cosmetic consistency. Check [`docs/brepia_branding.md`](docs/brepia_branding.md) and the current remake status before changing routing, environment variables, database/storage identifiers, agent IDs, external integration IDs or historical references.
+Brepia still contains compatibility-sensitive identifiers inherited from pCAD/CADAM. Current product/runtime cleanup is staged rather than performed as a blind global rename.
+
+Before changing routing, environment variables, database/storage identifiers, agent IDs, external integration IDs, prompt/profile lineage or historical references, check:
+
+- [`docs/brepia_branding.md`](docs/brepia_branding.md)
+- [`docs/cadam_cleanup_plan.md`](docs/cadam_cleanup_plan.md)
+
+In particular, preserve `CADAM Original` lineage and historical/upstream attribution. Persistent or externally configured identifiers require an explicit migration/deprecation plan rather than a cosmetic rename.
 
 ## Style Guide
 

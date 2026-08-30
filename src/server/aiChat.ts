@@ -578,7 +578,7 @@ function creativeTools({
       description,
       execute: async (input: AppTools['create_mesh']['input']) => {
         const response = await handleMeshRequest(
-          new Request(new URL('/cadam/api/mesh', req.url), {
+          new Request(new URL('/api/mesh', req.url), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -832,7 +832,10 @@ export async function handleAiChatRequest(req: Request) {
       conversationId: conversation.id,
       additionalContext: { operation: 'load_ai_runtime_settings' },
     });
-    return jsonResponse({ error: 'AI runtime settings could not be loaded' }, 500);
+    return jsonResponse(
+      { error: 'AI runtime settings could not be loaded' },
+      500,
+    );
   }
 
   let resolvedSystemPrompt: string;
@@ -920,7 +923,10 @@ export async function handleAiChatRequest(req: Request) {
       conversationId: conversation.id,
       additionalContext: { operation: 'resolve_auxiliary_instructions' },
     });
-    return jsonResponse({ error: 'AI instructions could not be resolved' }, 500);
+    return jsonResponse(
+      { error: 'AI instructions could not be resolved' },
+      500,
+    );
   }
 
   const tools =
@@ -1157,7 +1163,9 @@ export async function handleAiChatRequest(req: Request) {
   const openCodeRuntime: OpenCodeRuntimeOptions = {
     transportInstruction: openCodeTransportInstruction,
     timeoutMs: aiRuntime.number('transport.openCodeTimeoutMs'),
-    validationAttempts: aiRuntime.number('transport.openCodeValidationAttempts'),
+    validationAttempts: aiRuntime.number(
+      'transport.openCodeValidationAttempts',
+    ),
   };
   const cliTimeoutMs = aiRuntime.number('transport.cliTimeoutMs');
 

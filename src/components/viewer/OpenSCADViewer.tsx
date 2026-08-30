@@ -303,6 +303,17 @@ export function OpenSCADPreview({
 // Alias for backwards compatibility (ViewerSection imports OpenSCADViewer)
 export { OpenSCADPreview as OpenSCADViewer };
 
+function compileErrorDetail(error?: OpenSCADError | Error): string | null {
+  if (!error) return null;
+  if ('stdErr' in error && Array.isArray(error.stdErr)) {
+    const lines = error.stdErr
+      .filter((line): line is string => typeof line === 'string' && !!line.trim())
+      .slice(-2);
+    if (lines.length > 0) return lines.join(' ');
+  }
+  return error.message || error.name || null;
+}
+
 function FixWithAIButton({
   error,
   fixError,
@@ -310,6 +321,8 @@ function FixWithAIButton({
   error?: OpenSCADError | Error;
   fixError?: (error: OpenSCADError) => void;
 }) {
+  const detail = compileErrorDetail(error);
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
       <div className="flex flex-col items-center gap-3">
@@ -324,6 +337,11 @@ function FixWithAIButton({
           <p className="mt-1 text-xs text-adam-text-primary/60">
             Brepia encountered an error while compiling
           </p>
+          {detail && (
+            <p className="mx-auto mt-2 max-w-md break-words text-xs text-adam-text-primary/50">
+              {detail}
+            </p>
+          )}
         </div>
       </div>
       {fixError && error && error.name === 'OpenSCADError' && (

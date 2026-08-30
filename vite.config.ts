@@ -7,9 +7,51 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
-const appBase = '/cadam';
-const normalizedAppBase = appBase.replace(/\/$/, '');
+const appBase = '/';
+const legacyAppBase = '/cadam';
 const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
+
+function legacyCadamRedirectPlugin(): Plugin {
+  return {
+    name: 'legacy-cadam-base-redirect',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url) return next();
+
+        const url = new URL(req.url, 'http://localhost');
+        if (
+          url.pathname !== legacyAppBase &&
+          !url.pathname.startsWith(`${legacyAppBase}/`)
+        ) {
+          return next();
+        }
+
+        const pathname = url.pathname.slice(legacyAppBase.length) || '/';
+        res.statusCode = 308;
+        res.setHeader('Location', `${pathname}${url.search}`);
+        res.end();
+      });
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url) return next();
+
+        const url = new URL(req.url, 'http://localhost');
+        if (
+          url.pathname !== legacyAppBase &&
+          !url.pathname.startsWith(`${legacyAppBase}/`)
+        ) {
+          return next();
+        }
+
+        const pathname = url.pathname.slice(legacyAppBase.length) || '/';
+        res.statusCode = 308;
+        res.setHeader('Location', `${pathname}${url.search}`);
+        res.end();
+      });
+    },
+  };
+}
 
 function supabaseProxyPlugin(): Plugin {
   return {
@@ -80,33 +122,41 @@ function supabaseProxyPlugin(): Plugin {
   };
 }
 
-function serveOpenScadWasmInDev(): Plugin {
+function serveOpenScadWasm(): Plugin {
+  const wasmPath = path.resolve(
+    __dirname,
+    'src/vendor/openscad-wasm/openscad.wasm',
+  );
+
+  const installMiddleware = (server: {
+    middlewares: {
+      use: (handler: (req: http.IncomingMessage, res: http.ServerResponse, next: (error?: unknown) => void) => void) => void;
+    };
+  }) => {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url) return next();
+
+      const url = new URL(req.url, 'http://localhost');
+      if (!url.pathname.endsWith('/openscad.wasm')) {
+        return next();
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/wasm');
+      res.setHeader('Cache-Control', 'no-cache');
+      fs.createReadStream(wasmPath)
+        .on('error', (error) => next(error))
+        .pipe(res);
+    });
+  };
+
   return {
-    name: 'serve-openscad-wasm-in-dev',
+    name: 'serve-openscad-wasm',
     configureServer(server) {
-      const wasmPath = path.resolve(
-        __dirname,
-        'src/vendor/openscad-wasm/openscad.wasm',
-      );
-
-      server.middlewares.use((req, res, next) => {
-        if (!req.url) return next();
-
-        const url = new URL(req.url, 'http://localhost');
-        if (
-          url.pathname !==
-          `${normalizedAppBase}/src/vendor/openscad-wasm/openscad.wasm`
-        ) {
-          return next();
-        }
-
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/wasm');
-        res.setHeader('Cache-Control', 'no-cache');
-        fs.createReadStream(wasmPath)
-          .on('error', (error) => next(error))
-          .pipe(res);
-      });
+      installMiddleware(server);
+    },
+    configurePreviewServer(server) {
+      installMiddleware(server);
     },
   };
 }
@@ -114,20 +164,21 @@ function serveOpenScadWasmInDev(): Plugin {
 export default defineConfig({
   base: appBase,
   plugins: [
-    serveOpenScadWasmInDev(),
+    legacyCadamRedirectPlugin(),
+    serveOpenScadWasm(),
     supabaseProxyPlugin(),
     tanstackStart({
       router: {
-        basepath: normalizedAppBase,
+        basepath: appBase,
         semicolons: true,
       },
       spa: {
         enabled: true,
-        maskPath: normalizedAppBase,
+        maskPath: appBase,
       },
     }),
     nitro({
-      baseURL: normalizedAppBase,
+      baseURL: appBase,
       inlineDynamicImports: true,
     }),
     react(),
@@ -138,6 +189,10 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@/vendor/openscad-wasm/openscad.js': path.resolve(
+        __dirname,
+        './src/vendor/openscad-wasm/runtime.ts',
+      ),
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, './shared'),
     },
@@ -145,7 +200,7 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000,
 
-    outDir: 'dist/cadam',
+    outDir: 'dist/brepia',
     emptyOutDir: true,
 
     sourcemap: true,
@@ -153,7 +208,7 @@ export default defineConfig({
   environments: {
     client: {
       build: {
-        outDir: 'dist/cadam',
+        outDir: 'dist/brepia',
         rollupOptions: {
           output: {
             manualChunks(id) {
