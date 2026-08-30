@@ -4,15 +4,16 @@ This file records repository/workstation conventions that coding agents should r
 
 ## Local Supabase lifecycle
 
-On the current pCAD/Brepia development workstation, the local Supabase service lifecycle is documented as being owned by an external workstation manager called **NOx**.
+The local pCAD/Brepia Supabase stack is owned by the **repository-local Supabase CLI**, invoked through `npx`.
 
-Important repository-side facts:
+A previous workstation note incorrectly referred to a lifecycle manager named `NOx`. Workstation inspection on 2026-08-30 found no NOx executable, service or configuration; the running containers are the standard Supabase CLI/Compose project `cadam`. Treat historical NOx references as a documentation typo for `npx`, not as an external dependency.
 
-- this repository does **not** contain the NOx implementation/configuration itself;
-- `start.sh` does not start or stop Supabase — it configures the rootless Podman socket/shim, checks the already-running local stack with the repository-local CLI, and exits if Supabase is unavailable;
-- do **not** run `supabase start`, `supabase stop`, `npx supabase start`, or `npx supabase stop` as part of the normal local workflow;
-- a globally installed `supabase` binary is not expected; `supabase: command not found` is therefore not evidence that the project setup is broken;
-- after the workstation manager has started the local stack, use the repository-local CLI through `npx` for project operations, for example:
+Current workflow:
+
+- a globally installed `supabase` binary is not expected; use `npx supabase ...` from the repository;
+- `./start.sh` enables the rootless Podman socket, configures the repository Podman compatibility shim, checks the local stack and runs `npx supabase start` automatically when the stack is not already running;
+- explicit lifecycle commands are `npx supabase start`, `npx supabase status`, and `npx supabase stop` after configuring the same rootless Podman environment used by `start.sh`;
+- database operations use the repository-local CLI, for example:
 
 ```bash
 npx supabase db diff -f <migration_name>
@@ -22,15 +23,9 @@ npx supabase gen types typescript --local > shared/database.ts
 
 - never use `supabase db push` / `npx supabase db push` or `supabase db pull` / `npx supabase db pull` for the normal local workflow;
 - never hand-edit `shared/database.ts`; regenerate it from the running local Supabase instance;
-- follow `.cursor/rules/database-workflow.mdc` for the reconciled declarative schema/migration workflow.
+- follow `.cursor/rules/database-workflow.mdc` for the declarative schema/migration workflow.
 
-The exact workstation-side NOx identity/start/stop/status commands are being verified separately. See `docs/local_supabase_lifecycle.md`. If the stack is missing or the NOx convention looks stale, run the read-only inventory:
-
-```bash
-bash scripts/inspect-local-supabase-lifecycle.sh
-```
-
-Do not silently substitute a standalone Supabase lifecycle before that workstation evidence is reconciled.
+`docs/local_supabase_lifecycle.md` records the workstation investigation and the correction of the old NOx note. `scripts/inspect-local-supabase-lifecycle.sh` remains available as a read-only troubleshooting inventory.
 
 ## Brepia remake work
 
