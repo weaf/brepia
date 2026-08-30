@@ -48,6 +48,13 @@ body {
   color: rgb(var(--brepia-text-primary));
 }
 
+/* The legacy user-message bubble still carries the original dark-only
+   `text-white` utility. This exact class combination is unique to UserBubble;
+   keep it readable in Light without changing intentionally white controls. */
+html[data-theme='light'] .relative.grid.w-fit.rounded-lg.text-white {
+  color: rgb(var(--brepia-text-primary));
+}
+
 a:focus-visible {
   border-radius: 0.25rem;
   outline: 2px solid #00a6ff;
