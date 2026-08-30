@@ -527,10 +527,7 @@ function MobileSidebar({
           <Menu className="h-5 w-5 text-adam-text-primary" />
         </Button>
       </SheetTrigger>
-      <SheetContent
-        side="left"
-        className="bg-adam-bg-dark p-0 [&>button]:text-white"
-      >
+      <SheetContent side="left" className="bg-adam-bg-dark p-0">
         {/* For aria stuff */}
         <SheetHeader className="hidden">
           <SheetTitle className="text-adam-text-primary">Brepia</SheetTitle>
