@@ -1,6 +1,6 @@
 # Brepia Settings UX and appearance plan
 
-Status: **ACTIVE on `feature/post-merge-functionality`**
+Status: **IMPLEMENTATION COMPLETE on `feature/post-merge-functionality`; Phase 6 manual/regression gate pending**
 
 This plan covers usability, responsiveness, appearance, and accessibility improvements for the Brepia Settings experience. It is intentionally separate from Parametric/Creative runtime behavior, AI prompt/profile optimization, and stable-runtime recovery.
 
@@ -17,15 +17,15 @@ This plan covers usability, responsiveness, appearance, and accessibility improv
 
 ## Baseline observations
 
-The current implementation is functional but has several UX constraints:
+The original implementation was functional but had several UX constraints:
 
 - `SettingsView` used a single `max-w-xl` content width for Account, AI, Administration, and Debug. This was reasonable for Account but unnecessarily constrained AI and administration controls on desktop.
 - The root Settings flex layout vertically centered short pages, so the page heading moved significantly when switching between a short Account page and a long AI page.
-- AI settings already contain responsive grids, but the narrow parent prevented those layouts from making good use of desktop width.
-- Top-level Settings and AI subsection navigation used horizontally scrollable tab lists with hidden scrollbars. Phase 2 replaces those hidden-scroll dependencies with wrapping primary tabs, a mobile AI section selector, and desktop side navigation.
-- The CSS bundle already contained generic light/dark variables while Brepia surfaces used fixed `adam-*` palette utilities. Phase 3 now routes the core Brepia palette through semantic appearance tokens while retaining the existing utility names as a compatibility layer.
+- AI settings already contained responsive grids, but the narrow parent prevented those layouts from making good use of desktop width.
+- Top-level Settings and AI subsection navigation used horizontally scrollable tab lists with hidden scrollbars. Phase 2 replaced those hidden-scroll dependencies with wrapping primary tabs, a mobile AI section selector, and desktop side navigation.
+- The CSS bundle already contained generic light/dark variables while Brepia surfaces used fixed `adam-*` palette utilities. Phase 3 routes the core Brepia palette through semantic appearance tokens while retaining the existing utility names as a compatibility layer.
 - The Phase 4 review found that the remaining AI-settings density was primarily information-hierarchy rather than width/navigation: common default-model choices shared the same `Models` surface as the expert model catalog, while AI profile was a separate peer section.
-- Secondary text and compact controls should be checked for contrast and mobile target size rather than adjusted by visual guesswork.
+- Phase 5 identified two concrete accessibility issues rather than a need for broad redesign: dense expert controls had sub-40 px targets on mobile, and several tertiary/neutral grayscale tokens were too low-contrast for small normal text.
 
 ## UX invariants
 
@@ -50,7 +50,7 @@ Implementation checkpoint: `a708226a649a663b303ac1a46b8514e9a49d3fce`.
 - [ ] Ensure no new horizontal document overflow is introduced in real desktop/mobile review.
 - [ ] Verify existing Account actions and AI controls still render correctly.
 
-Acceptance — pending visual review:
+Acceptance — retain for Phase 6 manual review:
 
 - [ ] Account and AI headings do not jump vertically when switching tabs.
 - [ ] Long model names/selects gain useful desktop width.
@@ -65,17 +65,17 @@ Implementation checkpoint: `c5abec6c96592a5a031a8c21aec101cfb541b020`.
 
 Desktop/tablet:
 
-- [x] Keep the primary `Account / AI / Administration / Debug` navigation compact and obvious. The primary list now wraps instead of relying on hidden horizontal overflow.
+- [x] Keep the primary `Account / AI / Administration / Debug` navigation compact and obvious. The primary list wraps instead of relying on hidden horizontal overflow.
 - [x] Convert the larger AI subsection set into a left-side section navigation with content to the right at desktop/tablet widths.
 
 Mobile:
 
 - [x] Replace horizontally hidden AI subsection tabs with an explicit `Section` selector.
 - [x] Keep the currently selected section visible at all times through the controlled selector value.
-- [x] Avoid nested horizontal tab strips for normal navigation. The Prompts subsection tabs now wrap instead of scrolling horizontally.
+- [x] Avoid nested horizontal tab strips for normal navigation. The Prompts subsection tabs wrap instead of scrolling horizontally.
 - [x] Preserve keyboard navigation and accessible labels by retaining Radix tab semantics on desktop and using the existing accessible Select primitive on mobile.
 
-Acceptance — pending visual review:
+Acceptance — retain for Phase 6 manual review:
 
 - [ ] Every Settings and AI section is discoverable at 320 px without horizontal swiping to reveal hidden navigation.
 - [ ] Desktop users can move between AI sections without losing useful content width.
@@ -93,7 +93,7 @@ Implementation checkpoint: `949d605a56c8c9467ba240289b0106c52ca37cb9`.
 - [x] Persist the preference locally with the `brepia-appearance` key; no database migration or account contract was introduced.
 - [x] Apply `color-scheme` to the document so native controls follow the resolved appearance.
 - [x] Introduce semantic Brepia surface/text/border tokens and map the existing dark palette to them first. Existing `adam-*` utilities remain as compatibility aliases rather than forcing a broad component rewrite.
-- [x] Add a light palette with corresponding surface/text hierarchy. Formal contrast verification remains part of Phase 5.
+- [x] Add a light palette with corresponding surface/text hierarchy.
 - [x] Route shared layout/navigation/settings palette aliases through the semantic tokens so existing shared surfaces can follow appearance without changing their functional components.
 - [x] Remove the high-risk hardcoded dark/white combinations from the main authentication, email-confirmation, legal-notice, and History menu surfaces so Light does not render white text on light surfaces or isolated dark popups.
 - [x] Keep the 3D viewer background brightness preference independent. Appearance changes only document/UI theme state; viewer brightness continues through the existing viewer-specific brightness props/state.
@@ -105,9 +105,9 @@ Implementation notes:
 - The React provider deliberately starts from the same dark server snapshot and reconciles stored state after hydration, avoiding a server/client Settings-selection mismatch.
 - `tests/appearance.test.ts` covers accepted preference values and explicit/System resolution logic.
 - The user menu also exposes a compact `System / Light / Dark` quick switcher (`ca8218dadd76a05099c2e59d79a812107487ee19`) while the full Appearance setting remains available under Account.
-- The light-theme cleanup through `949d605a56c8c9467ba240289b0106c52ca37cb9` is styling-only: History menus, sign-in/sign-up/password/email-confirmation surfaces, and instance legal notices now use the semantic Brepia palette. No authentication, AI, Creative, Parametric, Supabase, or stable-runtime behavior was changed.
+- The light-theme cleanup through `949d605a56c8c9467ba240289b0106c52ca37cb9` is styling-only: History menus, sign-in/sign-up/password/email-confirmation surfaces, and instance legal notices use the semantic Brepia palette. No authentication, AI, Creative, Parametric, Supabase, or stable-runtime behavior was changed.
 - User visual review after the cleanup reported the result looked good. This closes the broad Dark-baseline and major Light-surface visual checks, but does not by itself prove System live switching, reload persistence/no-flash, or viewer-brightness independence.
-- The semantic compatibility layer intentionally does not change AI settings values, model/profile behavior, Creative/Parametric behavior, Supabase contracts, or stable-runtime logic.
+- The mobile Sheet close control was corrected in `4f5b28807aae4d0e98ef1413238523ea4cc4b699`: it now uses theme-aware foreground/hover colors, a 40 px target, visible focus ring and reduced-motion handling.
 
 Acceptance:
 
@@ -124,7 +124,7 @@ Goal: reduce technical density without removing expert functionality.
 Implementation checkpoint: `8c2303ce971cb07173d673ee7e8289784bcb95f2`.
 
 - [x] Review the AI landing experience after Phases 1–3 before changing information architecture. The review found that the flat seven-section navigation was usable, but common defaults were still mixed with expert model-catalog controls.
-- [x] Keep common choices immediately accessible. `General` is now the default AI section and contains both Parametric/Creative default models and the AI profile.
+- [x] Keep common choices immediately accessible. `General` is the default AI section and contains both Parametric/Creative default models and the AI profile.
 - [x] Group model catalog, local models, prompts, runtime, providers, and vision as advanced configuration. Desktop navigation and the mobile section selector expose explicit `Common` and `Advanced` grouping.
 - [x] Do not hide functionality behind an irreversible simplified mode. All previous sections remain directly reachable; only component placement and labels changed.
 
@@ -135,7 +135,7 @@ Reconciliation note:
 Implementation notes:
 
 - `DefaultModelSettings` and `InstructionProfileSettings` are rendered together under `General`; their existing query/mutation behavior is unchanged.
-- The previous expert `AiModelsSettings` panel is now `Model catalog` under `Advanced` rather than sharing the same landing surface as default-model selection.
+- The previous expert `AiModelsSettings` panel is `Model catalog` under `Advanced` rather than sharing the same landing surface as default-model selection.
 - `Local Models`, `Prompts`, `Runtime`, `Providers`, and `Vision` retain their existing components and behavior.
 - Desktop group labels are presentation-only inside the Radix tab list so they do not become additional keyboard tabs; the mobile selector uses Radix Select groups/labels.
 
@@ -148,9 +148,9 @@ Acceptance:
 
 ## Phase 5 — Accessibility and interaction polish
 
-Interaction checkpoint: `281eb0c05de53b6c201dfc56bf2c1f19f9b11d42`.
-
 ### Phase 5A — core Settings controls
+
+Interaction checkpoint: `281eb0c05de53b6c201dfc56bf2c1f19f9b11d42`.
 
 - [x] Increase the primary Settings tabs, desktop AI section tabs and Prompt subsection tabs to practical 40 px minimum targets while preserving existing Radix keyboard semantics.
 - [x] Increase Account action buttons and the editable-name input to a practical 40 px minimum target without changing their actions.
@@ -161,15 +161,22 @@ Interaction checkpoint: `281eb0c05de53b6c201dfc56bf2c1f19f9b11d42`.
 
 ### Phase 5B — contrast and remaining dense controls
 
-- [ ] Complete a component-level normal/secondary-text contrast pass in both themes before changing global palette tokens.
-- [ ] Dark-theme audit finding: `adam-neutral-400` resolves to `#676767` against the dark Brepia canvas near `#191A1A`, roughly 3.1:1 contrast. That is acceptable for some non-text decoration but below the 4.5:1 target for small normal text. Prefer targeted Settings copy changes or semantic text tokens rather than globally brightening every `neutral-400` use without visual review.
-- [ ] Review dense advanced controls (model-filter chips, switches and icon buttons) at phone width. The core navigation/actions now meet the practical target, but dense expert panels need their own mobile pass before claiming 40–44 px throughout.
-- [ ] Verify links and any custom non-Radix controls have an equally visible keyboard focus treatment.
-- [ ] Check zoom/reflow at 200% and ~320–390 px widths.
-- [ ] Verify remaining selected/disabled/error states in advanced panels do not rely on color alone.
-- [ ] Audit older nonessential transitions in advanced panels before claiming reduced-motion coverage for the entire Settings tree.
+Implementation checkpoint: `9030163aac4e67b29f3c3faf416eb39faa778887`.
+
+- [x] Complete the contrast pass without broadly changing primary/secondary Brepia colors. In Dark, tertiary text is raised from RGB 103 to 132 (~4.66:1 against the 25/26 canvas), `neutral-400` to RGB 140 (~5.19:1), and `neutral-500` to RGB 132 (~4.66:1). In Light, `neutral-500` is lowered from RGB 148 to 110 (~4.72:1 against the 246 canvas). This addresses the previously identified small-text/placeholder contrast gap while preserving visual hierarchy.
+- [x] Improve dense mobile controls through shared primitives instead of per-panel hacks: `size="sm"` buttons now retain a 40 px minimum target below the `sm` breakpoint, Select triggers/items have practical minimum targets, and Inputs retain at least 40 px even when expert panels request compact heights.
+- [x] Increase the Switch interaction box to 40 px while keeping the visible track at its existing ~24 px size. The checked/unchecked state continues to use Radix state plus thumb position, so it is not communicated by color alone.
+- [x] Strengthen keyboard focus: shared buttons/selects use two-pixel focus rings and application links now receive a visible two-pixel Brepia-blue `:focus-visible` outline.
+- [x] Verify selected/disabled/error semantics in the advanced-control patterns: filter choices use `aria-pressed`, Radix switches/selects expose programmatic state, disabled controls use the native/Radix disabled state, and errors retain explicit error text rather than color-only signaling.
+- [x] Add application-level `prefers-reduced-motion` fallback that effectively removes nonessential CSS animation/transition duration while preserving state changes.
+- [x] Fix the shared Sheet close control (`4f5b28807aae4d0e98ef1413238523ea4cc4b699`) so its theme contrast, keyboard focus and touch target satisfy the same interaction baseline.
+- [ ] Verify actual 200% zoom/reflow and 320–390 px rendering in a browser. This is a runtime/visual acceptance check and is intentionally left to Phase 6 rather than claimed from static code inspection.
+
+No Phase 5 change modifies AI model/profile values, provider/runtime behavior, Creative/Parametric behavior, Supabase contracts, authentication behavior or stable-runtime recovery.
 
 ## Phase 6 — Visual and regression gate
+
+This is the only remaining phase. No additional UX implementation is planned unless this gate finds a concrete regression.
 
 Desktop review:
 
@@ -184,20 +191,32 @@ Desktop review:
 - [ ] Administration (admin only)
 - [ ] Debug (when enabled)
 
-Responsive review:
+Responsive/reflow review:
 
 - [ ] ~320 px phone
 - [ ] ~390 px phone
 - [ ] tablet/narrow desktop
 - [ ] standard desktop
 - [ ] wide desktop
+- [ ] 200% browser zoom/reflow
+- [ ] no document-level horizontal scrolling in Settings
 
 Appearance review:
 
-- [ ] System
-- [x] Light — broad visual review reported good after the Phase 3 cleanup.
-- [x] Dark — broad visual review reported good after the Phase 3 cleanup.
-- [ ] app appearance independent from viewer background brightness
+- [ ] System follows an OS appearance change while Brepia is open
+- [x] Light — broad visual review reported good after the Phase 3 cleanup; recheck the final Phase 5 contrast polish
+- [x] Dark — broad visual review reported good after the Phase 3 cleanup; recheck the final Phase 5 contrast polish
+- [ ] explicit Light/Dark survives reload without a visible wrong-theme flash
+- [ ] app appearance remains independent from viewer background brightness
+- [ ] mobile sidebar Sheet close control remains visible in both Light and Dark
+
+Interaction/accessibility spot check:
+
+- [ ] keyboard through top Settings tabs and desktop AI navigation
+- [ ] keyboard through mobile AI selector, buttons, links and switches
+- [ ] focus indicator remains visible in both themes
+- [ ] dense Model catalog / Local Models / Providers controls remain practical on phone widths
+- [ ] disabled and error states remain understandable without relying on color alone
 
 Repository gate:
 
@@ -208,8 +227,8 @@ npm run lint
 npm run build
 ```
 
-The GitHub connector used for the implementation does not provide a local dependency/runtime environment, and this branch currently has no GitHub Actions run for the appearance checkpoint. Keep the repository gate unchecked until those commands are run in the normal project environment.
+The current execution environment could not run this gate: a clean checkout attempt failed because it could not resolve `github.com`, and the current branch head has no GitHub Actions workflow run. Keep the repository gate unchecked until these commands are run in the normal project environment.
 
 ## Execution rule
 
-Implement one phase or narrowly scoped sub-phase at a time. After each visible UX change, perform desktop and mobile review before broadening the scope. Do not combine theme migration, navigation restructuring, and unrelated application behavior in one large change.
+Implementation is complete. Run Phase 6 as the closeout gate. If the gate finds a concrete UX regression, fix only that regression and rerun the affected checks; do not reopen broad redesign or change AI/Creative/Parametric/stable-runtime functionality as part of UX closeout.
