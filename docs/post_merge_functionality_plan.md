@@ -146,21 +146,35 @@ The native installer does not depend on the retired Python Creative stack.
 - Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
 - Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
 
-## Local Supabase lifecycle / NOx follow-up — active
+## Local Supabase lifecycle / NOx follow-up — workstation verification pending
 
-The repository currently states that **NOx owns the local Supabase service lifecycle**, and `start.sh` assumes the Supabase stack has already been started through NOx. This needs an explicit workstation-level review before the convention is treated as authoritative long-term.
+Repository reconciliation is complete. The repo proves that NOx is an **external workstation-specific lifecycle manager**, not a component/configuration checked into pCAD. The exact workstation-side identity and commands still need evidence before the convention can be declared authoritative long-term.
 
-Follow-up tasks:
+Repo-side work completed:
+
+- [x] confirmed there is no NOx implementation, launcher, service definition or configuration in this repository;
+- [x] confirmed `start.sh` does not start/stop Supabase: it starts the rootless Podman socket, sets `DOCKER_HOST`, prepends the Podman compatibility shim, checks `npx supabase status`, and reads local credentials only after the stack is available;
+- [x] preserved repository-local Supabase operations through `npx` after the stack is running;
+- [x] reconciled `.cursor/rules/database-workflow.mdc`, removing the stale global `supabase stop/start` sequence and aligning it with `AGENTS.md`/`start.sh`;
+- [x] documented the current evidence and recovery boundary in `docs/local_supabase_lifecycle.md`;
+- [x] added `scripts/inspect-local-supabase-lifecycle.sh`, a read-only workstation inventory that avoids printing Supabase status credentials;
+- [x] documented that future agents must not silently substitute another lifecycle manager when the local stack is unavailable.
+
+Workstation evidence still required:
 
 - [ ] identify exactly what `NOx` refers to on the current development workstation;
-- [ ] locate its configuration, service definition, scripts or launcher and document the real start/stop/status commands;
-- [ ] verify whether NOx still actively owns the pCAD/Brepia Supabase containers or whether the documentation reflects an older local setup;
-- [ ] verify how the NOx-managed lifecycle interacts with the repository-local `npx supabase` CLI, Podman socket/shim and `start.sh`;
-- [ ] choose one canonical local Supabase lifecycle and remove stale/ambiguous instructions from `AGENTS.md`, `start.sh` comments and related docs;
-- [ ] preserve the current rule that migrations and type generation use the repository-local CLI after the local stack is running, unless the review establishes a better supported workflow;
-- [ ] document recovery/troubleshooting steps for a missing or stopped local Supabase stack so future agents do not guess or substitute another lifecycle manager silently.
+- [ ] locate its configuration, service definition, scripts or launcher and record the real start/stop/status operations;
+- [ ] verify whether NOx still actively owns the `cadam` pCAD/Brepia Supabase containers or whether the earlier documentation reflects an older local setup;
+- [ ] verify the discovered NOx manager against the current rootless Podman socket/container state;
+- [ ] choose/confirm the single canonical lifecycle after that evidence and, if necessary, update `start.sh` comments/error copy plus historical/current docs deliberately.
 
-Repository reconciliation already identified one stale instruction source: `.cursor/rules/database-workflow.mdc` still instructs agents to use global `supabase stop/start`, while `AGENTS.md` and `start.sh` describe a NOx-owned lifecycle with repository-local `npx supabase` operations. Resolve this contradiction as part of the workstation review rather than guessing which document is authoritative.
+Workstation discovery command:
+
+```bash
+bash scripts/inspect-local-supabase-lifecycle.sh
+```
+
+The resulting command/unit/file/container inventory is the evidence needed to close the remaining NOx checklist without guessing.
 
 This review is infrastructure/documentation cleanup and should remain separate from AI profile/prompt evaluation unless it blocks a required local migration/regression gate.
 
@@ -209,4 +223,4 @@ The final free-rotation/zoom viewer behavior is complete and manually verified.
 
 The Settings UX and appearance plan is complete, including Phase 6 final verification.
 
-The remaining active infrastructure/documentation task in this plan is the **local Supabase / NOx lifecycle review**. Other deferred work should remain in its dedicated plan/status files and must not be reopened implicitly.
+The only remaining active item in this plan is the **workstation verification for the local Supabase / NOx lifecycle**. Repo-side documentation/workflow reconciliation is complete. Other deferred work should remain in its dedicated plan/status files and must not be reopened implicitly.
