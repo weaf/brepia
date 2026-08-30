@@ -109,9 +109,25 @@ Verified workstation result:
 - [x] post-migration fingerprint remained exactly `auth.users=1`, `conversations=7`, `messages=39`, `storage.objects=40`, `storage.buckets=3`;
 - [x] `brepia` Supabase stack started healthy after migration;
 - [x] repository `supabase/config.toml` now commits `project_id = "brepia"`;
-- [ ] verify `./start.sh` and normal application operation against the migrated `brepia` stack;
+- [x] migrated conversations remained present in the application — user verified 2026-08-30;
+- [x] OpenSCAD WASM rendering works in stable runtime after the root-path regression fix — user verified 2026-08-30;
+- [ ] complete the remaining normal-application smoke against the migrated `brepia` stack;
 - [ ] keep original `supabase_db_cadam`, `supabase_storage_cadam` and migration archives until the application regression gate is green;
 - [ ] inspect and remove only confirmed stale `cadam` Podman resources after the rollback window.
+
+### Root-path OpenSCAD regression found during migration smoke
+
+The migrated data was intact, but the application smoke exposed a separate `/cadam` → `/` runtime regression in the OpenSCAD viewer. Emscripten's generated OpenSCAD module resolved `openscad.wasm` relative to the built worker layout, which became unreliable after the application base moved to `/`. The failure first surfaced as `Failed to fetch` and then as the normal 20-second worker timeout while diagnostics were narrowed.
+
+The repair keeps the generated Emscripten file untouched:
+
+- Vite now serves the vendored `openscad.wasm` in both dev and preview/stable mode with `Content-Type: application/wasm`;
+- a small runtime wrapper provides an explicit `locateFile` implementation for `openscad.wasm`;
+- the deterministic WASM URL is `${import.meta.env.BASE_URL}assets/openscad.wasm`, which is `/assets/openscad.wasm` at the root deployment;
+- other OpenSCAD/public viewer asset URLs were normalized so `BASE_URL='/'` no longer produces protocol-relative `//...` URLs;
+- the viewer now surfaces the underlying compile/worker error text instead of only the generic compilation error.
+
+External and localhost HTTP checks returned `200` with `application/wasm`, and user smoke-testing confirmed rendering works again on 2026-08-30.
 
 Prepared tooling remains available for audit/recovery:
 
@@ -170,4 +186,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Reconcile the workstation working tree with the committed `project_id = "brepia"`, run `./start.sh`, and smoke-test the normal Brepia application against the migrated Supabase stack. Keep the original `cadam` data volumes and backup archives until that gate is green. Afterward continue only with safe Phase 4 cleanup; do not mass-rename `PCAD_*`, auth/database identifiers, external Sentry identity or `CADAM Original` lineage.
+Complete the remaining application smoke against the migrated `brepia` Supabase stack, then run the full Phase 5 automated gate. Keep the original `cadam` data volumes and migration archives until those checks are green. Afterward close the rollback window, inspect/remove only confirmed stale `cadam` Podman resources, and continue only with safe Phase 4 cleanup; do not mass-rename `PCAD_*`, auth/database identifiers, external Sentry identity or `CADAM Original` lineage.
