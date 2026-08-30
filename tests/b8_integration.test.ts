@@ -30,6 +30,10 @@ vi.mock('../src/server/supabaseClient', () => ({
   }),
 }));
 
+vi.mock('../src/server/opencode', () => ({
+  opencodeModels: vi.fn(async () => []),
+}));
+
 // ===========================================================================
 // Authenticated request helper / route behavior
 // ===========================================================================

@@ -809,6 +809,7 @@ export function PromptProfilesSettings() {
       createMutation,
       updateMutation,
       builtinDetailFromApi,
+      isBuiltInEdit,
     ],
   );
 

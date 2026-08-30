@@ -54,12 +54,14 @@ export function useOpenSCAD() {
       teardownTimeoutRef.current = null;
     }
 
+    const cachedFiles = cachedFilesRef.current;
+
     return () => {
       teardownTimeoutRef.current = globalThis.setTimeout(() => {
         clientRef.current?.reset();
         clientRef.current = null;
         activeCompileRef.current = null;
-        cachedFilesRef.current.clear();
+        cachedFiles.clear();
         filesGenerationRef.current = 0;
         teardownTimeoutRef.current = null;
       }, 0);
