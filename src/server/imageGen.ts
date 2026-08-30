@@ -1,6 +1,5 @@
 import { Buffer } from 'node:buffer';
 import type { SupabaseClient } from './supabaseClient';
-import { GoogleGenAI, Modality } from '@google/genai';
 import { fal } from '@fal-ai/client';
 import OpenAI from 'openai';
 import { reformatSignedUrl } from './messageUtils';
@@ -187,105 +186,6 @@ export const generateImageWithGptImage2 = async (
   };
 };
 
-export const generateImageWithGeminiMultiTurn = async (
-  supabaseClient: SupabaseClient,
-  googleGenAI: GoogleGenAI,
-  userId: string,
-  conversationId: string,
-  prompt: string,
-  images: string[],
-): Promise<Buffer> => {
-  const resolvedPrompt = await resolveFalImagePrompt(userId, prompt);
-  debugLog('Generating image with Gemini Multi-Turn', {
-    userId,
-    conversationId,
-    prompt: resolvedPrompt,
-    imagesCount: images.length,
-  });
-
-  let imagePart: { inlineData: { mimeType: string; data: string } } | undefined;
-
-  // If there are images, use the latest one as context for the multi-turn edit
-  if (images.length > 0) {
-    const latestImageId = images[images.length - 1]; // Use the last image for continuity
-    const { data: imageData } = await supabaseClient.storage
-      .from('images')
-      .download(`${userId}/${conversationId}/${latestImageId}`);
-
-    if (!imageData) {
-      throw new Error(`Failed to download image ${latestImageId}`);
-    }
-
-    const imageArrayBuffer = await imageData.arrayBuffer();
-    const buffer = Buffer.from(imageArrayBuffer);
-    const base64Image = buffer.toString('base64');
-    // Derive mimeType from the blob rather than hardcoding png —
-    // gpt-image-2 stores jpeg, so a Gemini fallback on a later turn
-    // would otherwise send jpeg bytes declared as png and get rejected
-    // (or produce corrupt output).
-    const mimeType =
-      imageData.type && imageData.type.startsWith('image/')
-        ? imageData.type
-        : 'image/png';
-
-    imagePart = {
-      inlineData: {
-        mimeType,
-        data: base64Image,
-      },
-    };
-  }
-
-  // Initialize chat with the new Gemini 3 Pro Image Preview model
-  const chat = googleGenAI.chats.create({
-    model: 'gemini-3-pro-image-preview',
-    config: {
-      responseModalities: [Modality.TEXT, Modality.IMAGE],
-      // Note: Google Search grounding is built into gemini-3-pro-image-preview
-      // and doesn't need to be explicitly enabled as a tool for image generation
-    },
-  });
-
-  const messageContent: {
-    text?: string;
-    inlineData?: { mimeType: string; data: string };
-  }[] = [{ text: resolvedPrompt }];
-  if (imagePart) {
-    messageContent.push(imagePart);
-  }
-
-  debugLog('Sending message to Gemini Multi-Turn Chat');
-  const response = await chat.sendMessage({
-    message: messageContent,
-  });
-
-  if (
-    !response.candidates ||
-    !response.candidates[0] ||
-    !response.candidates[0].content ||
-    !response.candidates[0].content.parts
-  ) {
-    throw new Error('No result from Gemini Multi-Turn');
-  }
-
-  let generatedImageData: string | undefined;
-
-  for (const part of response.candidates[0].content.parts) {
-    if (part.text) {
-      debugLog('Gemini Text Response:', part.text);
-    } else if (part.inlineData) {
-      generatedImageData = part.inlineData.data;
-    }
-  }
-
-  if (!generatedImageData) {
-    throw new Error('No generated image data from Gemini Multi-Turn');
-  }
-
-  const imageBytes = Buffer.from(generatedImageData, 'base64');
-  return imageBytes;
-};
-
 export const generateImageWithFalFlux = async (
   supabaseClient: SupabaseClient,
   userId: string,
@@ -347,17 +247,17 @@ export const generateImageWithFalFlux = async (
     const response = await fetch(imageUrl.url);
     const imageBytes = await response.arrayBuffer();
     return Buffer.from(imageBytes);
-  } else {
-    const result = await fal.run('fal-ai/flux-pro/v1.1', {
-      input: {
-        prompt: enhancedPrompt,
-        safety_tolerance: '6',
-      },
-    });
-
-    const imageUrl = result.data.images[0];
-    const response = await fetch(imageUrl.url);
-    const imageBytes = await response.arrayBuffer();
-    return Buffer.from(imageBytes);
   }
+
+  const result = await fal.run('fal-ai/flux-pro/v1.1', {
+    input: {
+      prompt: enhancedPrompt,
+      safety_tolerance: '6',
+    },
+  });
+
+  const imageUrl = result.data.images[0];
+  const response = await fetch(imageUrl.url);
+  const imageBytes = await response.arrayBuffer();
+  return Buffer.from(imageBytes);
 };
