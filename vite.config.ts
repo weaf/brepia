@@ -122,30 +122,41 @@ function supabaseProxyPlugin(): Plugin {
   };
 }
 
-function serveOpenScadWasmInDev(): Plugin {
+function serveOpenScadWasm(): Plugin {
+  const wasmPath = path.resolve(
+    __dirname,
+    'src/vendor/openscad-wasm/openscad.wasm',
+  );
+
+  const installMiddleware = (server: {
+    middlewares: {
+      use: (handler: (req: http.IncomingMessage, res: http.ServerResponse, next: (error?: unknown) => void) => void) => void;
+    };
+  }) => {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url) return next();
+
+      const url = new URL(req.url, 'http://localhost');
+      if (!url.pathname.endsWith('/openscad.wasm')) {
+        return next();
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/wasm');
+      res.setHeader('Cache-Control', 'no-cache');
+      fs.createReadStream(wasmPath)
+        .on('error', (error) => next(error))
+        .pipe(res);
+    });
+  };
+
   return {
-    name: 'serve-openscad-wasm-in-dev',
+    name: 'serve-openscad-wasm',
     configureServer(server) {
-      const wasmPath = path.resolve(
-        __dirname,
-        'src/vendor/openscad-wasm/openscad.wasm',
-      );
-
-      server.middlewares.use((req, res, next) => {
-        if (!req.url) return next();
-
-        const url = new URL(req.url, 'http://localhost');
-        if (url.pathname !== '/src/vendor/openscad-wasm/openscad.wasm') {
-          return next();
-        }
-
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/wasm');
-        res.setHeader('Cache-Control', 'no-cache');
-        fs.createReadStream(wasmPath)
-          .on('error', (error) => next(error))
-          .pipe(res);
-      });
+      installMiddleware(server);
+    },
+    configurePreviewServer(server) {
+      installMiddleware(server);
     },
   };
 }
@@ -154,7 +165,7 @@ export default defineConfig({
   base: appBase,
   plugins: [
     legacyCadamRedirectPlugin(),
-    serveOpenScadWasmInDev(),
+    serveOpenScadWasm(),
     supabaseProxyPlugin(),
     tanstackStart({
       router: {
