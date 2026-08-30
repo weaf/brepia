@@ -30,12 +30,14 @@ jobs:
           python3 scripts/refine-configurable-model-routing.py
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('src/components/settings/CreativeRuntimeModelSettings.tsx')
-          text = path.read_text()
+          picker = Path('src/components/settings/CreativeRuntimeModelSettings.tsx')
+          text = picker.read_text()
           old = "              {value && !selected && (\n"
           if old not in text:
               raise SystemExit('Expected stale selected reference not found')
-          path.write_text(text.replace(old, "              {value && (\n", 1))
+          picker.write_text(text.replace(old, "              {value && (\n", 1))
+          mesh = Path('src/server/mesh.ts')
+          mesh.write_text(mesh.read_text().rstrip() + '\n')
           PY
           rm scripts/refine-configurable-model-routing.py
           rm .github/workflows/refine-configurable-model-routing.yml
