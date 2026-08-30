@@ -22,7 +22,7 @@ The current implementation is functional but has several UX constraints:
 - `SettingsView` used a single `max-w-xl` content width for Account, AI, Administration, and Debug. This was reasonable for Account but unnecessarily constrained AI and administration controls on desktop.
 - The root Settings flex layout vertically centered short pages, so the page heading moved significantly when switching between a short Account page and a long AI page.
 - AI settings already contain responsive grids, but the narrow parent prevented those layouts from making good use of desktop width.
-- Top-level Settings and AI subsection navigation use horizontally scrollable tab lists with hidden scrollbars. This prevents overflow but can hide undiscovered options on narrow screens.
+- Top-level Settings and AI subsection navigation used horizontally scrollable tab lists with hidden scrollbars. Phase 2 replaces those hidden-scroll dependencies with wrapping primary tabs, a mobile AI section selector, and desktop side navigation.
 - The CSS bundle already contains generic light/dark variables, but most Brepia surfaces still use fixed `adam-*` dark palette utilities, so a real light theme requires semantic application tokens rather than only toggling the existing `.dark` class.
 - Secondary text and compact controls should be checked for contrast and mobile target size rather than adjusted by visual guesswork.
 
@@ -60,22 +60,26 @@ Acceptance — pending visual review:
 
 Goal: remove dependence on hidden horizontal tab scrolling.
 
+Implementation checkpoint: `c5abec6c96592a5a031a8c21aec101cfb541b020`.
+
 Desktop/tablet:
 
-- [ ] Keep the primary `Account / AI / Administration / Debug` navigation compact and obvious.
-- [ ] Convert the larger AI subsection set into a navigation pattern that uses desktop space better, preferably a left-side section navigation with content to the right.
+- [x] Keep the primary `Account / AI / Administration / Debug` navigation compact and obvious. The primary list now wraps instead of relying on hidden horizontal overflow.
+- [x] Convert the larger AI subsection set into a left-side section navigation with content to the right at desktop/tablet widths.
 
 Mobile:
 
-- [ ] Replace horizontally hidden AI subsection tabs with an explicit section selector/menu.
-- [ ] Keep the currently selected section visible at all times.
-- [ ] Avoid nested horizontal tab strips for normal navigation.
-- [ ] Preserve keyboard navigation and accessible labels.
+- [x] Replace horizontally hidden AI subsection tabs with an explicit `Section` selector.
+- [x] Keep the currently selected section visible at all times through the controlled selector value.
+- [x] Avoid nested horizontal tab strips for normal navigation. The Prompts subsection tabs now wrap instead of scrolling horizontally.
+- [x] Preserve keyboard navigation and accessible labels by retaining Radix tab semantics on desktop and using the existing accessible Select primitive on mobile.
 
-Acceptance:
+Acceptance — pending visual review:
 
-- Every Settings and AI section is discoverable at 320 px without horizontal swiping to reveal hidden navigation.
-- Desktop users can move between AI sections without losing content width.
+- [ ] Every Settings and AI section is discoverable at 320 px without horizontal swiping to reveal hidden navigation.
+- [ ] Desktop users can move between AI sections without losing useful content width.
+- [ ] Primary Settings navigation remains clear when Administration and Debug are both visible.
+- [ ] Prompt subsection controls remain readable and usable at narrow phone widths.
 
 ## Phase 3 — Application appearance: System / Light / Dark
 
