@@ -227,7 +227,10 @@ export function VisualCard({
                   <MoreVertical className="h-4 w-4 text-adam-neutral-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-[#191A1A]">
+              <DropdownMenuContent
+                align="end"
+                className="bg-adam-background-2"
+              >
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
