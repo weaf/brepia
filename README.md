@@ -48,11 +48,10 @@ Creative workflows can also provide GLB output where supported.
 - Node.js `^20.19.0` or `>=22.12.0`
 - npm `>=10`
 - Podman or another Docker-compatible runtime supported by the Supabase CLI
-- a running local Supabase stack for local development
 - OpenCode for OpenCode-backed workflows
 - llama-swap for local AI models
 
-The current maintainer workstation uses an external local Supabase lifecycle manager documented as **NOx**. NOx is workstation-specific and is not bundled with this repository. See [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md) for the current lifecycle boundary and workstation review.
+The Supabase CLI is installed as a project dev dependency, so local commands should be run through `npx supabase ...`; a global `supabase` binary is not required.
 
 ## Installation
 
@@ -65,19 +64,34 @@ cp .env.local.template .env.local
 
 Configure the providers and integrations you want to use in `.env.local`.
 
-Bring up a local Supabase stack using the lifecycle appropriate for your development environment, then apply migrations with the repository-local CLI:
-
-```bash
-npx supabase migration up
-```
-
-On the current pCAD/Brepia maintainer workstation, start/stop is owned by the external NOx workflow. Agents working on that workstation must not silently substitute `npx supabase start/stop`; follow `AGENTS.md` and [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md).
-
 Start Brepia:
 
 ```bash
 ./start.sh
 ```
+
+On the current rootless-Podman development setup, `start.sh` enables the Podman socket, configures the compatibility shim and starts the local Supabase `cadam` stack with the repository-local CLI if it is not already running.
+
+For explicit local Supabase lifecycle work, configure the same Podman environment and use:
+
+```bash
+systemctl --user enable podman.socket --now
+export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+export PATH="$PWD/scripts/podman:$PATH"
+
+npx supabase start
+npx supabase status
+npx supabase stop
+```
+
+Apply local migrations and regenerate database types with:
+
+```bash
+npx supabase migration up
+npx supabase gen types typescript --local > shared/database.ts
+```
+
+For the complete local database workflow, see [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md) and `.cursor/rules/database-workflow.mdc`.
 
 For Vite HMR:
 
