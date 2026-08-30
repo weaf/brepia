@@ -32,12 +32,9 @@ const ADVANCED_AI_SETTINGS_SECTIONS = [
   { value: 'vision', label: 'Vision' },
 ] as const;
 
-const AI_SETTINGS_SECTIONS = [
-  ...COMMON_AI_SETTINGS_SECTIONS,
-  ...ADVANCED_AI_SETTINGS_SECTIONS,
-] as const;
-
-type AiSettingsTab = (typeof AI_SETTINGS_SECTIONS)[number]['value'];
+type AiSettingsTab =
+  | (typeof COMMON_AI_SETTINGS_SECTIONS)[number]['value']
+  | (typeof ADVANCED_AI_SETTINGS_SECTIONS)[number]['value'];
 
 export function AiSettingsSection() {
   const [activeSection, setActiveSection] =
