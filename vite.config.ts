@@ -189,6 +189,10 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@/vendor/openscad-wasm/openscad.js': path.resolve(
+        __dirname,
+        './src/vendor/openscad-wasm/runtime.ts',
+      ),
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, './shared'),
     },
