@@ -47,10 +47,12 @@ Creative workflows can also provide GLB output where supported.
 
 - Node.js `^20.19.0` or `>=22.12.0`
 - npm `>=10`
-- Podman
-- NOx-managed local Supabase
+- Podman or another Docker-compatible runtime supported by the Supabase CLI
+- a running local Supabase stack for local development
 - OpenCode for OpenCode-backed workflows
 - llama-swap for local AI models
+
+The current maintainer workstation uses an external local Supabase lifecycle manager documented as **NOx**. NOx is workstation-specific and is not bundled with this repository. See [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md) for the current lifecycle boundary and workstation review.
 
 ## Installation
 
@@ -63,11 +65,13 @@ cp .env.local.template .env.local
 
 Configure the providers and integrations you want to use in `.env.local`.
 
-Start the local Supabase stack through **NOx**, then apply migrations:
+Bring up a local Supabase stack using the lifecycle appropriate for your development environment, then apply migrations with the repository-local CLI:
 
 ```bash
 npx supabase migration up
 ```
+
+On the current pCAD/Brepia maintainer workstation, start/stop is owned by the external NOx workflow. Agents working on that workstation must not silently substitute `npx supabase start/stop`; follow `AGENTS.md` and [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md).
 
 Start Brepia:
 
