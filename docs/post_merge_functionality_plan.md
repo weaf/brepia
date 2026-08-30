@@ -1,6 +1,6 @@
 # Post-merge functionality improvement plan
 
-Status: **ACTIVE on `feature/post-merge-functionality`**
+Status: **COMPLETE on `feature/post-merge-functionality`**
 
 The Brepia stable-runtime and persistence architecture remains the protected baseline. `CADAM Original` lineage remains unchanged.
 
@@ -146,47 +146,50 @@ The native installer does not depend on the retired Python Creative stack.
 - Do not introduce a second generic local model gateway while llama-swap can own runtime lifecycle.
 - Keep hosted Creative services optional and isolated from the native TRELLIS.2 core.
 
-## Local Supabase lifecycle / NOx follow-up — final owner identification pending
+## Local Supabase lifecycle — completed
 
-Repository reconciliation and the first workstation inspection are complete. The current evidence does not expose any actual `nox`/`NOx` executable or NOx-named workstation configuration. The running local backend is a standard rootless-Podman Supabase CLI/Compose project named `cadam`, and the repository-local Supabase CLI sees that same stack.
+The lifecycle review is complete. The earlier references to a workstation manager named **NOx** were incorrect; the user identified the likely source as a typo where `npx` was intended.
 
-Repo-side work completed:
+Repository and workstation evidence agree:
 
-- [x] confirmed there is no NOx implementation, launcher, service definition or configuration in this repository;
-- [x] confirmed `start.sh` does not start/stop Supabase: it starts the rootless Podman socket, sets `DOCKER_HOST`, prepends the Podman compatibility shim, checks `npx supabase status`, and reads local credentials only after the stack is available;
-- [x] preserved repository-local Supabase operations through `npx` after the stack is running;
-- [x] reconciled `.cursor/rules/database-workflow.mdc` and `.cursor/rules/typescript-workflow.mdc`, removing stale `supabase start/stop` assumptions;
-- [x] documented the current evidence and recovery boundary in `docs/local_supabase_lifecycle.md`;
-- [x] added and then deepened `scripts/inspect-local-supabase-lifecycle.sh`, a read-only workstation inventory that avoids printing Supabase credential values;
-- [x] updated `README.md` so NOx is not presented as a portable project dependency.
+- [x] no `nox` or `NOx` executable was found;
+- [x] no NOx service, launcher or configuration was found;
+- [x] no global `supabase` binary is required;
+- [x] the repository contains Supabase CLI `^2.114.0` as a dev dependency;
+- [x] rootless `podman.socket` is active on the workstation;
+- [x] the running containers are the standard Supabase CLI/Compose project `cadam`;
+- [x] inspected containers carry `com.supabase.cli.project=cadam` and `com.docker.compose.project=cadam`;
+- [x] repository-local Supabase CLI `2.114.0` detects the running stack;
+- [x] the failed generated `postgres.service` is not the owner of the healthy `cadam` stack;
+- [x] `~/.config/supabase.env` contains legacy/local Supabase credential configuration but does not establish a separate lifecycle manager;
+- [x] `.cursor/rules/database-workflow.mdc`, `.cursor/rules/typescript-workflow.mdc`, `AGENTS.md` and `README.md` are reconciled to the repository-local `npx supabase` workflow;
+- [x] `docs/local_supabase_lifecycle.md` records the final evidence and canonical commands;
+- [x] `scripts/inspect-local-supabase-lifecycle.sh` remains available as read-only troubleshooting inventory;
+- [x] `start.sh` now configures the rootless Podman socket/shim, checks `npx supabase status`, and automatically runs `npx supabase start` when the local stack is not already running.
 
-First workstation pass completed:
+Canonical lifecycle:
 
-- [x] no `nox` or `NOx` command found;
-- [x] no global `supabase` command found, which matches the repository-local CLI convention;
-- [x] rootless `podman.socket` confirmed active;
-- [x] repository-local Supabase CLI `2.114.0` confirmed able to detect the local stack;
-- [x] full `supabase_*_cadam` container set confirmed running;
-- [x] inspected containers confirmed with `com.supabase.cli.project=cadam` and `com.docker.compose.project=cadam` labels;
-- [x] one candidate user service found: failed `postgres.service` with description `Supabase PostgREST`;
-- [x] one candidate per-user config found: `~/.config/supabase.env`.
-
-Remaining workstation evidence:
-
-- [ ] inspect the safe metadata for `postgres.service` to establish what executable/configuration it belongs to and whether it is obsolete;
-- [ ] inspect only the key names/references for `~/.config/supabase.env` to establish its role without exposing credential values;
-- [ ] inspect system-wide launcher/service locations and selected Compose working-directory/config-file labels for any missed external NOx launcher;
-- [ ] choose the single canonical start/stop/status lifecycle. If the second pass still finds no real NOx owner, retire the NOx wording and make repository-local `npx supabase start/stop/status` the explicit workstation lifecycle, retaining the rootless Podman compatibility environment where required.
-
-Updated workstation discovery command:
-
-```bash
-bash scripts/inspect-local-supabase-lifecycle.sh
+```text
+./start.sh
+  -> ensure rootless Podman socket
+  -> configure DOCKER_HOST + Podman compatibility shim
+  -> npx supabase status
+  -> npx supabase start when needed
+  -> read local Supabase env without printing credentials
+  -> continue Brepia startup
 ```
 
-The second-pass output is the final evidence needed to close this workstream without guessing.
+Explicit lifecycle commands remain:
 
-This review is infrastructure/documentation cleanup and should remain separate from AI profile/prompt evaluation unless it blocks a required local migration/regression gate.
+```bash
+npx supabase start
+npx supabase status
+npx supabase stop
+```
+
+On the current rootless-Podman workstation those direct lifecycle/status commands use the same `DOCKER_HOST` and `scripts/podman` compatibility environment documented in `docs/local_supabase_lifecycle.md`.
+
+Supabase is intentionally left running when Brepia exits.
 
 ## 3D viewer interaction — free rotation (completed)
 
@@ -225,12 +228,13 @@ Completed outcomes include:
 
 Phase 6 is closed as implemented and tested. Future Settings changes should be treated as new requirements or concrete regressions rather than continuation of this UX plan.
 
-## Completion / current active work
+## Completion
 
-The native Creative replacement is complete. TRELLIS.2 is the sole built-in Creative backend, the project gate is green, both native generation paths have been proven, and the superseded Python runtime has been removed from both the repository and the workstation.
+All workstreams tracked by this post-merge functionality plan are complete:
 
-The final free-rotation/zoom viewer behavior is complete and manually verified.
+- [x] native Creative backend migration and cleanup;
+- [x] final free-rotation/bidirectional-zoom viewer behavior;
+- [x] Settings UX/appearance implementation and Phase 6 verification;
+- [x] local Supabase lifecycle reconciliation and correction from erroneous NOx wording to repository-local `npx supabase` ownership.
 
-The Settings UX and appearance plan is complete, including Phase 6 final verification.
-
-The only remaining active item in this plan is the **final workstation owner identification for the local Supabase lifecycle**. Other deferred work should remain in its dedicated plan/status files and must not be reopened implicitly.
+Other deferred/future work remains governed by its dedicated plan/status documents and must not be reopened implicitly as part of this completed plan.
