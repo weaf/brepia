@@ -20,7 +20,7 @@ Do not rename or rewrite these merely for cosmetic consistency:
 - historical closeout/architecture documents except where a short correction note prevents future confusion;
 - database/storage/local-state identifiers until a migration and rollback path exists.
 
-## Phase 1 — remove `/cadam` URL requirement
+## Phase 1 — remove `/cadam` URL requirement — COMPLETE
 
 ### Audit
 
@@ -37,26 +37,32 @@ The actual user-visible base-path dependency was found in two active runtime loc
 
 The root application route already exists as the `_layout` index route, so the file-route structure itself does not require a `/cadam` route segment.
 
-### Implementation
+### Implementation and verification
 
 - [x] move Vite/TanStack/Nitro application base to `/`;
 - [x] move the application router basepath to `/`;
 - [x] update OpenSCAD WASM development serving to the root-based path;
 - [x] keep `/cadam` and `/cadam/...` as HTTP 308 compatibility redirects to the corresponding root path in both Vite dev and preview servers;
-- [ ] run typecheck/lint/build;
+- [x] `npm run typecheck` passed after the Phase 1 URL-base change — user verified 2026-08-30;
+- [x] `npm run lint` passed after the Phase 1 URL-base change — user verified 2026-08-30;
+- [x] `npm run build` passed after the Phase 1 URL-base change — user verified 2026-08-30;
 - [x] smoke-test stable runtime at `http://<host>:3000/` without `/cadam` — user verified 2026-08-30;
-- [x] verify an old `/cadam` bookmark redirects to `/` — user verified 2026-08-30;
-- [x] verify a nested old URL such as `/cadam/signin` redirects to `/signin` — user verified 2026-08-30;
-- [ ] verify auth, API, Supabase proxy, OpenSCAD WASM and stable-runtime behavior remain functional.
+- [x] old `/cadam` URL redirects to `/` — user verified 2026-08-30;
+- [x] nested old `/cadam/signin` URL redirects to `/signin` — user verified 2026-08-30.
+
+The broad auth/API/Supabase/OpenSCAD/stable-runtime regression smoke remains part of the final branch gate rather than blocking the already-verified root-path migration.
 
 ## Phase 2 — internal build/runtime naming
 
-Inventory before changing:
+Inventory/result so far:
 
-- [ ] `dist/cadam` build output directory;
-- [ ] other runtime filesystem paths containing `cadam`;
-- [ ] Sentry/external integration identifiers where inherited Adam/CADAM naming may be account configuration rather than local product naming;
-- [ ] scripts and developer commands that still assume CADAM-specific paths.
+- [x] `dist/cadam` is a purely local build-output name in `vite.config.ts`; renamed to `dist/brepia`;
+- [x] internal generated OpenSCAD helper module `__cadam_dxf_source__` is not persisted or externally consumed; renamed to `__brepia_dxf_source__`;
+- [x] no other active code path was identified as depending on `dist/cadam`;
+- [x] Sentry `org: 'adamcad'` / `project: 'adamcad'` is an external-service account identifier and is intentionally not renamed as part of safe local cleanup;
+- [x] `PCAD_*` environment variables are public/operator configuration contracts rather than CADAM-only implementation names; defer any rename to a separate compatibility/deprecation plan;
+- [ ] rerun typecheck/lint/build after the Phase 2 internal-name changes;
+- [ ] smoke-test normal stable startup after the output directory rename.
 
 Preferred outcome: use neutral/Brepia names for purely local implementation artifacts without forcing external account/data migrations.
 
@@ -111,4 +117,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Complete the remaining Phase 1 automated/regression gate, then continue with Phase 2 safe internal naming cleanup. Persistent Supabase identity remains deferred until its migration/rollback behavior is understood.
+Rerun the automated/build smoke after the Phase 2 `dist/brepia` and DXF helper renames. If green, continue the remaining CADAM inventory before deciding whether the persistent Supabase `project_id = "cadam"` should be migrated at all.
