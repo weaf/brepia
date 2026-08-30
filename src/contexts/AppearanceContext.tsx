@@ -49,13 +49,6 @@ export function resolveAppearance(
   return preference;
 }
 
-function systemPrefersDark() {
-  return (
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-  );
-}
-
 function applyResolvedAppearance(
   preference: AppearancePreference,
   resolved: ResolvedAppearance,
@@ -75,15 +68,23 @@ function applyResolvedAppearance(
 }
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const [appearance, setAppearanceState] = useState<AppearancePreference>(() =>
-    readStoredAppearance(),
-  );
+  // Keep the server render and the first client render identical. The inline
+  // bootstrap in __root.tsx already paints the stored theme before CSS loads;
+  // the provider reconciles its React state after hydration.
+  const [appearance, setAppearanceState] =
+    useState<AppearancePreference>('dark');
   const [resolvedAppearance, setResolvedAppearance] =
-    useState<ResolvedAppearance>(() =>
-      resolveAppearance(readStoredAppearance(), systemPrefersDark()),
-    );
+    useState<ResolvedAppearance>('dark');
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    setAppearanceState(readStoredAppearance());
+    setInitialized(true);
+  }, []);
+
+  useEffect(() => {
+    if (!initialized) return;
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
     const syncAppearance = () => {
@@ -98,9 +99,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
     mediaQuery.addEventListener('change', syncAppearance);
     return () => mediaQuery.removeEventListener('change', syncAppearance);
-  }, [appearance]);
+  }, [appearance, initialized]);
 
   const setAppearance = useCallback((nextAppearance: AppearancePreference) => {
+    setInitialized(true);
     setAppearanceState(nextAppearance);
 
     try {
