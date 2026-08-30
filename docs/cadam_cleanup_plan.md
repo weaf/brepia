@@ -80,31 +80,42 @@ Current local Supabase project id is `cadam`. Workstation inspection on 2026-08-
 - [x] Edge Runtime currently uses a repository bind mount under `supabase/.temp/start-secrets/...`, so the separately listed `supabase_edge_runtime_cadam` volume is not mounted by the active Edge Runtime container;
 - [x] project networking includes `supabase_network_cadam`; it is recreateable runtime infrastructure rather than application data;
 - [x] the generic `supabase_db-config` volume and `supabase_default` network are not keyed to the current project id;
-- [x] repository-local Supabase CLI 2.114.0 detects the current stack successfully.
+- [x] repository-local Supabase CLI 2.114.0 detects the current stack successfully;
+- [x] workstation fingerprint before migration is `auth.users=1`, `conversations=7`, `messages=39`, `storage.objects=40`, `storage.buckets=3`;
+- [x] approximate persistent sizes are DB 275 MB and Storage 252 MB.
 
 Current Supabase documentation confirms that `project_id` distinguishes local projects on the same host, `supabase stop` preserves local data unless `--no-backup` is used, and config changes require a stop/start cycle. This supports a controlled local identity migration rather than recreating the database from seed.
 
-Migration strategy:
+### Migration strategy
 
-1. stop `cadam` normally — never use `--no-backup`;
-2. archive the two active persistent volumes;
-3. rename the existing DB and Storage volumes from `_cadam` to `_brepia` so the live data itself is preserved rather than logically rebuilt;
-4. change `supabase/config.toml` to `project_id = "brepia"`;
-5. start the new `brepia` stack and verify it mounts the renamed DB and Storage volumes;
-6. keep safety archives and any stale `cadam` runtime resources until application regression is green;
-7. only then remove proven-unused `cadam` network/volume leftovers.
+The first implementation attempted to use `podman volume rename`. The workstation Podman version does not expose that subcommand. The attempt failed before changing `project_id` and automatic rollback successfully restarted the original `cadam` stack. Backup archives from that attempt were retained.
+
+The migration now uses a copy/import strategy supported by the installed Podman generation:
+
+1. ensure `cadam` is running and record the database fingerprint;
+2. stop `cadam`, verify no project container is still running, then remove only stopped container objects;
+3. export compressed archives of `supabase_db_cadam` and `supabase_storage_cadam` and record SHA-256 checksums;
+4. create `supabase_db_brepia` and `supabase_storage_brepia`, preserving volume labels while rewriting project-scoped labels to `brepia`;
+5. import the archives into the new `brepia` volumes;
+6. leave the original `cadam` volumes completely untouched as an additional rollback copy;
+7. change `supabase/config.toml` to `project_id = "brepia"`;
+8. start the `brepia` stack and verify exact DB/Storage mounts plus the pre/post database fingerprint;
+9. if a later step fails, remove only newly-created `brepia` container/volume copies, restore `project_id = "cadam"`, and restart from the untouched original volumes;
+10. keep both original `cadam` volumes and compressed archives until the application regression gate is green.
 
 Prepared tooling:
 
 - [x] `scripts/inspect-supabase-project-identity.sh` — read-only identity/mount inventory;
-- [x] `scripts/migrate-supabase-project-id.sh` — dry-run by default; `--execute` performs stop/archive/volume-rename/config/start with automatic rollback attempt on failure;
-- [ ] run the migration on the workstation;
+- [x] `scripts/migrate-supabase-project-id.sh` — dry-run by default; `--execute` performs stop/archive/create/import/config/start with automatic rollback from untouched original volumes;
+- [x] stop handling is resilient to a non-zero Supabase CLI stop return only when Podman independently confirms all project containers are stopped;
+- [x] migration fingerprints DB row/object counts before and after the identity move;
+- [ ] run the revised copy/import migration on the workstation;
 - [ ] verify the `brepia` stack has the existing auth/users/conversations/messages/storage objects;
 - [ ] verify `./start.sh` and normal application operation against `project_id = "brepia"`;
 - [ ] commit the final `supabase/config.toml` project-id change after workstation success;
 - [ ] inspect and remove only confirmed stale `cadam` Podman resources after the rollback window.
 
-Do not manually delete or recreate the current persistent volumes before this migration is verified.
+Do not manually delete the original persistent volumes before this migration and its application regression gate are verified.
 
 ## Phase 4 — source/config naming inventory — ACTIVE
 
@@ -156,4 +167,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Run the prepared Supabase project-id migration in dry-run mode first, review its reported source/target volume state and approximate size, then execute it. Do not proceed with CSS-token or auth/database identifier renames until the Supabase identity migration has passed its application smoke gate.
+Pull the revised copy/import migration tooling, run shell syntax validation and dry-run again. Only execute after the dry-run confirms the original `cadam` volumes exist, the `brepia` target volumes do not exist, and the expected database fingerprint is available.
