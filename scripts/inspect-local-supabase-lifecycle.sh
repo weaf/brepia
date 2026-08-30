@@ -25,8 +25,6 @@ printf 'branch:     %s\n' "$(git -C "${REPO_ROOT}" branch --show-current 2>/dev/
 printf 'head:       %s\n' "$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 section "Candidate commands"
-print_command nox
-print_command NOx
 print_command supabase
 print_command podman
 print_command node
@@ -41,7 +39,7 @@ if command -v systemctl >/dev/null 2>&1; then
   unit_matches="$({
     systemctl --user list-unit-files --no-legend 2>/dev/null || true
     systemctl --user list-units --all --type=service --no-legend --plain 2>/dev/null || true
-  } | grep -Ei 'nox|supabase|pcad|brepia|cadam|postgrest' | sort -u || true)"
+  } | grep -Ei 'supabase|pcad|brepia|cadam|postgrest' | sort -u || true)"
 
   if [ -n "${unit_matches}" ]; then
     printf '%s\n' "${unit_matches}"
@@ -79,7 +77,7 @@ else
   echo "No matching unit metadata to inspect."
 fi
 
-section "Candidate per-user files"
+section "Candidate Supabase files"
 found_files=0
 for root in \
   "${HOME}/.config" \
@@ -94,12 +92,12 @@ for root in \
     found_files=1
   done < <(
     find "${root}" -maxdepth 4 \
-      \( -iname '*nox*' -o -iname '*supabase*' -o -iname '*cadam*' -o -iname '*brepia*' -o -iname '*pcad*' \) \
+      \( -iname '*supabase*' -o -iname '*cadam*' -o -iname '*brepia*' -o -iname '*pcad*' \) \
       -print 2>/dev/null | sort -u | head -n 100
   )
 done
 
-# A launcher or service can reference NOx/Supabase without carrying it in the
+# A launcher or service can reference Supabase without carrying it in the
 # filename. Search only small launcher/service directories and print file names,
 # never matching file contents.
 for root in \
@@ -113,7 +111,7 @@ for root in \
     [ -n "${path}" ] || continue
     printf '%s\n' "${path}"
     found_files=1
-  done < <(grep -RIlE 'NOx|\bnox\b|Supabase|supabase|cadam|Brepia|pCAD|PostgREST' "${root}" 2>/dev/null | sort -u | head -n 100)
+  done < <(grep -RIlE 'Supabase|supabase|cadam|Brepia|pCAD|PostgREST' "${root}" 2>/dev/null | sort -u | head -n 100)
 done
 
 if [ "${found_files}" -eq 0 ]; then
@@ -139,7 +137,7 @@ else
 fi
 
 section "Relevant process names"
-process_names="$(ps -eo comm= 2>/dev/null | grep -Ei 'nox|supabase|postgrest|gotrue|realtime' | sort -u || true)"
+process_names="$(ps -eo comm= 2>/dev/null | grep -Ei 'supabase|postgrest|gotrue|realtime' | sort -u || true)"
 if [ -n "${process_names}" ]; then
   printf '%s\n' "${process_names}"
 else
@@ -197,4 +195,4 @@ fi
 
 section "Interpretation"
 echo "This helper is read-only. It does not start/stop Supabase or Podman and does not print Supabase credential values."
-echo "Use the unit metadata, env key names and container labels above to identify the actual workstation lifecycle."
+echo "Canonical lifecycle: repository-local npx supabase with the rootless Podman environment configured by ./start.sh."
