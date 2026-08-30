@@ -52,19 +52,22 @@ The root application route already exists as the `_layout` index route, so the f
 
 The broad auth/API/Supabase/OpenSCAD/stable-runtime regression smoke remains part of the final branch gate rather than blocking the already-verified root-path migration.
 
-## Phase 2 — internal build/runtime naming
+## Phase 2 — internal build/runtime naming — COMPLETE
 
-Inventory/result so far:
+Safe local implementation names were separated from compatibility-sensitive identifiers before any rename.
 
-- [x] `dist/cadam` is a purely local build-output name in `vite.config.ts`; renamed to `dist/brepia`;
-- [x] internal generated OpenSCAD helper module `__cadam_dxf_source__` is not persisted or externally consumed; renamed to `__brepia_dxf_source__`;
-- [x] no other active code path was identified as depending on `dist/cadam`;
-- [x] Sentry `org: 'adamcad'` / `project: 'adamcad'` is an external-service account identifier and is intentionally not renamed as part of safe local cleanup;
-- [x] `PCAD_*` environment variables are public/operator configuration contracts rather than CADAM-only implementation names; defer any rename to a separate compatibility/deprecation plan;
-- [ ] rerun typecheck/lint/build after the Phase 2 internal-name changes;
-- [ ] smoke-test normal stable startup after the output directory rename.
+Completed:
 
-Preferred outcome: use neutral/Brepia names for purely local implementation artifacts without forcing external account/data migrations.
+- [x] `dist/cadam` identified as a purely local build-output name and renamed to `dist/brepia`;
+- [x] internal generated OpenSCAD helper module `__cadam_dxf_source__` identified as non-persisted/non-external and renamed to `__brepia_dxf_source__`;
+- [x] no other active code path identified as depending on `dist/cadam`;
+- [x] Sentry `org: 'adamcad'` / `project: 'adamcad'` classified as an external-service account identifier and deliberately left unchanged;
+- [x] `PCAD_*` environment variables classified as public/operator configuration contracts and deferred to a separate compatibility/deprecation plan;
+- [x] accidental unrelated DXF-parser changes introduced during the helper rename were detected and reverted, leaving only the intended internal helper rename;
+- [x] `npm run typecheck` passed after Phase 2 — user verified 2026-08-30;
+- [x] `npm run lint` passed after Phase 2 — user verified 2026-08-30;
+- [x] `npm run build` passed after Phase 2 — user verified 2026-08-30;
+- [x] normal `./start.sh` stable startup passed after Phase 2 — user verified 2026-08-30.
 
 ## Phase 3 — Supabase project identity and persistent data
 
@@ -79,17 +82,31 @@ Before any change:
 - [ ] define backup/export/rollback steps;
 - [ ] decide whether renaming the local Supabase project provides enough value to justify migration risk.
 
-Do not change this in the same commit as the URL-base cleanup.
+Do not rename the Supabase project until those items are resolved.
 
-## Phase 4 — source/config naming inventory
+## Phase 4 — source/config naming inventory — ACTIVE
 
-Classify remaining `cadam`, `CADAM`, `adamcad`, and `PCAD_*` occurrences into:
+Remaining `cadam`, `CADAM`, `adamcad`, `Adam` and `PCAD_*` occurrences are classified into:
 
 1. safe product/runtime cleanup;
 2. compatibility-sensitive identifiers;
 3. external-service account identifiers;
 4. intentional historical/upstream attribution;
 5. prompt/profile lineage that must remain stable.
+
+Current classification:
+
+- [x] `/cadam` in `vite.config.ts` is now only the intentional legacy compatibility redirect; retain during the transition period;
+- [x] `CADAM Original` and related profile/revision references are intentional lineage; preserve;
+- [x] README/upstream Adam-CAD/CADAM attribution and historical remake/closeout documents are intentional historical records; preserve;
+- [x] Sentry `adamcad` org/project values are external-service identifiers; do not rename without corresponding Sentry configuration;
+- [x] `PCAD_*` variables are operator/API compatibility contracts; do not mass-rename;
+- [x] `pcad.invalid` and `pcad_*` auth/bootstrap/database identifiers are compatibility-sensitive and require a separate auth/database migration decision;
+- [x] active contributor/branding guidance was updated to point at this staged cleanup and no longer describes `/cadam` as the canonical deployment path;
+- [ ] local seed identity `test@adamcad.com` should be changed to a Brepia synthetic address; connector write is currently blocked because the seed file contains a literal local test password, so this remains a small manual/tooling follow-up;
+- [ ] inspect one-off/historical utility paths such as `/tmp/cadam_load` in `scripts/load-prod-snapshot.mjs` and decide whether to rename or archive the utility;
+- [ ] inspect legacy Adam/CADAM public assets and delete only those proven unreferenced;
+- [ ] inspect internal `adam-*` CSS/Tailwind token names separately; rename only if a complete mechanical replacement can be proven behavior-neutral.
 
 Only category 1 should be renamed automatically. Categories 2–5 require an explicit decision.
 
@@ -117,4 +134,4 @@ Final manual smoke should include:
 
 ## Current next step
 
-Rerun the automated/build smoke after the Phase 2 `dist/brepia` and DXF helper renames. If green, continue the remaining CADAM inventory before deciding whether the persistent Supabase `project_id = "cadam"` should be migrated at all.
+Continue Phase 4 with safe source/config/public-asset cleanup. Keep the working `/cadam` redirect, `CADAM Original`, external Sentry identity, `PCAD_*` contracts and persistent Supabase project identity unchanged until their explicit migration/deprecation decisions are made.
