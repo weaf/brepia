@@ -125,7 +125,7 @@ function supabaseProxyPlugin(): Plugin {
 
 function serveOpenScadWasm(): Plugin {
   const wasmPath = path.resolve(
-    __dirname,
+    import.meta.dirname,
     'src/vendor/openscad-wasm/openscad.wasm',
   );
 
@@ -184,9 +184,18 @@ const reactThreeChunkTest = (id: string) =>
   id.includes('/node_modules/@react-three/') ||
   id.includes('/node_modules/three-stdlib/');
 
-const streamdownChunkTest = (id: string) =>
-  id.includes('/node_modules/streamdown/') ||
-  id.includes('/node_modules/@streamdown/');
+const streamdownCoreChunkTest = (id: string) =>
+  id.includes('/node_modules/streamdown/');
+
+const streamdownCjkChunkTest = (id: string) =>
+  id.includes('/node_modules/@streamdown/cjk/');
+
+const streamdownMathChunkTest = (id: string) =>
+  id.includes('/node_modules/@streamdown/math/') ||
+  id.includes('/node_modules/katex/');
+
+const streamdownMermaidChunkTest = (id: string) =>
+  id.includes('/node_modules/@streamdown/mermaid/');
 
 const shikiChunkTest = (id: string) =>
   id.includes('/node_modules/shiki/dist/') ||
@@ -225,11 +234,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@/vendor/openscad-wasm/openscad.js': path.resolve(
-        __dirname,
+        import.meta.dirname,
         './src/vendor/openscad-wasm/runtime.ts',
       ),
-      '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, './shared'),
+      '@': path.resolve(import.meta.dirname, './src'),
+      '@shared': path.resolve(import.meta.dirname, './shared'),
     },
   },
   build: {
@@ -254,7 +263,10 @@ export default defineConfig({
                 { name: 'supabase', test: supabaseChunkTest },
                 { name: 'three', test: threeChunkTest },
                 { name: 'react-three', test: reactThreeChunkTest },
-                { name: 'streamdown', test: streamdownChunkTest },
+                { name: 'streamdown-core', test: streamdownCoreChunkTest },
+                { name: 'streamdown-cjk', test: streamdownCjkChunkTest },
+                { name: 'streamdown-math', test: streamdownMathChunkTest },
+                { name: 'streamdown-mermaid', test: streamdownMermaidChunkTest },
                 { name: 'shiki', test: shikiChunkTest },
               ],
             },
