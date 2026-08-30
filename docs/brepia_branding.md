@@ -1,7 +1,7 @@
 # Brepia branding maintenance
 
 This note defines the current presentation rules for the Brepia product identity.
-It complements `docs/brepia_remake_plan.md` and is intentionally short enough to
+It complements `docs/brepia_remake_plan.md` and `docs/cadam_cleanup_plan.md` and is intentionally short enough to
 serve as a maintenance reference for future contributors and coding agents.
 
 ## Product hierarchy
@@ -52,16 +52,18 @@ or wand icon may still describe a specific AI action.
 
 Do not globally replace every occurrence of `CADAM`, `Adam` or `pCAD`.
 
-Rename current user-facing product presentation to Brepia, but preserve or separately migrate:
+Rename current user-facing product presentation and safe local implementation artifacts to Brepia, but preserve or separately migrate:
 
 - compatibility-sensitive `PCAD_*` environment identifiers;
-- `pcad.invalid` synthetic auth addresses;
+- `pcad.invalid` synthetic auth addresses until their database/auth compatibility is explicitly migrated;
 - database/storage/local-state identifiers when renaming would require migration;
 - external integration IDs such as Sentry project names;
+- `CADAM Original` prompt/profile lineage;
 - historical/upstream documentation and URLs where the old name is part of the record.
 
-Internal CSS tokens such as `adam-*` remain implementation details for this remake and are not a
-user-facing branding defect.
+Internal CSS tokens such as `adam-*` are implementation details. They may be renamed later as a dedicated mechanical cleanup only if the repository-wide replacement can be proven behavior-neutral.
+
+The active staged cleanup and classification rules live in `docs/cadam_cleanup_plan.md`.
 
 ## Public assets
 
@@ -81,6 +83,8 @@ copy and avoid wording that implies a particular generation mode unless that mod
 
 ## Repository and deployment names
 
-The product can be Brepia while the repository remains `weaf/pCAD` and the deployed compatibility
-path remains `/cadam`. Repository and deployment renames are separate migration checkpoints and must
-not be bundled into cosmetic changes by default.
+The product is Brepia while the repository remains `weaf/pCAD` for now.
+
+The application no longer requires the inherited `/cadam` deployment base. Its canonical application base is `/`; `/cadam` and `/cadam/...` are retained only as compatibility redirects during the cleanup period.
+
+Repository renaming, `PCAD_*` environment-variable deprecation, Supabase project identity and external integration renames are separate migration checkpoints and must not be bundled into cosmetic changes.
