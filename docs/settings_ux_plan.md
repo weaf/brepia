@@ -85,7 +85,7 @@ Acceptance — pending visual review:
 
 Goal: add a real application-level appearance preference while preserving current dark mode as the default Brepia look.
 
-Implementation checkpoint: `d65bab77cb4b7abb49aae17e9931e40f1c30e7f1`.
+Implementation checkpoint: `949d605a56c8c9467ba240289b0106c52ca37cb9`.
 
 - [x] Add an `Appearance` control under Account with `System`, `Light`, and `Dark` choices.
 - [x] Use `prefers-color-scheme` when `System` is selected, including a live media-query listener for OS changes.
@@ -94,6 +94,7 @@ Implementation checkpoint: `d65bab77cb4b7abb49aae17e9931e40f1c30e7f1`.
 - [x] Introduce semantic Brepia surface/text/border tokens and map the existing dark palette to them first. Existing `adam-*` utilities remain as compatibility aliases rather than forcing a broad component rewrite.
 - [x] Add a light palette with corresponding surface/text hierarchy. Formal contrast verification remains part of Phase 5.
 - [x] Route shared layout/navigation/settings palette aliases through the semantic tokens so existing shared surfaces can follow appearance without changing their functional components.
+- [x] Remove the high-risk hardcoded dark/white combinations from the main authentication, email-confirmation, legal-notice, and History menu surfaces so Light does not render white text on light surfaces or isolated dark popups.
 - [x] Keep the 3D viewer background brightness preference independent. Appearance changes only document/UI theme state; viewer brightness continues through the existing viewer-specific brightness props/state.
 
 Implementation notes:
@@ -102,6 +103,8 @@ Implementation notes:
 - `src/routes/__root.tsx` applies the stored/resolved appearance before the application stylesheet paints to avoid a light/dark flash on reload.
 - The React provider deliberately starts from the same dark server snapshot and reconciles stored state after hydration, avoiding a server/client Settings-selection mismatch.
 - `tests/appearance.test.ts` covers accepted preference values and explicit/System resolution logic.
+- The user menu also exposes a compact `System / Light / Dark` quick switcher (`ca8218dadd76a05099c2e59d79a812107487ee19`) while the full Appearance setting remains available under Account.
+- The light-theme cleanup through `949d605a56c8c9467ba240289b0106c52ca37cb9` is styling-only: History menus, sign-in/sign-up/password/email-confirmation surfaces, and instance legal notices now use the semantic Brepia palette. No authentication, AI, Creative, Parametric, Supabase, or stable-runtime behavior was changed.
 - The semantic compatibility layer intentionally does not change AI settings values, model/profile behavior, Creative/Parametric behavior, Supabase contracts, or stable-runtime logic.
 
 Acceptance — pending visual/runtime review:
