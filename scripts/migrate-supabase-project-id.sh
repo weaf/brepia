@@ -78,7 +78,8 @@ db_fingerprint() {
     return 1
   fi
 
-  podman exec "${container}" psql -U postgres -d postgres -At -F '|' -v ON_ERROR_STOP=1 <<'SQL'
+  # -i is required so the heredoc SQL reaches psql inside the container.
+  podman exec -i "${container}" psql -U postgres -d postgres -At -F '|' -v ON_ERROR_STOP=1 <<'SQL'
 SELECT
   (SELECT count(*) FROM auth.users),
   (SELECT count(*) FROM public.conversations),
