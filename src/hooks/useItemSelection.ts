@@ -1,7 +1,7 @@
 import { useSelectedItems } from '@/contexts/SelectedItemsContext';
 import { useConversation } from '@/contexts/ConversationContext';
 import {
-  NATIVE_TRELLIS2_MODEL_ID,
+  NATIVE_CREATIVE_MESH_MODEL_ID,
   getCreativeMeshModelDefinition,
   normalizeCreativeMeshModelId,
 } from '@shared/creativeMeshModels';
@@ -19,7 +19,7 @@ export function useItemSelection() {
   const selectedCreativeModel =
     conversation.type === 'creative'
       ? (normalizeCreativeMeshModelId(conversation.settings?.model) ??
-        NATIVE_TRELLIS2_MODEL_ID)
+        NATIVE_CREATIVE_MESH_MODEL_ID)
       : null;
   const maxReferenceImages = selectedCreativeModel
     ? getCreativeMeshModelDefinition(selectedCreativeModel)?.maxReferenceImages
