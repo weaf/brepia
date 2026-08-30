@@ -5,11 +5,39 @@ import appCss from '@/index.css?url';
 const assetUrl = (path: string) =>
   `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}${path.replace(/^\//, '')}`;
 
+const appearanceBootstrapScript = `
+(() => {
+  try {
+    const stored = window.localStorage.getItem('brepia-appearance');
+    const preference =
+      stored === 'system' || stored === 'light' || stored === 'dark'
+        ? stored
+        : 'dark';
+    const resolved =
+      preference === 'system'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light'
+        : preference;
+    const root = document.documentElement;
+    root.dataset.appearance = preference;
+    root.dataset.theme = resolved;
+    root.classList.toggle('dark', resolved === 'dark');
+    root.style.colorScheme = resolved;
+  } catch {
+    document.documentElement.classList.add('dark');
+    document.documentElement.dataset.appearance = 'dark';
+    document.documentElement.dataset.theme = 'dark';
+    document.documentElement.style.colorScheme = 'dark';
+  }
+})();
+`;
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { title: 'Brepia' },
-      { name: 'theme-color', content: '#151515' },
+      { name: 'theme-color', content: '#191A1A' },
       { name: 'description', content: 'AI-assisted parametric 3D design' },
     ],
     links: [{ rel: 'stylesheet', href: appCss }],
@@ -32,12 +60,15 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <meta charSet="UTF-8" />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        />
+        <script
+          dangerouslySetInnerHTML={{ __html: appearanceBootstrapScript }}
         />
         <link
           rel="icon"
