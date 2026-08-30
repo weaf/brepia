@@ -65,7 +65,8 @@ export function ConversationCard({
     <div
       className={cn(
         'group relative rounded-xl transition-shadow',
-        selected && 'ring-2 ring-adam-blue ring-offset-2 ring-offset-adam-background-1',
+        selected &&
+          'ring-2 ring-adam-blue ring-offset-2 ring-offset-adam-background-1',
       )}
     >
       <Link
@@ -172,7 +173,10 @@ export function ConversationCard({
                     <MoreVertical className="h-4 w-4 text-adam-neutral-50" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-[#191A1A]">
+                <DropdownMenuContent
+                  align="end"
+                  className="bg-adam-background-2"
+                >
                   <AlertDialogTrigger
                     asChild
                     onClick={(e) => e.stopPropagation()}
@@ -223,8 +227,8 @@ export function ConversationCard({
                     Delete Conversation
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete this conversation? This action
-                    cannot be undone.
+                    Are you sure you want to delete this conversation? This
+                    action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
