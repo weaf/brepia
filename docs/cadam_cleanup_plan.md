@@ -18,7 +18,7 @@ Do not rename or rewrite these merely for cosmetic consistency:
 - historical revision directories and fingerprints that intentionally preserve CADAM lineage;
 - upstream attribution to Adam-CAD/CADAM;
 - historical closeout/architecture documents except where a short correction note prevents future confusion;
-- database/storage/local-state identifiers until a migration and rollback path exists.
+- compatibility-sensitive external/account identifiers unless their migration path is explicit.
 
 ## Phase 1 — remove `/cadam` URL requirement — COMPLETE
 
@@ -50,8 +50,6 @@ The root application route already exists as the `_layout` index route, so the f
 - [x] old `/cadam` URL redirects to `/` — user verified 2026-08-30;
 - [x] nested old `/cadam/signin` URL redirects to `/signin` — user verified 2026-08-30.
 
-The broad auth/API/Supabase/OpenSCAD/stable-runtime regression smoke remains part of the final branch gate rather than blocking the already-verified root-path migration.
-
 ## Phase 2 — internal build/runtime naming — COMPLETE
 
 Safe local implementation names were separated from compatibility-sensitive identifiers before any rename.
@@ -69,7 +67,7 @@ Completed:
 - [x] `npm run build` passed after Phase 2 — user verified 2026-08-30;
 - [x] normal `./start.sh` stable startup passed after Phase 2 — user verified 2026-08-30.
 
-## Phase 3 — Supabase project identity and persistent data — MIGRATED, REGRESSION PENDING
+## Phase 3 — Supabase project identity and persistent data — COMPLETE
 
 Local Supabase now uses `project_id = "brepia"`. Workstation inspection and migration on 2026-08-30 established and preserved the actual persistent data coupling:
 
@@ -95,7 +93,7 @@ The final migration used copy/import instead:
 3. archive `supabase_db_cadam` and `supabase_storage_cadam` with SHA-256 manifests;
 4. create `supabase_db_brepia` and `supabase_storage_brepia` with project-scoped labels rewritten to `brepia`;
 5. import the compressed archives into those new volumes;
-6. keep the original `cadam` volumes completely untouched as rollback copies;
+6. keep the original `cadam` volumes completely untouched as rollback copies during the regression window;
 7. change local `supabase/config.toml` to `project_id = "brepia"`;
 8. start the `brepia` stack and verify exact DB/Storage mounts;
 9. verify the post-migration fingerprint is exactly equal to the pre-migration fingerprint.
@@ -108,12 +106,16 @@ Verified workstation result:
 - [x] copied Storage size remains approximately 252 MB;
 - [x] post-migration fingerprint remained exactly `auth.users=1`, `conversations=7`, `messages=39`, `storage.objects=40`, `storage.buckets=3`;
 - [x] `brepia` Supabase stack started healthy after migration;
-- [x] repository `supabase/config.toml` now commits `project_id = "brepia"`;
+- [x] repository `supabase/config.toml` commits `project_id = "brepia"`;
 - [x] migrated conversations remained present in the application — user verified 2026-08-30;
+- [x] existing Storage-backed content remained accessible — user verified 2026-08-30;
+- [x] new Parametric conversation/generation works against the migrated stack — user verified 2026-08-30;
+- [x] Creative conversation/generation works against the migrated stack — user verified 2026-08-30;
 - [x] OpenSCAD WASM rendering works in stable runtime after the root-path regression fix — user verified 2026-08-30;
-- [ ] complete the remaining normal-application smoke against the migrated `brepia` stack;
-- [ ] keep original `supabase_db_cadam`, `supabase_storage_cadam` and migration archives until the application regression gate is green;
-- [ ] inspect and remove only confirmed stale `cadam` Podman resources after the rollback window.
+- [x] normal stable application smoke passed against the migrated `brepia` stack — user verified 2026-08-30;
+- [x] full automated gate (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) passed after migration/root-path fixes — user verified 2026-08-30.
+
+The regression/rollback window is therefore closed. The old `cadam` Podman resources are now cleanup candidates rather than active rollback state. Migration backup archives are retained independently by default so removing old volumes does not remove the last archival recovery copy.
 
 ### Root-path OpenSCAD regression found during migration smoke
 
@@ -121,20 +123,19 @@ The migrated data was intact, but the application smoke exposed a separate `/cad
 
 The repair keeps the generated Emscripten file untouched:
 
-- Vite now serves the vendored `openscad.wasm` in both dev and preview/stable mode with `Content-Type: application/wasm`;
+- Vite serves the vendored `openscad.wasm` in both dev and preview/stable mode with `Content-Type: application/wasm`;
 - a small runtime wrapper provides an explicit `locateFile` implementation for `openscad.wasm`;
 - the deterministic WASM URL is `${import.meta.env.BASE_URL}assets/openscad.wasm`, which is `/assets/openscad.wasm` at the root deployment;
 - other OpenSCAD/public viewer asset URLs were normalized so `BASE_URL='/'` no longer produces protocol-relative `//...` URLs;
-- the viewer now surfaces the underlying compile/worker error text instead of only the generic compilation error.
+- the viewer surfaces the underlying compile/worker error text instead of only the generic compilation error.
 
 External and localhost HTTP checks returned `200` with `application/wasm`, and user smoke-testing confirmed rendering works again on 2026-08-30.
 
-Prepared tooling remains available for audit/recovery:
+Prepared tooling remains available for audit/recovery/cleanup:
 
 - `scripts/inspect-supabase-project-identity.sh` — read-only identity/mount inventory;
-- `scripts/migrate-supabase-project-id.sh` — guarded migration tool using stop/archive/create/import/config/start with fingerprint verification and rollback to untouched original volumes.
-
-Do not delete the original `cadam` volumes or the migration backup archives until the final application regression gate has passed.
+- `scripts/migrate-supabase-project-id.sh` — guarded migration tool using stop/archive/create/import/config/start with fingerprint verification and rollback to untouched original volumes;
+- `scripts/cleanup-cadam-supabase-resources.sh` — dry-run-by-default cleanup that refuses to act unless the `brepia` DB/Storage stack is active and no legacy volume is mounted. It removes only matching legacy Podman containers/networks/volumes and intentionally retains migration backup archives.
 
 ## Phase 4 — source/config naming inventory — ACTIVE
 
@@ -162,28 +163,28 @@ Current classification:
 
 Only category 1 should be renamed automatically. Categories 2–5 require an explicit decision.
 
-## Phase 5 — final regression gate
+## Phase 5 — final regression gate — COMPLETE FOR CURRENT CLEANUP STATE
 
-After each compatibility-sensitive phase:
+Automated gate, user verified 2026-08-30:
 
-```bash
-npm test
-npm run typecheck
-npm run lint
-npm run build
-```
+- [x] `npm test`;
+- [x] `npm run typecheck`;
+- [x] `npm run lint`;
+- [x] `npm run build`.
 
-Final manual smoke should include:
+Manual smoke verified for the current cleanup state:
 
-- root URL startup and reload;
-- old `/cadam` redirect compatibility;
-- authentication/password flows;
-- Parametric and Creative conversation creation/continuation;
-- Supabase persistence and storage access;
-- OpenSCAD WASM rendering;
-- stable runtime/mobile background behavior;
-- exported/shared links.
+- [x] root URL startup and reload;
+- [x] old `/cadam` redirect compatibility;
+- [x] existing authentication/session behavior sufficient to access migrated data;
+- [x] Parametric conversation creation/continuation;
+- [x] Creative conversation creation/continuation;
+- [x] Supabase persistence and Storage access;
+- [x] OpenSCAD WASM rendering;
+- [x] stable runtime operation during the tested workflow.
+
+Exported/shared-link behavior and any deeper auth/password-flow permutations remain normal release-regression items, but no current CADAM cleanup blocker is known from them.
 
 ## Current next step
 
-Complete the remaining application smoke against the migrated `brepia` Supabase stack, then run the full Phase 5 automated gate. Keep the original `cadam` data volumes and migration archives until those checks are green. Afterward close the rollback window, inspect/remove only confirmed stale `cadam` Podman resources, and continue only with safe Phase 4 cleanup; do not mass-rename `PCAD_*`, auth/database identifiers, external Sentry identity or `CADAM Original` lineage.
+Run `scripts/cleanup-cadam-supabase-resources.sh` in dry-run mode and inspect the exact stale `cadam` Podman resources. If the inventory contains only the expected legacy resources, execute the guarded cleanup; migration backup archives are retained. Then continue the remaining safe Phase 4 source/config cleanup. Do not mass-rename `PCAD_*`, auth/database identifiers, external Sentry identity or `CADAM Original` lineage.
