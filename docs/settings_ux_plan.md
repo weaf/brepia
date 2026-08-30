@@ -24,6 +24,7 @@ The current implementation is functional but has several UX constraints:
 - AI settings already contain responsive grids, but the narrow parent prevented those layouts from making good use of desktop width.
 - Top-level Settings and AI subsection navigation used horizontally scrollable tab lists with hidden scrollbars. Phase 2 replaces those hidden-scroll dependencies with wrapping primary tabs, a mobile AI section selector, and desktop side navigation.
 - The CSS bundle already contained generic light/dark variables while Brepia surfaces used fixed `adam-*` palette utilities. Phase 3 now routes the core Brepia palette through semantic appearance tokens while retaining the existing utility names as a compatibility layer.
+- The Phase 4 review found that the remaining AI-settings density was primarily information-hierarchy rather than width/navigation: common default-model choices shared the same `Models` surface as the expert model catalog, while AI profile was a separate peer section.
 - Secondary text and compact controls should be checked for contrast and mobile target size rather than adjusted by visual guesswork.
 
 ## UX invariants
@@ -105,12 +106,13 @@ Implementation notes:
 - `tests/appearance.test.ts` covers accepted preference values and explicit/System resolution logic.
 - The user menu also exposes a compact `System / Light / Dark` quick switcher (`ca8218dadd76a05099c2e59d79a812107487ee19`) while the full Appearance setting remains available under Account.
 - The light-theme cleanup through `949d605a56c8c9467ba240289b0106c52ca37cb9` is styling-only: History menus, sign-in/sign-up/password/email-confirmation surfaces, and instance legal notices now use the semantic Brepia palette. No authentication, AI, Creative, Parametric, Supabase, or stable-runtime behavior was changed.
+- User visual review after the cleanup reported the result looked good. This closes the broad Dark-baseline and major Light-surface visual checks, but does not by itself prove System live switching, reload persistence/no-flash, or viewer-brightness independence.
 - The semantic compatibility layer intentionally does not change AI settings values, model/profile behavior, Creative/Parametric behavior, Supabase contracts, or stable-runtime logic.
 
-Acceptance — pending visual/runtime review:
+Acceptance:
 
-- [ ] Dark appearance remains visually consistent with the current Brepia baseline.
-- [ ] Light appearance is complete enough that no major application surface remains accidentally dark-only or low-contrast.
+- [x] Dark appearance remains visually consistent with the current Brepia baseline based on user visual review.
+- [x] Light appearance is complete enough that no major application surface remains accidentally dark-only or visibly broken based on user visual review.
 - [ ] System mode visibly updates when the operating-system preference changes.
 - [ ] Reloading the app preserves an explicit Light/Dark choice without a theme flash.
 - [ ] Application appearance remains visually and behaviorally independent from viewer background brightness.
@@ -119,12 +121,30 @@ Acceptance — pending visual/runtime review:
 
 Goal: reduce technical density without removing expert functionality.
 
-- [ ] Review the AI landing experience after Phases 1–3 before changing information architecture.
-- [ ] Keep common choices immediately accessible: Parametric default, Creative 3D default, Creative controller AI, AI profile.
-- [ ] Group model catalog, local models, prompts, runtime, providers, and vision as advanced configuration if usability review still shows excessive density.
-- [ ] Do not hide functionality behind an irreversible simplified mode.
+Implementation checkpoint: `8c2303ce971cb07173d673ee7e8289784bcb95f2`.
 
-This phase is conditional: do not reorganize the AI settings if the responsive layout/navigation changes already solve the usability problem.
+- [x] Review the AI landing experience after Phases 1–3 before changing information architecture. The review found that the flat seven-section navigation was usable, but common defaults were still mixed with expert model-catalog controls.
+- [x] Keep common choices immediately accessible. `General` is now the default AI section and contains both Parametric/Creative default models and the AI profile.
+- [x] Group model catalog, local models, prompts, runtime, providers, and vision as advanced configuration. Desktop navigation and the mobile section selector expose explicit `Common` and `Advanced` grouping.
+- [x] Do not hide functionality behind an irreversible simplified mode. All previous sections remain directly reachable; only component placement and labels changed.
+
+Reconciliation note:
+
+- The earlier plan text mentioned a separate `Creative controller AI` common choice. Current `user_ai_preferences` / AI-settings schemas contain Parametric default, Creative 3D default, AI profile, vision defaults, prompt/profile defaults and runtime overrides, but no distinct persisted Creative-controller preference. Phase 4 therefore does not invent a new controller setting as part of UX work.
+
+Implementation notes:
+
+- `DefaultModelSettings` and `InstructionProfileSettings` are rendered together under `General`; their existing query/mutation behavior is unchanged.
+- The previous expert `AiModelsSettings` panel is now `Model catalog` under `Advanced` rather than sharing the same landing surface as default-model selection.
+- `Local Models`, `Prompts`, `Runtime`, `Providers`, and `Vision` retain their existing components and behavior.
+- Desktop group labels are presentation-only inside the Radix tab list so they do not become additional keyboard tabs; the mobile selector uses Radix Select groups/labels.
+
+Acceptance — pending visual review:
+
+- [ ] AI opens on `General` with Default models and AI profile immediately visible.
+- [ ] `Model catalog` and every other advanced section remain clearly discoverable on desktop and mobile.
+- [ ] The new grouping reduces perceived technical density without hiding or changing any setting.
+- [ ] General and advanced sections remain usable at narrow mobile widths.
 
 ## Phase 5 — Accessibility and interaction polish
 
@@ -140,8 +160,8 @@ This phase is conditional: do not reorganize the AI settings if the responsive l
 Desktop review:
 
 - [ ] Account
-- [ ] AI / Models
-- [ ] AI / Profiles
+- [ ] AI / General
+- [ ] AI / Model catalog
 - [ ] AI / Local Models
 - [ ] AI / Prompts
 - [ ] AI / Runtime
@@ -161,8 +181,8 @@ Responsive review:
 Appearance review:
 
 - [ ] System
-- [ ] Light
-- [ ] Dark
+- [x] Light — broad visual review reported good after the Phase 3 cleanup.
+- [x] Dark — broad visual review reported good after the Phase 3 cleanup.
 - [ ] app appearance independent from viewer background brightness
 
 Repository gate:
