@@ -28,6 +28,8 @@ jobs:
         shell: bash
         run: |
           npm explain whatwg-encoding node-domexception glob
+          npm explain shiki @shikijs/engine-oniguruma @shikijs/engine-javascript @streamdown/code
+          npm explain brace-expansion dompurify js-yaml mermaid nanoid postcss protobufjs undici
           npm audit
 
       - name: Test
