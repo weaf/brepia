@@ -1,10 +1,8 @@
 import { corsHeaders, isRecord } from './api';
 import { fal } from '@fal-ai/client';
-import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import {
   generateImageWithFalFlux,
-  generateImageWithGeminiMultiTurn,
   generateImageWithGptImage2,
   INSTRUCTIONS_3D as instructions3D,
   type GptImageQuality,
@@ -120,8 +118,7 @@ async function getPriorImageCallId(
 // Unified mesh-image generation. Every mesh mode goes through this helper:
 //   1. Primary: gpt-image-2 via OpenAI Responses API (canonical per OpenAI
 //      docs, supports multi-turn via image_generation_call id)
-//   2. Fallback 1: Gemini 3 Pro Image Preview (nano banana pro)
-//   3. Fallback 2: Flux (fal-ai)
+//   2. Fallback: Flux (fal-ai)
 //
 // Flux is also the sole provider for mesh previews (see submitPreviewJob),
 // which intentionally does not go through this chain.
@@ -195,7 +192,7 @@ async function generateMeshImage(
     conversationId,
   };
 
-  let provider: 'gpt-image-2' | 'nano-banana-pro' | 'flux';
+  let provider: 'gpt-image-2' | 'flux';
   let result: {
     imageBytes: Buffer;
     imageCallId: string | null;
@@ -225,57 +222,34 @@ async function generateMeshImage(
       },
     });
     try {
-      const imageBytes = await generateImageWithGeminiMultiTurn(
+      const imageBytes = await generateImageWithFalFlux(
         supabaseClient,
-        getGoogleGenAI(),
         userId,
         conversationId,
         prompt,
         gptImageReferenceImages,
       );
-      // Gemini Multi-Turn returns png.
+      // Flux returns png per its output_format config.
       result = { imageBytes, imageCallId: null, contentType: 'image/png' };
-      provider = 'nano-banana-pro';
-    } catch (geminiError) {
-      logError(geminiError, {
+      provider = 'flux';
+    } catch (fluxError) {
+      logError(fluxError, {
         ...sentryContext,
         additionalContext: {
-          stage: 'nano_banana_pro_fallback',
+          stage: 'flux_fallback',
           hasFreshUserImages,
           priorImageCallIdStatus,
           ...sentryStage,
         },
       });
-      try {
-        const imageBytes = await generateImageWithFalFlux(
-          supabaseClient,
-          userId,
-          conversationId,
-          prompt,
-          gptImageReferenceImages,
-        );
-        // Flux returns png per its output_format config.
-        result = { imageBytes, imageCallId: null, contentType: 'image/png' };
-        provider = 'flux';
-      } catch (fluxError) {
-        logError(fluxError, {
-          ...sentryContext,
-          additionalContext: {
-            stage: 'flux_fallback',
-            hasFreshUserImages,
-            priorImageCallIdStatus,
-            ...sentryStage,
-          },
-        });
-        throw fluxError;
-      }
+      throw fluxError;
     }
   }
 
   // Diagnostic log — gated on DEBUG_LOGS. In prod, ground truth comes from:
   //   - images.image_generation_call_id (null = fallback ran, non-null = gpt-image-2)
-  //   - Sentry events tagged stage=gpt_image_2_fallback / nano_banana_pro_fallback
-  //     / flux_fallback with full meshModel + subStage context
+  //   - Sentry events tagged stage=gpt_image_2_fallback / flux_fallback
+  //     with full meshModel + subStage context
   // This line stays opt-in for live debugging without polluting prod logs.
   debugLog(
     `[mesh] image_gen provider=${provider} meshModel=${sentryStage.meshModel}` +
@@ -337,10 +311,6 @@ function ensureFalConfig() {
   if (falConfigured) return;
   fal.config({ credentials: requiredEnv('FAL_KEY') });
   falConfigured = true;
-}
-
-function getGoogleGenAI() {
-  return new GoogleGenAI({ apiKey: requiredEnv('GOOGLE_API_KEY') });
 }
 
 function getOpenAI() {
@@ -1075,9 +1045,9 @@ async function submitMeshJob(
       // ========================================================================
       // SAM 3D PIPELINE WITH MOONDREAM3 CAPTIONING
       // Strategy:
-      // 1. Pre-fetch Moondream3 long caption and genericize it
+      // 1. Pre-fetch Moondream3 long caption
       // 2. Try simple prompt "all the 3d models in the scene" first
-      // 3. If low score, fallback to genericized caption
+      // 3. If low score, fallback to the Moondream3 caption
       // 4. If still no mask, use full-image box prompt as last resort
       // ========================================================================
 
@@ -1102,46 +1072,6 @@ async function submitMeshJob(
 
         debugLog('Moondream3 caption:', longCaption?.substring(0, 100) + '...');
 
-        // Genericize the caption - replace character names with visual descriptions
-        if (longCaption) {
-          const genericizePrompt = `Replace ALL character names, brand names, IP names, and proper nouns with generic visual descriptions. Keep sentence structure intact.
-
-Rules:
-- Replace ANY character name (Pikachu, Sonic, Mario, Dexter, SpongeBob, etc.) with visual descriptions
-- "Pikachu" -> "yellow creature with pointed ears"
-- "Sonic" -> "blue spiky creature"  
-- "Dexter" -> "boy with glasses" or "humanoid figure"
-- "SpongeBob" -> "yellow sponge creature"
-- Remove references like "from Dexter's Laboratory" or "from Pokemon"
-- Keep color, pose, action, and position descriptions
-- Keep ALL non-name words exactly the same
-
-Input: ${longCaption}
-
-Output:`;
-
-          try {
-            const genericResult = await getGoogleGenAI().models.generateContent(
-              {
-                model: 'gemini-2.5-flash-lite',
-                contents: [
-                  { role: 'user', parts: [{ text: genericizePrompt }] },
-                ],
-              },
-            );
-            const genericText =
-              genericResult.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (genericText) {
-              longCaption = genericText;
-              debugLog(
-                'Genericized caption:',
-                longCaption.substring(0, 100) + '...',
-              );
-            }
-          } catch (genError) {
-            debugLog('Failed to genericize, using original:', genError);
-          }
-        }
       } catch (error) {
         debugLog('Error getting Moondream3 caption:', error);
       }
