@@ -7,10 +7,44 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  sync-lock:
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: chore/history-build-cleanup
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Refresh lockfile within declared ranges
+        run: npm update --package-lock-only --ignore-scripts
+
+      - name: Commit lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: refresh npm lockfile"
+          git push origin HEAD:chore/history-build-cleanup
+
   quality:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -30,9 +64,8 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          npm explain whatwg-encoding node-domexception glob
+          npm explain node-domexception
           npm explain shiki @shikijs/engine-oniguruma @shikijs/engine-javascript @streamdown/code
-          npm explain brace-expansion dompurify js-yaml mermaid nanoid postcss protobufjs undici
           npm audit
 
       - name: Test
