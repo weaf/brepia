@@ -36,8 +36,10 @@ import {
 import type { DxfExporter } from '@/utils/downloadUtils';
 import type { AppUIMessage } from '@shared/chatAi';
 import {
+  getParametricArtifactEntrypointCode,
   isParametricArtifact,
   replaceBuildParametricModelOutput,
+  replaceParametricArtifactEntrypointCode,
 } from '@shared/parametricParts';
 import Tree from '@shared/Tree';
 import type {
@@ -452,7 +454,8 @@ function ConversationEditor() {
   // mesh lands, or by the user clicking the Eye icon on a bubble). ──────
   const handleViewArtifact = useCallback(
     (artifact: ParametricArtifact, messageId: string) => {
-      baseCodeRef.current = artifact.code;
+      const code = getParametricArtifactEntrypointCode(artifact);
+      baseCodeRef.current = code;
       // Parameters are derived from the OpenSCAD source — same code always
       // yields the same `<ParameterSection>`, no matter which model wrote
       // it. The current values come from the (possibly edited) artifact
@@ -463,7 +466,7 @@ function ConversationEditor() {
       const originalCode = queryClient
         .getQueryData<Message[]>(['messages', conversation.id])
         ?.find((row) => row.id === messageId)?.metadata?.originalCode;
-      setParameters(mergeParameterDefaults(artifact.code, originalCode));
+      setParameters(mergeParameterDefaults(code, originalCode));
       setCurrentOutput(undefined);
       setDxfExporter(() => null);
       setActivePreview({ type: 'artifact', messageId, artifact });
@@ -580,10 +583,10 @@ function ConversationEditor() {
         nextCode = updateParameter(nextCode, parameter);
       }
       setParameters(nextParameters);
-      const updatedArtifact: ParametricArtifact = {
-        ...activePreview.artifact,
-        code: nextCode,
-      };
+      const updatedArtifact = replaceParametricArtifactEntrypointCode(
+        activePreview.artifact,
+        nextCode,
+      );
       setActivePreview({
         ...activePreview,
         artifact: updatedArtifact,
@@ -625,6 +628,14 @@ function ConversationEditor() {
 
   const hasArtifact =
     activePreview?.type === 'artifact' && parameters.length > 0;
+  const activeArtifactCode =
+    activePreview?.type === 'artifact'
+      ? getParametricArtifactEntrypointCode(activePreview.artifact)
+      : undefined;
+  const shareArtifactCode =
+    sharePreview?.type === 'artifact'
+      ? getParametricArtifactEntrypointCode(sharePreview.artifact)
+      : undefined;
 
   // `useCachedAiChat` captures `initialBranch` once at Chat construction;
   // if the messages query hasn't completed its first fetch yet the
@@ -665,11 +676,7 @@ function ConversationEditor() {
                       ? sharePreview.meshId
                       : undefined
                   }
-                  activeOpenscadCode={
-                    sharePreview?.type === 'artifact'
-                      ? sharePreview.artifact.code
-                      : undefined
-                  }
+                  activeOpenscadCode={shareArtifactCode}
                 />
               </div>
             </div>
@@ -697,11 +704,7 @@ function ConversationEditor() {
                         ? sharePreview.meshId
                         : undefined
                     }
-                    openscadCode={
-                      sharePreview?.type === 'artifact'
-                        ? sharePreview.artifact.code
-                        : undefined
-                    }
+                    openscadCode={shareArtifactCode}
                   />
                 </PopoverContent>
               </Popover>
@@ -749,7 +752,7 @@ function ConversationEditor() {
             <Loader showLoadingText />
           ) : activePreview?.type === 'artifact' ? (
             <OpenSCADPreview
-              scadCode={activePreview.artifact.code}
+              scadCode={activeArtifactCode ?? ''}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               onDxfExportChange={handleDxfExporterChange}
@@ -769,7 +772,7 @@ function ConversationEditor() {
             <Loader showLoadingText />
           ) : activePreview?.type === 'artifact' ? (
             <OpenSCADPreview
-              scadCode={activePreview.artifact.code}
+              scadCode={activeArtifactCode ?? ''}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               onDxfExportChange={handleDxfExporterChange}
@@ -792,11 +795,7 @@ function ConversationEditor() {
             onParameterChange={changeParameters}
             currentOutput={currentOutput}
             dxfExporter={dxfExporter}
-            code={
-              activePreview?.type === 'artifact'
-                ? activePreview.artifact.code
-                : undefined
-            }
+            code={activeArtifactCode}
           />
         </div>
       }
@@ -806,11 +805,7 @@ function ConversationEditor() {
           onParameterChange={changeParameters}
           currentOutput={currentOutput}
           dxfExporter={dxfExporter}
-          code={
-            activePreview?.type === 'artifact'
-              ? activePreview.artifact.code
-              : undefined
-          }
+          code={activeArtifactCode}
         />
       }
     />

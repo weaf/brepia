@@ -36,7 +36,10 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
 } from 'ai';
 import Tree from '@shared/Tree';
-import { isParametricArtifact } from '@shared/parametricParts';
+import {
+  getParametricArtifactEntrypointCode,
+  isParametricArtifact,
+} from '@shared/parametricParts';
 import type {
   Conversation,
   Message,
@@ -408,7 +411,8 @@ export function ChatSession({
       }
 
       try {
-        const { stl, off } = await previewScadColoredViaToolWorker(input.code);
+        const code = getParametricArtifactEntrypointCode(input);
+        const { stl, off } = await previewScadColoredViaToolWorker(code);
         let inspectionUploaded = false;
         try {
           if (user?.id) {
@@ -722,7 +726,7 @@ export function ChatSession({
     if (!preview) return;
     const key =
       preview.type === 'artifact'
-        ? `artifact:${preview.messageId}:${preview.artifact.code.length}`
+        ? `artifact:${preview.messageId}:${getParametricArtifactEntrypointCode(preview.artifact).length}`
         : `mesh:${preview.messageId}:${preview.meshId}`;
     if (lastAutoAppliedPreviewKeyRef.current === key) return;
     lastAutoAppliedPreviewKeyRef.current = key;

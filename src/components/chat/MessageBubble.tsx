@@ -33,6 +33,7 @@ import type { ParametricArtifact } from '@shared/types';
 import type { TreeNode } from '@shared/Tree';
 import {
   cleanAssistantText,
+  getParametricArtifactEntrypointCode,
   isParametricArtifact,
 } from '@shared/parametricParts';
 import { imageIdFromFilename } from '@shared/imageRefs';
@@ -115,6 +116,20 @@ function getStringField(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) return undefined;
   const field = value[key];
   return typeof field === 'string' ? field : undefined;
+}
+
+function getStreamingParametricEntrypointCode(value: unknown): string {
+  if (!isRecord(value) || !isRecord(value.project)) return '';
+  const entrypointPath = value.project.entrypointPath;
+  const files = value.project.files;
+  if (typeof entrypointPath !== 'string' || !Array.isArray(files)) return '';
+  for (const file of files) {
+    if (!isRecord(file)) continue;
+    if (file.path === entrypointPath && typeof file.content === 'string') {
+      return file.content;
+    }
+  }
+  return '';
 }
 
 function answerUserMessageText(
@@ -622,8 +637,11 @@ function AssistantBubble({
             // whatever `code` has arrived so far.
             const partialCode =
               part.state === 'input-streaming'
-                ? (getStringField(part.input, 'code') ?? '')
+                ? getStreamingParametricEntrypointCode(part.input)
                 : '';
+            const artifactCode = artifact
+              ? getParametricArtifactEntrypointCode(artifact)
+              : '';
             if (part.state === 'input-streaming') {
               return (
                 <StreamingCodeBlock
@@ -670,7 +688,7 @@ function AssistantBubble({
                     >
                       <ParametricImagePreview
                         toolCallId={part.toolCallId}
-                        code={artifact.code}
+                        code={artifactCode}
                       />
                     </button>
                   ) : null
@@ -681,10 +699,10 @@ function AssistantBubble({
                     {part.errorText}
                   </div>
                 ) : null}
-                {artifact?.code ? (
+                {artifactCode ? (
                   <ScrollArea className="h-80 w-full">
                     <pre className="m-0 whitespace-pre-wrap break-words p-3 text-xs text-adam-neutral-200">
-                      <code>{artifact.code}</code>
+                      <code>{artifactCode}</code>
                     </pre>
                   </ScrollArea>
                 ) : null}
