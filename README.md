@@ -34,12 +34,12 @@ Describe a model in natural language, inspect it in the 3D viewer, adjust parame
 
 ## Export formats
 
-| Format | Use |
-| --- | --- |
-| **STL** | 3D printing and mesh workflows |
-| **SCAD** | Editable OpenSCAD source |
-| **DXF** | 2D CAD exchange |
-| **STEP** | 3D CAD exchange |
+| Format   | Use                            |
+| -------- | ------------------------------ |
+| **STL**  | 3D printing and mesh workflows |
+| **SCAD** | Editable OpenSCAD source       |
+| **DXF**  | 2D CAD exchange                |
+| **STEP** | 3D CAD exchange                |
 
 Creative workflows can also provide GLB output where supported.
 

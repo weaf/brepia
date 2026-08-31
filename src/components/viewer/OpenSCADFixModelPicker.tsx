@@ -6,7 +6,11 @@ export function OpenSCADFixModelPicker() {
   const { conversation } = useConversation();
   const binding = useConversationModelPicker(conversation.id);
 
-  if (!binding || binding.type !== 'parametric' || binding.models.length === 0) {
+  if (
+    !binding ||
+    binding.type !== 'parametric' ||
+    binding.models.length === 0
+  ) {
     return null;
   }
 
@@ -23,7 +27,7 @@ export function OpenSCADFixModelPicker() {
         type="parametric"
         focused
         registerBinding={false}
-        className="border border-adam-neutral-600 bg-adam-neutral-800"
+        className="border-adam-neutral-600 border bg-adam-neutral-800"
       />
     </div>
   );

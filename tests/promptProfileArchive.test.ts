@@ -51,9 +51,8 @@ describe('prompt profile archival semantics', () => {
       defaultPromptProfileId: 'profile-active',
     });
 
-    const { ActivePromptProfileError, archivePromptProfile } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { ActivePromptProfileError, archivePromptProfile } =
+      await import('../src/server/promptProfiles');
 
     await expect(
       archivePromptProfile('user-id', 'profile-active'),
@@ -69,9 +68,8 @@ describe('prompt profile archival semantics', () => {
       },
     });
 
-    const { archivePromptProfile } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { archivePromptProfile } =
+      await import('../src/server/promptProfiles');
 
     await expect(
       archivePromptProfile('user-id', 'profile-vision'),
@@ -80,14 +78,15 @@ describe('prompt profile archival semantics', () => {
   });
 
   it('archives an inactive profile instead of hard deleting it', async () => {
-    const { archivePromptProfile } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { archivePromptProfile } =
+      await import('../src/server/promptProfiles');
 
     await archivePromptProfile('user-id', 'profile-old');
 
     expect(mockArchiveUpdate).toHaveBeenCalledTimes(1);
-    expect(mockArchiveUpdate.mock.calls[0][0]).toMatchObject({ archived: true });
+    expect(mockArchiveUpdate.mock.calls[0][0]).toMatchObject({
+      archived: true,
+    });
   });
 
   it('still resolves an archived profile when a historical conversation pins its id', async () => {
@@ -108,9 +107,8 @@ describe('prompt profile archival semantics', () => {
       error: null,
     });
 
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
 
     await expect(
       resolveConversationSystemPrompt({

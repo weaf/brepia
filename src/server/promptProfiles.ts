@@ -58,7 +58,9 @@ function parsePromptProfileMode(mode: string): PromptProfileMode {
   throw new Error(`Invalid prompt profile mode: ${mode}`);
 }
 
-function parsePromptProfileScope(scope: string | undefined): PromptProfileScope {
+function parsePromptProfileScope(
+  scope: string | undefined,
+): PromptProfileScope {
   if (scope == null) return 'parametric';
   if (isAiInstructionKey(scope)) return scope;
   throw new Error(`Unknown prompt profile scope: ${scope}`);
@@ -116,12 +118,12 @@ export function fingerprint(text: string): string {
 
 export function loadBuiltinProfile(
   scope: PromptProfileScope = 'parametric',
-  instructionProfileId: AiInstructionProfileId =
-    LEGACY_ORIGINAL_INSTRUCTION_PROFILE_ID,
+  instructionProfileId: AiInstructionProfileId = LEGACY_ORIGINAL_INSTRUCTION_PROFILE_ID,
 ): PromptProfileDetailDto {
   const definition = getAiInstructionDefinition(scope);
   if (!definition) throw new Error(`Unknown AI instruction: ${scope}`);
-  const packageDefinition = getAiInstructionProfileDefinition(instructionProfileId);
+  const packageDefinition =
+    getAiInstructionProfileDefinition(instructionProfileId);
   if (!packageDefinition) {
     throw new Error(`Unknown AI instruction profile: ${instructionProfileId}`);
   }
@@ -343,7 +345,8 @@ export async function updatePromptProfile(
     update.prompt_template = input.promptTemplate;
   }
   if (input.mode !== undefined) update.mode = input.mode;
-  if (input.baseRevision !== undefined) update.base_revision = input.baseRevision;
+  if (input.baseRevision !== undefined)
+    update.base_revision = input.baseRevision;
 
   // Ownership was established by the lookup above. Keep the write chain in
   // the legacy shape so existing Supabase test doubles remain valid.
@@ -433,7 +436,9 @@ export async function resolveInstructionProfile({
     );
   }
   if (profile.scope !== scope) {
-    throw new Error(`Prompt profile ${profileId} is ${profile.scope}, not ${scope}.`);
+    throw new Error(
+      `Prompt profile ${profileId} is ${profile.scope}, not ${scope}.`,
+    );
   }
 
   if (profile.mode === 'overlay') {

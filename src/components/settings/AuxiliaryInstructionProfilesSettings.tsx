@@ -48,7 +48,8 @@ type Draft = {
 };
 
 const DEFINITIONS = AI_INSTRUCTION_DEFINITIONS.filter(
-  (definition) => definition.key !== 'parametric' && definition.key !== 'creative',
+  (definition) =>
+    definition.key !== 'parametric' && definition.key !== 'creative',
 );
 
 function bundledId(key: string) {
@@ -74,7 +75,8 @@ function effectivePrompt(
   bundled: PromptProfile | null,
 ): string {
   if (!selected.promptTemplate) return '';
-  if (!selected.editable || selected.mode === 'fork') return selected.promptTemplate;
+  if (!selected.editable || selected.mode === 'fork')
+    return selected.promptTemplate;
   if (!bundled?.promptTemplate) return selected.promptTemplate;
   return `${bundled.promptTemplate}\n\n--- User Custom Instructions ---\n\n${selected.promptTemplate}`;
 }
@@ -226,7 +228,9 @@ export function AuxiliaryInstructionProfilesSettings() {
       toast({
         title: 'Error',
         description:
-          error instanceof Error ? error.message : 'Failed to save instruction.',
+          error instanceof Error
+            ? error.message
+            : 'Failed to save instruction.',
         variant: 'destructive',
       });
     },
@@ -246,7 +250,9 @@ export function AuxiliaryInstructionProfilesSettings() {
       toast({
         title: 'Error',
         description:
-          error instanceof Error ? error.message : 'Failed to archive instruction.',
+          error instanceof Error
+            ? error.message
+            : 'Failed to archive instruction.',
         variant: 'destructive',
       });
     },
@@ -259,7 +265,7 @@ export function AuxiliaryInstructionProfilesSettings() {
       description: '',
       promptTemplate: '',
       mode,
-      baseRevision: mode === 'fork' ? bundled?.fingerprint ?? null : null,
+      baseRevision: mode === 'fork' ? (bundled?.fingerprint ?? null) : null,
     });
   };
 
@@ -324,7 +330,9 @@ export function AuxiliaryInstructionProfilesSettings() {
           ))}
         </select>
         {definition ? (
-          <p className="text-xs text-adam-neutral-400">{definition.description}</p>
+          <p className="text-xs text-adam-neutral-400">
+            {definition.description}
+          </p>
         ) : null}
       </div>
 
@@ -332,7 +340,9 @@ export function AuxiliaryInstructionProfilesSettings() {
         <div className="flex items-center justify-center py-10">
           <Loader2 className="h-5 w-5 animate-spin text-adam-neutral-400" />
         </div>
-      ) : profilesQuery.error || preferencesQuery.error || selectedQuery.error ? (
+      ) : profilesQuery.error ||
+        preferencesQuery.error ||
+        selectedQuery.error ? (
         <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-300">
           Failed to load instruction profiles.
         </div>
@@ -410,7 +420,9 @@ export function AuxiliaryInstructionProfilesSettings() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-medium text-adam-neutral-50">
-                      {draft.id ? 'Edit instruction profile' : 'New instruction profile'}
+                      {draft.id
+                        ? 'Edit instruction profile'
+                        : 'New instruction profile'}
                     </h4>
                     <p className="mt-1 text-xs text-adam-neutral-400">
                       {draft.mode === 'fork'
@@ -427,7 +439,9 @@ export function AuxiliaryInstructionProfilesSettings() {
                   value={draft.name}
                   onChange={(event) =>
                     setDraft((current) =>
-                      current ? { ...current, name: event.target.value } : current,
+                      current
+                        ? { ...current, name: event.target.value }
+                        : current,
                     )
                   }
                   placeholder="Profile name"
@@ -456,7 +470,11 @@ export function AuxiliaryInstructionProfilesSettings() {
                 />
 
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setDraft(null)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setDraft(null)}
+                  >
                     Cancel
                   </Button>
                   <Button

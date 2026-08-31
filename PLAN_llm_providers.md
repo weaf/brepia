@@ -8,20 +8,21 @@
 
 ## Översikt av skillnader
 
-| Aspekt | pCAD (nu) | auto-trader-ai |
-|--------|-----------|----------------|
-| Transport | HTTP API (`POST /api/session` + SSE-polling) | CLI (`opencode run --format json`) |
-| Abstraktion | `LanguageModelV2` (AI SDK, strömmande) | `ProviderAdapter` (enkel, blockerande) |
-| Routning | `buildChatModel` switch-caser (`google/`, `local/`, `opencode/`, ...) | Prioritetskedja med automatisk fallback |
-| Konfiguration | Miljövariabler (.env.local) | DB-tabell `llm_provider_config` |
-| Inställningar | Ingen LLM-settings UI | Full UI med drag-and-drop priority |
-| Strömning | ✅ AI SDK `streamText` | ❌ Blocking — väntar på fullt svar |
+| Aspekt        | pCAD (nu)                                                             | auto-trader-ai                          |
+| ------------- | --------------------------------------------------------------------- | --------------------------------------- |
+| Transport     | HTTP API (`POST /api/session` + SSE-polling)                          | CLI (`opencode run --format json`)      |
+| Abstraktion   | `LanguageModelV2` (AI SDK, strömmande)                                | `ProviderAdapter` (enkel, blockerande)  |
+| Routning      | `buildChatModel` switch-caser (`google/`, `local/`, `opencode/`, ...) | Prioritetskedja med automatisk fallback |
+| Konfiguration | Miljövariabler (.env.local)                                           | DB-tabell `llm_provider_config`         |
+| Inställningar | Ingen LLM-settings UI                                                 | Full UI med drag-and-drop priority      |
+| Strömning     | ✅ AI SDK `streamText`                                                | ❌ Blocking — väntar på fullt svar      |
 
 ---
 
 ## Arkitekturval
 
 ### Strömningsproblem
+
 auto-trader-ai's CLI-approach är **blockerande** — ingen strömning. pCAD:s chat-UI
 bygger på AI SDK's `streamText` som kräver strömmande LanguageModelV2.
 
@@ -29,7 +30,7 @@ bygger på AI SDK's `streamText` som kräver strömmande LanguageModelV2.
 
 1. **Chat UI** — Behåll `LanguageModelV2` + AI SDK `streamText`.
    - `opencodeChatModel` fortsätter använda HTTP API (SSE-polling) för strömning.
-   - Vi *refaktor* inte bort detta förrän vi har en strömmande CLI-wrapper.
+   - Vi _refaktor_ inte bort detta förrän vi har en strömmande CLI-wrapper.
 
 2. **Ej-strömmande operationer** — Titelgenerering, förslagsgenerering, bakgrundsjobb.
    - Bygg ny `ProviderAdapter`-baserad CLI-implementation för opencode.
@@ -42,7 +43,7 @@ bygger på AI SDK's `streamText` som kräver strömmande LanguageModelV2.
 **Ny fil:** `src/lib/llm-providers/types.ts`
 
 ```typescript
-export type Capability = "reasoning" | "fast" | "vision" | "long-context";
+export type Capability = 'reasoning' | 'fast' | 'vision' | 'long-context';
 
 export interface CompleteInput {
   task: string;
@@ -119,16 +120,20 @@ export interface ProviderAdapter {
 **Ny fil:** `src/lib/llm-providers/router.ts`
 
 ### RouterConfig (från DB)
+
 ```typescript
 interface RouterConfig {
-  priorityOrder: string[];      // ["opencode", "local", "openrouter", ...]
+  priorityOrder: string[]; // ["opencode", "local", "openrouter", ...]
   providerModels: Record<string, string>; // {"opencode": "big-pickle", ...}
-  thinkingDisabled: string[];   // ["opencode"]
-  perCapability: Partial<Record<Capability, { provider: string; model?: string }>>;
+  thinkingDisabled: string[]; // ["opencode"]
+  perCapability: Partial<
+    Record<Capability, { provider: string; model?: string }>
+  >;
 }
 ```
 
 ### Router.complete()
+
 1. Ladda config från DB
 2. Build priority chain (använd perCapability overrides först, sedan priorityOrder)
 3. Filtrera bort inte-konfigurerade providers
@@ -137,6 +142,7 @@ interface RouterConfig {
 6. Om alla misslyckas med andra fel → samla alla fel, returnera
 
 ### Filtrering
+
 - Provider utan nyckel = hoppas över
 - `thinkingDisabled` = `enableThinking: false` för den providern
 - `perCapability.reasoning` = override för reasoning-capability
@@ -190,6 +196,7 @@ CREATE POLICY "Users can insert own config" ON public.llm_provider_config
 **Ny fil:** `src/routes/settings.llm.tsx`
 
 ### Sektioner:
+
 1. **Lokal LLM-URL** — input för llama-swap URL
 2. **Providers** — add/edit/delete custom providers
    - id, label, apiKind (openai/anthropic/ollama)
@@ -207,6 +214,7 @@ CREATE POLICY "Users can insert own config" ON public.llm_provider_config
 5. **LLM Scout intervall** — cadence + debounce (för framtida autotrader integration)
 
 ### Server Functions (TanStack Router)
+
 - `getLlmConfig()` — läs från DB
 - `setLlmConfig(config)` — skriv till DB
 - `listCustomProviders()` — läs custom providers från DB
@@ -222,6 +230,7 @@ CREATE POLICY "Users can insert own config" ON public.llm_provider_config
 ### 6.1 — aiChat.ts (refaktor)
 
 **Förändringar:**
+
 - Behåll `buildChatModel` för AI SDK direktproviders (google/, openrouter/, anthropic/, local/)
 - Lägg `buildOpencodeRouterModel()` som wrapper för router → LanguageModelV2-adapter
 - Eller: behåll nuvarande `opencodeChatModel` för strömmande chat, använd ny router för ej-strömmande
@@ -253,13 +262,16 @@ const output = await router.complete({
 
 ```typescript
 // NUVARANDE (hardcoded Anthropic):
-const suggestions = await generateConversationSuggestions({ anthropic, branch });
+const suggestions = await generateConversationSuggestions({
+  anthropic,
+  branch,
+});
 
 // NY (med router):
 const output = await router.complete({
-  task: branch.map(m => m.role + ": " + m.text).join("\n"),
+  task: branch.map((m) => m.role + ': ' + m.text).join('\n'),
   system: suggestionsPrompt,
-  capabilities: ["fast"],
+  capabilities: ['fast'],
 });
 const suggestions = normalizeConversationSuggestions(output.text);
 ```
@@ -290,17 +302,20 @@ const suggestions = normalizeConversationSuggestions(output.text);
 ## Implementeringsordning (rekommenderad)
 
 ### Sprint 1 — Grundläggande (3-4 timmar)
+
 1. **Del 1.1** — `cli.ts` (CLI-hjälp)
 2. **Del 1.2** — `opencode-adapter.ts` (ProviderAdapter)
 3. **Del 2** — `registry.ts`
 4. **Test:** `router.complete()` med opencode CLI fungerar
 
 ### Sprint 2 — Router + DB (3-4 timmar)
+
 5. **Del 3** — `router.ts` (fallback chain)
 6. **Del 4** — DB migration (`llm_provider_config`)
 7. **Del 5 (delvis)** — `getLlmConfig`/`setLlmConfig` server functions
 
 ### Sprint 3 — Settings UI (4-5 timmar)
+
 8. **Del 5 (resten)** — `settings.llm.tsx` UI
    - Provider-lista med CRUD
    - Prioritetsordning drag-drop
@@ -309,6 +324,7 @@ const suggestions = normalizeConversationSuggestions(output.text);
 9. **Del 6.2-6.3** — Integrera router i titel/suggestions generation
 
 ### Sprint 4 — Polering (2-3 timmar)
+
 10. **Del 7** — CLI bridge (valfri, för deployment-scenarier)
 11. **Del 6.4** — models.ts route uppdatering
 12. **Testing** — End-to-end: UI → DB config → router → provider → response
@@ -353,33 +369,37 @@ pCAD/
 
 ## Behålls utan förändring
 
-| Fil | Varför |
-|-----|--------|
-| `src/server/opencode.ts` | LanguageModelV2 för strömmande chat — fortfarande nödvändigt |
+| Fil                                     | Varför                                                                  |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| `src/server/opencode.ts`                | LanguageModelV2 för strömmande chat — fortfarande nödvändigt            |
 | `src/server/aiChat.ts` `buildChatModel` | Direktproviders (google/, openrouter/, anthropic/, local/) fungerar bra |
-| `src/routes/api/opencode/models.ts` | Model list i dropdown — fungerar, bara uppdatering |
-| `src/components/TextAreaChat.tsx` | Chat UI — ingen förändring |
-| `src/lib/utils.ts` `PARAMETRIC_MODELS` | Static model list — fungerar |
+| `src/routes/api/opencode/models.ts`     | Model list i dropdown — fungerar, bara uppdatering                      |
+| `src/components/TextAreaChat.tsx`       | Chat UI — ingen förändring                                              |
+| `src/lib/utils.ts` `PARAMETRIC_MODELS`  | Static model list — fungerar                                            |
 
 ---
 
 ## Risker och överväganden
 
 ### Risk 1: Strömning för opencode
+
 - **Problem:** CLI är blockerande, chat UI kräver strömning
 - **Åtgärd:** Behåll HTTP API `opencodeChatModel` för chat. Router-CLI används endast för titel/suggestions (snabba, ej-strömmande operationer)
 - **Framtid:** Overväg `opencode run --format json --pure` med ReadableStream wrapper för strömmande CLI
 
 ### Risk 2: DB-schema för pCAD
+
 - **Problem:** pCAD använder Supabase, auto-trader-ai har sin egen DB-lager
 - **Åtgärd:** Anpassa SQL-migration för Supabase RLS och TanStack Router patterns
 - **Kompatibilitet:** pCAD har redan `conversations` och `messages` tabeller
 
 ### Risk 3: Scope creep
+
 - **Problem:** auto-trader-ai har 7 providers, custom provider CRUD, full settings UI
 - **Åtgärd:** Fokus på **opencode CLI** först. Övriga providers och custom CRUD kan läggas till i Sprint 4+
 
 ### Risk 4: Befintlig funktionalitet bryts
+
 - **Problem:** Refaktor av aiChat.ts kan påverka existerande chat-funktioner
 - **Åtgärd:** Endast titel/suggestions generering byts (se Sprint 3). Chat-flow förblir oförändrad. TypeScript compiles clean = grön zon.
 

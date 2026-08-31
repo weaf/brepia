@@ -103,9 +103,7 @@ export function DefaultModelSettings() {
       : AUTOMATIC_VALUE;
 
   const resolvedCreativeBackend =
-    creativeValue === AUTOMATIC_VALUE
-      ? CREATIVE_MODELS[0]?.id
-      : creativeValue;
+    creativeValue === AUTOMATIC_VALUE ? CREATIVE_MODELS[0]?.id : creativeValue;
   const localCreativeProfiles = useMemo(
     () =>
       preferences
@@ -116,7 +114,9 @@ export function DefaultModelSettings() {
   const savedLocalProfileId =
     preferences?.modelRouting.defaultLocalCreativeProfileId ?? null;
   const selectedLocalProfile = savedLocalProfileId
-    ? localCreativeProfiles.find((profile) => profile.id === savedLocalProfileId)
+    ? localCreativeProfiles.find(
+        (profile) => profile.id === savedLocalProfileId,
+      )
     : undefined;
 
   const isLoading = isCatalogLoading || isPreferencesLoading;
@@ -264,16 +264,16 @@ export function DefaultModelSettings() {
                       </SelectContent>
                     </Select>
                     {!selectedLocalProfile ? (
-                      <p className="mt-2 text-xs text-adam-amber">
+                      <p className="text-adam-amber mt-2 text-xs">
                         Choose a Local Creative profile to activate its runtime
                         models and per-profile generation settings.
                       </p>
                     ) : null}
                   </>
                 ) : (
-                  <p className="mt-2 text-xs text-adam-amber">
-                    No usable Local Creative profile is configured. Add one under
-                    Advanced → Creative models.
+                  <p className="text-adam-amber mt-2 text-xs">
+                    No usable Local Creative profile is configured. Add one
+                    under Advanced → Creative models.
                   </p>
                 )}
               </div>

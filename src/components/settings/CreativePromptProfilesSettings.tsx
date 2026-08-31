@@ -41,9 +41,9 @@ type EditorDraft = {
 };
 
 async function fetchProfiles(): Promise<CreativeProfile[]> {
-  return apiJson(
-    'ai-settings/profiles?scope=creative',
-  ) as Promise<CreativeProfile[]>;
+  return apiJson('ai-settings/profiles?scope=creative') as Promise<
+    CreativeProfile[]
+  >;
 }
 
 async function fetchProfile(id: string): Promise<CreativeProfile> {
@@ -358,7 +358,9 @@ export function CreativePromptProfilesSettings() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-medium text-adam-neutral-50">
-                    {draft.id ? 'Edit Creative profile' : 'New Creative profile'}
+                    {draft.id
+                      ? 'Edit Creative profile'
+                      : 'New Creative profile'}
                   </h4>
                   <p className="mt-1 text-xs text-adam-neutral-400">
                     {draft.mode === 'overlay'
@@ -375,7 +377,9 @@ export function CreativePromptProfilesSettings() {
                   value={draft.name}
                   onChange={(event) =>
                     setDraft((current) =>
-                      current ? { ...current, name: event.target.value } : current,
+                      current
+                        ? { ...current, name: event.target.value }
+                        : current,
                     )
                   }
                   placeholder="My Creative prompt"
@@ -521,9 +525,9 @@ export function CreativePromptProfilesSettings() {
               </div>
 
               {forkIsStale ? (
-                <div className="rounded-lg border border-adam-amber/30 bg-adam-amber/5 p-3 text-xs text-adam-amber">
-                  This fork was created from an older Creative Original revision.
-                  It remains unchanged until you edit it.
+                <div className="border-adam-amber/30 bg-adam-amber/5 text-adam-amber rounded-lg border p-3 text-xs">
+                  This fork was created from an older Creative Original
+                  revision. It remains unchanged until you edit it.
                 </div>
               ) : null}
 

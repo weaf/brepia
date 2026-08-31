@@ -126,9 +126,8 @@ describe('hidden model identification', async () => {
 
 describe('custom model ID builder and parser', async () => {
   it('makeCustomProviderModelId produces stable IDs', async () => {
-    const { makeCustomProviderModelId } = await import(
-      '../shared/customModelIds'
-    );
+    const { makeCustomProviderModelId } =
+      await import('../shared/customModelIds');
 
     const id1 = makeCustomProviderModelId('abc-123', 'gpt-4');
     const id2 = makeCustomProviderModelId('abc-123', 'gpt-4');
@@ -138,9 +137,8 @@ describe('custom model ID builder and parser', async () => {
   });
 
   it('parseCustomProviderModelId correctly parses valid IDs', async () => {
-    const { parseCustomProviderModelId } = await import(
-      '../shared/customModelIds'
-    );
+    const { parseCustomProviderModelId } =
+      await import('../shared/customModelIds');
 
     const parsed = parseCustomProviderModelId('custom/abc-123-def/gpt-4');
     assert.deepStrictEqual(parsed, {
@@ -150,9 +148,8 @@ describe('custom model ID builder and parser', async () => {
   });
 
   it('parseCustomProviderModelId handles model IDs with slashes', async () => {
-    const { parseCustomProviderModelId } = await import(
-      '../shared/customModelIds'
-    );
+    const { parseCustomProviderModelId } =
+      await import('../shared/customModelIds');
 
     const parsed = parseCustomProviderModelId('custom/xyz-789/openai/gpt-4');
     assert.deepStrictEqual(parsed, {
@@ -162,9 +159,8 @@ describe('custom model ID builder and parser', async () => {
   });
 
   it('parseCustomProviderModelId returns null for non-custom IDs', async () => {
-    const { parseCustomProviderModelId } = await import(
-      '../shared/customModelIds'
-    );
+    const { parseCustomProviderModelId } =
+      await import('../shared/customModelIds');
 
     assert.strictEqual(
       parseCustomProviderModelId('google/gemini-3.1-pro-preview'),
@@ -189,9 +185,8 @@ describe('stale hidden model ID handling', async () => {
   });
 
   it('parse returns null for unknown format — no crash', async () => {
-    const { parseCustomProviderModelId } = await import(
-      '../shared/customModelIds'
-    );
+    const { parseCustomProviderModelId } =
+      await import('../shared/customModelIds');
 
     assert.doesNotThrow(() => parseCustomProviderModelId('garbage!@#'));
     assert.strictEqual(parseCustomProviderModelId('garbage!@#'), null);
@@ -203,9 +198,8 @@ describe('stale hidden model ID handling', async () => {
 // ---------------------------------------------------------------------------
 
 describe('B1 — filterSelectableCatalog', async () => {
-  const { filterSelectableCatalog } = await import(
-    '../src/server/modelCatalog'
-  );
+  const { filterSelectableCatalog } =
+    await import('../src/server/modelCatalog');
 
   it('built-in visible by default', () => {
     const catalog = [

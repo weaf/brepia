@@ -32,7 +32,9 @@ type TestRow = {
   parent_message_id: string | null;
 };
 
-function build(baseline: { status: 'success' } | { status: 'error'; errorText: string }) {
+function build(
+  baseline: { status: 'success' } | { status: 'error'; errorText: string },
+) {
   return buildImportedArtifactMessages({
     conversationId,
     userMessageId,
@@ -161,9 +163,9 @@ describe('imported artifact persistence primitive', () => {
   });
 
   it('preserves the imported artifact after a DB-style JSON reload before the first edit', async () => {
-    const persistedRows = JSON.parse(JSON.stringify(build({ status: 'success' }))) as ReturnType<
-      typeof build
-    >;
+    const persistedRows = JSON.parse(
+      JSON.stringify(build({ status: 'success' })),
+    ) as ReturnType<typeof build>;
     const [reloadedUser, reloadedAssistant] = persistedRows;
 
     const inputs = await modelBuildInputs([
@@ -285,7 +287,9 @@ describe('imported artifact persistence primitive', () => {
     const restoredAssistant: TestRow = {
       ...originalAssistant,
       id: '14141414-9999-4999-8999-999999999999',
-      parts: JSON.parse(JSON.stringify(originalAssistant.parts)) as AppUIMessage['parts'],
+      parts: JSON.parse(
+        JSON.stringify(originalAssistant.parts),
+      ) as AppUIMessage['parts'],
       metadata: JSON.parse(
         JSON.stringify(originalAssistant.metadata ?? {}),
       ) as AppUIMessage['metadata'],

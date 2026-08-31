@@ -14,7 +14,11 @@ import {
   type InstanceIdentity,
 } from '@/services/instanceIdentityService';
 
-export function InstanceIdentitySettingsSection() {
+export function InstanceIdentitySettingsSection({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const { data: access } = useQuery({
     queryKey: ['account-access'],
     queryFn: getAccountAccess,
@@ -28,7 +32,13 @@ export function InstanceIdentitySettingsSection() {
   if (access?.role !== 'admin') return null;
 
   return (
-    <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6">
+    <section
+      className={
+        embedded
+          ? 'min-w-0'
+          : 'rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-6'
+      }
+    >
       <div className="mb-5">
         <h2 className="text-sm font-medium text-adam-neutral-50">
           Instance identity
@@ -45,7 +55,7 @@ export function InstanceIdentitySettingsSection() {
           <ActivityIndicator label="Loading instance identity" />
         </div>
       ) : isError ? (
-        <div className="rounded-lg border border-adam-red-400/30 bg-adam-red-400/5 p-4 text-sm text-adam-red-300">
+        <div className="border-adam-red-400/30 bg-adam-red-400/5 text-adam-red-300 rounded-lg border p-4 text-sm">
           Could not load instance identity settings. Make sure the latest
           Supabase migration has been applied.
         </div>

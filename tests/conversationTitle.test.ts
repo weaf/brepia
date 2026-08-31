@@ -30,9 +30,9 @@ describe('conversation titles', () => {
     expect(conversationTitleFromText('', { meshCount: 1 })).toBe(
       'CAD model edit',
     );
-    expect(
-      conversationTitleFromText('', { imageCount: 1, meshCount: 1 }),
-    ).toBe('CAD from image and mesh references');
+    expect(conversationTitleFromText('', { imageCount: 1, meshCount: 1 })).toBe(
+      'CAD from image and mesh references',
+    );
     expect(conversationTitleFromText('')).toBe(DEFAULT_CONVERSATION_TITLE);
   });
 

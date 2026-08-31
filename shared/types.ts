@@ -50,12 +50,7 @@ export type ParameterOption = { value: string | number; label?: string };
 export type ParameterRange = { min?: number; max?: number; step?: number };
 
 export type ParameterType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'string[]'
-  | 'number[]'
-  | 'boolean[]';
+  'string' | 'number' | 'boolean' | 'string[]' | 'number[]' | 'boolean[]';
 
 export type Parameter = {
   name: string;

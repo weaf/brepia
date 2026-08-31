@@ -25,17 +25,18 @@ describe('local SCAD import validation', () => {
   });
 
   it('accepts Android/browser .scad.txt filename aliases', () => {
-    expect(
-      decodeScadImportBytes('kropp4.scad.txt', bytes(VALID_SOURCE)),
-    ).toBe(VALID_SOURCE);
-    expect(
-      decodeScadImportBytes('MODEL.SCAD.TXT', bytes(VALID_SOURCE)),
-    ).toBe(VALID_SOURCE);
+    expect(decodeScadImportBytes('kropp4.scad.txt', bytes(VALID_SOURCE))).toBe(
+      VALID_SOURCE,
+    );
+    expect(decodeScadImportBytes('MODEL.SCAD.TXT', bytes(VALID_SOURCE))).toBe(
+      VALID_SOURCE,
+    );
   });
 
   it('rejects ordinary TXT files that are not SCAD filename aliases', () => {
-    expect(() => decodeScadImportBytes('bracket.txt', bytes(VALID_SOURCE)))
-      .toThrowError(ScadImportError);
+    expect(() =>
+      decodeScadImportBytes('bracket.txt', bytes(VALID_SOURCE)),
+    ).toThrowError(ScadImportError);
     try {
       decodeScadImportBytes('bracket.txt', bytes(VALID_SOURCE));
     } catch (error) {
@@ -71,7 +72,9 @@ include <MCAD/boxes.scad>
 ${VALID_SOURCE}
 `;
     expect(findUnsupportedScadDependencies(source)).toEqual([]);
-    expect(() => decodeScadImportBytes('libs.scad', bytes(source))).not.toThrow();
+    expect(() =>
+      decodeScadImportBytes('libs.scad', bytes(source)),
+    ).not.toThrow();
   });
 
   it('rejects custom or relative include/use dependencies', () => {
@@ -93,8 +96,9 @@ import("mesh.stl");
 surface(file="heightmap.dat");
 ${VALID_SOURCE}
 `;
-    expect(findUnsupportedScadDependencies(source).map((issue) => issue.kind))
-      .toEqual(['import', 'surface']);
+    expect(
+      findUnsupportedScadDependencies(source).map((issue) => issue.kind),
+    ).toEqual(['import', 'surface']);
   });
 
   it('does not treat commented or quoted dependency examples as active', () => {
@@ -120,10 +124,14 @@ ${VALID_SOURCE}
       ),
     ).toBe(true);
     expect(
-      isBlockingScadCompileError(new Error('OpenSCAD output exceeds 67108864 bytes.')),
+      isBlockingScadCompileError(
+        new Error('OpenSCAD output exceeds 67108864 bytes.'),
+      ),
     ).toBe(true);
     expect(
-      isBlockingScadCompileError(new Error('Parser error: syntax error in file input.scad')),
+      isBlockingScadCompileError(
+        new Error('Parser error: syntax error in file input.scad'),
+      ),
     ).toBe(false);
   });
 

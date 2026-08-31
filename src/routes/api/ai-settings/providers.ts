@@ -53,7 +53,10 @@ export const Route = createFileRoute('/api/ai-settings/providers')({
           }
           if (slug.startsWith('builtin-')) {
             return json(
-              { error: 'The builtin-* namespace is reserved for managed provider overrides' },
+              {
+                error:
+                  'The builtin-* namespace is reserved for managed provider overrides',
+              },
               400,
             );
           }
@@ -65,10 +68,7 @@ export const Route = createFileRoute('/api/ai-settings/providers')({
             slug,
             name,
             driver: driver as
-              | 'openai-compatible'
-              | 'anthropic'
-              | 'google'
-              | 'openrouter',
+              'openai-compatible' | 'anthropic' | 'google' | 'openrouter',
             baseUrl: body.baseUrl,
             credential: body.credential,
           });

@@ -7,12 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import * as Sentry from '@sentry/react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useProfile, useUpdateProfile } from '@/services/profileService';
@@ -21,7 +16,6 @@ import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
 import { DebugSettingsSection } from '@/components/settings/DebugSettingsSection';
-import { InstanceIdentitySettingsSection } from '@/components/settings/InstanceIdentitySettingsSection';
 import { InstanceLegalLinks } from '@/components/settings/InstanceLegalLinks';
 import { ActivityIndicator } from '@/components/brand';
 import { getAccountAccess } from '@/services/accountAdminService';
@@ -68,7 +62,10 @@ export default function SettingsView() {
         onSuccess: () => {
           setEditingName(false);
           setNewName(profile?.full_name || '');
-          toast({ title: 'Success', description: 'Your name has been updated' });
+          toast({
+            title: 'Success',
+            description: 'Your name has been updated',
+          });
         },
         onError: (e) => {
           Sentry.captureException(e);
@@ -205,9 +202,9 @@ export default function SettingsView() {
                         Manage account
                       </div>
                       <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
-                        Update your name, email, password, and account details in
-                        your account. Brepia avatar icons remain local to this
-                        application.
+                        Update your name, email, password, and account details
+                        in your account. Brepia avatar icons remain local to
+                        this application.
                       </div>
                     </div>
                     <a
@@ -298,7 +295,9 @@ export default function SettingsView() {
 
                   <div className="flex items-center justify-between gap-4 pt-5">
                     <div className="min-w-0">
-                      <div className="text-sm text-adam-neutral-50">Password</div>
+                      <div className="text-sm text-adam-neutral-50">
+                        Password
+                      </div>
                       <div className="mt-0.5 text-xs leading-relaxed text-adam-neutral-200">
                         {localAccount
                           ? 'Password is managed by an administrator'
@@ -435,7 +434,6 @@ export default function SettingsView() {
               className="mt-0 flex min-w-0 flex-col gap-4"
             >
               <AdminSettingsSection />
-              <InstanceIdentitySettingsSection />
             </TabsContent>
           )}
 

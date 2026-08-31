@@ -79,7 +79,9 @@ export function conversationModelCodeSha256(code: string): string {
   return createHash('sha256').update(code, 'utf8').digest('hex');
 }
 
-function originalCodeFromMessage(message: ConversationMessageRow): string | null {
+function originalCodeFromMessage(
+  message: ConversationMessageRow,
+): string | null {
   if (!isRecord(message.metadata)) return null;
   const originalCode = message.metadata.originalCode;
   return typeof originalCode === 'string' && originalCode.trim()
@@ -250,7 +252,9 @@ function parseRevisionMetadata(
     typeof raw.revision !== 'number' ||
     typeof raw.toolCallId !== 'string' ||
     typeof raw.messageId !== 'string' ||
-    !(raw.messageCreatedAt === null || typeof raw.messageCreatedAt === 'string') ||
+    !(
+      raw.messageCreatedAt === null || typeof raw.messageCreatedAt === 'string'
+    ) ||
     typeof raw.title !== 'string' ||
     typeof raw.version !== 'string' ||
     typeof raw.codeSha256 !== 'string' ||

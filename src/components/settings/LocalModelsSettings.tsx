@@ -47,7 +47,9 @@ type LocalModelUpdate = Pick<
 >;
 
 async function fetchLocalModels(): Promise<RuntimePayload> {
-  return apiJson('settings/runtimeIntegrations?includeModels=1') as Promise<RuntimePayload>;
+  return apiJson(
+    'settings/runtimeIntegrations?includeModels=1',
+  ) as Promise<RuntimePayload>;
 }
 
 async function saveLocalModel(input: LocalModelUpdate): Promise<LocalModel> {
@@ -115,7 +117,8 @@ function LocalModelRow({
             disabled={busy}
             className="h-8 text-xs text-adam-neutral-50"
             onBlur={(event) => {
-              const displayName = event.currentTarget.value.trim() || model.modelId;
+              const displayName =
+                event.currentTarget.value.trim() || model.modelId;
               if (displayName !== model.displayName) update({ displayName });
             }}
           />
@@ -134,7 +137,8 @@ function LocalModelRow({
               onBlur={(event) => {
                 const value = event.currentTarget.value.trim();
                 const contextLimit = value ? Number(value) : null;
-                if (contextLimit !== model.contextLimit) update({ contextLimit });
+                if (contextLimit !== model.contextLimit)
+                  update({ contextLimit });
               }}
             />
           </div>
@@ -222,9 +226,9 @@ export function LocalModelsSettings() {
             </h2>
           </div>
           <p className="mt-1 max-w-2xl text-xs text-adam-neutral-300">
-            Models are discovered live from the built-in Local OpenAI / llama-swap
-            provider via /v1/models. Only capability and display metadata is saved;
-            model IDs are never hardcoded in Brepia.
+            Models are discovered live from the built-in Local OpenAI /
+            llama-swap provider via /v1/models. Only capability and display
+            metadata is saved; model IDs are never hardcoded in Brepia.
           </p>
         </div>
         <Button
@@ -245,8 +249,11 @@ export function LocalModelsSettings() {
 
       {localRuntime && (
         <div className="mb-4 rounded-lg border border-adam-neutral-800 bg-adam-background-1/50 px-3 py-2 text-xs text-adam-neutral-300">
-          <span className="font-medium text-adam-neutral-100">{localRuntime.label}</span>
-          {' · '}{localRuntime.status}
+          <span className="font-medium text-adam-neutral-100">
+            {localRuntime.label}
+          </span>
+          {' · '}
+          {localRuntime.status}
           {localRuntime.baseUrl ? ` · ${localRuntime.baseUrl}` : ''}
         </div>
       )}
@@ -256,7 +263,7 @@ export function LocalModelsSettings() {
           <ActivityIndicator label="Discovering local models" />
         </div>
       ) : query.isError ? (
-        <div className="rounded-lg border border-adam-red-400/30 px-3 py-3 text-xs text-adam-red-300">
+        <div className="border-adam-red-400/30 text-adam-red-300 rounded-lg border px-3 py-3 text-xs">
           Local model discovery failed: {query.error.message}
         </div>
       ) : models.length === 0 ? (

@@ -22,7 +22,10 @@ describe('chat error presentation', () => {
       'Model call failed: Vision models are not configured. Open Settings → Vision.',
     );
 
-    assert.equal(userFacingChatError(error).message, VISION_CONFIGURATION_MESSAGE);
+    assert.equal(
+      userFacingChatError(error).message,
+      VISION_CONFIGURATION_MESSAGE,
+    );
   });
 
   it('turns missing provider authentication into a Providers settings message', () => {

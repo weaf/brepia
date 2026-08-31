@@ -465,9 +465,9 @@ Add uniqueness appropriate for UX, recommended:
 Do not create a database row for the original built-in prompt. Represent original as a synthetic immutable profile from server code, e.g.:
 
 ```ts
-id: 'builtin:parametric'
-name: 'CADAM Original'
-mode: 'builtin'
+id: 'builtin:parametric';
+name: 'CADAM Original';
+mode: 'builtin';
 ```
 
 The built-in profile is not deletable/editable.
@@ -644,9 +644,9 @@ Important: provider DTOs never contain decrypted secrets.
 Server helpers:
 
 ```ts
-getAiPreferences(userId)
-updateHiddenModels(userId, ids)
-setDefaultPromptProfile(userId, profileId | null)
+getAiPreferences(userId);
+updateHiddenModels(userId, ids);
+setDefaultPromptProfile(userId, profileId | null);
 ```
 
 Validate every submitted model ID as a bounded string and deduplicate before persisting.
@@ -664,12 +664,12 @@ src/server/promptProfiles.ts
 Functions:
 
 ```ts
-listPromptProfiles(userId)
-getPromptProfile(userId, id)
-createPromptProfile(userId, input)
-updatePromptProfile(userId, id, input)
-archivePromptProfile(userId, id)
-resolveParametricPrompt(userId, profileId | null, builtinPrompt)
+listPromptProfiles(userId);
+getPromptProfile(userId, id);
+createPromptProfile(userId, input);
+updatePromptProfile(userId, id, input);
+archivePromptProfile(userId, id);
+resolveParametricPrompt(userId, profileId | null, builtinPrompt);
 ```
 
 Rules:
@@ -835,9 +835,9 @@ shared/customModelIds.ts
 Functions:
 
 ```ts
-isCustomProviderModel(id)
-makeCustomProviderModelId(providerId, modelId)
-parseCustomProviderModelId(id)
+isCustomProviderModel(id);
+makeCustomProviderModelId(providerId, modelId);
+parseCustomProviderModelId(id);
 ```
 
 ## P03C — Catalog API
@@ -1045,7 +1045,7 @@ Recommended function:
 async function resolveConversationSystemPrompt({
   userId,
   conversation,
-}): Promise<string>
+}): Promise<string>;
 ```
 
 Resolution:
@@ -1262,7 +1262,11 @@ Recommended seam:
 
 ```ts
 if (isCustomProviderModel(actualModelId)) {
-  built = await buildCustomChatModel({ userId, modelId: actualModelId, thinking });
+  built = await buildCustomChatModel({
+    userId,
+    modelId: actualModelId,
+    thinking,
+  });
 } else {
   built = buildChatModel(actualModelId, providers, thinkingEnabled);
 }

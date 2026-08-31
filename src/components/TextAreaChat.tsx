@@ -1665,7 +1665,6 @@ function TextAreaChat({
               selectedModel={model}
               onModelChange={setModel}
               type={type}
-              focused={isFocused}
               className="min-w-0 max-w-[240px]"
             />
             <div className="w-full md:w-auto">

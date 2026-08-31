@@ -25,8 +25,7 @@ export function UserAvatar({
   // self-host, fall back to whatever the OAuth provider put in user_metadata.
   const claims = ssoClaims(user);
   const metadata = user?.user_metadata as
-    | { avatar_url?: string; picture?: string }
-    | undefined;
+    { avatar_url?: string; picture?: string } | undefined;
   const providerAvatar = claims
     ? claims.picture || claims.avatar_url
     : metadata?.avatar_url || metadata?.picture;
@@ -51,7 +50,9 @@ export function UserAvatar({
       ) : (
         <>
           <AvatarImage src={src} />
-          <AvatarFallback>{getInitials(profile?.full_name || null)}</AvatarFallback>
+          <AvatarFallback>
+            {getInitials(profile?.full_name || null)}
+          </AvatarFallback>
         </>
       )}
     </Avatar>

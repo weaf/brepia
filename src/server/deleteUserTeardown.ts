@@ -1,4 +1,5 @@
 import { isRecord } from '@/server/api';
+import { deleteUserConversationWorkspaces } from '@/server/conversationTeardown';
 import {
   getServiceRoleSupabaseClient,
   type SupabaseClient,
@@ -17,14 +18,16 @@ export type TeardownOptions = {
 };
 
 /**
- * Runs the full teardown for a single user: deletes the Supabase auth user
- * (which cascades sessions, accounts, and user-keyed rows via FK / RLS
- * cascade) and removes the user's storage objects. Both the session-authed
- * `delete-user` route and the internal server-to-server
- * `internal/account/delete` route call this so teardown behavior stays
- * identical.
+ * Runs the full teardown for a single user: deletes Brepia's local
+ * conversation workspaces, deletes the Supabase auth user (which cascades
+ * sessions, accounts, and user-keyed rows via FK / RLS cascade), and removes
+ * the user's storage objects. Both the session-authed `delete-user` route and
+ * the internal server-to-server `internal/account/delete` route call this so
+ * teardown behavior stays identical.
  *
- * Storage ordering depends on `awaitStorage` (see TeardownOptions).
+ * Local workspace deletion always happens while conversation rows still exist,
+ * because auth deletion cascades those rows. Storage ordering depends on
+ * `awaitStorage` (see TeardownOptions).
  */
 export async function teardownUser(
   supabase: SupabaseClient,
@@ -32,9 +35,10 @@ export async function teardownUser(
   options: TeardownOptions = {},
 ): Promise<void> {
   if (options.awaitStorage) {
-    // Storage-first, awaited: if this throws the auth user still exists, so the
-    // caller's retry re-lists and completes — no silently-orphaned blobs.
+    // Storage/workspace-first, awaited: if either throws the auth user still
+    // exists, so the caller can retry without silently orphaning artifacts.
     await deleteUserStorageItems(supabase, user.id);
+    await deleteUserConversationWorkspaces(supabase, user.id);
     const { error: deleteError } = await supabase.auth.admin.deleteUser(
       user.id,
     );
@@ -44,8 +48,10 @@ export async function teardownUser(
     return;
   }
 
-  // Default user-facing path: delete the auth user now, clean storage in the
-  // background so the response is fast.
+  // Local workspaces must be enumerated before auth deletion cascades the
+  // conversation rows. Storage remains background cleanup for the fast
+  // user-facing path, preserving the existing response semantics.
+  await deleteUserConversationWorkspaces(supabase, user.id);
   const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
   if (deleteError) {
     throw new Error(`Failed to delete auth user: ${deleteError.message}`);

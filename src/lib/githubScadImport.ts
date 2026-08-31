@@ -45,10 +45,7 @@ function hasControlCharacters(value: string): boolean {
   return false;
 }
 
-function fail(
-  code: GithubScadImportErrorCode,
-  message: string,
-): never {
+function fail(code: GithubScadImportErrorCode, message: string): never {
   throw new GithubScadImportError(code, message);
 }
 
@@ -71,7 +68,8 @@ function rawPathname(input: string): string {
   const candidates = [queryStart, fragmentStart].filter(
     (index) => index !== -1,
   );
-  const pathEnd = candidates.length > 0 ? Math.min(...candidates) : input.length;
+  const pathEnd =
+    candidates.length > 0 ? Math.min(...candidates) : input.length;
   return input.slice(pathStart, pathEnd);
 }
 
@@ -87,7 +85,10 @@ function decodeSafeRawInputPath(input: string): string {
   try {
     decoded = decodeURIComponent(pathname);
   } catch {
-    fail('unsafe_encoding', 'The GitHub import path contains invalid encoding.');
+    fail(
+      'unsafe_encoding',
+      'The GitHub import path contains invalid encoding.',
+    );
   }
 
   // Reject a second encoded layer such as %252e%252e or %252f. The server
@@ -103,12 +104,13 @@ function decodeSafeRawInputPath(input: string): string {
     fail('invalid_path', 'Backslashes are not allowed in GitHub import paths.');
   }
   if (hasControlCharacters(decoded)) {
-    fail('invalid_path', 'Control characters are not allowed in GitHub import paths.');
+    fail(
+      'invalid_path',
+      'Control characters are not allowed in GitHub import paths.',
+    );
   }
   if (
-    decoded
-      .split('/')
-      .some((segment) => segment === '.' || segment === '..')
+    decoded.split('/').some((segment) => segment === '.' || segment === '..')
   ) {
     fail('invalid_path', 'GitHub import paths may not contain dot segments.');
   }
@@ -125,7 +127,12 @@ function splitPath(pathname: string): string[] {
 }
 
 function assertSimpleSegment(value: string, label: string): void {
-  if (!value || !SIMPLE_SEGMENT.test(value) || value === '.' || value === '..') {
+  if (
+    !value ||
+    !SIMPLE_SEGMENT.test(value) ||
+    value === '.' ||
+    value === '..'
+  ) {
     fail('invalid_path', `Invalid GitHub ${label}.`);
   }
 }
@@ -176,7 +183,8 @@ function parseGithubBlob(segments: string[]): GithubScadSource {
   assertSimpleSegment(owner, 'owner');
   assertSimpleSegment(repo, 'repository');
   assertSimpleSegment(ref, 'ref');
-  if (pathParts.length === 0) fail('invalid_path', 'GitHub file path is missing.');
+  if (pathParts.length === 0)
+    fail('invalid_path', 'GitHub file path is missing.');
   for (const segment of pathParts) assertFileSegment(segment);
 
   const path = pathParts.join('/');
@@ -205,7 +213,8 @@ function parseRawGithub(segments: string[]): GithubScadSource {
   assertSimpleSegment(owner, 'owner');
   assertSimpleSegment(repo, 'repository');
   assertSimpleSegment(ref, 'ref');
-  if (pathParts.length === 0) fail('invalid_path', 'GitHub file path is missing.');
+  if (pathParts.length === 0)
+    fail('invalid_path', 'GitHub file path is missing.');
   for (const segment of pathParts) assertFileSegment(segment);
 
   const path = pathParts.join('/');

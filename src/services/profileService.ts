@@ -3,10 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase, ssoClaims } from '@/lib/supabase';
 import type { Database } from '@shared/database';
 import { Profile } from '@shared/types';
-import {
-  isAvatarPresetId,
-  type AvatarPresetId,
-} from '@shared/avatarPresets';
+import { isAvatarPresetId, type AvatarPresetId } from '@shared/avatarPresets';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export type ProfileWithAvatarPreset = Profile & {
@@ -50,9 +47,8 @@ export function useProfile() {
     // the provider's name wins over the local mirror (which is display-only).
     select: (profile): ProfileWithAvatarPreset => {
       const name = ssoDisplayName(user);
-      const rawPreset = (
-        profile as unknown as { avatar_preset?: unknown }
-      ).avatar_preset;
+      const rawPreset = (profile as unknown as { avatar_preset?: unknown })
+        .avatar_preset;
       const avatarPreset = isAvatarPresetId(rawPreset) ? rawPreset : null;
       return {
         ...profile,

@@ -210,7 +210,8 @@ async function discoverLocalOpenAI(
         status: 'available',
         baseUrl,
         modelCount: 0,
-        explanation: 'Local runtime responds but the OpenAI /v1/models endpoint is not reachable',
+        explanation:
+          'Local runtime responds but the OpenAI /v1/models endpoint is not reachable',
       };
     }
   } catch {

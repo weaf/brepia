@@ -48,7 +48,10 @@ export async function persistConversationExport(
   let response = await postExport(options, token);
 
   if (response.status === 409) {
-    const body: unknown = await response.clone().json().catch(() => null);
+    const body: unknown = await response
+      .clone()
+      .json()
+      .catch(() => null);
     const retryable =
       typeof body === 'object' &&
       body !== null &&

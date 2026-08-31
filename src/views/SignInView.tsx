@@ -106,7 +106,11 @@ export function SignInView() {
           ? 'Invalid username/email or password'
           : 'An error occurred while signing in';
       setError(message);
-      toast({ title: 'Whoopsies', description: message, variant: 'destructive' });
+      toast({
+        title: 'Whoopsies',
+        description: message,
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }

@@ -25,8 +25,8 @@ const Loader = ({ showLoadingText = false, label = 'Creating' }: Props) => {
             className="inline-flex items-end gap-1 pb-0.5"
             aria-hidden="true"
           >
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-adam-blue motion-reduce:animate-none [animation-delay:-300ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-adam-blue motion-reduce:animate-none [animation-delay:-150ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-adam-blue [animation-delay:-300ms] motion-reduce:animate-none" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-adam-blue [animation-delay:-150ms] motion-reduce:animate-none" />
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-adam-blue motion-reduce:animate-none" />
           </span>
         </div>

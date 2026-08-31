@@ -6,10 +6,7 @@ import {
 } from '@/lib/openScadLimits';
 import { normalizeOpenSCADDxf } from '@/utils/dxfUtils';
 import { OpenScadWorkerClient } from '@/worker/openScadWorkerClient';
-import type {
-  OpenSCADWorkerResponseData,
-  WorkerMessage,
-} from '@/worker/types';
+import type { OpenSCADWorkerResponseData, WorkerMessage } from '@/worker/types';
 import { WorkerMessageType } from '@/worker/types';
 
 function requestId(prefix: string): string {
@@ -32,9 +29,9 @@ export function useOpenSCAD() {
   const activeCompileRef = useRef<string | null>(null);
   const cachedFilesRef = useRef<Map<string, CachedWorkerFile>>(new Map());
   const filesGenerationRef = useRef(0);
-  const teardownTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(
-    null,
-  );
+  const teardownTimeoutRef = useRef<ReturnType<
+    typeof globalThis.setTimeout
+  > | null>(null);
 
   const getClient = useCallback(() => {
     if (!clientRef.current) {
@@ -132,7 +129,9 @@ export function useOpenSCAD() {
           throw new Error('OpenSCAD did not return a preview output');
         }
 
-        setOutput(new Blob([new Uint8Array(response.output)], { type: 'model/stl' }));
+        setOutput(
+          new Blob([new Uint8Array(response.output)], { type: 'model/stl' }),
+        );
         const offBytes = response.extraOutputs?.off;
         setOffOutput(
           offBytes
@@ -142,7 +141,9 @@ export function useOpenSCAD() {
       } catch (caught) {
         if (activeCompileRef.current !== id) return;
         const nextError =
-          caught instanceof Error ? caught : new Error('OpenSCAD compilation failed');
+          caught instanceof Error
+            ? caught
+            : new Error('OpenSCAD compilation failed');
         setError(nextError);
         setIsError(true);
         setOutput(undefined);
@@ -167,9 +168,8 @@ export function useOpenSCAD() {
         type: WorkerMessageType.PREVIEW,
         data: { code, params: [], fileType: 'stl' },
       };
-      const response = await getClient().request<OpenSCADWorkerResponseData>(
-        message,
-      );
+      const response =
+        await getClient().request<OpenSCADWorkerResponseData>(message);
       assertOpenScadOutputWithinLimit(response);
 
       if (!response.output) {
@@ -199,9 +199,8 @@ export function useOpenSCAD() {
         type: WorkerMessageType.EXPORT,
         data: { code, params: [], fileType },
       };
-      const response = await getClient().request<OpenSCADWorkerResponseData>(
-        message,
-      );
+      const response =
+        await getClient().request<OpenSCADWorkerResponseData>(message);
       assertOpenScadOutputWithinLimit(response);
 
       if (!response.output) {

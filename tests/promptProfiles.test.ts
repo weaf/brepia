@@ -66,9 +66,8 @@ vi.doMock('@/server/supabaseClient', () => ({
 
 describe('loadBuiltinProfile', () => {
   it('returns a profile with the built-in prompt template', async () => {
-    const { loadBuiltinProfile, BUILTIN_PROFILE_ID } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { loadBuiltinProfile, BUILTIN_PROFILE_ID } =
+      await import('../src/server/promptProfiles');
 
     const profile = loadBuiltinProfile();
 
@@ -212,9 +211,8 @@ describe('mode validation', () => {
 
 describe('resolveConversationSystemPrompt — NULL profile', () => {
   it('returns the built-in prompt when profileId is null', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
 
     const result = await resolveConversationSystemPrompt({
       userId: '00000000-0000-0000-0000-000000000000',
@@ -227,9 +225,8 @@ describe('resolveConversationSystemPrompt — NULL profile', () => {
   });
 
   it('returns the built-in prompt when profileId is undefined', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
 
     const result = await resolveConversationSystemPrompt({
       userId: '00000000-0000-0000-0000-000000000000',
@@ -270,9 +267,8 @@ describe('resolveConversationSystemPrompt — missing custom profile', () => {
   });
 
   it('throws when custom profile is not found', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
 
     await expect(
       resolveConversationSystemPrompt({
@@ -293,9 +289,8 @@ describe('fork mode immutability', () => {
   });
 
   it('updatePromptProfile throws when changing mode on fork profile', async () => {
-    const { updatePromptProfile } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { updatePromptProfile } =
+      await import('../src/server/promptProfiles');
 
     mockSingle.mockResolvedValueOnce({
       data: { id: 'profile-id', mode: 'fork' },
@@ -321,9 +316,8 @@ describe('overlay mode can change to fork', () => {
   });
 
   it('updatePromptProfile allows changing overlay to fork', async () => {
-    const { updatePromptProfile } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { updatePromptProfile } =
+      await import('../src/server/promptProfiles');
 
     const mockUpdateResult = {
       id: 'profile-id',
@@ -390,9 +384,8 @@ describe('prompt template validation', () => {
 
 describe('B3 — loadBuiltinProfile returns real CADAM prompt', () => {
   it('loadBuiltinProfile contains the real PARAMETRIC_AGENT_PROMPT', async () => {
-    const { loadBuiltinProfile, BUILTIN_PROFILE_ID } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { loadBuiltinProfile, BUILTIN_PROFILE_ID } =
+      await import('../src/server/promptProfiles');
 
     const profile = loadBuiltinProfile();
 
@@ -434,9 +427,8 @@ describe('B3 — overlay creation semantics', () => {
   });
 
   it('Overlay resolution uses CURRENT built-in prompt + custom instructions', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
 
     // NULL profileId should resolve to the built-in prompt
     const result = await resolveConversationSystemPrompt({

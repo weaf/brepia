@@ -123,9 +123,10 @@ async function resolveGithubFile(
     `/${encodeURIComponent(source.repo)}/contents/${encodedContentPath(source.path)}` +
     `?ref=${encodeURIComponent(source.ref)}`;
   const response = await githubFetch(endpoint);
-  const payload = (await response.json().catch(() => null)) as
-    | Record<string, unknown>
-    | null;
+  const payload = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   if (!payload || Array.isArray(payload)) {
     throw new GithubScadResolveError(
       'github_invalid_response',
@@ -182,9 +183,10 @@ async function resolveGist(
 ): Promise<ResolvedGithubScadImport> {
   const endpoint = `https://api.github.com/gists/${encodeURIComponent(source.gistId)}`;
   const response = await githubFetch(endpoint);
-  const payload = (await response.json().catch(() => null)) as
-    | Record<string, unknown>
-    | null;
+  const payload = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   if (!payload) {
     throw new GithubScadResolveError(
       'github_invalid_response',

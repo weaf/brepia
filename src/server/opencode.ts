@@ -57,7 +57,8 @@ function bundledRuntimeNumber(key: string): number {
 function resolveOpenCodeRuntime(options: OpenCodeRuntimeOptions = {}) {
   return {
     transportInstruction:
-      options.transportInstruction ?? loadBundledInstruction('transport.opencode'),
+      options.transportInstruction ??
+      loadBundledInstruction('transport.opencode'),
     timeoutMs:
       options.timeoutMs ?? bundledRuntimeNumber('transport.openCodeTimeoutMs'),
     validationAttempts:
@@ -296,19 +297,13 @@ export function buildOpenCodeSessionTitle(
     markerIndex >= 0 ? prompt.slice(markerIndex + marker.length) : '';
   const firstLine = (rawUser.split('\n')[0] ?? '').replace(/\s+/g, ' ').trim();
   const summary =
-    firstLine.length > 60
-      ? `${firstLine.slice(0, 57).trimEnd()}…`
-      : firstLine;
+    firstLine.length > 60 ? `${firstLine.slice(0, 57).trimEnd()}…` : firstLine;
   const bareModel = modelId.includes('/')
     ? modelId.slice(modelId.lastIndexOf('/') + 1)
     : modelId;
   const modelLabel =
-    bareModel.length > 36
-      ? `${bareModel.slice(0, 33).trimEnd()}…`
-      : bareModel;
-  return summary
-    ? `[pCAD] ${modelLabel} · ${summary}`
-    : `[pCAD] ${modelLabel}`;
+    bareModel.length > 36 ? `${bareModel.slice(0, 33).trimEnd()}…` : bareModel;
+  return summary ? `[pCAD] ${modelLabel} · ${summary}` : `[pCAD] ${modelLabel}`;
 }
 
 export type OpenCodeSessionIdentity = {
@@ -542,15 +537,12 @@ export async function updateOpenCodeSessionTitle(
   signal?: AbortSignal,
 ): Promise<boolean> {
   try {
-    const response = await opencodeFetch(
-      `${apiUrl}/api/session/${sessionId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-        signal,
-      },
-    );
+    const response = await opencodeFetch(`${apiUrl}/api/session/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+      signal,
+    });
     if (response.ok) return true;
 
     const body = await response.text();
@@ -580,7 +572,8 @@ function sessionDataFromJson(value: unknown): OpenCodeSessionData | undefined {
     return undefined;
   }
   const data = (value as Record<string, unknown>)['data'];
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  if (!data || typeof data !== 'object' || Array.isArray(data))
+    return undefined;
   const record = data as Record<string, unknown>;
   if (typeof record['id'] !== 'string') return undefined;
   const model =
@@ -773,7 +766,9 @@ async function submitOpenCodePrompt(
     : undefined;
 }
 
-function toFinishReason(reason: string | undefined): LanguageModelV3FinishReason {
+function toFinishReason(
+  reason: string | undefined,
+): LanguageModelV3FinishReason {
   let unified: LanguageModelV3FinishReason['unified'];
   switch (reason) {
     case undefined:
@@ -1007,8 +1002,7 @@ export function processBatch(
 
   for (const evt of events) {
     const legacyDurable = evt.data['durable'] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const durableSeq =
       evt.durable?.seq ??
       (legacyDurable && typeof legacyDurable['seq'] === 'number'
@@ -1038,8 +1032,7 @@ export function processBatch(
       state.isErrored = true;
       state.finishReason = toFinishReason('error');
       const errorData = evt.data['error'] as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       const errMsg = errorData?.['message'] as string | undefined;
       if (errMsg) {
         logError(errMsg, {
@@ -1288,8 +1281,7 @@ async function* streamParts(
       }
 
       let eventReader:
-        | ReturnType<typeof createIncrementalSseReader>
-        | undefined;
+        ReturnType<typeof createIncrementalSseReader> | undefined;
       try {
         const eventRes = await opencodeFetch(eventsUrl, {
           signal: ac.signal,
@@ -1384,10 +1376,7 @@ async function* streamParts(
       yield { type: 'reasoning-end', id: reasoningId };
     }
 
-    const finishPart: Extract<
-      LanguageModelV3StreamPart,
-      { type: 'finish' }
-    > = {
+    const finishPart: Extract<LanguageModelV3StreamPart, { type: 'finish' }> = {
       type: 'finish',
       finishReason: state.finishReason,
       usage: state.usage ?? USAGE(),

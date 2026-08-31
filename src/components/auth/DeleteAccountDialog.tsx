@@ -60,13 +60,17 @@ export const DeleteAccountDialog = ({
       <AlertDialogContent className="max-w-md rounded-3xl">
         <div className="flex flex-col gap-16">
           <AlertDialogHeader className="text-center sm:text-center">
-            <AlertDialogTitle className="w-full">Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle className="w-full">
+              Are you sure?
+            </AlertDialogTitle>
           </AlertDialogHeader>
           <div className="space-y-4">
             <p>Deleting your account means:</p>
             <div className="rounded-lg bg-adam-neutral-950 p-4 text-adam-neutral-100">
               <ul className="list-disc space-y-2 pl-5 text-sm">
-                <li>Deleting your account is permanent and cannot be undone.</li>
+                <li>
+                  Deleting your account is permanent and cannot be undone.
+                </li>
                 <li>
                   Your data will be deleted within 30 days, except we may retain
                   a limited set of data for longer where required or permitted
@@ -77,8 +81,8 @@ export const DeleteAccountDialog = ({
           </div>
           <div className="space-y-2">
             <p>
-              Type <span className="font-semibold text-red-500">DELETE</span>{' '}
-              to confirm
+              Type <span className="font-semibold text-red-500">DELETE</span> to
+              confirm
             </p>
             <Input
               className="rounded-none border-x-0 border-b border-t-0 border-adam-neutral-200 shadow-none ring-0 focus:border-adam-neutral-200 focus:ring-0"

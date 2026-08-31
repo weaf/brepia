@@ -18,9 +18,9 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `blade_count` | `26` | `[16:2:36]` | Number of front fan blades |
+| Parameter     | Default | Range / options | Description                |
+| ------------- | ------- | --------------- | -------------------------- |
+| `blade_count` | `26`    | `[16:2:36]`     | Number of front fan blades |
 
 <details>
 <summary>OpenSCAD source — <code>11-turbofan-jet-engine.scad</code></summary>
@@ -46,7 +46,7 @@ shaft_color = "LightGray";
 
 // Main Execution
 // Orient engine horizontally and center it
-rotate([-90, 0, 0]) 
+rotate([-90, 0, 0])
 translate([0, 0, -155]) {
     engine_casings();
     internals();
@@ -70,12 +70,12 @@ module engine_casings() {
 module casings() {
     // Outer Nacelle Cowl
     color(nacelle_color)
-    rotate_extrude($fn=128) 
+    rotate_extrude($fn=128)
     nacelle_profile();
 
     // Inner Core Cowl
     color(core_cowl_color)
-    rotate_extrude($fn=128) 
+    rotate_extrude($fn=128)
     core_cowl_profile();
 
     // Bypass Struts / Outlet Guide Vanes
@@ -111,10 +111,10 @@ module internals() {
     color(shaft_color)
     rotate_extrude($fn=64)
     polygon([
-        [0, 40], [24, 40], 
-        [16, 55],          
-        [16, 135],         
-        [16, 240],         
+        [0, 40], [24, 40],
+        [16, 55],
+        [16, 135],
+        [16, 240],
         [0, 240]
     ]);
 
@@ -132,8 +132,8 @@ module internals() {
     translate([0, 0, 135])
     rotate_extrude($fn=64)
     polygon([
-        [16, 0], [21, 5], [21, 10], 
-        [18, 15], 
+        [16, 0], [21, 5], [21, 10],
+        [18, 15],
         [21, 20], [21, 25], [16, 30]
     ]);
 
@@ -157,7 +157,7 @@ module nose_spinner() {
     rotate_extrude($fn=64)
     intersection() {
         square([30, 40]);
-        translate([-20, 40]) 
+        translate([-20, 40])
         circle(r=45, $fn=128);
     }
 }

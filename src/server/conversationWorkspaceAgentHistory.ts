@@ -71,7 +71,10 @@ function agentFromModel(model: string): ConversationAgentKind | null {
 function decodeCliSessionMarker(
   toolCallId: string,
 ): { agent: ConversationAgentKind; sessionId: string | null } | null {
-  if (toolCallId.startsWith('cli-agent-') && !toolCallId.startsWith(`${CLI_SESSION_MARKER_PREFIX}.`)) {
+  if (
+    toolCallId.startsWith('cli-agent-') &&
+    !toolCallId.startsWith(`${CLI_SESSION_MARKER_PREFIX}.`)
+  ) {
     return null;
   }
 
@@ -94,9 +97,7 @@ function decodeCliSessionMarker(
     }
     return {
       agent: 'codex',
-      sessionId: /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(decoded)
-        ? decoded
-        : null,
+      sessionId: /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(decoded) ? decoded : null,
     };
   } catch {
     return { agent: rawAgent, sessionId: null };
@@ -152,7 +153,10 @@ function discoverAgentTurn(
   } else if (part.toolCallId.startsWith('cli-agent-')) {
     transport = 'cli';
     sessionId = null;
-  } else if (part.toolCallId.startsWith('stream-') && modelAgent === 'opencode') {
+  } else if (
+    part.toolCallId.startsWith('stream-') &&
+    modelAgent === 'opencode'
+  ) {
     transport = 'streaming';
     sessionId = buildOpenCodeSessionId(conversationId);
   } else {
@@ -212,12 +216,7 @@ export function collectConversationAgentTurns(
     if (row.role !== 'assistant' || !Array.isArray(row.parts)) continue;
     for (const part of row.parts) {
       if (!isRecord(part)) continue;
-      const turn = discoverAgentTurn(
-        conversationId,
-        row,
-        part,
-        sessionSeen,
-      );
+      const turn = discoverAgentTurn(conversationId, row, part, sessionSeen);
       if (turn) turns.push(turn);
     }
   }
@@ -258,7 +257,11 @@ function latestSessionInput(
   conversationId: string,
   turn: DiscoveredAgentTurn,
 ): ConversationAgentSessionInput {
-  if (turn.agent === 'opencode' && turn.transport === 'streaming' && turn.sessionId) {
+  if (
+    turn.agent === 'opencode' &&
+    turn.transport === 'streaming' &&
+    turn.sessionId
+  ) {
     const server = opencodeApiUrl();
     const directory = process.cwd();
     return {
@@ -301,7 +304,8 @@ export async function syncConversationAgentHistory(
 
   const loadMessages = dependencies.loadMessages ?? defaultLoadMessages;
   const recordTurn = dependencies.recordTurn ?? recordConversationAgentTurn;
-  const recordSession = dependencies.recordSession ?? recordConversationAgentSession;
+  const recordSession =
+    dependencies.recordSession ?? recordConversationAgentSession;
   const rows = await loadMessages(request, conversationId);
   const turns = collectConversationAgentTurns(conversationId, rows, leafId);
 

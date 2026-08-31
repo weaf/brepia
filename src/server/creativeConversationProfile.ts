@@ -5,9 +5,7 @@ import {
 } from '@shared/modelRouting';
 
 export type CreativeConversationProfileSource =
-  | 'legacy-current-default'
-  | 'pinned'
-  | 'pinned-none';
+  'legacy-current-default' | 'pinned' | 'pinned-none';
 
 export type CreativeConversationProfileResolution = {
   profile: LocalCreativeProfile | null;

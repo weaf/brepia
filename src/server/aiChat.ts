@@ -121,12 +121,7 @@ function jsonResponse(body: unknown, status: number) {
 }
 
 type ChatProvider =
-  | 'anthropic'
-  | 'google'
-  | 'openrouter'
-  | 'local'
-  | 'opencode'
-  | 'cli-agent';
+  'anthropic' | 'google' | 'openrouter' | 'local' | 'opencode' | 'cli-agent';
 
 function providerFor(modelId: string): ChatProvider {
   if (modelId.startsWith('anthropic/')) return 'anthropic';
@@ -851,9 +846,7 @@ export async function handleAiChatRequest(req: Request) {
       });
     } else {
       const promptProfileId = conversation.settings?.promptProfileId as
-        | string
-        | null
-        | undefined;
+        string | null | undefined;
       resolvedSystemPrompt = await resolveConversationSystemPrompt({
         userId: user.id,
         profileId: promptProfileId,
@@ -994,7 +987,7 @@ export async function handleAiChatRequest(req: Request) {
     builtinProviderOverrides.anthropic?.enabled !== false &&
     Boolean(
       builtinProviderOverrides.anthropic?.credential ||
-        env('ANTHROPIC_API_KEY'),
+      env('ANTHROPIC_API_KEY'),
     );
 
   const isFirstUserTurn = branchMessages.length === 1 && leafRole === 'user';

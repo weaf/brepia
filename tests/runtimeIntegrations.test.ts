@@ -52,9 +52,8 @@ describe('discoverRuntimeIntegrations', () => {
   it('returns exactly 3 integration statuses', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false });
 
-    const { discoverRuntimeIntegrations } = await import(
-      '@/server/runtimeIntegrations'
-    );
+    const { discoverRuntimeIntegrations } =
+      await import('@/server/runtimeIntegrations');
     const results = await discoverRuntimeIntegrations();
 
     expect(results).toHaveLength(3);
@@ -67,9 +66,8 @@ describe('discoverRuntimeIntegrations', () => {
   it('OpenCode integration has correct label and valid status', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false });
 
-    const { discoverRuntimeIntegrations } = await import(
-      '@/server/runtimeIntegrations'
-    );
+    const { discoverRuntimeIntegrations } =
+      await import('@/server/runtimeIntegrations');
     const results = await discoverRuntimeIntegrations();
     const opencode = results.find((r) => r.integrationId === 'opencode');
 
@@ -86,9 +84,8 @@ describe('discoverRuntimeIntegrations', () => {
     setEnv({ LOCAL_LLM_BASE_URL: undefined });
     mockFetch.mockReset();
 
-    const { discoverRuntimeIntegrations } = await import(
-      '@/server/runtimeIntegrations'
-    );
+    const { discoverRuntimeIntegrations } =
+      await import('@/server/runtimeIntegrations');
     const results = await discoverRuntimeIntegrations();
 
     const local = results.find((r) => r.integrationId === 'local-openai');
@@ -101,9 +98,8 @@ describe('discoverRuntimeIntegrations', () => {
     setEnv({ LOCAL_LLM_BASE_URL: '' });
     mockFetch.mockReset();
 
-    const { discoverRuntimeIntegrations } = await import(
-      '@/server/runtimeIntegrations'
-    );
+    const { discoverRuntimeIntegrations } =
+      await import('@/server/runtimeIntegrations');
     const results = await discoverRuntimeIntegrations();
 
     const local = results.find((r) => r.integrationId === 'local-openai');
@@ -116,9 +112,8 @@ describe('discoverRuntimeIntegrations', () => {
       .mockResolvedValueOnce({ ok: false })
       .mockResolvedValueOnce({ ok: false });
 
-    const { discoverRuntimeIntegrations } = await import(
-      '@/server/runtimeIntegrations'
-    );
+    const { discoverRuntimeIntegrations } =
+      await import('@/server/runtimeIntegrations');
     const results = await discoverRuntimeIntegrations();
 
     const allText = results.map((r) => JSON.stringify(r)).join('\n');
@@ -132,9 +127,8 @@ describe('discoverRuntimeIntegrations', () => {
 describe('RuntimeIntegrationStatus DTO shape', () => {
   it('has all required fields with correct types', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false });
-    const { discoverRuntimeIntegrations } = await import(
-      '@/server/runtimeIntegrations'
-    );
+    const { discoverRuntimeIntegrations } =
+      await import('@/server/runtimeIntegrations');
     const results = await discoverRuntimeIntegrations();
 
     for (const r of results) {
@@ -164,7 +158,10 @@ describe('RuntimeIntegrationStatus DTO shape', () => {
 describe('API endpoint auth requirement', () => {
   it('route file uses requireUser for auth', async () => {
     const routeSource = readFileSync(
-      join(import.meta.dirname, '../src/routes/api/settings/runtimeIntegrations.ts'),
+      join(
+        import.meta.dirname,
+        '../src/routes/api/settings/runtimeIntegrations.ts',
+      ),
       'utf-8',
     );
     expect(routeSource).toContain('requireUser');
@@ -172,7 +169,10 @@ describe('API endpoint auth requirement', () => {
 
   it('route is defined with GET handler', async () => {
     const routeSource = readFileSync(
-      join(import.meta.dirname, '../src/routes/api/settings/runtimeIntegrations.ts'),
+      join(
+        import.meta.dirname,
+        '../src/routes/api/settings/runtimeIntegrations.ts',
+      ),
       'utf-8',
     );
     expect(routeSource).toContain('GET');

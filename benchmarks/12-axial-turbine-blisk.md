@@ -18,22 +18,22 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `num_blades` | `28` | `[10:1:60]` | Number of blades around the hub |
-| `hub_radius` | `45` | `[20:1:100]` | Outer radius of the central hub |
-| `bore_radius` | `12` | `[5:1:30]` | Radius of the central shaft hole |
-| `blade_height` | `45` | `[20:1:100]` | Radial height of each blade |
-| `hub_center_thickness` | `30` | `[10:1:60]` | Thickness of the hub at the center |
-| `hub_rim_thickness` | `22` | `[10:1:50]` | Thickness of the hub at the rim |
-| `flange_width` | `8` | `[0:1:20]` | Width of the collar around the bore |
-| `flange_height` | `5` | `[0:1:20]` | Height of the collar around the bore |
-| `blade_chord` | `22` | `[10:1:50]` | Length of the blade profile (chord) |
-| `root_stagger` | `30` | `[0:1:90]` | Angle of the blade at the root |
-| `blade_twist` | `35` | `[-60:1:60]` | Total twist from root to tip |
-| `camber_pct` | `10` | `[0:1:20]` | Aerodynamic camber (curvature) |
-| `thickness_pct` | `6` | `[2:1:15]` | Maximum thickness of the blade profile |
-| `steps` | `30` | `Resolution per side` |  |
+| Parameter              | Default | Range / options       | Description                            |
+| ---------------------- | ------- | --------------------- | -------------------------------------- |
+| `num_blades`           | `28`    | `[10:1:60]`           | Number of blades around the hub        |
+| `hub_radius`           | `45`    | `[20:1:100]`          | Outer radius of the central hub        |
+| `bore_radius`          | `12`    | `[5:1:30]`            | Radius of the central shaft hole       |
+| `blade_height`         | `45`    | `[20:1:100]`          | Radial height of each blade            |
+| `hub_center_thickness` | `30`    | `[10:1:60]`           | Thickness of the hub at the center     |
+| `hub_rim_thickness`    | `22`    | `[10:1:50]`           | Thickness of the hub at the rim        |
+| `flange_width`         | `8`     | `[0:1:20]`            | Width of the collar around the bore    |
+| `flange_height`        | `5`     | `[0:1:20]`            | Height of the collar around the bore   |
+| `blade_chord`          | `22`    | `[10:1:50]`           | Length of the blade profile (chord)    |
+| `root_stagger`         | `30`    | `[0:1:90]`            | Angle of the blade at the root         |
+| `blade_twist`          | `35`    | `[-60:1:60]`          | Total twist from root to tip           |
+| `camber_pct`           | `10`    | `[0:1:20]`            | Aerodynamic camber (curvature)         |
+| `thickness_pct`        | `6`     | `[2:1:15]`            | Maximum thickness of the blade profile |
+| `steps`                | `30`    | `Resolution per side` |                                        |
 
 <details>
 <summary>OpenSCAD source — <code>12-axial-turbine-blisk.scad</code></summary>
@@ -115,7 +115,7 @@ module blade_array() {
         // Embed the blade root slightly into the hub rim
         translate([hub_radius - 2, 0, 0])
         // Lay the blade down so it points outward radially
-        rotate([0, 90, 0]) 
+        rotate([0, 90, 0])
         // Extrude with aerodynamic twist
         linear_extrude(height = blade_height + 2, twist = blade_twist, slices = 45, convexity = 2)
         // Set the root angle (stagger)
@@ -148,7 +148,7 @@ module naca_airfoil(c, t_pct, m_pct, p_pct) {
     function theta(x) = atan(dy_c(x));
 
     steps = 30; // Resolution per side
-    
+
     // Generate upper surface points
     pts_upper = [ for (i=[0:steps])
         let (

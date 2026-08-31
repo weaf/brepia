@@ -8,7 +8,9 @@ describe('worker OpenSCAD error reconstruction', () => {
       name: 'OpenSCADError',
       message: 'Adam did not exit correctly',
       code: '1',
-      stdErr: ["WARNING: Ignoring unknown variable 'heiht' in file input.scad, line 4"],
+      stdErr: [
+        "WARNING: Ignoring unknown variable 'heiht' in file input.scad, line 4",
+      ],
     });
 
     expect(error).toBeInstanceOf(OpenSCADError);

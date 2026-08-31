@@ -69,7 +69,7 @@ export function InstructionProfileSettings() {
       </div>
 
       {error ? (
-        <div className="text-sm text-adam-red-400">
+        <div className="text-adam-red-400 text-sm">
           Failed to load AI profile settings.
         </div>
       ) : isLoading ? (
@@ -112,7 +112,8 @@ export function InstructionProfileSettings() {
               </p>
               {selected.lineage ? (
                 <p className="mt-2 text-[11px] text-adam-neutral-500">
-                  Source: {selected.lineage.project} · {selected.lineage.revision}
+                  Source: {selected.lineage.project} ·{' '}
+                  {selected.lineage.revision}
                 </p>
               ) : selected.origin ? (
                 <p className="mt-2 text-[11px] text-adam-neutral-500">

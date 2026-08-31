@@ -7,10 +7,7 @@ import {
 
 export type AccountRole = 'admin' | 'user';
 export type AccountStatus = 'pending' | 'active' | 'disabled';
-export type RegistrationIdentityPolicy =
-  | 'email'
-  | 'social'
-  | 'email_or_social';
+export type RegistrationIdentityPolicy = 'email' | 'social' | 'email_or_social';
 
 export type RegistrationSettings = {
   allowRegistration: boolean;
@@ -221,7 +218,8 @@ async function canBootstrapAdmin(supabase: SupabaseClient, user: User) {
     page: 1,
     perPage: 2,
   });
-  if (error) throw new AccountAdminError('failed_to_check_admin_bootstrap', 500);
+  if (error)
+    throw new AccountAdminError('failed_to_check_admin_bootstrap', 500);
   return data.users.length === 1 && data.users[0]?.id === user.id;
 }
 
@@ -391,7 +389,10 @@ async function listAuthUsers(supabase: SupabaseClient): Promise<User[]> {
   const users: User[] = [];
   const perPage = 1000;
   for (let page = 1; ; page += 1) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage,
+    });
     if (error) throw new AccountAdminError('failed_to_list_users', 500);
     users.push(...data.users);
     if (data.users.length < perPage) break;
@@ -520,7 +521,10 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
   if (input.role && !['admin', 'user'].includes(input.role)) {
     throw new AccountAdminError('invalid_account_role');
   }
-  if (input.status && !['pending', 'active', 'disabled'].includes(input.status)) {
+  if (
+    input.status &&
+    !['pending', 'active', 'disabled'].includes(input.status)
+  ) {
     throw new AccountAdminError('invalid_account_status');
   }
 
@@ -573,12 +577,10 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
   if (input.fullName !== undefined) {
     const fullName = input.fullName.trim();
     if (!fullName) throw new AccountAdminError('full_name_required');
-    const { error: authMetadataError } = await supabase.auth.admin.updateUserById(
-      user.id,
-      {
+    const { error: authMetadataError } =
+      await supabase.auth.admin.updateUserById(user.id, {
         user_metadata: { ...user.user_metadata, full_name: fullName },
-      },
-    );
+      });
     if (authMetadataError) {
       throw new AccountAdminError('failed_to_update_user_metadata', 500);
     }
@@ -586,7 +588,8 @@ export async function updateAdminUser(input: UpdateAdminUserInput) {
       .from('profiles')
       .update({ full_name: fullName })
       .eq('user_id', user.id);
-    if (profileError) throw new AccountAdminError('failed_to_update_profile', 500);
+    if (profileError)
+      throw new AccountAdminError('failed_to_update_profile', 500);
   }
 
   if (input.contactEmail !== undefined) {

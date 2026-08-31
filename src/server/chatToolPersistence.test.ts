@@ -16,7 +16,10 @@ describe('hasPersistableMessageParts', () => {
   });
 
   it('accepts any non-empty assistant payload', () => {
-    assert.equal(hasPersistableMessageParts([{ type: 'text', text: 'ok' }]), true);
+    assert.equal(
+      hasPersistableMessageParts([{ type: 'text', text: 'ok' }]),
+      true,
+    );
     assert.equal(
       hasPersistableMessageParts([
         { type: 'tool-build_parametric_model', state: 'input-available' },

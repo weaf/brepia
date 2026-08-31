@@ -174,7 +174,7 @@ export function ChatTitle({
                           >
                             <span
                               className={cn(
-                                'min-w-0 line-clamp-1 select-text',
+                                'line-clamp-1 min-w-0 select-text',
                                 isParametric && 'text-center',
                               )}
                             >
@@ -226,14 +226,16 @@ export function ChatTitle({
                     <div className="flex h-8 w-fit max-w-full items-center gap-2 rounded font-medium tracking-tight text-adam-neutral-10 transition-colors duration-200 hover:bg-black hover:text-adam-neutral-0">
                       <span
                         className={cn(
-                          'min-w-0 line-clamp-1 cursor-pointer px-2 text-left text-[17px]',
+                          'line-clamp-1 min-w-0 cursor-pointer px-2 text-left text-[17px]',
                           isParametric && 'text-center',
                         )}
                         onClick={() => setIsEditingTitle(true)}
                       >
                         {conversation.title || 'Chat'}
                       </span>
-                      <InstructionProfileBadge label={instructionProfileLabel} />
+                      <InstructionProfileBadge
+                        label={instructionProfileLabel}
+                      />
                     </div>
                   )}
                 </>
@@ -242,7 +244,7 @@ export function ChatTitle({
                 <div className="flex h-8 w-fit max-w-full items-center gap-2 rounded font-medium tracking-tight text-adam-neutral-10">
                   <span
                     className={cn(
-                      'min-w-0 line-clamp-1 px-2 text-left text-[17px]',
+                      'line-clamp-1 min-w-0 px-2 text-left text-[17px]',
                       isParametric && 'text-center',
                     )}
                   >

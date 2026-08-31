@@ -82,9 +82,7 @@ describe('GitHub SCAD URL normalization', () => {
       canonicalUrl: 'https://gist.github.com/aa5a315d61ae9438b18d',
     });
     expect(
-      normalizeGithubScadUrl(
-        'https://gist.github.com/aa5a315d61ae9438b18d',
-      ),
+      normalizeGithubScadUrl('https://gist.github.com/aa5a315d61ae9438b18d'),
     ).toMatchObject({ kind: 'gist', gistId: 'aa5a315d61ae9438b18d' });
   });
 
@@ -277,24 +275,20 @@ describe('trusted GitHub SCAD retrieval', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      resolveGithubScadImport(
-        'https://gist.github.com/aa5a315d61ae9438b18d',
-      ),
+      resolveGithubScadImport('https://gist.github.com/aa5a315d61ae9438b18d'),
     ).rejects.toMatchObject({ code: 'gist_ambiguous' });
     await expect(
-      resolveGithubScadImport(
-        'https://gist.github.com/aa5a315d61ae9438b18d',
-      ),
+      resolveGithubScadImport('https://gist.github.com/aa5a315d61ae9438b18d'),
     ).rejects.toMatchObject({ code: 'gist_ambiguous' });
     await expect(
-      resolveGithubScadImport(
-        'https://gist.github.com/aa5a315d61ae9438b18d',
-      ),
+      resolveGithubScadImport('https://gist.github.com/aa5a315d61ae9438b18d'),
     ).rejects.toMatchObject({ code: 'gist_truncated' });
   });
 
   it('does not convert GitHub transport failures into arbitrary outbound retries', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 404 }));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(

@@ -321,8 +321,7 @@ function makeState() {
       raw: 'stop',
     } as import('@ai-sdk/provider').LanguageModelV3FinishReason,
     usage: undefined as
-      | import('@ai-sdk/provider').LanguageModelV3Usage
-      | undefined,
+      import('@ai-sdk/provider').LanguageModelV3Usage | undefined,
     totalText: '',
     yieldedText: '',
     totalReasoning: '',

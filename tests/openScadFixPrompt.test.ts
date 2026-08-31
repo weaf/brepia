@@ -7,18 +7,18 @@ import {
 
 describe('openScadFixPrompt', () => {
   it('includes bounded compiler diagnostics without duplicating SCAD source', () => {
-    const error = new OpenSCADError(
-      'Compilation failed',
-      'E_OPENSCAD',
-      ['ERROR: Parser error in file model.scad, line 4'],
-    );
+    const error = new OpenSCADError('Compilation failed', 'E_OPENSCAD', [
+      'ERROR: Parser error in file model.scad, line 4',
+    ]);
 
     const prompt = openScadFixPrompt(error);
 
     expect(prompt).toContain('Fix the current OpenSCAD model');
     expect(prompt).toContain('Compiler code: E_OPENSCAD');
     expect(prompt).toContain('Parser error');
-    expect(prompt).toContain('current complete pCAD artifact as the source of truth');
+    expect(prompt).toContain(
+      'current complete pCAD artifact as the source of truth',
+    );
     expect(prompt).not.toContain('cube([');
   });
 

@@ -1,8 +1,5 @@
 import { OPENSCAD_COMPILE_TIMEOUT_MS } from '@/lib/openScadLimits';
-import type {
-  OpenSCADWorkerResponseData,
-  WorkerMessage,
-} from '@/worker/types';
+import type { OpenSCADWorkerResponseData, WorkerMessage } from '@/worker/types';
 import { errorFromWorker } from '@/worker/workerError';
 
 type TimeoutHandle = ReturnType<typeof globalThis.setTimeout>;

@@ -37,11 +37,7 @@ function assertConversationId(conversationId: string): void {
 }
 
 function assertSafeSegment(value: string, label: string): void {
-  if (
-    !SAFE_SEGMENT_PATTERN.test(value) ||
-    value === '.' ||
-    value === '..'
-  ) {
+  if (!SAFE_SEGMENT_PATTERN.test(value) || value === '.' || value === '..') {
     throw new Error(`Invalid ${label}: ${value}`);
   }
 }
@@ -143,7 +139,10 @@ export function conversationModelRevisionsDir(conversationId: string): string {
   return join(conversationModelDir(conversationId), 'revisions');
 }
 
-function revisionFilename(revision: number, extension: 'scad' | 'json'): string {
+function revisionFilename(
+  revision: number,
+  extension: 'scad' | 'json',
+): string {
   return `${revisionStem(revision)}.${extension}`;
 }
 
@@ -254,7 +253,10 @@ export function conversationAgentTurnPath(
   turnId: string,
 ): string {
   assertSafeSegment(turnId, 'agent turn id');
-  return join(conversationAgentTurnsDir(conversationId, agent), `${turnId}.json`);
+  return join(
+    conversationAgentTurnsDir(conversationId, agent),
+    `${turnId}.json`,
+  );
 }
 
 export function conversationLogDir(conversationId: string): string {
@@ -293,8 +295,14 @@ async function readExistingManifest(
 ): Promise<Record<string, unknown> | null> {
   try {
     const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error(`Conversation workspace manifest is not an object: ${path}`);
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error(
+        `Conversation workspace manifest is not an object: ${path}`,
+      );
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
@@ -345,7 +353,8 @@ export async function initializeConversationWorkspace(
     id: metadata.conversationId,
     title: metadata.title ?? existingString(existing, 'title'),
     type: metadata.type ?? existingString(existing, 'type'),
-    createdAt: metadata.createdAt ?? existingString(existing, 'createdAt') ?? now,
+    createdAt:
+      metadata.createdAt ?? existingString(existing, 'createdAt') ?? now,
     updatedAt: metadata.updatedAt ?? now,
   };
 

@@ -73,8 +73,7 @@ export default function parseParameters(script: string): Parameter[] {
       const name = match[1];
       const value = match[2];
       let typeAndValue:
-        | { value: Parameter['value']; type: Parameter['type'] }
-        | undefined;
+        { value: Parameter['value']; type: Parameter['type'] } | undefined;
       try {
         typeAndValue = convertType(value);
       } catch {

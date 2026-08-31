@@ -70,13 +70,10 @@ export const Route = createFileRoute(
             description: updateFields.description as string | null | undefined,
             supportsTools: updateFields.supportsTools as boolean | undefined,
             supportsThinking: updateFields.supportsThinking as
-              | boolean
-              | undefined,
+              boolean | undefined,
             supportsVision: updateFields.supportsVision as boolean | undefined,
             contextLimit: updateFields.contextLimit as
-              | number
-              | null
-              | undefined,
+              number | null | undefined,
             outputLimit: updateFields.outputLimit as number | null | undefined,
             isVisible: updateFields.isVisible as boolean | undefined,
           });

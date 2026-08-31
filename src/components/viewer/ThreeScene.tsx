@@ -1,16 +1,18 @@
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import {
   ArcballControls,
   Stage,
   Environment,
   OrthographicCamera,
   PerspectiveCamera,
+  OrbitControls,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { Suspense, useEffect, useMemo, useState } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Lock, Moon, Sun, Unlock } from 'lucide-react';
 import { OrthographicPerspectiveToggle } from '@/components/viewer/OrthographicPerspectiveToggle';
 import { ViewGizmo } from '@/components/viewer/ViewGizmo';
+import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +27,30 @@ interface ThreeSceneProps {
   coloredGroup?: THREE.Group | null;
 }
 
+function ViewerControls({ uprightLocked }: { uprightLocked: boolean }) {
+  const camera = useThree((state) => state.camera);
+  const invalidate = useThree((state) => state.invalidate);
+
+  useEffect(() => {
+    if (!uprightLocked) return;
+
+    // ArcballControls allows the camera's up vector to roll freely. When the
+    // user switches to the Mesh-style locked interaction, restore canonical
+    // world-up before OrbitControls takes over so Top/Bottom and the view gizmo
+    // stay deterministic instead of preserving an already-rolled frame.
+    camera.up.set(0, 1, 0);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    invalidate();
+  }, [camera, invalidate, uprightLocked]);
+
+  if (uprightLocked) {
+    return <OrbitControls makeDefault minZoom={0.01} maxZoom={1000} />;
+  }
+
+  return <ArcballControls makeDefault minZoom={0.01} maxZoom={1000} />;
+}
+
 export function ThreeScene({
   geometry,
   color,
@@ -33,6 +59,7 @@ export function ThreeScene({
   coloredGroup,
 }: ThreeSceneProps) {
   const [isOrthographic, setIsOrthographic] = useState(true);
+  const [uprightLocked, setUprightLocked] = useState(false);
   const defaultBackgroundLightness = useMemo(
     () => hexColorToLightness(backgroundColor),
     [backgroundColor],
@@ -150,11 +177,7 @@ export function ThreeScene({
           followCamera={false}
           infiniteGrid={true}
         /> */}
-          <ArcballControls
-            makeDefault
-            minZoom={0.01}
-            maxZoom={1000}
-          />
+          <ViewerControls uprightLocked={uprightLocked} />
           {!initialIsMobile && <ViewGizmo />}
         </Canvas>
       </Suspense>
@@ -189,6 +212,28 @@ export function ThreeScene({
         )}
       >
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant={uprightLocked ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-8 w-8 rounded-full border border-adam-neutral-700/70 bg-adam-background-1/85 text-adam-text-primary backdrop-blur-sm"
+            aria-label={
+              uprightLocked
+                ? 'Unlock viewer rotation'
+                : 'Lock viewer upright like Mesh view'
+            }
+            aria-pressed={uprightLocked}
+            title={
+              uprightLocked ? 'Free rotate' : 'Lock upright like Mesh view'
+            }
+            onClick={() => setUprightLocked((locked) => !locked)}
+          >
+            {uprightLocked ? (
+              <Lock className="h-4 w-4" />
+            ) : (
+              <Unlock className="h-4 w-4" />
+            )}
+          </Button>
           <OrthographicPerspectiveToggle
             isOrthographic={isOrthographic}
             onToggle={setIsOrthographic}

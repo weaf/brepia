@@ -76,7 +76,10 @@ export const Route = createFileRoute('/api/delete-user')({
           if (isRecord(body) && body.action === 'bootstrap-admin') {
             const identifier = stringValue(body, 'identifier') ?? '';
             const password = stringValue(body, 'password') ?? '';
-            return json(await bootstrapFirstAdmin({ identifier, password }), 201);
+            return json(
+              await bootstrapFirstAdmin({ identifier, password }),
+              201,
+            );
           }
 
           const user = await requireUser(request);
@@ -118,22 +121,21 @@ export const Route = createFileRoute('/api/delete-user')({
             return json(
               await updateAdminUser({
                 userId,
-                username:
-                  Object.prototype.hasOwnProperty.call(body, 'username')
-                    ? stringValue(body, 'username') ?? ''
-                    : undefined,
-                password:
-                  Object.prototype.hasOwnProperty.call(body, 'password')
-                    ? stringValue(body, 'password') ?? ''
-                    : undefined,
-                fullName:
-                  Object.prototype.hasOwnProperty.call(body, 'fullName')
-                    ? stringValue(body, 'fullName') ?? ''
-                    : undefined,
-                contactEmail:
-                  Object.prototype.hasOwnProperty.call(body, 'contactEmail')
-                    ? stringValue(body, 'contactEmail') ?? null
-                    : undefined,
+                username: Object.prototype.hasOwnProperty.call(body, 'username')
+                  ? (stringValue(body, 'username') ?? '')
+                  : undefined,
+                password: Object.prototype.hasOwnProperty.call(body, 'password')
+                  ? (stringValue(body, 'password') ?? '')
+                  : undefined,
+                fullName: Object.prototype.hasOwnProperty.call(body, 'fullName')
+                  ? (stringValue(body, 'fullName') ?? '')
+                  : undefined,
+                contactEmail: Object.prototype.hasOwnProperty.call(
+                  body,
+                  'contactEmail',
+                )
+                  ? (stringValue(body, 'contactEmail') ?? null)
+                  : undefined,
                 role,
                 status,
               }),
@@ -145,15 +147,17 @@ export const Route = createFileRoute('/api/delete-user')({
             if (!userId) return json({ error: 'user_id_required' }, 400);
             await assertUserCanBeDeleted(userId);
             const supabase = getServiceRoleSupabaseClient();
-            await teardownUser(supabase, { id: userId }, { awaitStorage: true });
+            await teardownUser(
+              supabase,
+              { id: userId },
+              { awaitStorage: true },
+            );
             return json({ success: true });
           }
 
           if (action === 'update-registration') {
-            const identityPolicy = stringValue(
-              body,
-              'identityPolicy',
-            ) as RegistrationIdentityPolicy | undefined;
+            const identityPolicy = stringValue(body, 'identityPolicy') as
+              RegistrationIdentityPolicy | undefined;
             const providers = Array.isArray(body.allowedSocialProviders)
               ? body.allowedSocialProviders.filter(
                   (value): value is string => typeof value === 'string',

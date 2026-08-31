@@ -18,16 +18,16 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `gear1_teeth` | `24` | `[10:1:60]` |  |
-| `gear2_teeth` | `16` | `[10:1:60]` |  |
-| `circular_pitch` | `5` | `[2:0.5:10]` |  |
-| `face_width` | `8` | `[4:1:20]` |  |
-| `bore_diameter` | `5` | `[2:0.5:20]` |  |
-| `shaft_length` | `30` | `[10:1:50]` |  |
-| `shaft_diameter` | `5` | `[2:0.5:20]` |  |
-| `gear2_spin` | `11.25` | `[0:0.1:45]` |  |
+| Parameter        | Default | Range / options | Description |
+| ---------------- | ------- | --------------- | ----------- |
+| `gear1_teeth`    | `24`    | `[10:1:60]`     |             |
+| `gear2_teeth`    | `16`    | `[10:1:60]`     |             |
+| `circular_pitch` | `5`     | `[2:0.5:10]`    |             |
+| `face_width`     | `8`     | `[4:1:20]`      |             |
+| `bore_diameter`  | `5`     | `[2:0.5:20]`    |             |
+| `shaft_length`   | `30`    | `[10:1:50]`     |             |
+| `shaft_diameter` | `5`     | `[2:0.5:20]`    |             |
+| `gear2_spin`     | `11.25` | `[0:0.1:45]`    |             |
 
 <details>
 <summary>OpenSCAD source — <code>07-bevel-gear-drive.scad</code></summary>
@@ -65,7 +65,7 @@ module gear_system() {
         spiral = 0,
         anchor = "apex"
     );
-    
+
     // Vertical Shaft
     color(shaft_color)
     translate([0, 0, -shaft_length/2])
@@ -84,7 +84,7 @@ module gear_system() {
         spiral = 0,
         anchor = "apex"
     );
-    
+
     // Horizontal Shaft
     color(shaft_color)
     rotate([0, 90, 0])

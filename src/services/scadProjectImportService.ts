@@ -5,6 +5,7 @@ import {
   scadImportTitle,
 } from '@/lib/scadImport';
 import { persistImportedArtifact } from '@/services/importedArtifactService';
+import { syncConversationWorkspace } from '@/services/conversationWorkspaceService';
 import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
 import type { ImportedArtifactBaseline } from '@shared/importedArtifact';
 import type { ImportedArtifactOrigin } from '@shared/chatAi';
@@ -104,6 +105,22 @@ export async function createImportedScadProject({
       // Preserve the authoritative persistence failure; cleanup is best-effort.
     }
     throw error;
+  }
+
+  // Imported SCAD projects are complete conversations immediately after the
+  // baseline messages are persisted. Mirror that state into the canonical
+  // conversation workspace now instead of waiting for the first later chat
+  // generation to trigger the normal workspace lifecycle.
+  try {
+    await syncConversationWorkspace(conversationId);
+  } catch (error) {
+    // Workspace persistence is intentionally best-effort throughout Brepia.
+    // A local filesystem problem must not turn an otherwise valid import into
+    // a failed/rolled-back conversation.
+    console.warn(
+      `[conversation-workspace] Failed to sync imported SCAD ${conversationId}:`,
+      error,
+    );
   }
 
   return { conversationId, baseline };

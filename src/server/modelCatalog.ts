@@ -280,7 +280,10 @@ function mergeByProvider(
 export async function buildCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
-  const builtin = await applyBuiltinProviderAvailability(getBuiltInModels(), user);
+  const builtin = await applyBuiltinProviderAvailability(
+    getBuiltInModels(),
+    user,
+  );
   const local = await getLocalModels(user);
   const opencode = await getOpencodeModels();
   const custom = await getCustomProviderModels(user);

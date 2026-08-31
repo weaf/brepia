@@ -157,10 +157,7 @@ function toast({ ...props }: Toast) {
       id,
       open: true,
       onOpenChange: (open) => {
-        if (
-          !open &&
-          shouldDismissToastFromPrimitiveOpenChange(props.variant)
-        ) {
+        if (!open && shouldDismissToastFromPrimitiveOpenChange(props.variant)) {
           dismiss();
         }
       },

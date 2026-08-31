@@ -74,10 +74,7 @@ export function selectVisionModelId(
   return preferences.visionFastModelId ?? undefined;
 }
 
-function combinedSignal(
-  timeoutMs: number,
-  signal?: AbortSignal,
-): AbortSignal {
+function combinedSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(timeoutMs);
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
@@ -115,7 +112,9 @@ async function resolveBuiltInVisionModel(
 
   const catalogModel = PARAMETRIC_MODELS.find((entry) => entry.id === modelId);
   if (!catalogModel?.supportsVision) {
-    throw new Error(`Configured vision model is not vision-capable: ${modelId}`);
+    throw new Error(
+      `Configured vision model is not vision-capable: ${modelId}`,
+    );
   }
 
   const overrides = await loadBuiltinProviderRuntimeOverrides(userId);

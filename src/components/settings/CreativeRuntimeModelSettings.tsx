@@ -1,12 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Check,
-  ChevronsUpDown,
-  Plus,
-  RefreshCw,
-  Trash2,
-} from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { ActivityIndicator } from '@/components/brand';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -79,8 +73,7 @@ const HOSTED_MODEL_FIELDS: Array<{
   {
     key: 'falImageReferenceModelId',
     label: 'fal.ai reference image model',
-    description:
-      'fal.ai image model used when reference images are present.',
+    description: 'fal.ai image model used when reference images are present.',
   },
   {
     key: 'falUltraMeshModelId',
@@ -154,9 +147,7 @@ function ProviderSelect({
         value={value ?? NONE_VALUE}
         disabled={disabled}
         onValueChange={(next) =>
-          onChange(
-            next === NONE_VALUE ? null : (next as CreativeImageProvider),
-          )
+          onChange(next === NONE_VALUE ? null : (next as CreativeImageProvider))
         }
       >
         <SelectTrigger>
@@ -524,10 +515,7 @@ export function CreativeRuntimeModelSettings() {
             onClick={() => discoveryQuery.refetch()}
           >
             {discoveryQuery.isFetching ? (
-              <ActivityIndicator
-                label="Refreshing Creative models"
-                size="sm"
-              />
+              <ActivityIndicator label="Refreshing Creative models" size="sm" />
             ) : (
               <RefreshCw className="mr-1 h-3.5 w-3.5" />
             )}
@@ -535,7 +523,7 @@ export function CreativeRuntimeModelSettings() {
           </Button>
         </div>
         {discoveryQuery.isError ? (
-          <p className="mt-3 text-xs text-adam-red-300">
+          <p className="text-adam-red-300 mt-3 text-xs">
             Discovery failed. Existing saved IDs remain editable; verify that
             llama-swap is running and refresh again.
           </p>
@@ -555,7 +543,7 @@ export function CreativeRuntimeModelSettings() {
       </div>
 
       {hasLegacyRouting ? (
-        <div className="rounded-lg border border-adam-amber/40 bg-adam-amber/5 p-4">
+        <div className="border-adam-amber/40 bg-adam-amber/5 rounded-lg border p-4">
           <div className="text-sm font-medium text-adam-neutral-50">
             Existing local routing detected
           </div>

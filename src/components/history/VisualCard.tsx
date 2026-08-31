@@ -227,10 +227,7 @@ export function VisualCard({
                   <MoreVertical className="h-4 w-4 text-adam-neutral-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="bg-adam-background-2"
-              >
+              <DropdownMenuContent align="end" className="bg-adam-background-2">
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
@@ -264,7 +261,10 @@ export function VisualCard({
                     Make Private
                   </DropdownMenuItem>
                 )}
-                <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <AlertDialogTrigger
+                  asChild
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <DropdownMenuItem className="text-adam-neutral-50 hover:cursor-pointer hover:bg-adam-neutral-950 hover:text-red-500 focus:bg-adam-neutral-950 focus:text-red-500">
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete

@@ -18,9 +18,9 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `crank_angle` | `45` | `[0:1:360]` | Rotate the crankshaft to see the pistons move |
+| Parameter     | Default | Range / options | Description                                   |
+| ------------- | ------- | --------------- | --------------------------------------------- |
+| `crank_angle` | `45`    | `[0:1:360]`     | Rotate the crankshaft to see the pistons move |
 
 <details>
 <summary>OpenSCAD source — <code>13-v8-engine.scad</code></summary>
@@ -37,13 +37,13 @@ cutaway = true;
 crank_angle = 45; // [0:1:360]
 
 /* [Colors] */
-block_color = "Silver"; 
-head_color = "DarkGray"; 
-valve_cover_color = "FireBrick"; 
-intake_color = "DimGray"; 
-exhaust_color = "Peru"; 
+block_color = "Silver";
+head_color = "DarkGray";
+valve_cover_color = "FireBrick";
+intake_color = "DimGray";
+exhaust_color = "Peru";
 pulley_color = "Black";
-oil_pan_color = "DarkSlateGray"; 
+oil_pan_color = "DarkSlateGray";
 internals_color = "LightSteelBlue";
 
 /* [Hidden] */
@@ -60,7 +60,7 @@ main_y = [0, 28, 56, 84, 112];
 pin_y_start = [8, 36, 64, 92];
 
 // Core kinematics calculation for piston position
-function get_D(crank_ang, bank_ang) = 
+function get_D(crank_ang, bank_ang) =
     let(Px = crank_r * sin(crank_ang),
         Pz = crank_r * cos(crank_ang),
         K = Px * sin(bank_ang) + Pz * cos(bank_ang))
@@ -92,7 +92,7 @@ module cutaway_cutter() {
              rotate([0, bank_angle, 0])
              translate([0.1, 0, -50])
              cube([80, 100, 150]);
-             
+
              // Limit strictly to right half to preserve left side
              translate([0, 50, -50]) cube([100, 100, 150]);
         }
@@ -105,11 +105,11 @@ module engine_block() {
         union() {
             // Main block body
             translate([-25, 0, -10]) cube([50, 120, 20]);
-            
+
             // Banks
             intersect_bank(bank_angle);
             intersect_bank(-bank_angle);
-            
+
             // Side reinforcement ribs
             for(y = main_y) {
                 translate([-26, y-2, -10]) cube([52, 4, 15]);
@@ -117,14 +117,14 @@ module engine_block() {
             // Rear bell housing flange
             translate([-26, -4, -10]) cube([52, 4, 30]);
         }
-        
+
         // Hollow out valley
         translate([-10, -1, 20]) cube([20, 122, 40]);
-        
+
         // Hollow out crankcase
         translate([0, -1, 0]) rotate([-90,0,0]) cylinder(r=18, h=122);
-        translate([-18, -1, -20]) cube([36, 122, 20]); 
-        
+        translate([-18, -1, -20]) cube([36, 122, 20]);
+
         // Cylinder bores
         for(i=[0:3]) {
             y_s = pin_y_start[i];
@@ -132,13 +132,13 @@ module engine_block() {
             translate([0, y_s + 7.5, 0])
             rotate([0, bank_angle, 0])
             translate([0, 0, 10]) cylinder(r=bore, h=deck_height+10);
-            
+
             // Left bank
             translate([0, y_s + 12.5, 0])
             rotate([0, -bank_angle, 0])
             translate([0, 0, 10]) cylinder(r=bore, h=deck_height+10);
         }
-        
+
         cutaway_cutter();
     }
 }
@@ -161,7 +161,7 @@ module heads() {
 
 module head_shape(ang) {
     rotate([0, ang, 0])
-    translate([-14, 0, deck_height]) 
+    translate([-14, 0, deck_height])
     difference() {
         cube([28, 120, 18]);
         // Spark plug recesses
@@ -207,7 +207,7 @@ module valve_cover_shape(ang) {
             translate([4, y, 10]) cube([16, 4, 2]);
         }
         // Oil cap
-        if(ang > 0) { 
+        if(ang > 0) {
             translate([12, 20, 10]) cylinder(r=5, h=4);
         }
     }
@@ -240,7 +240,7 @@ module intake_manifold() {
         union() {
             // Central plenum
             translate([-10, 10, 35]) cube([20, 100, 15]);
-            
+
             // Runners to Right head
             for(i=[0:3]) {
                 y_s = pin_y_start[i] + 10;
@@ -249,7 +249,7 @@ module intake_manifold() {
                     rotate([0, bank_angle, 0]) translate([-14, y_s-4, deck_height-2]) cube([5, 8, 12]);
                 }
             }
-            
+
             // Runners to Left head
             for(i=[0:3]) {
                 y_s = pin_y_start[i] + 10;
@@ -258,7 +258,7 @@ module intake_manifold() {
                     rotate([0, -bank_angle, 0]) translate([9, y_s-4, deck_height-2]) cube([5, 8, 12]);
                 }
             }
-            
+
             // Throttle body
             translate([0, 110, 42.5]) rotate([-90,0,0]) cylinder(r=8, h=15);
         }
@@ -277,7 +277,7 @@ module exhaust_headers() {
             }
             // Right Collector
             translate([50, 10, -25]) rotate([-90,0,0]) cylinder(r=6, h=100);
-            
+
             // Left bank
             for(i=[0:3]) {
                 y_s = pin_y_start[i] + 10;
@@ -293,7 +293,7 @@ module exhaust_headers() {
 module header_pipe(ang, dir, y) {
     gx = dir * (14*cos(45) + (deck_height+7.5)*sin(45));
     gz = (deck_height+7.5)*cos(45) - 14*sin(45);
-    
+
     hull() {
         translate([gx, y, gz]) rotate([0, 90, 0]) cylinder(r=4, h=2, center=true);
         translate([gx + dir*5, y, gz - 5]) sphere(r=4);
@@ -361,7 +361,7 @@ module fan() {
             for(a=[0:72:359]) {
                 rotate([0, a, 0])
                 translate([5, 142.5, 30])
-                rotate([20, 0, 0]) 
+                rotate([20, 0, 0])
                 cube([25, 2, 8]);
             }
         }
@@ -411,26 +411,26 @@ module internals(crank_angle_offset=0) {
                 translate([0, 4, 0]) rotate([-90,0,0]) cylinder(r=5, h=8, center=true);
             }
         }
-        
+
         for(i = [0:3]) {
             ang = crank_angle_offset + pin_angles[i];
             y_s = pin_y_start[i];
-            
+
             // Web 1
             web(ang, y_s);
-            
+
             // Crank Pin
-            translate([0, y_s + 5, 0]) 
-            rotate([0, ang, 0]) 
-            translate([0, 0, crank_r]) 
+            translate([0, y_s + 5, 0])
+            rotate([0, ang, 0])
+            translate([0, 0, crank_r])
             translate([0, 5, 0]) rotate([-90,0,0]) cylinder(r=4, h=10, center=true);
-            
+
             // Web 2
             web(ang, y_s + 15);
-            
+
             // Piston 1 (Right Bank)
             piston_and_rod(ang, bank_angle, y_s + 7.5);
-            
+
             // Piston 2 (Left Bank)
             piston_and_rod(ang, -bank_angle, y_s + 12.5);
         }
@@ -456,9 +456,9 @@ module piston_and_rod(crank_ang, bank_ang, y_pos) {
     Pz = crank_r * cos(crank_ang);
     Wx = D * sin(bank_ang);
     Wz = D * cos(bank_ang);
-    
+
     rod_ang = atan2(Wx - Px, Wz - Pz);
-    
+
     translate([0, y_pos, 0]) {
         // Conrod
         translate([Px, 0, Pz])
@@ -469,12 +469,12 @@ module piston_and_rod(crank_ang, bank_ang, y_pos) {
                 translate([0, 0, conrod_len]) rotate([-90,0,0]) cylinder(r=3, h=5);
             }
         }
-        
+
         // Piston pin
         translate([Wx, 0, Wz])
         rotate([0, bank_ang, 0])
         rotate([-90,0,0]) cylinder(r=2.5, h=10, center=true);
-        
+
         // Piston body
         translate([Wx, 0, Wz])
         rotate([0, bank_ang, 0]) {

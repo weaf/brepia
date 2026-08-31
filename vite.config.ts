@@ -131,7 +131,13 @@ function serveOpenScadWasm(): Plugin {
 
   const installMiddleware = (server: {
     middlewares: {
-      use: (handler: (req: http.IncomingMessage, res: http.ServerResponse, next: (error?: unknown) => void) => void) => void;
+      use: (
+        handler: (
+          req: http.IncomingMessage,
+          res: http.ServerResponse,
+          next: (error?: unknown) => void,
+        ) => void,
+      ) => void;
     };
   }) => {
     server.middlewares.use((req, res, next) => {
@@ -169,8 +175,7 @@ const vendorChunkTest = (id: string) =>
   id.includes('/node_modules/@tanstack/react-start/') ||
   id.includes('/node_modules/lucide-react/');
 
-const radixChunkTest = (id: string) =>
-  id.includes('/node_modules/@radix-ui/');
+const radixChunkTest = (id: string) => id.includes('/node_modules/@radix-ui/');
 
 const aiSdkChunkTest = (id: string) =>
   id.includes('/node_modules/ai/') || id.includes('/node_modules/@ai-sdk/');
@@ -266,7 +271,10 @@ export default defineConfig({
                 { name: 'streamdown-core', test: streamdownCoreChunkTest },
                 { name: 'streamdown-cjk', test: streamdownCjkChunkTest },
                 { name: 'streamdown-math', test: streamdownMathChunkTest },
-                { name: 'streamdown-mermaid', test: streamdownMermaidChunkTest },
+                {
+                  name: 'streamdown-mermaid',
+                  test: streamdownMermaidChunkTest,
+                },
                 { name: 'shiki', test: shikiChunkTest },
               ],
             },

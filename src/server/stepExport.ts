@@ -106,11 +106,15 @@ function stderrText(value: unknown): string {
 }
 
 function providerUnavailableMessage(detail: string): string {
-  const normalized = detail.replace(/^STEP_SANDBOX_UNAVAILABLE:\s*/i, '').trim();
+  const normalized = detail
+    .replace(/^STEP_SANDBOX_UNAVAILABLE:\s*/i, '')
+    .trim();
   return normalized || 'STEP export sandbox is unavailable on this server.';
 }
 
-async function convertScadToStep(sourceCode: string): Promise<StepExportResult> {
+async function convertScadToStep(
+  sourceCode: string,
+): Promise<StepExportResult> {
   const workspace = await mkdtemp(path.join(tmpdir(), 'pcad-step-'));
   const inputDir = path.join(workspace, 'input');
   const outputDir = path.join(workspace, 'output');
@@ -154,11 +158,7 @@ async function convertScadToStep(sourceCode: string): Promise<StepExportResult> 
         );
       }
 
-      if (
-        record.code === 124 ||
-        record.killed ||
-        record.signal === 'SIGTERM'
-      ) {
+      if (record.code === 124 || record.killed || record.signal === 'SIGTERM') {
         throw new StepExportError(
           'conversion_timeout',
           'STEP conversion exceeded the server time limit.',
@@ -219,7 +219,9 @@ async function convertScadToStep(sourceCode: string): Promise<StepExportResult> 
       provider: `${STEP_EXPORT_PROVIDER}@${STEP_EXPORT_PROVIDER_VERSION}`,
     };
   } finally {
-    await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
+    await rm(workspace, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
   }
 }
 

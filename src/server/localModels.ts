@@ -102,7 +102,9 @@ type MetadataRow = {
   is_visible: boolean;
 };
 
-async function loadMetadataRows(userId: string): Promise<Map<string, MetadataRow>> {
+async function loadMetadataRows(
+  userId: string,
+): Promise<Map<string, MetadataRow>> {
   // Generated Supabase types can lag migrations, so keep this isolated cast here.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = getServiceRoleSupabaseClient() as any;
@@ -135,7 +137,8 @@ export function applyLocalModelMetadata(
         supportsTools:
           row?.supports_tools ?? DEFAULT_LOCAL_MODEL_METADATA.supportsTools,
         supportsThinking:
-          row?.supports_thinking ?? DEFAULT_LOCAL_MODEL_METADATA.supportsThinking,
+          row?.supports_thinking ??
+          DEFAULT_LOCAL_MODEL_METADATA.supportsThinking,
         supportsVision:
           row?.supports_vision ?? DEFAULT_LOCAL_MODEL_METADATA.supportsVision,
         contextLimit:

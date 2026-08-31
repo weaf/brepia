@@ -18,17 +18,17 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `root_chord` | `120` | `[50:10:300]` | Tapered Wing Section Parameters |
-| `tip_chord` | `80` | `[30:10:200]` |  |
-| `span` | `200` | `[50:10:500]` |  |
-| `naca_m` | `0.02` | `[0.00:0.01:0.09]` | First digit (max camber in hundredths) |
-| `naca_p` | `0.40` | `[0.10:0.10:0.90]` | Second digit (position of max camber in tenths) |
-| `naca_t` | `0.12` | `[0.05:0.01:0.30]` | Last two digits (max thickness in hundredths) |
-| `spar_radius` | `4` | `[1:0.5:10]` |  |
-| `lightening_holes` | `5` | `[0:1:10]` |  |
-| `wing_color` | `"SteelBlue"` | `[SteelBlue, Silver, Orange, White, DimGray]` |  |
+| Parameter          | Default       | Range / options                               | Description                                     |
+| ------------------ | ------------- | --------------------------------------------- | ----------------------------------------------- |
+| `root_chord`       | `120`         | `[50:10:300]`                                 | Tapered Wing Section Parameters                 |
+| `tip_chord`        | `80`          | `[30:10:200]`                                 |                                                 |
+| `span`             | `200`         | `[50:10:500]`                                 |                                                 |
+| `naca_m`           | `0.02`        | `[0.00:0.01:0.09]`                            | First digit (max camber in hundredths)          |
+| `naca_p`           | `0.40`        | `[0.10:0.10:0.90]`                            | Second digit (position of max camber in tenths) |
+| `naca_t`           | `0.12`        | `[0.05:0.01:0.30]`                            | Last two digits (max thickness in hundredths)   |
+| `spar_radius`      | `4`           | `[1:0.5:10]`                                  |                                                 |
+| `lightening_holes` | `5`           | `[0:1:10]`                                    |                                                 |
+| `wing_color`       | `"SteelBlue"` | `[SteelBlue, Silver, Orange, White, DimGray]` |                                                 |
 
 <details>
 <summary>OpenSCAD source — <code>05-naca-airfoil-wing.scad</code></summary>
@@ -125,12 +125,12 @@ p2_root = [x_spar2 * root_chord, naca_camber(x_spar2, naca_m, naca_p) * root_cho
 p2_tip  = [x_spar2 * tip_chord,  naca_camber(x_spar2, naca_m, naca_p) * tip_chord, span];
 
 
-// Rotate wing to lay "flat" for standard viewing 
+// Rotate wing to lay "flat" for standard viewing
 // (Span extends along +Y, chord along +X, thickness aligns with Z)
 color(wing_color)
 rotate([-90, 0, 0])
 difference() {
-    
+
     // Solid Wing Shape
     linear_extrude(height = span, scale = tip_chord / root_chord)
     scale([root_chord, root_chord])
@@ -146,13 +146,13 @@ difference() {
             let (
                 // Space holes along the span
                 z_pos = i * span / (lightening_holes + 1),
-                
+
                 // Determine the chord length at this spanwise position
                 local_chord = root_chord + (tip_chord - root_chord) * (z_pos / span),
-                
+
                 // Position halfway between the two spars
                 x_pos = 0.475 * local_chord,
-                
+
                 // Make the hole size proportional to the local chord length
                 hole_r = local_chord * 0.12
             )

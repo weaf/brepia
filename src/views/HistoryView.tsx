@@ -31,6 +31,7 @@ import { HistoryConversation } from '../types/misc.ts';
 import { ConversationCard } from '@/components/history/ConversationCard';
 import { VisualCard } from '@/components/history/VisualCard';
 import { RenameDialogDrawer } from '@/components/history/RenameDialogDrawer';
+import { deleteConversations as deleteConversationRecords } from '@/services/conversationAdminService';
 import { cn } from '@/lib/utils';
 
 const VIEW_TRANSITION_PROPS = {
@@ -125,33 +126,7 @@ export function HistoryView() {
   const deleteConversations = useMutation({
     mutationFn: async (conversationIds: string[]) => {
       if (conversationIds.length === 0) return;
-
-      const { error } = await supabase
-        .from('conversations')
-        .delete()
-        .in('id', conversationIds);
-
-      if (error) throw error;
-
-      const userId = user?.id;
-      if (!userId) return;
-
-      // Preserve the existing non-blocking image cleanup semantics for each
-      // deleted conversation. Database deletion remains the authoritative
-      // operation; storage cleanup must not make a successful delete look
-      // failed to the user.
-      void Promise.all(
-        conversationIds.map(async (conversationId) => {
-          const { data: list } = await supabase.storage
-            .from('images')
-            .list(`${userId}/${conversationId}`);
-          if (!list?.length) return;
-          const filesToRemove = list.map(
-            (file) => `${userId}/${conversationId}/${file.name}`,
-          );
-          await supabase.storage.from('images').remove(filesToRemove);
-        }),
-      );
+      await deleteConversationRecords(conversationIds);
     },
     onMutate: async (conversationIds) => {
       await queryClient.cancelQueries({ queryKey: ['conversations'] });
@@ -397,7 +372,6 @@ export function HistoryView() {
                 {selectionMode ? 'Cancel' : 'Select'}
               </Button>
 
-              {/* View Toggle */}
               <div
                 role="group"
                 aria-label="View mode"

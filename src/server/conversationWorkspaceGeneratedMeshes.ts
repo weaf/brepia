@@ -125,7 +125,10 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function writeGeneratedMesh(path: string, bytes: Uint8Array): Promise<void> {
+async function writeGeneratedMesh(
+  path: string,
+  bytes: Uint8Array,
+): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
@@ -150,7 +153,8 @@ export async function syncConversationGeneratedMeshes(
   dependencies: GeneratedMeshDependencies = {},
 ): Promise<ConversationGeneratedMeshMirrorResult> {
   const listArtifacts = dependencies.listArtifacts ?? defaultListArtifacts;
-  const downloadArtifact = dependencies.downloadArtifact ?? defaultDownloadArtifact;
+  const downloadArtifact =
+    dependencies.downloadArtifact ?? defaultDownloadArtifact;
   const artifacts = await listArtifacts(request, conversationId);
 
   let copied = 0;

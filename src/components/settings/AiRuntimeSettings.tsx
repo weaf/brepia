@@ -43,14 +43,10 @@ function parseDraftValue(
     throw new Error(`${definition.label} must be an integer.`);
   }
   if (definition.min !== undefined && parsed < definition.min) {
-    throw new Error(
-      `${definition.label} must be at least ${definition.min}.`,
-    );
+    throw new Error(`${definition.label} must be at least ${definition.min}.`);
   }
   if (definition.max !== undefined && parsed > definition.max) {
-    throw new Error(
-      `${definition.label} must be at most ${definition.max}.`,
-    );
+    throw new Error(`${definition.label} must be at most ${definition.max}.`);
   }
   return parsed;
 }
@@ -105,7 +101,10 @@ export function AiRuntimeSettings() {
     () =>
       AI_RUNTIME_LIMIT_DEFINITIONS.some((definition) => {
         const current = serializeValue(effectiveValue(definition, overrides));
-        return drafts[definition.key] !== undefined && drafts[definition.key] !== current;
+        return (
+          drafts[definition.key] !== undefined &&
+          drafts[definition.key] !== current
+        );
       }),
     [drafts, overrides],
   );
@@ -240,7 +239,8 @@ export function AiRuntimeSettings() {
                   </p>
                   <p className="text-[11px] text-adam-neutral-500">
                     Repository default: {String(definition.defaultValue)}
-                    {definition.min !== undefined && definition.max !== undefined
+                    {definition.min !== undefined &&
+                    definition.max !== undefined
                       ? ` · allowed ${definition.min}–${definition.max}`
                       : ''}
                   </p>

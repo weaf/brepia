@@ -1,12 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  mkdir,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { imageStoragePath } from '@shared/imageRefs';
 import {
@@ -118,7 +111,8 @@ async function defaultListArtifacts(
   const images: ConversationInputArtifact[] = (imagesResult.data ?? [])
     .filter(
       (row) =>
-        row.status === 'success' && isUserUploadedInputPrompt(row.prompt, 'image'),
+        row.status === 'success' &&
+        isUserUploadedInputPrompt(row.prompt, 'image'),
     )
     .map((row) => ({
       kind: 'image' as const,
@@ -131,7 +125,8 @@ async function defaultListArtifacts(
   const meshes: ConversationInputArtifact[] = (meshesResult.data ?? [])
     .filter(
       (row) =>
-        row.status === 'success' && isUserUploadedInputPrompt(row.prompt, 'mesh'),
+        row.status === 'success' &&
+        isUserUploadedInputPrompt(row.prompt, 'mesh'),
     )
     .map((row) => ({
       kind: 'mesh' as const,
@@ -245,7 +240,8 @@ export async function syncConversationInputArtifacts(
   dependencies: InputMirrorDependencies = {},
 ): Promise<ConversationInputMirrorResult> {
   const listArtifacts = dependencies.listArtifacts ?? defaultListArtifacts;
-  const downloadArtifact = dependencies.downloadArtifact ?? defaultDownloadArtifact;
+  const downloadArtifact =
+    dependencies.downloadArtifact ?? defaultDownloadArtifact;
   const artifacts = await listArtifacts(request, conversationId);
 
   let copied = 0;

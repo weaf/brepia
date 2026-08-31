@@ -8,6 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { ActivityIndicator } from '@/components/brand';
+import { AdminModelsSettings } from '@/components/settings/AdminModelsSettings';
+import { InstanceIdentitySettingsSection } from '@/components/settings/InstanceIdentitySettingsSection';
 import {
   createLocalUser,
   deleteAdminUser,
@@ -57,14 +59,17 @@ export function AdminSettingsSection() {
           Administration
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-adam-neutral-200">
-          Manage local accounts and decide how new users may register.
+          Manage local accounts, registration, stored conversation models, and
+          this Brepia instance identity.
         </p>
       </div>
 
       <Tabs defaultValue="users">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="registration">Registration</TabsTrigger>
+          <TabsTrigger value="models">Models</TabsTrigger>
+          <TabsTrigger value="instance-identity">Instance identity</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-5">
@@ -84,6 +89,14 @@ export function AdminSettingsSection() {
               <ActivityIndicator label="Loading registration settings" />
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="models" className="mt-5">
+          <AdminModelsSettings />
+        </TabsContent>
+
+        <TabsContent value="instance-identity" className="mt-5">
+          <InstanceIdentitySettingsSection embedded />
         </TabsContent>
       </Tabs>
     </section>
@@ -413,9 +426,7 @@ function UserEditor({
         <select
           className="h-10 w-full rounded-md border border-adam-neutral-700 bg-adam-background-1 px-3 text-sm text-adam-neutral-50"
           value={role}
-          onChange={(event) =>
-            setRole(event.target.value as 'admin' | 'user')
-          }
+          onChange={(event) => setRole(event.target.value as 'admin' | 'user')}
         >
           <option value="user">User</option>
           <option value="admin">Admin</option>

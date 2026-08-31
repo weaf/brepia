@@ -18,13 +18,13 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `gear_module` | `1.5` | `[1:0.1:3]` |  |
-| `gear_thickness` | `10` | `[5:1:20]` |  |
-| `sun_twist` | `10` | `[0:1:30]` |  |
-| `sun_bore` | `6` | `[3:0.5:10]` |  |
-| `planet_bore` | `6` | `[3:0.5:10]` |  |
+| Parameter        | Default | Range / options | Description |
+| ---------------- | ------- | --------------- | ----------- |
+| `gear_module`    | `1.5`   | `[1:0.1:3]`     |             |
+| `gear_thickness` | `10`    | `[5:1:20]`      |             |
+| `sun_twist`      | `10`    | `[0:1:30]`      |             |
+| `sun_bore`       | `6`     | `[3:0.5:10]`    |             |
+| `planet_bore`    | `6`     | `[3:0.5:10]`    |             |
 
 <details>
 <summary>OpenSCAD source — <code>09-herringbone-planetary-gearbox.scad</code></summary>
@@ -84,10 +84,10 @@ module herringbone_gear_base(mod, teeth, thickness, base_twist, is_planet) {
     half_t = thickness / 2;
     // Maintain constant helix angle across different gear sizes
     t_angle = (base_twist * 18 / teeth) * (is_planet ? -1 : 1);
-    
+
     union() {
         single_gear(teeth, mod, half_t, t_angle);
-        
+
         translate([0, 0, thickness])
         mirror([0, 0, 1])
         single_gear(teeth, mod, half_t, t_angle);
@@ -98,15 +98,15 @@ module hb_gear(teeth, is_planet=false, bore=0) {
     difference() {
         herringbone_gear_base(gear_module, teeth, gear_thickness, sun_twist, is_planet);
         if (bore > 0) {
-            translate([0, 0, -1]) 
+            translate([0, 0, -1])
             cylinder(r=bore/2, h=gear_thickness+2, $fn=32);
         }
     }
 }
 
 module ring_gear() {
-    outer_radius = pitch_ring + 4 * gear_module; 
-    
+    outer_radius = pitch_ring + 4 * gear_module;
+
     // Shift slightly to prevent Z-fighting at top and bottom
     translate([0, 0, 0.01])
     difference() {
@@ -119,7 +119,7 @@ module ring_gear() {
                 cylinder(r=gear_module, h=gear_thickness - 0.02, $fn=16);
             }
         }
-        
+
         // Subtract a slightly scaled herringbone gear to form the internal teeth with clearance
         translate([0, 0, -0.01])
         scale([1.015, 1.015, 1])
@@ -135,28 +135,28 @@ module carrier() {
         union() {
             // Main carrier disc
             cylinder(r=center_distance + 8, h=3, $fn=64);
-            
+
             // Pins connecting the planet gears
             for(i=[0:120:359]) {
                 rotate([0, 0, i])
                 translate([center_distance, 0, -gear_thickness - 0.1])
                 cylinder(r=planet_bore/2 - 0.2, h=gear_thickness + 1.1, $fn=32);
             }
-            
+
             // Central pin acting as sun bearing
             translate([0, 0, -gear_thickness - 0.1])
             cylinder(r=sun_bore/2 - 0.2, h=gear_thickness + 1.1, $fn=32);
         }
-        
+
         // Aesthetic weight-saving cutouts
         for(i=[0:60:359]) {
             rotate([0, 0, i + 30])
             translate([center_distance * 0.55, 0, -1])
             cylinder(r=6, h=5, $fn=32);
         }
-        
+
         // Central hole through the carrier shaft
-        translate([0, 0, -gear_thickness - 0.2]) 
+        translate([0, 0, -gear_thickness - 0.2])
         cylinder(r=sun_bore/2 - 1.5, h=gear_thickness + 5, $fn=16);
     }
 }

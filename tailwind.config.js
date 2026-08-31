@@ -35,8 +35,7 @@ export default {
         'adam-bg-secondary-light': '#ECECEB',
         'adam-blue': '#00A6FF',
         'adam-blue-dark': '#00A6FF',
-        'adam-text-primary':
-          'rgb(var(--brepia-text-primary) / <alpha-value>)',
+        'adam-text-primary': 'rgb(var(--brepia-text-primary) / <alpha-value>)',
         'adam-text-secondary':
           'rgb(var(--brepia-text-secondary) / <alpha-value>)',
         'adam-text-tertiary':
@@ -50,10 +49,8 @@ export default {
         'white-16%': 'rgba(255,255,255,0.16)',
         'white-700': 'rgb(var(--brepia-neutral-100) / <alpha-value>)',
         'white-500': 'rgb(var(--brepia-neutral-300) / <alpha-value>)',
-        'adam-background-1':
-          'rgb(var(--brepia-surface-1) / <alpha-value>)',
-        'adam-background-2':
-          'rgb(var(--brepia-surface-2) / <alpha-value>)',
+        'adam-background-1': 'rgb(var(--brepia-surface-1) / <alpha-value>)',
+        'adam-background-2': 'rgb(var(--brepia-surface-2) / <alpha-value>)',
         'adam-neutral-950': 'rgb(var(--brepia-neutral-950) / <alpha-value>)',
         'adam-neutral-900': 'rgb(var(--brepia-neutral-900) / <alpha-value>)',
         'adam-neutral-800': 'rgb(var(--brepia-neutral-800) / <alpha-value>)',

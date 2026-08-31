@@ -39,9 +39,8 @@ export function startLifecycleDiagnostics(): () => void {
   }
 
   const documentId = crypto.randomUUID();
-  const navigation = performance.getEntriesByType(
-    'navigation',
-  )[0] as PerformanceNavigationTiming | undefined;
+  const navigation = performance.getEntriesByType('navigation')[0] as
+    PerformanceNavigationTiming | undefined;
   const wasDiscarded =
     (document as Document & { wasDiscarded?: boolean }).wasDiscarded ?? false;
 
@@ -64,7 +63,8 @@ export function startLifecycleDiagnostics(): () => void {
 
   log('boot');
 
-  const onVisibilityChange = () => log(`visibility:${document.visibilityState}`);
+  const onVisibilityChange = () =>
+    log(`visibility:${document.visibilityState}`);
   const onFocus = () => log('focus');
   const onBlur = () => log('blur');
   const onOnline = () => log('online');

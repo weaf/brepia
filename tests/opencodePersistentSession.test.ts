@@ -66,8 +66,10 @@ describe('persistent OpenCode sessions', () => {
   });
 
   it('uses the latest complete artifact instead of the original import on a later edit', () => {
-    const originalCode = 'width = 20;\nheight = 10;\ncube([width, width, height]);';
-    const latestCode = 'width = 36;\nheight = 14;\ncube([width, width, height]);';
+    const originalCode =
+      'width = 20;\nheight = 10;\ncube([width, width, height]);';
+    const latestCode =
+      'width = 36;\nheight = 14;\ncube([width, width, height]);';
     const prompt = [
       { role: 'system', content: 'CAD context' },
       {
@@ -138,8 +140,21 @@ describe('persistent OpenCode sessions', () => {
           },
         ],
       },
-      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 1 compiled' } }] },
-      { role: 'user', content: [{ type: 'text', text: 'Turn 2: make it wider' }] },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'build_parametric_model',
+            output: { type: 'text', value: 'turn 1 compiled' },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Turn 2: make it wider' }],
+      },
       {
         role: 'assistant',
         content: [
@@ -151,8 +166,21 @@ describe('persistent OpenCode sessions', () => {
           },
         ],
       },
-      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-2', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 2 compiled' } }] },
-      { role: 'user', content: [{ type: 'text', text: 'Turn 3: make it deeper' }] },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-2',
+            toolName: 'build_parametric_model',
+            output: { type: 'text', value: 'turn 2 compiled' },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Turn 3: make it deeper' }],
+      },
       {
         role: 'assistant',
         content: [
@@ -164,8 +192,21 @@ describe('persistent OpenCode sessions', () => {
           },
         ],
       },
-      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-3', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 3 compiled' } }] },
-      { role: 'user', content: [{ type: 'text', text: 'Turn 4: make it taller' }] },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-3',
+            toolName: 'build_parametric_model',
+            output: { type: 'text', value: 'turn 3 compiled' },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Turn 4: make it taller' }],
+      },
     ] as unknown as LanguageModelV3Prompt;
 
     const fourthTurn = buildPersistentOpenCodePrompt(prompt, false);
@@ -187,10 +228,23 @@ describe('persistent OpenCode sessions', () => {
           },
         ],
       },
-      { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-4', toolName: 'build_parametric_model', output: { type: 'text', value: 'turn 4 compiled' } }] },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-4',
+            toolName: 'build_parametric_model',
+            output: { type: 'text', value: 'turn 4 compiled' },
+          },
+        ],
+      },
     ] as unknown as LanguageModelV3Prompt;
 
-    const fourthContinuation = buildPersistentOpenCodePrompt(continuation, false);
+    const fourthContinuation = buildPersistentOpenCodePrompt(
+      continuation,
+      false,
+    );
     assert.match(fourthContinuation, /revision = 4;/);
     assert.match(fourthContinuation, /turn 4 compiled/);
     assert.equal(fourthContinuation.includes('<user_request>\n'), false);

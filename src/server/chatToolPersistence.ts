@@ -21,9 +21,7 @@ export const DANGLING_TOOL_ERROR_TEXT =
   'Tool execution did not complete (the previous request was interrupted).';
 
 export const EMPTY_ASSISTANT_RESPONSE = 'empty-assistant-response' as const;
-export type PendingClientToolState =
-  | boolean
-  | typeof EMPTY_ASSISTANT_RESPONSE;
+export type PendingClientToolState = boolean | typeof EMPTY_ASSISTANT_RESPONSE;
 
 /**
  * The messages table intentionally rejects rows whose `parts` array is empty
