@@ -21,7 +21,6 @@ import { accountUrl, ssoManaged } from '@/lib/supabase';
 import { AiSettingsSection } from '@/components/settings/AiSettingsSection';
 import { AdminSettingsSection } from '@/components/settings/AdminSettingsSection';
 import { DebugSettingsSection } from '@/components/settings/DebugSettingsSection';
-import { InstanceIdentitySettingsSection } from '@/components/settings/InstanceIdentitySettingsSection';
 import { InstanceLegalLinks } from '@/components/settings/InstanceLegalLinks';
 import { ActivityIndicator } from '@/components/brand';
 import { getAccountAccess } from '@/services/accountAdminService';
@@ -435,7 +434,6 @@ export default function SettingsView() {
               className="mt-0 flex min-w-0 flex-col gap-4"
             >
               <AdminSettingsSection />
-              <InstanceIdentitySettingsSection />
             </TabsContent>
           )}
 
