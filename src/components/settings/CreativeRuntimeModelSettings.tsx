@@ -34,21 +34,24 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { CREATIVE_MODELS } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { CREATIVE_MODELS, cn } from '@/lib/utils';
 import { apiJson } from '@/services/api';
 import {
   getAiPreferences,
   updateModelRoutingPreferences,
 } from '@/services/aiPreferencesService';
-import type {
-  CreativeImageProvider,
-  CreativeRuntimeModelKey,
-  CreativeRuntimeModelRouting,
-  LocalCreativeProfile,
+import {
+  LOCAL_CREATIVE_PROFILE_DEFAULTS,
+  type CreativeImageProvider,
+  type CreativeRuntimeModelKey,
+  type CreativeRuntimeModelRouting,
+  type LocalCreativeProfile,
+  type LocalCreativeResolution,
 } from '@shared/modelRouting';
 
 const NONE_VALUE = '__none__';
+const MIN_TIMEOUT_MINUTES = 1;
+const MAX_TIMEOUT_MINUTES = 240;
 
 const HOSTED_MODEL_FIELDS: Array<{
   key: CreativeRuntimeModelKey;
@@ -119,7 +122,11 @@ async function fetchCreativeRuntimeModels(): Promise<string[]> {
   const payload = (await apiJson(
     'settings/runtimeIntegrations?includeCreativeModels=1',
   )) as CreativeRuntimeDiscoveryPayload;
-  return [...new Set((payload.creativeRuntimeModels ?? []).map((item) => item.modelId))].sort();
+  return [
+    ...new Set(
+      (payload.creativeRuntimeModels ?? []).map((item) => item.modelId),
+    ),
+  ].sort();
 }
 
 function ProviderSelect({
@@ -147,7 +154,9 @@ function ProviderSelect({
         value={value ?? NONE_VALUE}
         disabled={disabled}
         onValueChange={(next) =>
-          onChange(next === NONE_VALUE ? null : (next as CreativeImageProvider))
+          onChange(
+            next === NONE_VALUE ? null : (next as CreativeImageProvider),
+          )
         }
       >
         <SelectTrigger>
@@ -257,7 +266,8 @@ function RuntimeModelPicker({
                     value={`${customCandidate} custom model id`}
                     onSelect={() => choose(customCandidate)}
                   >
-                    Use <span className="ml-1 font-mono">{customCandidate}</span>
+                    Use{' '}
+                    <span className="ml-1 font-mono">{customCandidate}</span>
                   </CommandItem>
                 </CommandGroup>
               </>
@@ -281,6 +291,59 @@ function ModelAvailability({
     return <Badge variant="outline">Available</Badge>;
   }
   return <Badge variant="outline">Not currently discovered</Badge>;
+}
+
+function TimeoutMinutesInput({
+  label,
+  description,
+  valueMs,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  valueMs: number;
+  disabled: boolean;
+  onChange: (valueMs: number) => void;
+}) {
+  const minutes = Math.max(1, Math.round(valueMs / 60_000));
+  return (
+    <div className="space-y-2">
+      <div>
+        <div className="text-sm font-medium text-adam-neutral-50">{label}</div>
+        <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
+          {description}
+        </p>
+      </div>
+      <div className="flex max-w-xs items-center gap-2">
+        <Input
+          key={`${label}-${minutes}`}
+          type="number"
+          min={MIN_TIMEOUT_MINUTES}
+          max={MAX_TIMEOUT_MINUTES}
+          step={1}
+          defaultValue={minutes}
+          disabled={disabled}
+          className="h-9"
+          onBlur={(event) => {
+            const parsed = Number(event.currentTarget.value);
+            if (!Number.isFinite(parsed)) {
+              event.currentTarget.value = String(minutes);
+              return;
+            }
+            const nextMinutes = Math.min(
+              MAX_TIMEOUT_MINUTES,
+              Math.max(MIN_TIMEOUT_MINUTES, Math.round(parsed)),
+            );
+            event.currentTarget.value = String(nextMinutes);
+            const nextMs = nextMinutes * 60_000;
+            if (nextMs !== valueMs) onChange(nextMs);
+          }}
+        />
+        <span className="shrink-0 text-xs text-adam-neutral-400">minutes</span>
+      </div>
+    </div>
+  );
 }
 
 export function CreativeRuntimeModelSettings() {
@@ -319,7 +382,11 @@ export function CreativeRuntimeModelSettings() {
   if (preferencesQuery.isLoading) {
     return (
       <div className="py-6">
-        <ActivityIndicator label="Loading Creative models…" showLabel size="sm" />
+        <ActivityIndicator
+          label="Loading Creative models…"
+          showLabel
+          size="sm"
+        />
       </div>
     );
   }
@@ -380,23 +447,30 @@ export function CreativeRuntimeModelSettings() {
     );
   };
 
+  const newProfile = (name: string): LocalCreativeProfile => ({
+    id: crypto.randomUUID(),
+    name,
+    adapter: 'native-image-mesh-v1',
+    imageModelId: null,
+    meshModelId: null,
+    resolution: LOCAL_CREATIVE_PROFILE_DEFAULTS.resolution,
+    imageGenerationTimeoutMs:
+      LOCAL_CREATIVE_PROFILE_DEFAULTS.imageGenerationTimeoutMs,
+    meshGenerationTimeoutMs:
+      LOCAL_CREATIVE_PROFILE_DEFAULTS.meshGenerationTimeoutMs,
+    enabled: false,
+  });
+
   const addProfile = () => {
-    const profile: LocalCreativeProfile = {
-      id: crypto.randomUUID(),
-      name: `Local Creative ${profiles.length + 1}`,
-      adapter: 'native-image-mesh-v1',
-      imageModelId: null,
-      meshModelId: null,
-      enabled: false,
-    };
-    saveProfiles([...profiles, profile]);
+    saveProfiles([
+      ...profiles,
+      newProfile(`Local Creative ${profiles.length + 1}`),
+    ]);
   };
 
   const convertLegacyRouting = () => {
-    const profile: LocalCreativeProfile = {
-      id: crypto.randomUUID(),
-      name: 'Local Creative',
-      adapter: 'native-image-mesh-v1',
+    const profile = {
+      ...newProfile('Local Creative'),
       imageModelId: routing.nativeImageModelId,
       meshModelId: routing.nativeMeshModelId,
       enabled: Boolean(routing.nativeMeshModelId),
@@ -425,10 +499,9 @@ export function CreativeRuntimeModelSettings() {
         </h3>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-adam-neutral-400">
           Local Creative profiles are the primary configuration. Each profile
-          names the compatible runtime adapter and the exact conditioning-image
-          and mesh model IDs it should use. Models advertised by llama-swap are
-          discovered live, so removing a selection never removes the model from
-          the picker.
+          groups its runtime models with the generation settings that belong to
+          that setup. Models advertised by llama-swap are discovered live, so
+          removing a selection never removes the model from the picker.
         </p>
       </div>
 
@@ -451,7 +524,10 @@ export function CreativeRuntimeModelSettings() {
             onClick={() => discoveryQuery.refetch()}
           >
             {discoveryQuery.isFetching ? (
-              <ActivityIndicator label="Refreshing Creative models" size="sm" />
+              <ActivityIndicator
+                label="Refreshing Creative models"
+                size="sm"
+              />
             ) : (
               <RefreshCw className="mr-1 h-3.5 w-3.5" />
             )}
@@ -553,7 +629,9 @@ export function CreativeRuntimeModelSettings() {
                           }
                         }}
                       />
-                      {isDefault ? <Badge variant="outline">Default</Badge> : null}
+                      {isDefault ? (
+                        <Badge variant="outline">Default</Badge>
+                      ) : null}
                       <Badge variant="outline">Native image → mesh</Badge>
                     </div>
                     <div className="mt-2 font-mono text-[11px] text-adam-neutral-500">
@@ -637,6 +715,70 @@ export function CreativeRuntimeModelSettings() {
                     />
                   </div>
                 </div>
+
+                <details className="mt-4 rounded-lg border border-adam-neutral-700/70 p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-adam-neutral-200">
+                    Advanced runtime settings
+                  </summary>
+                  <p className="mt-2 text-xs leading-relaxed text-adam-neutral-400">
+                    These values belong to this profile. Use longer timeouts for
+                    models that need more time before returning headers or the
+                    final mesh.
+                  </p>
+                  <div className="mt-4 grid gap-5 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-sm font-medium text-adam-neutral-50">
+                          Resolution
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
+                          Native adapter output resolution when supported by the
+                          selected runtime.
+                        </p>
+                      </div>
+                      <Select
+                        value={profile.resolution}
+                        disabled={mutation.isPending}
+                        onValueChange={(resolution) =>
+                          updateProfile(profile.id, {
+                            resolution: resolution as LocalCreativeResolution,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="512">512</SelectItem>
+                          <SelectItem value="1024">1024</SelectItem>
+                          <SelectItem value="1536">1536</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <TimeoutMinutesInput
+                      label="Conditioning image timeout"
+                      description="Maximum time for text → conditioning image generation."
+                      valueMs={profile.imageGenerationTimeoutMs}
+                      disabled={mutation.isPending}
+                      onChange={(imageGenerationTimeoutMs) =>
+                        updateProfile(profile.id, {
+                          imageGenerationTimeoutMs,
+                        })
+                      }
+                    />
+
+                    <TimeoutMinutesInput
+                      label="Mesh generation timeout"
+                      description="Maximum time for the mesh runtime, including waiting for response headers."
+                      valueMs={profile.meshGenerationTimeoutMs}
+                      disabled={mutation.isPending}
+                      onChange={(meshGenerationTimeoutMs) =>
+                        updateProfile(profile.id, { meshGenerationTimeoutMs })
+                      }
+                    />
+                  </div>
+                </details>
 
                 <div className="mt-4 flex justify-end">
                   <Button
