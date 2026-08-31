@@ -2,103 +2,108 @@
 
 ## Purpose
 
-Guide implementation of custom AI provider support while preserving existing upstream provider routing and security properties.
+Guide custom AI-provider changes using Brepia's current provider registry, stable model IDs and credential/security boundaries.
 
-## Architecture Principles
+## Current architecture
 
-### Built-in Providers Remain Source/Env Managed
+Custom providers are user-owned rows in:
 
-- Built-in providers (Anthropic, Google, OpenRouter, local OpenAI-compatible, OpenCode, CLI agents) are configured via environment variables and static code.
-- Do NOT convert built-in providers into database rows.
-- Do NOT modify `providerFor()`, `createChatProviders()`, or `buildChatModel()` routing logic unless the plan explicitly requires it.
+- `ai_providers`
+- `ai_provider_models`
 
-### Custom Providers Are Additive
+Shared DTO/validation lives in `shared/aiSettings.ts`; stable custom model-ID helpers live in `shared/customModelIds.ts`; server-side CRUD, credential handling, connection testing and runtime model construction live in `src/server/customProviders.ts`.
 
-- Custom providers are user-owned, stored in `ai_providers` table.
-- They are resolved at runtime by the server, merged into the provider routing alongside built-in providers.
-- Custom provider IDs are user-owned and namespaced (e.g., `<slug>/<model_id>`).
+Do not reconstruct provider behavior from historical settings plans when these modules define the live contract.
 
-### Provider Secrets Are Server-Only
+## Stable custom model IDs
 
-- API keys, tokens, and credentials are encrypted and stored server-side.
-- Never log API keys, tokens, or authorization headers.
-- Never return credential columns in API responses to the client.
-- Never include credentials in error messages or browser console output.
+Custom catalog IDs use:
 
-## Must Do
-
-1. **Validate URLs** — Reject unsupported protocols (`file://`, `data://`, etc.). Only `https://` and `http://` (localhost only) are allowed.
-2. **Bounded timeouts** — Test connection with a bounded timeout (e.g., 5 seconds), not an infinite wait.
-3. **No silent fallback** — If a custom provider fails, fail explicitly with a useful error. Do NOT silently fall back to another provider.
-4. **Explicit capability metadata** — Each provider model's capabilities (vision, tool-use, etc.) must be explicitly set, not inferred.
-5. **Stable model IDs** — Model IDs stored in conversations remain stable regardless of provider configuration changes.
-6. **Reserved prefixes** — Custom slugs must NOT impersonate built-in prefixes:
-   - `anthropic`, `google`, `openai`, `openrouter`, `local`, `opencode`, `agent`
-
-## Must NOT Do
-
-- Log API keys, tokens, or authorization headers at any level (debug, info, error).
-- Return plaintext credentials in any API response or error message.
-- Silent fallback to another provider when a custom provider fails.
-- Modify built-in provider routing unless the plan explicitly requires it.
-- Store credentials in plaintext.
-- Allow custom slugs that conflict with reserved prefixes.
-- Infer model capabilities from provider type — always be explicit.
-
-## Provider Driver Mapping
-
-| Driver              | Description                | Runtime              |
-| ------------------- | -------------------------- | -------------------- |
-| `openai-compatible` | OpenAI-compatible chat API | `@ai-sdk/openai`     |
-| `anthropic`         | Anthropic Claude API       | `@ai-sdk/anthropic`  |
-| `google`            | Google Gemini API          | `@ai-sdk/google`     |
-| `openrouter`        | OpenRouter API             | `@ai-sdk/openrouter` |
-
-## Preset Convenience
-
-Presets (`ollama`, `llama-swap`, `lm-studio`, `custom`) are UI conveniences that set default values for `base_url`, `driver`, and common headers. They do NOT determine runtime behavior — the `driver` field does.
-
-## API Response Security
-
-When returning provider data to the client, always exclude credential columns:
-
-```typescript
-// SAFE — exclude credential columns
-const safeProviders = providers.map(
-  ({
-    id,
-    user_id,
-    slug,
-    name,
-    driver,
-    preset,
-    base_url,
-    enabled,
-    headers,
-    created_at,
-    updated_at,
-  }) => ({
-    id,
-    slug,
-    name,
-    driver,
-    preset,
-    base_url,
-    enabled,
-    headers,
-    created_at,
-    updated_at,
-  }),
-);
-
-// UNSAFE — never do this
-const unsafeProviders = providers; // includes credential_ciphertext, credential_iv, credential_tag
+```text
+custom/<provider-uuid>/<provider-native-model-id>
 ```
 
-## Error Handling
+The provider UUID is the stable namespace. Provider display names/slugs are mutable metadata and are not model identity.
 
-When a custom provider fails:
+Always use `makeCustomProviderModelId()` / `parseCustomProviderModelId()` rather than assembling or parsing custom IDs ad hoc. Provider-native model IDs may themselves contain `/`.
 
-1. Log the error message (NOT credentials).
-2. Return a structured error to the client: `{ error: 'Provider unavailable', provider: '<slug>', details: '<message>' }`.
-3. Do NOT attempt to retry with a different provider.
+## Supported drivers
+
+The current shared driver enum is:
+
+| Driver | Runtime package |
+| --- | --- |
+| `openai-compatible` | `@ai-sdk/openai-compatible` |
+| `anthropic` | `@ai-sdk/anthropic` |
+| `google` | `@ai-sdk/google` |
+| `openrouter` | `@openrouter/ai-sdk-provider` |
+
+Do not add a driver in only one layer. Update shared validation, server runtime construction, UI and tests together.
+
+## Provider secrets
+
+Provider credentials are server-only and encrypted at rest by the existing AES-256-GCM implementation.
+
+- The encryption key is supplied through `PCAD_CREDENTIAL_ENCRYPTION_KEY`.
+- API DTOs expose credential presence (`hasCredential`) rather than the credential.
+- Never log plaintext credentials, decrypted values or Authorization headers.
+- Never return encrypted credential columns or plaintext credentials to the browser.
+- Reuse the existing credential update/removal semantics rather than creating a second secret format.
+
+## URL and connection-test security
+
+Provider connection testing accepts user-controlled URLs and therefore uses the existing SSRF guard in `src/server/customProviders.ts`.
+
+- Only HTTP(S) protocols are considered.
+- Private, loopback, link-local, metadata/internal addresses are blocked by the current test-provider guard.
+- DNS-resolved addresses are checked as part of the guard.
+- Connection attempts use a bounded timeout.
+
+Do not weaken or bypass this protection just to make a provider test pass. Any change to local/private provider testing requires an explicit security design, not a UI-only exception.
+
+## Model capabilities
+
+Custom model capability metadata is explicit (`supportsTools`, `supportsThinking`, `supportsVision`, context/output limits and visibility fields).
+
+Do not infer capabilities from the driver or provider name. Preserve stored model identity even if a provider/model is later disabled or removed so historical conversations can fail explicitly rather than silently switching models.
+
+## Routing behavior
+
+Custom providers are additive to built-in provider/model routing.
+
+- Do not silently fall back to a built-in provider when a selected custom provider/model is missing, disabled or fails.
+- Keep provider/model ownership scoped to the authenticated user.
+- Service-role queries must retain explicit user ownership constraints.
+- Use the existing catalog/runtime helpers instead of inserting custom rows directly into a built-in catalog.
+
+## Reserved slugs
+
+Shared validation prevents custom provider slugs from impersonating built-in prefixes such as:
+
+- `anthropic`
+- `google`
+- `openai`
+- `openrouter`
+- `local`
+- `opencode`
+- `agent`
+
+Use the shared Zod schemas rather than duplicating this list in route/UI validation.
+
+## Completion
+
+For provider changes:
+
+1. inspect shared validation, server runtime construction, catalog behavior and affected UI/API routes;
+2. add/update focused tests for identity, auth/ownership, secrets, capabilities and failure behavior;
+3. run:
+
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   npm run build
+   git diff --check
+   ```
+
+4. verify the diff contains no secret exposure or silent fallback path.
