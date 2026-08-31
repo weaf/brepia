@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import OpenSCADError from '@/lib/OpenSCADError';
-import {
-  assertOpenScadOutputWithinLimit,
-  assertOpenScadSourceWithinLimit,
-} from '@/lib/openScadLimits';
+import { assertOpenScadOutputWithinLimit } from '@/lib/openScadLimits';
 import { normalizeOpenSCADDxf } from '@/utils/dxfUtils';
 import { OpenScadWorkerClient } from '@/worker/openScadWorkerClient';
 import type { OpenSCADWorkerResponseData, WorkerMessage } from '@/worker/types';
 import { WorkerMessageType } from '@/worker/types';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 
 function requestId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -104,8 +105,8 @@ export function useOpenSCAD() {
     [ensureCachedFiles, getClient, writeWorkerFile],
   );
 
-  const compileScad = useCallback(
-    async (code: string): Promise<void> => {
+  const compileProject = useCallback(
+    async (project: OpenScadProject): Promise<void> => {
       setIsCompiling(true);
       setError(undefined);
       setIsError(false);
@@ -114,12 +115,12 @@ export function useOpenSCAD() {
       activeCompileRef.current = id;
 
       try {
-        assertOpenScadSourceWithinLimit(code);
+        const normalizedProject = normalizeOpenScadProject(project);
         await ensureCachedFiles();
         const response = await getClient().request<OpenSCADWorkerResponseData>({
           id,
           type: WorkerMessageType.PREVIEW,
-          data: { code, params: [], fileType: 'stl' },
+          data: { project: normalizedProject, params: [], fileType: 'stl' },
         });
         assertOpenScadOutputWithinLimit(response);
 
@@ -158,15 +159,17 @@ export function useOpenSCAD() {
     [ensureCachedFiles, getClient],
   );
 
-  const previewScadColored = useCallback(
-    async (code: string): Promise<{ stl: Blob; off: Blob | undefined }> => {
-      assertOpenScadSourceWithinLimit(code);
+  const previewProjectColored = useCallback(
+    async (
+      project: OpenScadProject,
+    ): Promise<{ stl: Blob; off: Blob | undefined }> => {
+      const normalizedProject = normalizeOpenScadProject(project);
       await ensureCachedFiles();
       const id = requestId('preview');
       const message: WorkerMessage & { id: string } = {
         id,
         type: WorkerMessageType.PREVIEW,
-        data: { code, params: [], fileType: 'stl' },
+        data: { project: normalizedProject, params: [], fileType: 'stl' },
       };
       const response =
         await getClient().request<OpenSCADWorkerResponseData>(message);
@@ -189,15 +192,15 @@ export function useOpenSCAD() {
     [ensureCachedFiles, getClient],
   );
 
-  const exportScad = useCallback(
-    async (code: string, fileType: string): Promise<Blob> => {
-      assertOpenScadSourceWithinLimit(code);
+  const exportProject = useCallback(
+    async (project: OpenScadProject, fileType: string): Promise<Blob> => {
+      const normalizedProject = normalizeOpenScadProject(project);
       await ensureCachedFiles();
       const id = requestId('export');
       const message: WorkerMessage & { id: string } = {
         id,
         type: WorkerMessageType.EXPORT,
-        data: { code, params: [], fileType },
+        data: { project: normalizedProject, params: [], fileType },
       };
       const response =
         await getClient().request<OpenSCADWorkerResponseData>(message);
@@ -226,9 +229,9 @@ export function useOpenSCAD() {
   );
 
   return {
-    compileScad,
-    exportScad,
-    previewScadColored,
+    compileProject,
+    exportProject,
+    previewProjectColored,
     writeFile,
     isCompiling,
     output,
