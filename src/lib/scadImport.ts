@@ -220,6 +220,12 @@ export function scadImportTitle(filename: string): string {
   return withoutExtension || 'Imported OpenSCAD model';
 }
 
+export function scadImportProjectPath(filename: string): string {
+  assertScadFilename(filename);
+  const basename = (filename.split(/[\\/]/).at(-1) ?? filename).trim();
+  return basename.replace(/\.scad\.txt$/i, '.scad');
+}
+
 export function isBlockingScadCompileError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(?:timed out after|output exceeds|source exceeds|worker error|worker message error|worker terminated|failed to post message)/i.test(
