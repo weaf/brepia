@@ -116,12 +116,15 @@ export function AdminModelsSettings() {
             : 'The selected conversations and their Brepia-managed artifacts were removed.',
       });
     },
-    onError: (error) =>
+    onError: (error) => {
+      setSelectedWorkspaceIds(new Set());
+      setSelectionMode(false);
       toast({
         title: 'Could not complete workspace deletion',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
-      }),
+      });
+    },
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-model-inventory'] }),
