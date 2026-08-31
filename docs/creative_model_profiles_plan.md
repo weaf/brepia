@@ -1,6 +1,6 @@
 # Creative model profiles plan
 
-Status: **Phase 1 implementation and live regression verification in progress on `feature/creative-model-profiles`**
+Status: **Phase 1 complete and merged; Phase 2 implementation in progress on `feature/creative-profile-pinning`**
 
 ## Product direction
 
@@ -27,6 +27,7 @@ Goals:
 - [x] Preserve existing hosted adapter compatibility when it is explicitly enabled.
 - [x] Store generation resolution and long-running conditioning/mesh timeouts on each Local Creative profile.
 - [x] Make the native Creative transport honor the profile timeout rather than Node/Undici's shorter implicit response-header timeout.
+- [x] Verify live 1024 TRELLIS.2 generation through completion beyond the previous five-minute cutoff.
 
 Compatibility implementation:
 
@@ -50,13 +51,32 @@ Native Creative conditioning and mesh calls therefore use an explicit long-runni
 
 ## Phase 2 — Conversation profile pinning
 
-Planned after Phase 1 regression verification:
+Implementation goals:
 
-- [ ] Pin local Creative profile ID when a new Creative conversation is created.
-- [ ] Resolve native runtime models and runtime settings from the pinned profile rather than only the current global active profile.
-- [ ] Preserve legacy conversations without a profile using the existing compatibility routing behavior.
+- [x] Pin the current Local Creative default profile ID when a new Creative conversation is created.
+- [x] Resolve native runtime models and runtime settings from the pinned profile rather than only the current global active profile.
+- [x] Preserve legacy conversations without a profile key using the existing compatibility routing behavior.
 - [ ] Add an explicit per-conversation local profile selector if live switching is desirable.
-- [ ] Ensure changing the default profile affects only new conversations unless the user explicitly changes an existing conversation.
+- [x] Ensure changing the default profile affects only new conversations unless the user explicitly changes an existing conversation.
+
+### Persistence semantics
+
+`conversations.settings.localCreativeProfileId` is the conversation-level pin.
+
+- Declarative database source is the Creative pinning function/trigger section in `supabase/schemas/triggers.sql`; the migration must be generated from it with the repository-local `npx supabase db diff` workflow.
+- New Creative conversations receive the current `defaultLocalCreativeProfileId` in a `BEFORE INSERT` database trigger. This keeps pinning consistent for every client that creates a conversation rather than relying on one React view.
+- The trigger always writes the key for new Creative conversations. A JSON `null` value records that no Local Creative profile was selected at creation time.
+- Existing conversations are not backfilled. Absence of the key therefore remains an unambiguous legacy marker and preserves Phase-1 compatibility behavior.
+- No new conversation table column is required; the existing typed `settings` JSON is the intended home for other pinned conversation choices as well.
+
+### Runtime semantics
+
+- A string pin resolves exactly that Local Creative profile from the user's current profile catalog.
+- The pinned profile supplies the conditioning-image model, mesh model, resolution and per-stage timeouts as one coherent runtime configuration. Native generation does not borrow missing model IDs from another active/default profile.
+- A profile's `enabled` flag controls whether it can be selected for new/default usage. An already-pinned conversation may continue to use a disabled profile while the profile still exists and remains structurally usable.
+- Deleting a pinned profile or removing its mesh runtime fails closed with an actionable configuration error instead of silently retargeting the conversation.
+- A new conversation pinned to `null` does not adopt a Local Creative profile if the user later changes the global default; starting a new Creative conversation is required until a per-conversation selector exists.
+- A legacy conversation with no pin key continues following the current explicit default/compatibility routing, matching Phase 1.
 
 ## Phase 3 — Provider adapter management
 
@@ -89,14 +109,22 @@ npm run build
 git diff --check
 ```
 
-Live verification should then confirm:
+Phase 2 local database preparation:
 
-1. Creative runtime discovery shows installed `creative/*` models.
-2. Setting a runtime to Not configured does not make the discovered model disappear.
-3. A local profile can be created, edited, enabled and selected as default.
-4. Default models → Creative shows the concrete local profile/mesh ID.
-5. Profile Advanced runtime settings persist resolution and conditioning/mesh timeout values.
-6. A TRELLIS.2 generation lasting longer than five minutes remains connected until the profile's mesh timeout is reached or the GLB is returned.
-7. Local Creative still generates text → 3D and reference-image → 3D with the selected profile.
-8. Hosted provider-specific routing is absent in a local-only deployment.
-9. Stable-runtime behavior remains unchanged while generation is in progress.
+```bash
+npx supabase db diff -f creative_conversation_profile_pinning
+# review the generated migration
+npx supabase migration up
+npx supabase gen types typescript --local > shared/database.ts
+```
+
+Phase 2 local/live verification should then confirm:
+
+1. The generated migration contains only the intended Creative conversation pin trigger/function changes.
+2. Create Creative conversation A while profile A is the default and verify `settings.localCreativeProfileId` is A.
+3. Change the global default to profile B.
+4. Continue conversation A and verify native Creative logs still report profile A and its resolution/timeouts/model IDs.
+5. Create conversation B and verify it pins profile B.
+6. Confirm a pre-Phase-2 Creative conversation with no pin key still works through compatibility routing.
+7. Confirm text → 3D and reference-image → 3D remain functional.
+8. Confirm stable-runtime/background/reconnect behavior is unchanged during a long native generation.

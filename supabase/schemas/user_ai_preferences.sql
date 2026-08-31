@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS "public"."user_ai_preferences" (
     "vision_fast_model_id" "text" NULL,
     "vision_deep_model_id" "text" NULL,
     "model_routing" "jsonb" NOT NULL DEFAULT '{}'::"jsonb",
+    "default_creative_prompt_profile_id" "uuid" NULL,
+    "instruction_profile_defaults" "jsonb" NOT NULL DEFAULT '{}'::"jsonb",
+    "runtime_overrides" "jsonb" NOT NULL DEFAULT '{}'::"jsonb",
+    "default_instruction_profile_id" "text" NOT NULL DEFAULT 'standard',
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
@@ -26,10 +30,18 @@ COMMENT ON COLUMN "public"."user_ai_preferences"."vision_deep_model_id" IS
     'Model catalog id used for difficult/render inspection pCAD vision fallback analysis.';
 COMMENT ON COLUMN "public"."user_ai_preferences"."model_routing" IS
     'User-configurable low-level runtime model IDs and provider routing. Runtime code must not inject hidden model defaults.';
+COMMENT ON COLUMN "public"."user_ai_preferences"."default_instruction_profile_id" IS
+    'Repository-backed Brepia AI instruction profile package ID, such as standard or cadam.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS "user_ai_preferences_pkey" ON "public"."user_ai_preferences" USING btree ("user_id");
 ALTER TABLE "public"."user_ai_preferences" ADD CONSTRAINT "user_ai_preferences_pkey" PRIMARY KEY USING INDEX "user_ai_preferences_pkey";
 ALTER TABLE "public"."user_ai_preferences" ADD CONSTRAINT "user_ai_preferences_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."user_ai_preferences"
+    ADD CONSTRAINT "user_ai_preferences_instruction_profile_defaults_object"
+    CHECK (jsonb_typeof("instruction_profile_defaults") = 'object');
+ALTER TABLE "public"."user_ai_preferences"
+    ADD CONSTRAINT "user_ai_preferences_runtime_overrides_object"
+    CHECK (jsonb_typeof("runtime_overrides") = 'object');
 
 ALTER TABLE "public"."user_ai_preferences" ENABLE ROW LEVEL SECURITY;
 

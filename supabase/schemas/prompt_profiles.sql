@@ -12,14 +12,19 @@ CREATE TABLE IF NOT EXISTS "public"."prompt_profiles" (
     "base_revision" "text" NULL,
     "archived" boolean NOT NULL DEFAULT false,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "scope" text NOT NULL DEFAULT 'parametric'
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_pkey" ON "public"."prompt_profiles" USING btree ("id");
 ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_pkey" PRIMARY KEY USING INDEX "prompt_profiles_pkey";
 ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."prompt_profiles" ADD CONSTRAINT "prompt_profiles_scope_check"
+    CHECK ("scope" ~ '^[a-z0-9][a-z0-9_.-]{0,127}$');
 
-CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_user_name_unique" ON "public"."prompt_profiles" USING btree ("user_id", lower("name")) WHERE archived = false;
+CREATE UNIQUE INDEX IF NOT EXISTS "prompt_profiles_user_scope_name_unique"
+    ON "public"."prompt_profiles" USING btree ("user_id", "scope", lower("name"))
+    WHERE archived = false;
 CREATE INDEX IF NOT EXISTS "prompt_profiles_user_archived_idx" ON "public"."prompt_profiles" USING btree ("user_id", "archived");
 
 ALTER TABLE "public"."prompt_profiles" ENABLE ROW LEVEL SECURITY;

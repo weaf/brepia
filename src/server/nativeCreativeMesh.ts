@@ -8,7 +8,6 @@ import {
 import { imageIdFromFilename } from '@shared/imageRefs';
 import type { AiPreferencesDto } from '@shared/aiSettings';
 import {
-  getDefaultLocalCreativeProfile,
   requireCreativeRuntimeModel,
   type CreativeRuntimeModelRouting,
   type LocalCreativeProfile,
@@ -20,6 +19,7 @@ import {
   resolveRuntimeNumberFromPreferences,
   resolveRuntimeStringFromPreferences,
 } from './aiInstructionRuntime';
+import { resolveCreativeConversationProfile } from './creativeConversationProfile';
 import { env } from './env';
 import { logError } from './serverLog';
 import {
@@ -661,14 +661,11 @@ export async function handleNativeCreativeMeshRequest(
     await supabase.auth.getUser(token);
   if (userError || !userData.user?.id) return localError('Unauthorized', 401);
 
-  let runtime: NativeCreativeRuntime;
+  let preferences: AiPreferencesDto;
   let modelRouting: CreativeRuntimeModelRouting;
-  let activeProfile: LocalCreativeProfile | null;
   try {
-    const preferences = await loadUserAiPreferences(userData.user.id);
+    preferences = await loadUserAiPreferences(userData.user.id);
     modelRouting = preferences.modelRouting;
-    activeProfile = getDefaultLocalCreativeProfile(modelRouting);
-    runtime = resolveNativeCreativeRuntime(preferences, activeProfile);
   } catch (error) {
     return localError(
       `Invalid Creative runtime settings: ${errorMessage(error)}`,
@@ -681,12 +678,41 @@ export async function handleNativeCreativeMeshRequest(
 
   const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
-    .select('id, current_message_leaf_id')
+    .select('id, current_message_leaf_id, settings')
     .eq('id', conversationId)
     .eq('user_id', userData.user.id)
     .maybeSingle();
   if (conversationError || !conversation) {
     return localError('Conversation not found', 404);
+  }
+
+  let profileResolution: ReturnType<
+    typeof resolveCreativeConversationProfile
+  >;
+  try {
+    profileResolution = resolveCreativeConversationProfile(
+      modelRouting,
+      conversation.settings,
+    );
+  } catch (error) {
+    return localError(errorMessage(error), 422);
+  }
+  if (profileResolution.source === 'pinned-none') {
+    return localError(
+      'This Creative conversation was created without a Local Creative profile. Select a default Local Creative profile and start a new Creative conversation.',
+      422,
+    );
+  }
+
+  const activeProfile = profileResolution.profile;
+  let runtime: NativeCreativeRuntime;
+  try {
+    runtime = resolveNativeCreativeRuntime(preferences, activeProfile);
+  } catch (error) {
+    return localError(
+      `Invalid Creative runtime settings: ${errorMessage(error)}`,
+      500,
+    );
   }
 
   const text = body.text?.trim() || undefined;
@@ -721,13 +747,35 @@ export async function handleNativeCreativeMeshRequest(
   let nativeImageModel: string | null = null;
   let nativeMeshModel: string;
   try {
-    nativeMeshModel =
-      activeProfile?.meshModelId?.trim() ||
-      requireCreativeRuntimeModel(modelRouting, 'nativeMeshModelId');
-    if (imageIds.length === 0) {
-      nativeImageModel =
-        activeProfile?.imageModelId?.trim() ||
-        requireCreativeRuntimeModel(modelRouting, 'nativeImageModelId');
+    if (activeProfile) {
+      const profileMeshModel = activeProfile.meshModelId?.trim();
+      if (!profileMeshModel) {
+        throw new Error(
+          `Local Creative profile ${activeProfile.name} does not configure a mesh runtime model.`,
+        );
+      }
+      nativeMeshModel = profileMeshModel;
+
+      if (imageIds.length === 0) {
+        const profileImageModel = activeProfile.imageModelId?.trim();
+        if (!profileImageModel) {
+          throw new Error(
+            `Local Creative profile ${activeProfile.name} does not configure a conditioning image model required for text-to-3D generation.`,
+          );
+        }
+        nativeImageModel = profileImageModel;
+      }
+    } else {
+      nativeMeshModel = requireCreativeRuntimeModel(
+        modelRouting,
+        'nativeMeshModelId',
+      );
+      if (imageIds.length === 0) {
+        nativeImageModel = requireCreativeRuntimeModel(
+          modelRouting,
+          'nativeImageModelId',
+        );
+      }
     }
   } catch (error) {
     return localError(errorMessage(error), 422);
@@ -744,6 +792,7 @@ export async function handleNativeCreativeMeshRequest(
   nativeCreativeLog('job-create', 'creating native Creative mesh job', {
     conversationId,
     profileId: activeProfile?.id ?? null,
+    profileSource: profileResolution.source,
     imageCount: imageIds.length,
     usesConditioningImage: imageIds.length === 0,
     runtime,
@@ -820,6 +869,7 @@ export async function handleNativeCreativeMeshRequest(
       meshId: meshData.id,
       conversationId,
       profileId: activeProfile?.id ?? null,
+      profileSource: profileResolution.source,
     });
   } catch (error) {
     await markFailure(
