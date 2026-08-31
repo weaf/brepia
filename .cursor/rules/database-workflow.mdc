@@ -21,7 +21,7 @@ version: 1.2.0
 
 ## Local Supabase Lifecycle
 
-The pCAD/Brepia local stack is managed by the repository-local Supabase CLI through `npx`.
+The Brepia local stack is managed by the repository-local Supabase CLI through `npx`.
 
 A previous note incorrectly referred to `NOx`; workstation inspection found no such lifecycle manager. The active containers are the normal Supabase CLI/Compose project `cadam`.
 
