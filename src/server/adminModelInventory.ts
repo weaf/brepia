@@ -81,8 +81,12 @@ type WalkResult = {
   models: AdminModelFile[];
 };
 
+function normalizePathSeparators(value: string): string {
+  return value.split('\\').join('/');
+}
+
 function modelKind(relativePath: string): AdminModelFileKind | null {
-  const normalized = relativePath.replaceAll('\\', '/');
+  const normalized = normalizePathSeparators(relativePath);
   const extension = normalized.split('.').at(-1)?.toLowerCase() ?? '';
   if (!MODEL_EXTENSIONS.has(extension)) return null;
   if (normalized.startsWith('models/generated/')) return 'generated';
@@ -126,7 +130,7 @@ async function walkWorkspace(root: string, directory: string): Promise<WalkResul
     const fileStat = await stat(absolutePath);
     totalBytes += fileStat.size;
     fileCount += 1;
-    const relativePath = relative(root, absolutePath).replaceAll('\\', '/');
+    const relativePath = normalizePathSeparators(relative(root, absolutePath));
     const kind = modelKind(relativePath);
     if (!kind) continue;
     models.push({
