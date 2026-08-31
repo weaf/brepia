@@ -12,7 +12,11 @@ import { supabase } from '@/lib/supabase';
 import { updateParameter } from '@/lib/utils';
 import parseParameters from '@shared/parseParameters';
 import type { AppUIMessage } from '@shared/chatAi';
-import { isParametricArtifact } from '@shared/parametricParts';
+import {
+  getParametricArtifactEntrypointCode,
+  isParametricArtifact,
+  replaceParametricArtifactEntrypointCode,
+} from '@shared/parametricParts';
 import Tree from '@shared/Tree';
 import type {
   Conversation,
@@ -148,15 +152,19 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
   useEffect(() => {
     const latest = findLatestPreview(branch);
     if (!latest) return;
+    const latestArtifactCode =
+      latest.type === 'artifact'
+        ? getParametricArtifactEntrypointCode(latest.artifact)
+        : null;
     const key =
       latest.type === 'artifact'
-        ? `artifact:${latest.messageId}:${latest.artifact.code.length}`
+        ? `artifact:${latest.messageId}:${latestArtifactCode?.length ?? 0}`
         : `mesh:${latest.messageId}:${latest.meshId}`;
     if (lastAutoAppliedPreviewKeyRef.current === key) return;
     lastAutoAppliedPreviewKeyRef.current = key;
-    if (latest.type === 'artifact') {
-      baseCodeRef.current = latest.artifact.code;
-      setParameters(parseParameters(latest.artifact.code));
+    if (latest.type === 'artifact' && latestArtifactCode !== null) {
+      baseCodeRef.current = latestArtifactCode;
+      setParameters(parseParameters(latestArtifactCode));
       setCurrentOutput(undefined);
       setActivePreview({
         type: 'artifact',
@@ -164,7 +172,7 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
         artifact: latest.artifact,
       });
       setMobilePreviewVersion((version) => version + 1);
-    } else {
+    } else if (latest.type === 'mesh') {
       setCurrentOutput(undefined);
       setActivePreview({
         type: 'mesh',
@@ -177,8 +185,9 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
 
   const handleViewArtifact = useCallback(
     (artifact: ParametricArtifact, messageId: string) => {
-      baseCodeRef.current = artifact.code;
-      setParameters(parseParameters(artifact.code));
+      const code = getParametricArtifactEntrypointCode(artifact);
+      baseCodeRef.current = code;
+      setParameters(parseParameters(code));
       setCurrentOutput(undefined);
       setActivePreview({ type: 'artifact', messageId, artifact });
       setMobilePreviewVersion((version) => version + 1);
@@ -201,10 +210,10 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
       setParameters(nextParameters);
       setActivePreview({
         ...activePreview,
-        artifact: {
-          ...activePreview.artifact,
-          code: nextCode,
-        },
+        artifact: replaceParametricArtifactEntrypointCode(
+          activePreview.artifact,
+          nextCode,
+        ),
       });
     },
     [activePreview],
@@ -212,6 +221,10 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
 
   const hasArtifact =
     activePreview?.type === 'artifact' && parameters.length > 0;
+  const activeArtifactCode =
+    activePreview?.type === 'artifact'
+      ? getParametricArtifactEntrypointCode(activePreview.artifact)
+      : undefined;
 
   return (
     <ConversationView
@@ -234,11 +247,7 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
                     ? activePreview.meshId
                     : undefined
                 }
-                activeOpenscadCode={
-                  activePreview?.type === 'artifact'
-                    ? activePreview.artifact.code
-                    : undefined
-                }
+                activeOpenscadCode={activeArtifactCode}
               />
             </div>
           </div>
@@ -264,9 +273,9 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
       }
       previewSlot={
         <div className="flex h-full w-full items-center justify-center bg-adam-neutral-700">
-          {activePreview?.type === 'artifact' ? (
+          {activePreview?.type === 'artifact' && activeArtifactCode ? (
             <OpenSCADPreview
-              scadCode={activePreview.artifact.code}
+              scadCode={activeArtifactCode}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
             />
@@ -281,9 +290,9 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
       }
       mobilePreviewSlot={
         <div className="flex h-full w-full items-center justify-center bg-adam-bg-secondary-dark">
-          {activePreview?.type === 'artifact' ? (
+          {activePreview?.type === 'artifact' && activeArtifactCode ? (
             <OpenSCADPreview
-              scadCode={activePreview.artifact.code}
+              scadCode={activeArtifactCode}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               isMobile={true}
@@ -305,11 +314,7 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
             onParameterChange={changeParameters}
             currentOutput={currentOutput}
             dxfExporter={null}
-            code={
-              activePreview?.type === 'artifact'
-                ? activePreview.artifact.code
-                : undefined
-            }
+            code={activeArtifactCode}
           />
         </div>
       }
@@ -319,11 +324,7 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
           onParameterChange={changeParameters}
           currentOutput={currentOutput}
           dxfExporter={null}
-          code={
-            activePreview?.type === 'artifact'
-              ? activePreview.artifact.code
-              : undefined
-          }
+          code={activeArtifactCode}
         />
       }
     />
