@@ -1,6 +1,6 @@
 # Contributing to Brepia
 
-When contributing to this repository, please first discuss substantial changes through [issues](https://github.com/weaf/pCAD/issues) before opening a large pull request.
+When contributing to this repository, please first discuss substantial changes through [issues](https://github.com/weaf/brepia/issues) before opening a large pull request.
 
 Please note that this repository has a [code of conduct](CODE_OF_CONDUCT.md); follow it in all interactions with the project.
 
