@@ -2,12 +2,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 async function patchFile(path, replacements) {
   let source = await readFile(path, 'utf8');
-  for (const [before, after, label] of replacements) {
+  for (const [before, after, label, expectedCount = 1] of replacements) {
     const occurrences = source.split(before).length - 1;
-    if (occurrences !== 1) {
-      throw new Error(`${path}: expected one ${label}, found ${occurrences}`);
+    if (occurrences !== expectedCount) {
+      throw new Error(
+        `${path}: expected ${expectedCount} ${label}, found ${occurrences}`,
+      );
     }
-    source = source.replace(before, after);
+    source = source.split(before).join(after);
   }
   await writeFile(path, source, 'utf8');
 }
@@ -102,12 +104,8 @@ await patchFile('src/views/EditorView.tsx', [
   [
     '              scadCode={activePreview.artifact.code}',
     '              scadCode={activeArtifactCode ?? \'\'}',
-    'desktop preview entrypoint code',
-  ],
-  [
-    '              scadCode={activePreview.artifact.code}',
-    '              scadCode={activeArtifactCode ?? \'\'}',
-    'mobile preview entrypoint code',
+    'preview entrypoint code',
+    2,
   ],
   [
     "            code={\n              activePreview?.type === 'artifact'\n                ? activePreview.artifact.code\n                : undefined\n            }",
@@ -121,4 +119,6 @@ await patchFile('src/views/EditorView.tsx', [
   ],
 ]);
 
-console.log('Applied project-native entrypoint cutover to ChatSession, MessageBubble, and EditorView.');
+console.log(
+  'Applied project-native entrypoint cutover to ChatSession, MessageBubble, and EditorView.',
+);
