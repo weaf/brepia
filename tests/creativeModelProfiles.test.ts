@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CreativeRuntimeModelRoutingSchema,
+  LOCAL_CREATIVE_PROFILE_DEFAULTS,
   getDefaultLocalCreativeProfile,
   getUsableLocalCreativeProfiles,
 } from '@shared/modelRouting';
@@ -14,6 +15,26 @@ describe('Local Creative profiles', () => {
     expect(getDefaultLocalCreativeProfile(routing)).toBeNull();
   });
 
+  it('adds safe runtime defaults to existing profiles', () => {
+    const routing = CreativeRuntimeModelRoutingSchema.parse({
+      localCreativeProfiles: [
+        {
+          id: 'legacy-profile',
+          name: 'Legacy profile',
+          meshModelId: 'creative/mesh-a',
+        },
+      ],
+    });
+
+    expect(routing.localCreativeProfiles[0]).toMatchObject({
+      resolution: LOCAL_CREATIVE_PROFILE_DEFAULTS.resolution,
+      imageGenerationTimeoutMs:
+        LOCAL_CREATIVE_PROFILE_DEFAULTS.imageGenerationTimeoutMs,
+      meshGenerationTimeoutMs:
+        LOCAL_CREATIVE_PROFILE_DEFAULTS.meshGenerationTimeoutMs,
+    });
+  });
+
   it('uses the explicitly selected usable profile', () => {
     const routing = CreativeRuntimeModelRoutingSchema.parse({
       localCreativeProfiles: [
@@ -23,6 +44,9 @@ describe('Local Creative profiles', () => {
           adapter: 'native-image-mesh-v1',
           imageModelId: 'creative/image-a',
           meshModelId: 'creative/mesh-a',
+          resolution: '512',
+          imageGenerationTimeoutMs: 300_000,
+          meshGenerationTimeoutMs: 600_000,
           enabled: true,
         },
         {
@@ -31,6 +55,9 @@ describe('Local Creative profiles', () => {
           adapter: 'native-image-mesh-v1',
           imageModelId: 'creative/image-b',
           meshModelId: 'creative/mesh-b',
+          resolution: '1536',
+          imageGenerationTimeoutMs: 900_000,
+          meshGenerationTimeoutMs: 3_600_000,
           enabled: true,
         },
       ],
@@ -38,7 +65,12 @@ describe('Local Creative profiles', () => {
     });
 
     expect(getUsableLocalCreativeProfiles(routing)).toHaveLength(2);
-    expect(getDefaultLocalCreativeProfile(routing)?.id).toBe('quality');
+    expect(getDefaultLocalCreativeProfile(routing)).toMatchObject({
+      id: 'quality',
+      resolution: '1536',
+      imageGenerationTimeoutMs: 900_000,
+      meshGenerationTimeoutMs: 3_600_000,
+    });
   });
 
   it('does not treat disabled or mesh-less profiles as usable', () => {
@@ -84,6 +116,32 @@ describe('Local Creative profiles', () => {
       ],
     });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects unsafe per-profile runtime settings', () => {
+    const tooLong = CreativeRuntimeModelRoutingSchema.safeParse({
+      localCreativeProfiles: [
+        {
+          id: 'too-long',
+          name: 'Too long',
+          meshModelId: 'creative/mesh-a',
+          meshGenerationTimeoutMs: 14_400_001,
+        },
+      ],
+    });
+    const unsupportedResolution = CreativeRuntimeModelRoutingSchema.safeParse({
+      localCreativeProfiles: [
+        {
+          id: 'bad-resolution',
+          name: 'Bad resolution',
+          meshModelId: 'creative/mesh-a',
+          resolution: '2048',
+        },
+      ],
+    });
+
+    expect(tooLong.success).toBe(false);
+    expect(unsupportedResolution.success).toBe(false);
   });
 });
 
