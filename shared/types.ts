@@ -101,6 +101,13 @@ export type ConversationSettings = {
    */
   creativePromptProfileId?: string | null;
   /**
+   * Local Creative runtime profile captured when a Creative conversation is
+   * created. Missing means a legacy conversation that keeps compatibility
+   * routing; null means the conversation was explicitly created without a
+   * Local Creative profile selected.
+   */
+  localCreativeProfileId?: string | null;
+  /**
    * Per-conversation follow-up suggestions rendered as pills above the
    * chat input. Regenerated server-side after each non-tool-call
    * assistant turn — see `emitConversationSuggestions` in
