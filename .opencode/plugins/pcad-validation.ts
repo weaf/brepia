@@ -6,7 +6,7 @@ export default async function pcadValidationPlugin() {
     tool: {
       pcad_validate: tool({
         description:
-          'Compile a complete OpenSCAD source for pCAD. Returns structured compiler diagnostics; call it before returning final code.',
+          'Compile a complete OpenSCAD source for Brepia. Returns structured compiler diagnostics; call it before returning final code.',
         args: {
           code: tool.schema.string().min(1).max(256_000),
         },
