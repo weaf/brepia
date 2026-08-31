@@ -2,17 +2,25 @@
  * Shared final-result parser for OpenCode/Codex agent responses.
  *
  * This is the ONLY place that interprets a completed agent response into
- * pCAD's structured artifact (OpenSCAD code) and message. Both transports
- * call `parseAgentResult`, so CLI and Streaming emit identical
+ * Brepia's structured Parametric artifact and user-facing message. Both
+ * transports call `parseAgentResult`, so CLI and Streaming emit identical
  * `build_parametric_model` tool-calls from the same output.
  */
 import crypto from 'node:crypto';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 
 /**
- * Canonical machine-readable contract between external agents and pCAD.
+ * Canonical machine-readable contract between external agents and Brepia.
  * Behavioral and environment instructions live in editable transport profiles;
- * this contract only defines the response protocol pCAD must be able to parse.
+ * this contract only defines the response protocol Brepia must be able to parse.
+ *
+ * External agents remain code-oriented at this boundary for now. Step 5 will
+ * upgrade the agent protocol to author complete multi-file snapshots. Until
+ * then the adapter below deterministically wraps returned code as `main.scad`.
  */
 export function buildAgentOutputContract(): string {
   return [
@@ -24,7 +32,7 @@ export function buildAgentOutputContract(): string {
     'The object must be valid JSON. Escape line breaks and other control',
     'characters inside JSON strings (for example, use \\n inside `code`).',
     '',
-    'pCAD parametric turn protocol:',
+    'Brepia parametric turn protocol:',
     '  - If <user_request> is present and <pcad_build_result> is absent, code',
     '    MUST be non-empty and contain the complete runnable OpenSCAD program.',
     '  - code = "" is allowed after <pcad_build_result> when no revised CAD',
@@ -38,9 +46,9 @@ export function buildAgentOutputContract(): string {
     '  - code = ""',
     '  - message = the user-facing response',
     '',
-    'You MUST emit this JSON final result. pCAD converts a non-empty code value',
-    'into build_parametric_model itself; do not emit or wait for a native pCAD',
-    'tool call inside the external agent transport.',
+    'You MUST emit this JSON final result. Brepia converts a non-empty code',
+    'value into a project-native build_parametric_model call itself; do not',
+    'emit or wait for a native Brepia tool call inside the external transport.',
   ].join('\n');
 }
 
@@ -231,7 +239,7 @@ export function parseAgentResult(text: string): AgentResult {
 export type ParametricBuildInput = {
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
   message: string;
 };
 
@@ -243,7 +251,11 @@ export function parametricBuildInput(
   return {
     title: 'Generated model',
     version: 'v1',
-    code: result.code,
+    project: normalizeOpenScadProject({
+      schemaVersion: 1,
+      entrypointPath: 'main.scad',
+      files: [{ path: 'main.scad', content: result.code }],
+    }),
     message: result.message || 'Model generated.',
   };
 }
