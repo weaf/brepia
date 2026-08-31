@@ -1,4 +1,6 @@
 import { Buffer } from 'node:buffer';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import {
   NATIVE_CREATIVE_MESH_MODEL_ID,
   type CreativeMeshModelId,
@@ -6,8 +8,10 @@ import {
 import { imageIdFromFilename } from '@shared/imageRefs';
 import type { AiPreferencesDto } from '@shared/aiSettings';
 import {
+  getDefaultLocalCreativeProfile,
   requireCreativeRuntimeModel,
   type CreativeRuntimeModelRouting,
+  type LocalCreativeProfile,
 } from '@shared/modelRouting';
 import type { MeshFileType } from '@shared/types';
 import { corsHeaders, isRecord } from './api';
@@ -57,6 +61,12 @@ type NativeCreativeRuntime = {
   trellisResolution: '512' | '1024' | '1536';
 };
 
+type BufferedHttpResponse = {
+  statusCode: number;
+  contentType: string;
+  body: Buffer;
+};
+
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -68,8 +78,30 @@ function localError(message: string, status = 400): Response {
   return jsonResponse({ error: { message } }, status);
 }
 
+function errorCode(error: unknown): string | null {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) {
+    return error.code;
+  }
+  return null;
+}
+
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (!(error instanceof Error)) return String(error);
+
+  const directCode = errorCode(error);
+  const cause = 'cause' in error ? error.cause : undefined;
+  if (cause instanceof Error) {
+    const causeCode = errorCode(cause);
+    const code = causeCode ? ` [${causeCode}]` : '';
+    return `${error.message}: ${cause.name}${code}: ${cause.message}`;
+  }
+
+  return directCode ? `${error.message} [${directCode}]` : error.message;
 }
 
 function nativeCreativeLog(
@@ -133,21 +165,28 @@ function configuredTrellisResolution(
 
 function resolveNativeCreativeRuntime(
   preferences: AiPreferencesDto,
+  profile: LocalCreativeProfile | null,
 ): NativeCreativeRuntime {
+  const legacyImageTimeoutMs = resolveRuntimeNumberFromPreferences(
+    preferences,
+    'creative.imageGenerationTimeoutMs',
+  );
+  const legacyMeshTimeoutMs = resolveRuntimeNumberFromPreferences(
+    preferences,
+    'creative.meshGenerationTimeoutMs',
+  );
+
   return {
     healthTimeoutMs: resolveRuntimeNumberFromPreferences(
       preferences,
       'creative.healthTimeoutMs',
     ),
-    imageGenerationTimeoutMs: resolveRuntimeNumberFromPreferences(
-      preferences,
-      'creative.imageGenerationTimeoutMs',
-    ),
-    meshGenerationTimeoutMs: resolveRuntimeNumberFromPreferences(
-      preferences,
-      'creative.meshGenerationTimeoutMs',
-    ),
-    trellisResolution: configuredTrellisResolution(preferences),
+    imageGenerationTimeoutMs:
+      profile?.imageGenerationTimeoutMs ?? legacyImageTimeoutMs,
+    meshGenerationTimeoutMs:
+      profile?.meshGenerationTimeoutMs ?? legacyMeshTimeoutMs,
+    trellisResolution:
+      profile?.resolution ?? configuredTrellisResolution(preferences),
   };
 }
 
@@ -156,9 +195,8 @@ function zImageSize(): string {
   return /^\d{3,4}x\d{3,4}$/.test(configured) ? configured : '1024x1024';
 }
 
-async function responseFailureDetail(response: Response): Promise<string> {
-  const text = await response.text().catch(() => '');
-  if (!text) return `HTTP ${response.status}`;
+function failureDetailFromText(status: number, text: string): string {
+  if (!text) return `HTTP ${status}`;
   try {
     const parsed = JSON.parse(text) as unknown;
     if (isRecord(parsed)) {
@@ -172,6 +210,83 @@ async function responseFailureDetail(response: Response): Promise<string> {
     // Keep the upstream text below.
   }
   return text.slice(0, 1000);
+}
+
+async function responseFailureDetail(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '');
+  return failureDetailFromText(response.status, text);
+}
+
+async function bufferedHttpRequest({
+  url,
+  headers,
+  body,
+  timeoutMs,
+}: {
+  url: string;
+  headers: Record<string, string>;
+  body: Buffer;
+  timeoutMs: number;
+}): Promise<BufferedHttpResponse> {
+  const target = new URL(url);
+  const requestFn = target.protocol === 'https:' ? httpsRequest : httpRequest;
+  const signal = AbortSignal.timeout(timeoutMs);
+
+  return await new Promise<BufferedHttpResponse>((resolve, reject) => {
+    const request = requestFn(
+      target,
+      {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Length': String(body.byteLength),
+        },
+        signal,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on('error', reject);
+        response.on('aborted', () =>
+          reject(new Error('Upstream response was aborted before completion')),
+        );
+        response.on('end', () => {
+          const rawContentType = response.headers['content-type'];
+          const contentType = Array.isArray(rawContentType)
+            ? rawContentType.join(', ')
+            : (rawContentType ?? '');
+          resolve({
+            statusCode: response.statusCode ?? 0,
+            contentType,
+            body: Buffer.concat(chunks),
+          });
+        });
+      },
+    );
+
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
+async function encodeMultipartForm(form: FormData): Promise<{
+  body: Buffer;
+  contentType: string;
+}> {
+  const encodedRequest = new Request('http://native-creative.local/', {
+    method: 'POST',
+    body: form,
+  });
+  const contentType = encodedRequest.headers.get('content-type');
+  if (!contentType) {
+    throw new Error('Failed to encode native Creative multipart request');
+  }
+  return {
+    body: Buffer.from(await encodedRequest.arrayBuffer()),
+    contentType,
+  };
 }
 
 async function ensureLlamaSwapModels(
@@ -327,40 +442,54 @@ async function generateConditioningImage(
     {
       model,
       size: zImageSize(),
+      timeoutMs,
     },
   );
 
-  const response = await fetch(`${llamaSwapUrl()}/v1/images/generations`, {
-    method: 'POST',
-    headers: llamaSwapHeaders(true),
-    body: JSON.stringify({
+  const requestBody = Buffer.from(
+    JSON.stringify({
       model,
       prompt,
       n: 1,
       size: zImageSize(),
       output_format: 'png',
     }),
-    signal: AbortSignal.timeout(timeoutMs),
+  );
+  const response = await bufferedHttpRequest({
+    url: `${llamaSwapUrl()}/v1/images/generations`,
+    headers: llamaSwapHeaders(true),
+    body: requestBody,
+    timeoutMs,
   });
 
-  if (!response.ok) {
+  if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(
-      `Z-Image-Turbo generation failed: ${await responseFailureDetail(response)}`,
+      `Conditioning image generation failed: ${failureDetailFromText(
+        response.statusCode,
+        response.body.toString('utf8'),
+      )}`,
     );
   }
 
-  const payload = (await response.json().catch(() => null)) as unknown;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(response.body.toString('utf8')) as unknown;
+  } catch {
+    payload = null;
+  }
   if (!isRecord(payload) || !Array.isArray(payload.data)) {
-    throw new Error('Z-Image-Turbo returned an invalid image response');
+    throw new Error('Conditioning image runtime returned an invalid response');
   }
   const first = payload.data[0];
   if (!isRecord(first) || typeof first.b64_json !== 'string') {
-    throw new Error('Z-Image-Turbo response did not contain base64 image data');
+    throw new Error(
+      'Conditioning image response did not contain base64 image data',
+    );
   }
 
   const decoded = Buffer.from(first.b64_json, 'base64');
   if (decoded.length === 0) {
-    throw new Error('Z-Image-Turbo returned an empty conditioning image');
+    throw new Error('Conditioning image runtime returned an empty image');
   }
   const bytes = Uint8Array.from(decoded);
   return {
@@ -369,7 +498,7 @@ async function generateConditioningImage(
       bytes.byteOffset + bytes.byteLength,
     ) as ArrayBuffer,
     mediaType: 'image/png',
-    filename: 'z-image-conditioning.png',
+    filename: 'native-conditioning.png',
   };
 }
 
@@ -387,40 +516,50 @@ async function generateNativeMeshGlb(
   form.append('resolution', runtime.trellisResolution);
 
   const url = `${llamaSwapUrl()}/upstream/${encodedModelPath(model)}/generate`;
-  nativeCreativeLog('mesh-generate', 'starting TRELLIS.2 generation', {
+  nativeCreativeLog('mesh-generate', 'starting native mesh generation', {
     model,
     resolution: runtime.trellisResolution,
+    timeoutMs: runtime.meshGenerationTimeoutMs,
     via: url,
   });
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: llamaSwapHeaders(),
-    body: form,
-    signal: AbortSignal.timeout(runtime.meshGenerationTimeoutMs),
+  const encoded = await encodeMultipartForm(form);
+  const response = await bufferedHttpRequest({
+    url,
+    headers: {
+      ...llamaSwapHeaders(),
+      'Content-Type': encoded.contentType,
+    },
+    body: encoded.body,
+    timeoutMs: runtime.meshGenerationTimeoutMs,
   });
 
-  if (!response.ok) {
+  if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(
-      `TRELLIS.2 generation failed: ${await responseFailureDetail(response)}`,
+      `Native mesh generation failed: ${failureDetailFromText(
+        response.statusCode,
+        response.body.toString('utf8'),
+      )}`,
     );
   }
 
-  const contentType = response.headers.get('content-type') ?? '';
   if (
-    !contentType.includes('model/gltf-binary') &&
-    !contentType.includes('application/octet-stream')
+    !response.contentType.includes('model/gltf-binary') &&
+    !response.contentType.includes('application/octet-stream')
   ) {
     throw new Error(
-      `TRELLIS.2 returned unexpected content type: ${contentType || 'missing'}`,
+      `Native mesh runtime returned unexpected content type: ${response.contentType || 'missing'}`,
     );
   }
 
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength < 12) {
-    throw new Error('TRELLIS.2 returned an empty or invalid GLB');
+  if (response.body.byteLength < 12) {
+    throw new Error('Native mesh runtime returned an empty or invalid GLB');
   }
-  return bytes;
+  const bytes = Uint8Array.from(response.body);
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
 }
 
 async function persistMeshResult({
@@ -443,7 +582,7 @@ async function persistMeshResult({
       upsert: true,
     });
   if (uploadError) {
-    throw new Error(`Failed to store TRELLIS.2 mesh: ${uploadError.message}`);
+    throw new Error(`Failed to store native Creative mesh: ${uploadError.message}`);
   }
 
   const { error: updateError } = await supabase
@@ -482,6 +621,7 @@ async function markFailure(
       meshId,
       model: NATIVE_CREATIVE_MESH_MODEL_ID,
       stage,
+      errorDetail: errorMessage(error),
     },
   });
   await supabase
@@ -523,10 +663,12 @@ export async function handleNativeCreativeMeshRequest(
 
   let runtime: NativeCreativeRuntime;
   let modelRouting: CreativeRuntimeModelRouting;
+  let activeProfile: LocalCreativeProfile | null;
   try {
     const preferences = await loadUserAiPreferences(userData.user.id);
-    runtime = resolveNativeCreativeRuntime(preferences);
     modelRouting = preferences.modelRouting;
+    activeProfile = getDefaultLocalCreativeProfile(modelRouting);
+    runtime = resolveNativeCreativeRuntime(preferences, activeProfile);
   } catch (error) {
     return localError(
       `Invalid Creative runtime settings: ${errorMessage(error)}`,
@@ -579,15 +721,13 @@ export async function handleNativeCreativeMeshRequest(
   let nativeImageModel: string | null = null;
   let nativeMeshModel: string;
   try {
-    nativeMeshModel = requireCreativeRuntimeModel(
-      modelRouting,
-      'nativeMeshModelId',
-    );
+    nativeMeshModel =
+      activeProfile?.meshModelId?.trim() ||
+      requireCreativeRuntimeModel(modelRouting, 'nativeMeshModelId');
     if (imageIds.length === 0) {
-      nativeImageModel = requireCreativeRuntimeModel(
-        modelRouting,
-        'nativeImageModelId',
-      );
+      nativeImageModel =
+        activeProfile?.imageModelId?.trim() ||
+        requireCreativeRuntimeModel(modelRouting, 'nativeImageModelId');
     }
   } catch (error) {
     return localError(errorMessage(error), 422);
@@ -601,10 +741,11 @@ export async function handleNativeCreativeMeshRequest(
     return localError(errorMessage(error), 503);
   }
 
-  nativeCreativeLog('job-create', 'creating TRELLIS.2 mesh job', {
+  nativeCreativeLog('job-create', 'creating native Creative mesh job', {
     conversationId,
+    profileId: activeProfile?.id ?? null,
     imageCount: imageIds.length,
-    usesZImage: imageIds.length === 0,
+    usesConditioningImage: imageIds.length === 0,
     runtime,
   });
   const { data: meshData, error: meshError } = await supabase
@@ -634,7 +775,7 @@ export async function handleNativeCreativeMeshRequest(
   try {
     let conditioningImage: ImageInput;
     if (imageIds.length > 0) {
-      nativeCreativeLog(stage, 'loading TRELLIS.2 reference image', {
+      nativeCreativeLog(stage, 'loading native Creative reference image', {
         meshId: meshData.id,
         imageId: imageIds[0],
       });
@@ -675,9 +816,10 @@ export async function handleNativeCreativeMeshRequest(
       meshId: meshData.id,
       bytes: glb,
     });
-    nativeCreativeLog(stage, 'TRELLIS.2 generation completed', {
+    nativeCreativeLog(stage, 'native Creative generation completed', {
       meshId: meshData.id,
       conversationId,
+      profileId: activeProfile?.id ?? null,
     });
   } catch (error) {
     await markFailure(
