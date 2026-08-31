@@ -2,38 +2,50 @@
 globs: supabase/**/*
 alwaysApply: false
 ---
-# Deployment Restrictions
-version: 1.0.0
+# Supabase Remote-Change Restrictions
+version: 2.0.0
 
-## Function Deployment
+## Default rule
 
-### NEVER Deploy Functions
-- **NEVER** run `supabase functions deploy` commands
-- **NEVER** run `npx supabase functions deploy` commands
-- **NEVER** attempt to deploy any Supabase Edge Functions
-- **NEVER** suggest or recommend deploying functions
+Brepia's normal development workflow is local-first. Do not mutate remote Supabase projects, deploy remote functions, or apply remote database changes unless the current task explicitly requests that remote operation and the target/scope are unambiguous.
 
-### Local Development Only
-- All function testing should be done locally with `supabase functions serve`
-- Use local Supabase instance for development and testing
-- Function deployment is exclusively the responsibility of the human developer
+Do not assume that production infrastructure is absent; simply treat remote mutation as outside normal local development scope.
 
-### Code Changes Only
-- AI assistant should only:
-  - Modify function code
-  - Update type definitions
-  - Make local code changes
-  - Run type checks
-  - Test locally if needed
+## Normal local workflow
 
-### Deployment Handoff
-- After making function changes, simply inform the user that:
-  - The code changes are complete
-  - Function deployment is required for the changes to take effect
-  - The user needs to deploy manually when ready
+Use the repository-local CLI and the rootless Podman environment described in `AGENTS.md` and `.cursor/rules/database-workflow.mdc`:
 
-## Rationale
-- Production deployments require human oversight
-- Deployment credentials should not be accessed by AI
-- Local testing is sufficient for development workflow
-- Human developer maintains control over when and what gets deployed
+```bash
+npx supabase start
+npx supabase status
+npx supabase db diff -f <migration_name>
+npx supabase migration up
+npx supabase gen types typescript --local > shared/database.ts
+```
+
+`./start.sh` configures the expected local environment automatically for normal application startup.
+
+## Prohibited as routine development commands
+
+Do not run these as part of the normal local workflow:
+
+```bash
+npx supabase db push
+npx supabase db pull
+supabase db push
+supabase db pull
+```
+
+Do not deploy or alter a remote Supabase project merely because local code/schema work is complete.
+
+## If a remote operation is explicitly requested
+
+Before executing it:
+
+1. identify the exact target project/environment;
+2. verify that the requested operation is within the stated task scope;
+3. review pending schema/function changes and relevant local validation evidence;
+4. avoid printing or exposing credentials/secrets;
+5. report exactly what remote mutation was performed.
+
+If the available tooling or credentials cannot safely identify the target, stop the remote operation rather than guessing. Local implementation and validation may still proceed.
