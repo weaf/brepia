@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { ActivityIndicator } from '@/components/brand';
+import { AdminModelsSettings } from '@/components/settings/AdminModelsSettings';
 import {
   createLocalUser,
   deleteAdminUser,
@@ -57,7 +58,7 @@ export function AdminSettingsSection() {
           Administration
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-adam-neutral-200">
-          Manage local accounts and decide how new users may register.
+          Manage local accounts, registration, and stored conversation models.
         </p>
       </div>
 
@@ -65,6 +66,7 @@ export function AdminSettingsSection() {
         <TabsList>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="registration">Registration</TabsTrigger>
+          <TabsTrigger value="models">Models</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-5">
@@ -84,6 +86,10 @@ export function AdminSettingsSection() {
               <ActivityIndicator label="Loading registration settings" />
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="models" className="mt-5">
+          <AdminModelsSettings />
         </TabsContent>
       </Tabs>
     </section>
