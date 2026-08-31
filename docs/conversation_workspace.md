@@ -1,6 +1,6 @@
 # Conversation workspace architecture
 
-pCAD keeps persistent local conversation artifacts under a UUID-owned workspace instead of writing generated files into the repository root.
+Brepia keeps persistent local conversation artifacts under a UUID-owned workspace instead of writing generated files into the repository root.
 
 ## Identity and root
 
@@ -102,7 +102,7 @@ Raw prompts, raw stdout, raw stderr and full model output are not written into t
 
 ## Repository-root invariant
 
-Normal pCAD runtime must not create persistent generated artifacts in the repository root.
+Normal Brepia runtime must not create persistent generated artifacts in the repository root.
 
 Known local/runtime directories are ignored explicitly rather than using broad patterns such as `*.png`, `*.scad` or `*.stl`. This keeps unexpected root artifacts visible during development.
 
@@ -110,7 +110,7 @@ Parametric and Creative controlled-run baseline tests have both been used to ver
 
 ## Local Creative v1 boundary
 
-The verified local Creative v1 path is image/text generation through the selected local mesh backend, persistence to Supabase, display in pCAD and mirroring into `models/generated/`.
+The verified local Creative v1 path is image/text generation through the selected local mesh backend, persistence to Supabase, display in Brepia and mirroring into `models/generated/`.
 
 Follow-up editing of an existing locally generated mesh is currently deferred. The stable local mesh entrypoint rejects `meshId` edit requests rather than silently regenerating a mesh or claiming an edit succeeded.
 
