@@ -1,8 +1,8 @@
-# pCAD Supabase Settings Migration Skill
+# Brepia Supabase Settings Migration Skill
 
 ## Purpose
 
-Guide safe database migrations for pCAD local customization settings, following the project's established patterns.
+Guide safe database migrations for Brepia local customization settings, following the project's established patterns.
 
 ## Project Conventions (from migration audit)
 

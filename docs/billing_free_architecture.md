@@ -1,18 +1,18 @@
-# Billing-free pCAD architecture
+# Billing-free Brepia architecture
 
 ## Purpose
 
-pCAD does not contain an end-user billing system. Payment, subscriptions, credits, token balances, trials, checkout, token packs, and billing-service availability are not part of the application's runtime contract.
+Brepia does not contain an end-user billing system. Payment, subscriptions, credits, token balances, trials, checkout, token packs, and billing-service availability are not part of the application's runtime contract.
 
-External AI/API provider costs are deployment concerns. They may affect how an operator configures providers, but they must not be represented as pCAD credits or used to gate generation.
+External AI/API provider costs are deployment concerns. They may affect how an operator configures providers, but they must not be represented as Brepia credits or used to gate generation.
 
 ## Runtime invariants
 
-- Parametric and Creative generation do not perform a pCAD billing preflight.
+- Parametric and Creative generation do not perform a Brepia billing preflight.
 - Generation does not call a billing consume/refund API.
-- Generation cannot fail because a pCAD credit balance is exhausted or because a billing service is unavailable.
-- HTTP 402 handling is not used for an internal pCAD billing workflow.
-- Conversation/message persistence does not contain pCAD billing-credit metadata such as `billingTokens`.
+- Generation cannot fail because a Brepia credit balance is exhausted or because a billing service is unavailable.
+- HTTP 402 handling is not used for an internal Brepia billing workflow.
+- Conversation/message persistence does not contain Brepia billing-credit metadata such as `billingTokens`.
 - Authentication/session loading does not wait for billing or subscription state.
 - Account deletion does not cancel a subscription and does not send cancellation-feedback data to a billing backend.
 
@@ -24,9 +24,9 @@ The in-app Terms of Service must not describe paid subscriptions unless a billin
 
 ## Configuration
 
-pCAD does not require billing-service environment variables. In particular, `BILLING_SERVICE_URL` and `BILLING_SERVICE_KEY` are not part of the supported environment contract.
+Brepia does not require billing-service environment variables. In particular, `BILLING_SERVICE_URL` and `BILLING_SERVICE_KEY` are not part of the supported environment contract.
 
-AI provider credentials and endpoints remain supported because provider/API charging is independent of pCAD's removed end-user billing system.
+AI provider credentials and endpoints remain supported because provider/API charging is independent of Brepia's removed end-user billing system.
 
 ## Persistence and migration history
 

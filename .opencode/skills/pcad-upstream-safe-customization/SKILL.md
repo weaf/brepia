@@ -1,4 +1,4 @@
-# pCAD Upstream-Safe Customization Skill
+# Brepia Upstream-Safe Customization Skill
 
 ## Purpose
 
@@ -40,7 +40,7 @@ Ensure every local customization task preserves upstream CADAM compatibility and
 When you MUST edit an upstream-heavy file, add a comment block at the top describing the integration seam:
 
 ```typescript
-// pCAD LOCAL CUSTOMIZATION — sync seam
+// BREPIA LOCAL CUSTOMIZATION — sync seam
 // Purpose: [why this upstream file is touched]
 // Task: [PxxX from plan]
 // Alternative considered: [what additive approach was rejected and why]

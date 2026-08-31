@@ -1,4 +1,4 @@
-# pCAD AI Provider Registry Skill
+# Brepia AI Provider Registry Skill
 
 ## Purpose
 

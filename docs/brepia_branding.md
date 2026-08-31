@@ -74,8 +74,8 @@ Start-page prompt copy lives in `src/lib/homePromptCopy.ts`. Keep it product-neu
 
 ## Repository and deployment names
 
-The product is Brepia while the repository remains `weaf/pCAD` for now.
+The canonical repository is `weaf/brepia`.
 
 The canonical application base is `/`. The `/cadam` and `/cadam/...` routes exist only as compatibility redirects.
 
-Repository renaming, `PCAD_*` deprecation, auth/database identifier migration, design-token migration and external integration renames must be handled as explicit compatibility changes rather than cosmetic edits.
+The repository rename does not imply renaming compatibility-sensitive runtime identifiers. `PCAD_*` deprecation, auth/database identifier migration, design-token migration and external integration renames must be handled as explicit compatibility changes rather than cosmetic edits.

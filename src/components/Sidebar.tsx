@@ -352,7 +352,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a
-                    href="https://github.com/weaf/pCAD"
+                    href="https://github.com/weaf/brepia"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -376,7 +376,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
             {/* GitHub Button - Expanded state */}
             {isSidebarOpen && (
               <a
-                href="https://github.com/weaf/pCAD"
+                href="https://github.com/weaf/brepia"
                 target="_blank"
                 rel="noopener noreferrer"
               >
