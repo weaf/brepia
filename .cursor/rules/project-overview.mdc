@@ -3,48 +3,46 @@ description:
 globs: 
 alwaysApply: false
 ---
-# Adam - AI-Powered 3D CAD Model Generation Platform
+# Brepia - 3D Design Platform
 
 ## Project Overview
-Adam is a web application that enables users to generate 3D CAD models through AI-powered natural language, images, and direct manipulation. The platform combines parametric modeling with creative AI generation.
+Brepia is a web application for parametric and Creative 3D design. The platform combines editable OpenSCAD modelling, a browser-based 3D workspace, import/export tooling and optional AI-assisted generation workflows.
 
 ## Tech Stack
 - **Frontend**: React 19 + TypeScript + Vite
 - **UI Framework**: Radix UI + Tailwind CSS + shadcn/ui
 - **3D Graphics**: Three.js + React Three Fiber
-- **Backend**: Supabase (PostgreSQL + Edge Functions)
+- **Backend**: Supabase
 - **Authentication**: Supabase Auth
-- **AI Services**: Anthropic Claude
+- **AI Services**: Local and hosted model providers
 - **State Management**: React Query + Context API
-- **Routing**: React Router v6
+- **Routing**: TanStack Router / React Start
 
 ## Project Structure
 ```
-adam/
-├── src/                    # Frontend source code
+brepia/
+├── src/                    # Frontend and server source code
 │   ├── components/         # Reusable UI components
-│   ├── views/             # Page-level components
-│   ├── contexts/          # React contexts
-│   ├── hooks/             # Custom React hooks
-│   ├── services/          # API service functions
-│   ├── utils/             # Utility functions
-│   ├── types/             # TypeScript type definitions
-│   ├── lib/               # Third-party library configurations
-│   └── worker/            # Web Worker for OpenSCAD processing
-├── supabase/              # Backend configuration
-│   ├── functions/         # Edge functions
-│   ├── migrations/        # Database migrations
-│   ├── schemas/           # Database schemas
-│   └── config.toml        # Supabase configuration
-├── public/                # Static assets
-└── shared/                # Items shared between backend and frontend
+│   ├── views/              # Page-level components
+│   ├── contexts/           # React contexts
+│   ├── hooks/              # Custom React hooks
+│   ├── services/           # API service functions
+│   ├── server/             # Server-side application logic
+│   ├── lib/                # Shared application libraries
+│   └── worker/             # Web Worker/OpenSCAD processing
+├── supabase/               # Backend configuration and database source
+│   ├── migrations/         # Database migrations
+│   ├── schemas/            # Declarative database schemas
+│   └── config.toml         # Supabase configuration
+├── public/                 # Static assets
+└── shared/                 # Items shared between server and client
 ```
 
 ## Development Conventions
 
 ### Code Style
 - Use TypeScript for all new code
-- Follow React 19 patterns and hooks
+- Follow current React patterns and hooks
 - Use functional components with hooks
 - Implement proper error boundaries
 - Use React Query for server state management
@@ -56,16 +54,16 @@ adam/
 - Implement proper loading and error states
 
 ### State Management
-- Use React Context for global state (auth, user data)
+- Use React Context for appropriate global client state
 - Use React Query for server state
 - Use local state for component-specific data
 - Implement proper loading states and error handling
 
 ### API Integration
-- All API calls go through Supabase Edge Functions
-- Use React Query for caching and synchronization
+- Follow the existing TanStack/React Start API route patterns
+- Use React Query for caching and synchronization where appropriate
 - Implement proper error handling and retry logic
-- Use TypeScript interfaces for API responses.
+- Use TypeScript interfaces for API responses
 
 ### 3D Graphics
 - Use Three.js for 3D rendering
@@ -74,20 +72,19 @@ adam/
 - Handle WebGL context loss gracefully
 
 ### Security
-- All sensitive operations go through authenticated Edge Functions
+- Keep sensitive operations server-side
 - Implement proper CORS policies
 - Validate all user inputs
 - Use environment variables for sensitive data
 
 ## Environment Setup
-- Frontend: `.env.local` for Vite environment variables
-- Backend: `supabase/functions/.env` for Edge Function environment variables
-- Use ngrok for local webhook development
+- Frontend/runtime configuration: `.env.local`
+- Local database/runtime lifecycle: repository-local Supabase CLI through `npx supabase`
+- Follow `AGENTS.md` and `docs/local_supabase_lifecycle.md` for the current local workflow
 
 ## Common Patterns
 - Use React Query for data fetching and caching
 - Implement proper loading states with skeleton components
 - Use toast notifications for user feedback
 - Implement proper error boundaries
-- Use React Router for navigation
 - Follow the established component hierarchy
