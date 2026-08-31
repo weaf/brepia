@@ -1,8 +1,8 @@
-# pCAD Settings UI Skill
+# Brepia Settings UI Skill
 
 ## Purpose
 
-Guide implementation of pCAD settings UI components that match the project's visual conventions and accessibility standards.
+Guide implementation of Brepia settings UI components that match the project's visual conventions and accessibility standards.
 
 ## Visual Conventions
 
