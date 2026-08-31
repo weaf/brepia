@@ -35,11 +35,13 @@ import { Route as ApiAiSettingsPreferencesRouteImport } from './routes/api/ai-se
 import { Route as ApiAiSettingsProfilesRouteImport } from './routes/api/ai-settings/profiles';
 import { Route as ApiAiSettingsProvidersRouteImport } from './routes/api/ai-settings/providers';
 import { Route as ApiConversationsDeleteRouteImport } from './routes/api/conversations/delete';
+import { Route as ApiConversationsWorkspaceRouteImport } from './routes/api/conversations/workspace';
 import { Route as ApiExportStepRouteImport } from './routes/api/export.step';
 import { Route as ApiJacksonPollockSplatRouteImport } from './routes/api/jackson-pollock/$';
 import { Route as ApiModelsCatalogRouteImport } from './routes/api/models/catalog';
 import { Route as ApiOpencodeModelsRouteImport } from './routes/api/opencode/models';
 import { Route as ApiScadImportGithubRouteImport } from './routes/api/scad-import.github';
+import { Route as ApiSettingsAdminModelsRouteImport } from './routes/api/settings/adminModels';
 import { Route as ApiSettingsInstanceIdentityRouteImport } from './routes/api/settings/instanceIdentity';
 import { Route as ApiSettingsRuntimeIntegrationsRouteImport } from './routes/api/settings/runtimeIntegrations';
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id';
@@ -181,6 +183,12 @@ const ApiConversationsDeleteRoute = ApiConversationsDeleteRouteImport.update({
   path: '/api/conversations/delete',
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiConversationsWorkspaceRoute =
+  ApiConversationsWorkspaceRouteImport.update({
+    id: '/api/conversations/workspace',
+    path: '/api/conversations/workspace',
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const ApiExportStepRoute = ApiExportStepRouteImport.update({
   id: '/api/export/step',
   path: '/api/export/step',
@@ -204,6 +212,11 @@ const ApiOpencodeModelsRoute = ApiOpencodeModelsRouteImport.update({
 const ApiScadImportGithubRoute = ApiScadImportGithubRouteImport.update({
   id: '/api/scad-import/github',
   path: '/api/scad-import/github',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiSettingsAdminModelsRoute = ApiSettingsAdminModelsRouteImport.update({
+  id: '/api/settings/adminModels',
+  path: '/api/settings/adminModels',
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiSettingsInstanceIdentityRoute =
@@ -296,11 +309,13 @@ export interface FileRoutesByFullPath {
   '/api/ai-settings/profiles': typeof ApiAiSettingsProfilesRouteWithChildren;
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
   '/api/conversations/delete': typeof ApiConversationsDeleteRoute;
+  '/api/conversations/workspace': typeof ApiConversationsWorkspaceRoute;
   '/api/export/step': typeof ApiExportStepRoute;
   '/api/jackson-pollock/$': typeof ApiJacksonPollockSplatRoute;
   '/api/models/catalog': typeof ApiModelsCatalogRouteWithChildren;
   '/api/opencode/models': typeof ApiOpencodeModelsRoute;
   '/api/scad-import/github': typeof ApiScadImportGithubRoute;
+  '/api/settings/adminModels': typeof ApiSettingsAdminModelsRoute;
   '/api/settings/instanceIdentity': typeof ApiSettingsInstanceIdentityRoute;
   '/api/settings/runtimeIntegrations': typeof ApiSettingsRuntimeIntegrationsRoute;
   '/editor/$id': typeof LayoutAuthEditorIdRoute;
@@ -338,11 +353,13 @@ export interface FileRoutesByTo {
   '/api/ai-settings/profiles': typeof ApiAiSettingsProfilesRouteWithChildren;
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
   '/api/conversations/delete': typeof ApiConversationsDeleteRoute;
+  '/api/conversations/workspace': typeof ApiConversationsWorkspaceRoute;
   '/api/export/step': typeof ApiExportStepRoute;
   '/api/jackson-pollock/$': typeof ApiJacksonPollockSplatRoute;
   '/api/models/catalog': typeof ApiModelsCatalogRouteWithChildren;
   '/api/opencode/models': typeof ApiOpencodeModelsRoute;
   '/api/scad-import/github': typeof ApiScadImportGithubRoute;
+  '/api/settings/adminModels': typeof ApiSettingsAdminModelsRoute;
   '/api/settings/instanceIdentity': typeof ApiSettingsInstanceIdentityRoute;
   '/api/settings/runtimeIntegrations': typeof ApiSettingsRuntimeIntegrationsRoute;
   '/editor/$id': typeof LayoutAuthEditorIdRoute;
@@ -383,11 +400,13 @@ export interface FileRoutesById {
   '/api/ai-settings/profiles': typeof ApiAiSettingsProfilesRouteWithChildren;
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
   '/api/conversations/delete': typeof ApiConversationsDeleteRoute;
+  '/api/conversations/workspace': typeof ApiConversationsWorkspaceRoute;
   '/api/export/step': typeof ApiExportStepRoute;
   '/api/jackson-pollock/$': typeof ApiJacksonPollockSplatRoute;
   '/api/models/catalog': typeof ApiModelsCatalogRouteWithChildren;
   '/api/opencode/models': typeof ApiOpencodeModelsRoute;
   '/api/scad-import/github': typeof ApiScadImportGithubRoute;
+  '/api/settings/adminModels': typeof ApiSettingsAdminModelsRoute;
   '/api/settings/instanceIdentity': typeof ApiSettingsInstanceIdentityRoute;
   '/api/settings/runtimeIntegrations': typeof ApiSettingsRuntimeIntegrationsRoute;
   '/_layout/_auth/editor/$id': typeof LayoutAuthEditorIdRoute;
@@ -427,11 +446,13 @@ export interface FileRouteTypes {
     | '/api/ai-settings/profiles'
     | '/api/ai-settings/providers'
     | '/api/conversations/delete'
+    | '/api/conversations/workspace'
     | '/api/export/step'
     | '/api/jackson-pollock/$'
     | '/api/models/catalog'
     | '/api/opencode/models'
     | '/api/scad-import/github'
+    | '/api/settings/adminModels'
     | '/api/settings/instanceIdentity'
     | '/api/settings/runtimeIntegrations'
     | '/editor/$id'
@@ -469,11 +490,13 @@ export interface FileRouteTypes {
     | '/api/ai-settings/profiles'
     | '/api/ai-settings/providers'
     | '/api/conversations/delete'
+    | '/api/conversations/workspace'
     | '/api/export/step'
     | '/api/jackson-pollock/$'
     | '/api/models/catalog'
     | '/api/opencode/models'
     | '/api/scad-import/github'
+    | '/api/settings/adminModels'
     | '/api/settings/instanceIdentity'
     | '/api/settings/runtimeIntegrations'
     | '/editor/$id'
@@ -513,11 +536,13 @@ export interface FileRouteTypes {
     | '/api/ai-settings/profiles'
     | '/api/ai-settings/providers'
     | '/api/conversations/delete'
+    | '/api/conversations/workspace'
     | '/api/export/step'
     | '/api/jackson-pollock/$'
     | '/api/models/catalog'
     | '/api/opencode/models'
     | '/api/scad-import/github'
+    | '/api/settings/adminModels'
     | '/api/settings/instanceIdentity'
     | '/api/settings/runtimeIntegrations'
     | '/_layout/_auth/editor/$id'
@@ -552,11 +577,13 @@ export interface RootRouteChildren {
   ApiAiSettingsProfilesRoute: typeof ApiAiSettingsProfilesRouteWithChildren;
   ApiAiSettingsProvidersRoute: typeof ApiAiSettingsProvidersRouteWithChildren;
   ApiConversationsDeleteRoute: typeof ApiConversationsDeleteRoute;
+  ApiConversationsWorkspaceRoute: typeof ApiConversationsWorkspaceRoute;
   ApiExportStepRoute: typeof ApiExportStepRoute;
   ApiJacksonPollockSplatRoute: typeof ApiJacksonPollockSplatRoute;
   ApiModelsCatalogRoute: typeof ApiModelsCatalogRouteWithChildren;
   ApiOpencodeModelsRoute: typeof ApiOpencodeModelsRoute;
   ApiScadImportGithubRoute: typeof ApiScadImportGithubRoute;
+  ApiSettingsAdminModelsRoute: typeof ApiSettingsAdminModelsRoute;
   ApiSettingsInstanceIdentityRoute: typeof ApiSettingsInstanceIdentityRoute;
   ApiSettingsRuntimeIntegrationsRoute: typeof ApiSettingsRuntimeIntegrationsRoute;
   ApiInternalAccountDeleteRoute: typeof ApiInternalAccountDeleteRoute;
@@ -746,6 +773,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConversationsDeleteRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    '/api/conversations/workspace': {
+      id: '/api/conversations/workspace';
+      path: '/api/conversations/workspace';
+      fullPath: '/api/conversations/workspace';
+      preLoaderRoute: typeof ApiConversationsWorkspaceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     '/api/export/step': {
       id: '/api/export/step';
       path: '/api/export/step';
@@ -779,6 +813,13 @@ declare module '@tanstack/react-router' {
       path: '/api/scad-import/github';
       fullPath: '/api/scad-import/github';
       preLoaderRoute: typeof ApiScadImportGithubRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/settings/adminModels': {
+      id: '/api/settings/adminModels';
+      path: '/api/settings/adminModels';
+      fullPath: '/api/settings/adminModels';
+      preLoaderRoute: typeof ApiSettingsAdminModelsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/api/settings/instanceIdentity': {
@@ -988,11 +1029,13 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAiSettingsProfilesRoute: ApiAiSettingsProfilesRouteWithChildren,
   ApiAiSettingsProvidersRoute: ApiAiSettingsProvidersRouteWithChildren,
   ApiConversationsDeleteRoute: ApiConversationsDeleteRoute,
+  ApiConversationsWorkspaceRoute: ApiConversationsWorkspaceRoute,
   ApiExportStepRoute: ApiExportStepRoute,
   ApiJacksonPollockSplatRoute: ApiJacksonPollockSplatRoute,
   ApiModelsCatalogRoute: ApiModelsCatalogRouteWithChildren,
   ApiOpencodeModelsRoute: ApiOpencodeModelsRoute,
   ApiScadImportGithubRoute: ApiScadImportGithubRoute,
+  ApiSettingsAdminModelsRoute: ApiSettingsAdminModelsRoute,
   ApiSettingsInstanceIdentityRoute: ApiSettingsInstanceIdentityRoute,
   ApiSettingsRuntimeIntegrationsRoute: ApiSettingsRuntimeIntegrationsRoute,
   ApiInternalAccountDeleteRoute: ApiInternalAccountDeleteRoute,
