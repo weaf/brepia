@@ -60,32 +60,74 @@ export function AdminModelsSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<Set<string>>(
+    new Set(),
+  );
   const inventoryQuery = useQuery({
     queryKey: ['admin-model-inventory'],
     queryFn: getAdminModelInventory,
   });
   const deleteMutation = useMutation({
-    mutationFn: deleteAdminModelWorkspace,
-    onSuccess: async (result) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin-model-inventory'] }),
-        queryClient.invalidateQueries({ queryKey: ['conversations'] }),
-      ]);
+    mutationFn: async (conversationIds: string[]) => {
+      const results: Array<Awaited<ReturnType<typeof deleteAdminModelWorkspace>>> =
+        [];
+
+      for (const conversationId of conversationIds) {
+        try {
+          results.push(await deleteAdminModelWorkspace(conversationId));
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown delete error';
+          if (results.length > 0) {
+            throw new Error(
+              `Deleted ${results.length} of ${conversationIds.length} workspaces before the operation stopped: ${message}`,
+            );
+          }
+          throw error;
+        }
+      }
+
+      return results;
+    },
+    onSuccess: (results) => {
+      setSelectedWorkspaceIds(new Set());
+      setSelectionMode(false);
+
+      if (results.length === 1) {
+        const result = results[0];
+        toast({
+          title: result.orphaned
+            ? 'Orphaned workspace deleted'
+            : 'Conversation deleted',
+          description: result.orphaned
+            ? 'The local workspace was removed from disk.'
+            : 'The conversation and its Brepia-managed artifacts were removed.',
+        });
+        return;
+      }
+
+      const orphanedCount = results.filter((result) => result.orphaned).length;
       toast({
-        title: result.orphaned
-          ? 'Orphaned workspace deleted'
-          : 'Conversation deleted',
-        description: result.orphaned
-          ? 'The local workspace was removed from disk.'
-          : 'The conversation and its Brepia-managed artifacts were removed.',
+        title: `${results.length} workspaces deleted`,
+        description:
+          orphanedCount > 0
+            ? `${results.length - orphanedCount} conversations and ${orphanedCount} orphaned workspaces were removed.`
+            : 'The selected conversations and their Brepia-managed artifacts were removed.',
       });
     },
     onError: (error) =>
       toast({
-        title: 'Could not delete workspace',
+        title: 'Could not complete workspace deletion',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       }),
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-model-inventory'] }),
+        queryClient.invalidateQueries({ queryKey: ['conversations'] }),
+      ]);
+    },
   });
   const normalizedSearch = search.trim().toLowerCase();
   const workspaces = useMemo(
@@ -95,6 +137,13 @@ export function AdminModelsSettings() {
       ),
     [inventoryQuery.data?.workspaces, normalizedSearch],
   );
+
+  const selectedCount = selectedWorkspaceIds.size;
+  const allVisibleSelected =
+    workspaces.length > 0 &&
+    workspaces.every((workspace) =>
+      selectedWorkspaceIds.has(workspace.conversationId),
+    );
 
   const copyPath = async (path: string) => {
     try {
@@ -107,6 +156,36 @@ export function AdminModelsSettings() {
         variant: 'destructive',
       });
     }
+  };
+
+  const toggleWorkspaceSelection = (conversationId: string) => {
+    setSelectedWorkspaceIds((current) => {
+      const next = new Set(current);
+      if (next.has(conversationId)) next.delete(conversationId);
+      else next.add(conversationId);
+      return next;
+    });
+  };
+
+  const leaveSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedWorkspaceIds(new Set());
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedWorkspaceIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        for (const workspace of workspaces) {
+          next.delete(workspace.conversationId);
+        }
+      } else {
+        for (const workspace of workspaces) {
+          next.add(workspace.conversationId);
+        }
+      }
+      return next;
+    });
   };
 
   if (inventoryQuery.isLoading) {
@@ -166,19 +245,92 @@ export function AdminModelsSettings() {
           placeholder="Search title, user, UUID, model or path..."
           className="flex-1"
         />
-        <Button
-          variant="dark"
-          disabled={inventoryQuery.isFetching}
-          onClick={() => void inventoryQuery.refetch()}
-        >
-          {inventoryQuery.isFetching ? (
-            <ActivityIndicator label="Refreshing model inventory" size="sm" />
-          ) : (
-            <RefreshCw className="mr-2 h-4 w-4" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="dark"
+            disabled={deleteMutation.isPending}
+            onClick={() =>
+              selectionMode ? leaveSelectionMode() : setSelectionMode(true)
+            }
+          >
+            {selectionMode ? 'Cancel' : 'Select'}
+          </Button>
+          <Button
+            variant="dark"
+            disabled={inventoryQuery.isFetching || deleteMutation.isPending}
+            onClick={() => void inventoryQuery.refetch()}
+          >
+            {inventoryQuery.isFetching ? (
+              <ActivityIndicator label="Refreshing model inventory" size="sm" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {selectionMode && workspaces.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-adam-neutral-700 bg-adam-background-1 px-3 py-2">
+          <span className="text-sm text-adam-neutral-300">
+            {selectedCount} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={deleteMutation.isPending}
+              onClick={toggleSelectAllVisible}
+            >
+              {allVisibleSelected ? 'Deselect all' : 'Select all'}
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={selectedCount === 0 || deleteMutation.isPending}
+                >
+                  {deleteMutation.isPending ? (
+                    <ActivityIndicator
+                      label="Deleting selected workspaces"
+                      size="sm"
+                    />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="border-[2px] border-adam-neutral-700 bg-adam-background-1">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-adam-neutral-100">
+                    Delete selected workspaces?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes {selectedCount}{' '}
+                    {selectedCount === 1 ? 'workspace' : 'workspaces'}. Normal
+                    conversations will also be removed from the database and
+                    Supabase storage. Orphaned entries remove only their local
+                    workspace from disk. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() =>
+                      deleteMutation.mutate([...selectedWorkspaceIds])
+                    }
+                  >
+                    Delete selected
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-3">
         {workspaces.length === 0 ? (
@@ -194,12 +346,16 @@ export function AdminModelsSettings() {
               workspace={workspace}
               onCopyPath={copyPath}
               onDelete={(conversationId) =>
-                deleteMutation.mutate(conversationId)
+                deleteMutation.mutate([conversationId])
               }
               deleting={
                 deleteMutation.isPending &&
-                deleteMutation.variables === workspace.conversationId
+                (deleteMutation.variables?.includes(workspace.conversationId) ??
+                  false)
               }
+              selectionMode={selectionMode}
+              selected={selectedWorkspaceIds.has(workspace.conversationId)}
+              onToggleSelection={toggleWorkspaceSelection}
             />
           ))
         )}
@@ -234,46 +390,68 @@ function WorkspaceCard({
   onCopyPath,
   onDelete,
   deleting,
+  selectionMode,
+  selected,
+  onToggleSelection,
 }: {
   workspace: AdminConversationWorkspace;
   onCopyPath: (path: string) => Promise<void>;
   onDelete: (conversationId: string) => void;
   deleting: boolean;
+  selectionMode: boolean;
+  selected: boolean;
+  onToggleSelection: (conversationId: string) => void;
 }) {
   const title = workspace.title?.trim() || null;
 
   return (
-    <details className="group rounded-lg border border-adam-neutral-800 p-4 open:bg-adam-background-1/30">
+    <details
+      className={`group rounded-lg border p-4 open:bg-adam-background-1/30 ${
+        selected ? 'border-adam-blue' : 'border-adam-neutral-800'
+      }`}
+    >
       <summary className="cursor-pointer list-none">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-sm font-medium text-adam-neutral-50">
-                {title || workspace.conversationId}
-              </span>
-              {workspace.orphaned && (
-                <span className="rounded-full border border-amber-700 bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-                  Orphaned
+        <div className="flex items-start gap-3">
+          {selectionMode && (
+            <input
+              type="checkbox"
+              checked={selected}
+              aria-label={`Select ${title || workspace.conversationId}`}
+              className="mt-1 h-4 w-4 shrink-0 accent-adam-blue"
+              onClick={(event) => event.stopPropagation()}
+              onChange={() => onToggleSelection(workspace.conversationId)}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-medium text-adam-neutral-50">
+                  {title || workspace.conversationId}
                 </span>
-              )}
-            </div>
-            {title && (
-              <div className="mt-1 truncate font-mono text-[11px] text-adam-neutral-400">
-                {workspace.conversationId}
+                {workspace.orphaned && (
+                  <span className="rounded-full border border-amber-700 bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                    Orphaned
+                  </span>
+                )}
               </div>
-            )}
-            <div className="mt-1 text-xs text-adam-neutral-300">
-              {workspace.ownerLabel || 'Unknown owner'}
-              {' · '}
-              {workspace.type || 'unknown type'}
-              {' · '}
-              {workspace.modelCount} models
-              {' · '}
-              {formatBytes(workspace.totalBytes)}
+              {title && (
+                <div className="mt-1 truncate font-mono text-[11px] text-adam-neutral-400">
+                  {workspace.conversationId}
+                </div>
+              )}
+              <div className="mt-1 text-xs text-adam-neutral-300">
+                {workspace.ownerLabel || 'Unknown owner'}
+                {' · '}
+                {workspace.type || 'unknown type'}
+                {' · '}
+                {workspace.modelCount} models
+                {' · '}
+                {formatBytes(workspace.totalBytes)}
+              </div>
             </div>
-          </div>
-          <div className="text-xs text-adam-neutral-400">
-            {workspace.fileCount} files
+            <div className="text-xs text-adam-neutral-400">
+              {workspace.fileCount} files
+            </div>
           </div>
         </div>
       </summary>
@@ -345,43 +523,45 @@ function WorkspaceCard({
           )}
         </div>
 
-        <div className="flex justify-end border-t border-adam-neutral-800 pt-4">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={deleting}>
-                {deleting ? (
-                  <ActivityIndicator label="Deleting workspace" size="sm" />
-                ) : (
-                  <Trash2 className="mr-2 h-4 w-4" />
-                )}
-                Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="border-[2px] border-adam-neutral-700 bg-adam-background-1">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-adam-neutral-100">
-                  {workspace.orphaned
-                    ? 'Delete orphaned workspace?'
-                    : 'Delete conversation and models?'}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {workspace.orphaned
-                    ? `This permanently removes the local workspace ${title || workspace.conversationId} from disk.`
-                    : `This permanently deletes ${title || workspace.conversationId}, its database conversation, storage artifacts, and local workspace.`}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => onDelete(workspace.conversationId)}
-                >
+        {!selectionMode && (
+          <div className="flex justify-end border-t border-adam-neutral-800 pt-4">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={deleting}>
+                  {deleting ? (
+                    <ActivityIndicator label="Deleting workspace" size="sm" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
                   Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="border-[2px] border-adam-neutral-700 bg-adam-background-1">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-adam-neutral-100">
+                    {workspace.orphaned
+                      ? 'Delete orphaned workspace?'
+                      : 'Delete conversation and models?'}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {workspace.orphaned
+                      ? `This permanently removes the local workspace ${title || workspace.conversationId} from disk.`
+                      : `This permanently deletes ${title || workspace.conversationId}, its database conversation, storage artifacts, and local workspace.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => onDelete(workspace.conversationId)}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </div>
     </details>
   );
