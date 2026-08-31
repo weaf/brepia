@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { conversationWorkspaceRoot } from './conversationWorkspace';
@@ -167,7 +168,7 @@ function imageKind(relativePath: string): AdminImageFileKind | null {
 }
 
 async function walkWorkspace(root: string, directory: string): Promise<WalkResult> {
-  let entries;
+  let entries: Dirent[];
   try {
     entries = await readdir(directory, { withFileTypes: true });
   } catch (error) {
@@ -243,7 +244,7 @@ async function loadAllConversations(): Promise<ConversationRow[]> {
 
 export async function listAdminModelInventory(): Promise<AdminModelInventory> {
   const workspaceRoot = conversationWorkspaceRoot();
-  let entries;
+  let entries: Dirent[];
   try {
     entries = await readdir(workspaceRoot, { withFileTypes: true });
   } catch (error) {
