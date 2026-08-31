@@ -47,17 +47,17 @@ function ensureFalConfig() {
 
 export type GptImageQuality = 'low' | 'medium' | 'high';
 
-export type GptImage2Result = {
+export type OpenAiImageResult = {
   imageBytes: Buffer;
   imageCallId: string | null;
-  // MIME of the returned bytes — gpt-image-2 returns jpeg per our tool
+  // MIME of the returned bytes — configured OpenAI image model returns jpeg per our tool
   // config. Callers must use this when persisting to storage so the
   // Content-Type header matches the actual bytes.
   contentType: 'image/jpeg';
 };
 
 /**
- * Generates an image with gpt-image-2 via the OpenAI Responses API.
+ * Generates an image with configured OpenAI image model via the OpenAI Responses API.
  * This is the default image model for mesh mode.
  *
  * Multi-turn: when `priorImageCallId` is provided, the prior
@@ -69,7 +69,7 @@ export type GptImage2Result = {
  * the image_generation tool, and our downstream 3D pipelines don't need
  * alpha (we also set background=opaque). Latency win.
  */
-export const generateImageWithGptImage2 = async (
+export const generateImageWithOpenAiImageTool = async (
   supabaseClient: SupabaseClient,
   openAI: OpenAI,
   userId: string,
@@ -77,25 +77,30 @@ export const generateImageWithGptImage2 = async (
   prompt: string,
   images: string[],
   priorImageCallId: string | null,
+  orchestratorModelId: string,
+  imageModelId: string,
   // 'low' (~$0.006) for fast/draft use, 'high' (~$0.21) for final mesh
   // seeds. 'medium' also available (~$0.053).
   quality: GptImageQuality,
-): Promise<GptImage2Result> => {
+): Promise<OpenAiImageResult> => {
   const resolvedPrompt = await resolveFalImagePrompt(userId, prompt);
-  debugLog('Generating image with gpt-image-2 via Responses API', {
-    userId,
-    conversationId,
-    prompt: resolvedPrompt,
-    imagesCount: images.length,
-    priorImageCallId,
-  });
+  debugLog(
+    'Generating image with configured OpenAI image model via Responses API',
+    {
+      userId,
+      conversationId,
+      prompt: resolvedPrompt,
+      imagesCount: images.length,
+      priorImageCallId,
+    },
+  );
 
   const content: Array<
     | { type: 'input_text'; text: string }
     | { type: 'input_image'; image_url: string; detail: 'auto' }
   > = [{ type: 'input_text', text: resolvedPrompt }];
 
-  // Base64 path is only used when we have no prior gpt-image-2 call to
+  // Base64 path is only used when we have no prior configured OpenAI image model call to
   // reference (e.g. a freshly uploaded user image).
   const shouldEncodeReference = !priorImageCallId && images.length > 0;
 
@@ -146,16 +151,13 @@ export const generateImageWithGptImage2 = async (
 
   input.push({ role: 'user', content });
 
-  // gpt-5.4 is the canonical orchestrator for the Responses API
-  // image_generation tool per OpenAI's docs; gpt-image-2 is the actual
-  // image model invoked via the tool.
   const response = await openAI.responses.create({
-    model: 'gpt-5.4',
+    model: orchestratorModelId,
     input,
     tools: [
       {
         type: 'image_generation',
-        model: 'gpt-image-2',
+        model: imageModelId,
         quality,
         size: '1024x1024',
         output_format: 'jpeg',
@@ -171,10 +173,12 @@ export const generateImageWithGptImage2 = async (
   const latestCall = imageCalls[imageCalls.length - 1];
 
   if (!latestCall?.result) {
-    throw new Error('No generated image data from gpt-image-2');
+    throw new Error(
+      'No generated image data from configured OpenAI image model',
+    );
   }
 
-  debugLog('Successfully generated image with gpt-image-2', {
+  debugLog('Successfully generated image with configured OpenAI image model', {
     imageCallId: latestCall.id,
     status: latestCall.status,
   });
@@ -192,6 +196,8 @@ export const generateImageWithFalFlux = async (
   conversationId: string,
   promptText: string,
   images: string[],
+  textModelId: string,
+  referenceModelId: string,
 ) => {
   ensureFalConfig();
   // Extract all available images for visual context, similar to how OpenAI processes them
@@ -235,7 +241,7 @@ export const generateImageWithFalFlux = async (
   }
 
   if (imageInputs.length > 0) {
-    const result = await fal.run('fal-ai/flux-pro/kontext/max/multi', {
+    const result = await fal.run(referenceModelId, {
       input: {
         prompt: enhancedPrompt,
         image_urls: imageInputs,
@@ -249,7 +255,7 @@ export const generateImageWithFalFlux = async (
     return Buffer.from(imageBytes);
   }
 
-  const result = await fal.run('fal-ai/flux-pro/v1.1', {
+  const result = await fal.run(textModelId, {
     input: {
       prompt: enhancedPrompt,
       safety_tolerance: '6',

@@ -1,11 +1,12 @@
-export const NATIVE_TRELLIS2_MODEL_ID = 'local/trellis2' as const;
+export const NATIVE_CREATIVE_MESH_MODEL_ID = 'local/native' as const;
 
 /**
  * Old local backend IDs are intentionally no longer selectable. They are kept
  * only as read-compatibility aliases for conversations created before the
- * TRELLIS.2 migration.
+ * native Creative backend was decoupled from a concrete upstream model.
  */
 export const LEGACY_LOCAL_CREATIVE_MESH_MODEL_IDS = [
+  'local/trellis2',
   'local/trellis-v1',
   'local/hunyuan3d-2',
   'local/hunyuan3d-2.1',
@@ -18,12 +19,11 @@ export const FAL_CREATIVE_MESH_MODEL_IDS = [
 ] as const;
 
 /**
- * Compile-time known Creative models. TRELLIS.2 is always available; models
- * owned by optional providers are exposed to the UI only when that provider is
- * enabled by the server-side Creative provider registry.
+ * Compile-time Creative product modes. Concrete upstream model IDs are not
+ * stored here; they are selected in AI Settings > Model routing.
  */
 export const CREATIVE_MESH_MODEL_IDS = [
-  NATIVE_TRELLIS2_MODEL_ID,
+  NATIVE_CREATIVE_MESH_MODEL_ID,
   ...FAL_CREATIVE_MESH_MODEL_IDS,
 ] as const;
 
@@ -60,13 +60,13 @@ export type CreativeMeshProviderDefinition = {
   modelIds: readonly CreativeMeshModelId[];
 };
 
-/** TRELLIS.2 is the only built-in Creative mesh backend. */
+/** Built-in local Creative product mode; upstream models come from Settings. */
 export const CORE_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
   {
-    id: NATIVE_TRELLIS2_MODEL_ID,
-    name: 'TRELLIS.2',
+    id: NATIVE_CREATIVE_MESH_MODEL_ID,
+    name: 'Local Creative',
     description:
-      'Local text-to-3D via Z-Image-Turbo or direct image-to-3D; textured PBR GLB',
+      'Local configurable image-to-mesh runtime; concrete image and mesh models are selected in AI Settings',
     provider: 'local',
     providerLabel: 'Local',
     supportsText: true,
@@ -78,15 +78,15 @@ export const CORE_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] =
 ] as const;
 
 /**
- * Models supplied by optional external services. Keeping these definitions
- * separate from the core model makes the provider removable without changing
- * TRELLIS.2 and gives future services an explicit extension point.
+ * Product modes supplied by the optional hosted Creative adapter. The product
+ * mode IDs are stable contracts; the concrete provider model for each mode is
+ * selected in AI Settings > Model routing.
  */
 export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
   {
     id: 'ultra',
     name: 'Max Quality',
-    description: 'fal.ai Meshy high-quality textured generation',
+    description: 'Hosted high-quality textured generation',
     provider: 'fal',
     providerLabel: 'fal.ai',
     supportsText: true,
@@ -99,7 +99,7 @@ export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition
   {
     id: 'quality',
     name: 'Draft',
-    description: 'fal.ai SAM 3D draft generation',
+    description: 'Hosted draft generation',
     provider: 'fal',
     providerLabel: 'fal.ai',
     supportsText: true,
@@ -112,7 +112,7 @@ export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition
   {
     id: 'fast',
     name: 'Textureless',
-    description: 'fal.ai fast textureless generation',
+    description: 'Hosted fast textureless generation',
     provider: 'fal',
     providerLabel: 'fal.ai',
     supportsText: true,
@@ -124,7 +124,7 @@ export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition
   },
 ] as const;
 
-/** All known model definitions, including optional provider models. */
+/** All known Creative product-mode definitions. */
 export const CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
   ...CORE_CREATIVE_MESH_MODELS,
   ...OPTIONAL_CREATIVE_MESH_MODELS,
@@ -135,7 +135,7 @@ export const CREATIVE_MESH_PROVIDERS: readonly CreativeMeshProviderDefinition[] 
     id: 'local',
     label: 'Local',
     optional: false,
-    modelIds: [NATIVE_TRELLIS2_MODEL_ID],
+    modelIds: [NATIVE_CREATIVE_MESH_MODEL_ID],
   },
   {
     id: 'fal',
@@ -169,15 +169,16 @@ export function isLegacyLocalCreativeMeshModelId(
 }
 
 /**
- * Resolve persisted Creative model IDs into the current product catalog.
- * Retired local backends migrate forward to TRELLIS.2 instead of reviving the
- * removed Python gateway.
+ * Resolve persisted Creative product-mode IDs into the current catalog.
+ * Retired local model-specific backend IDs migrate to the neutral native mode.
  */
 export function normalizeCreativeMeshModelId(
   value: unknown,
 ): CreativeMeshModelId | undefined {
   if (isCreativeMeshModelId(value)) return value;
-  if (isLegacyLocalCreativeMeshModelId(value)) return NATIVE_TRELLIS2_MODEL_ID;
+  if (isLegacyLocalCreativeMeshModelId(value)) {
+    return NATIVE_CREATIVE_MESH_MODEL_ID;
+  }
   return undefined;
 }
 
@@ -201,14 +202,14 @@ export function getCreativeMeshInputCapability(
 
 export function isLocalCreativeMeshModel(
   id: string,
-): id is typeof NATIVE_TRELLIS2_MODEL_ID {
-  return id === NATIVE_TRELLIS2_MODEL_ID;
+): id is typeof NATIVE_CREATIVE_MESH_MODEL_ID {
+  return id === NATIVE_CREATIVE_MESH_MODEL_ID;
 }
 
-export function isNativeTrellis2Model(
+export function isNativeCreativeMeshModel(
   id: string,
-): id is typeof NATIVE_TRELLIS2_MODEL_ID {
-  return id === NATIVE_TRELLIS2_MODEL_ID;
+): id is typeof NATIVE_CREATIVE_MESH_MODEL_ID {
+  return id === NATIVE_CREATIVE_MESH_MODEL_ID;
 }
 
 export function isFalCreativeMeshModel(

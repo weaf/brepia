@@ -6,6 +6,7 @@
 import type { User } from '@supabase/supabase-js';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
 import type { AiPreferencesDto } from '@shared/aiSettings';
+import { CreativeRuntimeModelRoutingSchema } from '@shared/modelRouting';
 import {
   AiInstructionProfileIdSchema,
   DEFAULT_INSTRUCTION_PROFILE_ID,
@@ -24,6 +25,7 @@ const DEFAULT_PREFERENCES: Omit<AiPreferencesDto, 'userId'> = {
   defaultCreativeModelId: null,
   visionFastModelId: null,
   visionDeepModelId: null,
+  modelRouting: CreativeRuntimeModelRoutingSchema.parse({}),
 };
 
 type PreferenceRow = {
@@ -38,6 +40,7 @@ type PreferenceRow = {
   default_creative_model_id?: string | null;
   vision_fast_model_id?: string | null;
   vision_deep_model_id?: string | null;
+  model_routing?: unknown;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +58,13 @@ function parseInstructionProfileDefaults(value: unknown) {
 function parseRuntimeOverrides(value: unknown) {
   const parsed = RuntimeOverridesSchema.safeParse(value ?? {});
   return parsed.success ? parsed.data : {};
+}
+
+function parseModelRouting(value: unknown) {
+  const parsed = CreativeRuntimeModelRoutingSchema.safeParse(value ?? {});
+  return parsed.success
+    ? parsed.data
+    : CreativeRuntimeModelRoutingSchema.parse({});
 }
 
 function toDto(row: PreferenceRow): AiPreferencesDto {
@@ -75,6 +85,7 @@ function toDto(row: PreferenceRow): AiPreferencesDto {
     defaultCreativeModelId: row.default_creative_model_id ?? null,
     visionFastModelId: row.vision_fast_model_id ?? null,
     visionDeepModelId: row.vision_deep_model_id ?? null,
+    modelRouting: parseModelRouting(row.model_routing),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -59,7 +59,7 @@ const LOCAL_MODEL_CONFIG: ModelConfig = {
 };
 
 export const MODEL_CONFIGS: Record<CreativeModel, ModelConfig> = {
-  'local/trellis2': { ...LOCAL_MODEL_CONFIG },
+  'local/native': { ...LOCAL_MODEL_CONFIG },
   fast: {
     brightness: MATERIAL_DEFAULTS.BRIGHTNESS_TEXTURELESS,
     roughness: MATERIAL_DEFAULTS.ROUGHNESS,

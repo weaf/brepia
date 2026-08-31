@@ -1,16 +1,13 @@
-export const INTERNAL_CREATIVE_RUNTIME_MODEL_IDS = [
-  'creative/z-image-turbo',
-  'creative/trellis2',
-] as const;
+const INTERNAL_CREATIVE_RUNTIME_MODEL_PREFIX = 'creative/';
 
-export type InternalCreativeRuntimeModelId =
-  (typeof INTERNAL_CREATIVE_RUNTIME_MODEL_IDS)[number];
-
+/**
+ * Internal Creative generation runtimes are identified by namespace rather
+ * than concrete model IDs. The actual runtime model IDs are user-configurable
+ * under AI Settings > Model routing.
+ */
 export function isInternalCreativeRuntimeModelId(modelId: string): boolean {
   const normalized = modelId.startsWith('local/')
     ? modelId.slice('local/'.length)
     : modelId;
-  return INTERNAL_CREATIVE_RUNTIME_MODEL_IDS.includes(
-    normalized as InternalCreativeRuntimeModelId,
-  );
+  return normalized.startsWith(INTERNAL_CREATIVE_RUNTIME_MODEL_PREFIX);
 }

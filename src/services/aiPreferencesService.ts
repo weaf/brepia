@@ -1,4 +1,5 @@
 import type { AiPreferencesDto } from '@shared/aiSettings';
+import type { CreativeRuntimeModelRouting } from '@shared/modelRouting';
 import type { AiInstructionProfileId } from '@shared/aiInstructionCatalog';
 import { apiJson } from '@/services/api';
 
@@ -26,5 +27,14 @@ export async function updateDefaultModelPreferences(
   return (await apiJson('ai-settings/preferences', {
     method: 'PUT',
     body: JSON.stringify(update),
+  })) as AiPreferencesDto;
+}
+
+export async function updateModelRoutingPreferences(
+  update: Partial<CreativeRuntimeModelRouting>,
+): Promise<AiPreferencesDto> {
+  return (await apiJson('ai-settings/preferences', {
+    method: 'PUT',
+    body: JSON.stringify({ modelRouting: update }),
   })) as AiPreferencesDto;
 }

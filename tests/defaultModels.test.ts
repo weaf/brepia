@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FALLBACK_CREATIVE_MODEL_ID,
-  FALLBACK_PARAMETRIC_MODEL_ID,
+  UNCONFIGURED_MODEL_ID,
   resolveCreativeDefaultModel,
   resolveParametricDefaultModel,
 } from '../src/lib/defaultModels';
@@ -10,55 +9,40 @@ describe('default model resolution', () => {
   it('uses a saved selectable Parametric model', () => {
     expect(
       resolveParametricDefaultModel('local/qwen', [
-        { id: FALLBACK_PARAMETRIC_MODEL_ID },
+        { id: 'openrouter/example' },
         { id: 'local/qwen' },
       ]),
     ).toBe('local/qwen');
   });
 
-  it('falls back when the saved Parametric model is unavailable', () => {
+  it('uses the first selectable Parametric model when the saved model is unavailable', () => {
     expect(
       resolveParametricDefaultModel('local/missing', [
-        { id: FALLBACK_PARAMETRIC_MODEL_ID },
+        { id: 'openrouter/example' },
+        { id: 'local/qwen' },
       ]),
-    ).toBe(FALLBACK_PARAMETRIC_MODEL_ID);
+    ).toBe('openrouter/example');
   });
 
-  it('uses the first selectable Parametric model if the built-in fallback is unavailable', () => {
+  it('returns an explicit unconfigured sentinel when no Parametric model exists', () => {
+    expect(resolveParametricDefaultModel(null, [])).toBe(UNCONFIGURED_MODEL_ID);
+  });
+
+  it('uses the first enabled Creative backend instead of a hard-coded fallback', () => {
+    const resolved = resolveCreativeDefaultModel('not-a-creative-model', [
+      { id: 'quality' },
+      { id: 'local/native' },
+    ]);
+    expect(resolved).toBe('quality');
+  });
+
+  it('normalizes retired local Creative IDs then respects the selectable catalog', () => {
     expect(
-      resolveParametricDefaultModel(null, [{ id: 'agent/opencode/example' }]),
-    ).toBe('agent/opencode/example');
+      resolveCreativeDefaultModel('local/trellis-v1', [{ id: 'local/native' }]),
+    ).toBe('local/native');
   });
 
-  it('uses TRELLIS.2 as the Creative fallback', () => {
-    expect(FALLBACK_CREATIVE_MODEL_ID).toBe('local/trellis2');
-    expect(resolveCreativeDefaultModel('local/trellis2')).toBe('local/trellis2');
-    expect(resolveCreativeDefaultModel('not-a-creative-model')).toBe(
-      'local/trellis2',
-    );
-  });
-
-  it('migrates retired local Creative model IDs forward to TRELLIS.2', () => {
-    expect(resolveCreativeDefaultModel('local/trellis-v1')).toBe(
-      'local/trellis2',
-    );
-    expect(resolveCreativeDefaultModel('local/hunyuan3d-2')).toBe(
-      'local/trellis2',
-    );
-    expect(resolveCreativeDefaultModel('local/hunyuan3d-2.1')).toBe(
-      'local/trellis2',
-    );
-  });
-
-  it('falls back from an optional provider when it is not selectable', () => {
-    expect(
-      resolveCreativeDefaultModel('quality', [{ id: 'local/trellis2' }]),
-    ).toBe('local/trellis2');
-    expect(
-      resolveCreativeDefaultModel('quality', [
-        { id: 'local/trellis2' },
-        { id: 'quality' },
-      ]),
-    ).toBe('quality');
+  it('returns an explicit unconfigured sentinel when no Creative backend exists', () => {
+    expect(resolveCreativeDefaultModel(null, [])).toBe(UNCONFIGURED_MODEL_ID);
   });
 });

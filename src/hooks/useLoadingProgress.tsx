@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 type Timing = { expected: number; min: number; max: number };
 
-// Timing configuration. TRELLIS.2 includes first-run model loading, so the
+// Timing configuration. The native Creative backend can include first-run model loading, so the
 // fallback estimate remains deliberately conservative until the native runtime
 // exposes real stage/progress reporting.
 export const TIMING_CONFIG: Record<
@@ -11,13 +11,13 @@ export const TIMING_CONFIG: Record<
   Record<CreativeModel, Timing>
 > = {
   image: {
-    'local/trellis2': { expected: 180000, min: 45000, max: 600000 },
+    'local/native': { expected: 180000, min: 45000, max: 600000 },
     fast: { expected: 35000, min: 15000, max: 45000 },
     quality: { expected: 120000, min: 60000, max: 150000 },
     ultra: { expected: 150000, min: 90000, max: 200000 },
   },
   mesh: {
-    'local/trellis2': { expected: 300000, min: 60000, max: 900000 },
+    'local/native': { expected: 300000, min: 60000, max: 900000 },
     fast: { expected: 75000, min: 60000, max: 90000 },
     quality: { expected: 45000, min: 30000, max: 60000 },
     ultra: { expected: 270000, min: 240000, max: 300000 },
@@ -37,7 +37,7 @@ export function useLoadingProgress(
 
   const actualStartTime = useMemo(() => startTime || Date.now(), [startTime]);
 
-  const modelName = model || 'local/trellis2';
+  const modelName = model || 'local/native';
 
   const timing = TIMING_CONFIG[modelType][modelName];
 

@@ -10,76 +10,77 @@ import {
   isFalCreativeMeshModel,
   isLegacyLocalCreativeMeshModelId,
   isLocalCreativeMeshModel,
-  isNativeTrellis2Model,
+  isNativeCreativeMeshModel,
   normalizeCreativeMeshModelId,
 } from '../shared/creativeMeshModels';
 import { MODEL_CONFIGS } from '../src/constants/meshConstants';
 import { getCreativeInputValidationIssue } from '../src/lib/creativeInputValidation';
 
 describe('Creative mesh backend catalog', () => {
-  it('keeps TRELLIS.2 as the only built-in Creative model', () => {
+  it('keeps a model-neutral local backend as the only built-in Creative mode', () => {
     assert.deepEqual(
       CORE_CREATIVE_MESH_MODELS.map((model) => model.id),
-      ['local/trellis2'],
+      ['local/native'],
     );
-    assert.equal(isLocalCreativeMeshModel('local/trellis2'), true);
-    assert.equal(isNativeTrellis2Model('local/trellis2'), true);
+    assert.equal(isLocalCreativeMeshModel('local/native'), true);
+    assert.equal(isNativeCreativeMeshModel('local/native'), true);
   });
 
-  it('keeps fal.ai models as optional provider models', () => {
-    assert.deepEqual([...FAL_CREATIVE_MESH_MODEL_IDS], [
-      'ultra',
-      'quality',
-      'fast',
-    ]);
+  it('keeps hosted product modes behind the optional provider', () => {
+    assert.deepEqual(
+      [...FAL_CREATIVE_MESH_MODEL_IDS],
+      ['ultra', 'quality', 'fast'],
+    );
     for (const id of FAL_CREATIVE_MESH_MODEL_IDS) {
       assert.equal(isFalCreativeMeshModel(id), true, id);
       assert.equal(getCreativeMeshModelDefinition(id)?.provider, 'fal', id);
     }
   });
 
-  it('does not expose retired local backends as selectable model IDs', () => {
-    assert.deepEqual([...CREATIVE_MESH_MODEL_IDS], [
-      'local/trellis2',
-      'ultra',
-      'quality',
-      'fast',
-    ]);
+  it('normalizes model-specific legacy local IDs to the neutral native mode', () => {
+    assert.deepEqual(
+      [...CREATIVE_MESH_MODEL_IDS],
+      ['local/native', 'ultra', 'quality', 'fast'],
+    );
 
     for (const id of [
+      'local/trellis2',
       'local/trellis-v1',
       'local/hunyuan3d-2',
       'local/hunyuan3d-2.1',
     ]) {
       assert.equal(isCreativeMeshModelId(id), false, id);
       assert.equal(isLegacyLocalCreativeMeshModelId(id), true, id);
-      assert.equal(normalizeCreativeMeshModelId(id), 'local/trellis2', id);
+      assert.equal(normalizeCreativeMeshModelId(id), 'local/native', id);
     }
   });
 
-  it('marks TRELLIS.2 as text/image-capable with one reference image', () => {
-    const definition = getCreativeMeshModelDefinition('local/trellis2');
+  it('marks the native backend as text/image-capable with one reference image', () => {
+    const definition = getCreativeMeshModelDefinition('local/native');
     assert.equal(definition?.supportsText, true);
     assert.equal(definition?.supportsImage, true);
     assert.equal(definition?.maxReferenceImages, 1);
-    assert.equal(getCreativeMeshInputCapability('local/trellis2'), 'Text + image');
+    assert.equal(
+      getCreativeMeshInputCapability('local/native'),
+      'Text + image',
+    );
   });
 
-  it('allows text-only TRELLIS.2 input', () => {
+  it('allows text-only native Creative input', () => {
     assert.equal(
       getCreativeInputValidationIssue({
         conversationType: 'creative',
-        model: 'local/trellis2',
+        model: 'local/native',
         parts: [{ type: 'text', text: 'Make a small dragon' }],
       }),
       null,
     );
   });
 
-  it('rejects multiple TRELLIS.2 reference images before generation', () => {
+  it('rejects multiple native Creative reference images before generation', () => {
     const issue = getCreativeInputValidationIssue({
       conversationType: 'creative',
-      model: 'local/trellis2',
+      model: 'local/native',
       parts: [
         {
           type: 'file',
@@ -98,12 +99,12 @@ describe('Creative mesh backend catalog', () => {
     assert.equal(issue?.title, 'Too many reference images');
   });
 
-  it('has UI mesh configuration for every active model definition', () => {
+  it('has UI mesh configuration for every active product mode', () => {
     for (const id of CREATIVE_MESH_MODEL_IDS) {
       assert.ok(MODEL_CONFIGS[id], id);
     }
     assert.equal(
-      Object.prototype.hasOwnProperty.call(MODEL_CONFIGS, 'local/trellis-v1'),
+      Object.prototype.hasOwnProperty.call(MODEL_CONFIGS, 'local/trellis2'),
       false,
     );
   });
