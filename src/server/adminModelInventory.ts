@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { conversationWorkspaceRoot } from './conversationWorkspace';
 import { getServiceRoleSupabaseClient } from './supabaseClient';
@@ -75,6 +75,13 @@ type AccountRow = {
   contact_email: string | null;
 };
 
+type WorkspaceManifest = {
+  title: string | null;
+  type: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 type WalkResult = {
   totalBytes: number;
   fileCount: number;
@@ -83,6 +90,41 @@ type WalkResult = {
 
 function normalizePathSeparators(value: string): string {
   return value.split('\\').join('/');
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+async function readWorkspaceManifest(
+  workspacePath: string,
+): Promise<WorkspaceManifest | null> {
+  try {
+    const raw = JSON.parse(
+      await readFile(join(workspacePath, 'conversation.json'), 'utf8'),
+    ) as unknown;
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      return null;
+    }
+    const record = raw as Record<string, unknown>;
+    return {
+      title: stringOrNull(record.title),
+      type: stringOrNull(record.type),
+      createdAt: stringOrNull(record.createdAt),
+      updatedAt: stringOrNull(record.updatedAt),
+    };
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return null;
+    }
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
 }
 
 function modelKind(relativePath: string): AdminModelFileKind | null {
@@ -223,7 +265,10 @@ export async function listAdminModelInventory(): Promise<AdminModelInventory> {
   const workspaces: AdminConversationWorkspace[] = [];
   for (const conversationId of conversationIds) {
     const workspacePath = join(workspaceRoot, conversationId);
-    const disk = await walkWorkspace(workspacePath, workspacePath);
+    const [disk, manifest] = await Promise.all([
+      walkWorkspace(workspacePath, workspacePath),
+      readWorkspaceManifest(workspacePath),
+    ]);
     const row = conversationById.get(conversationId) ?? null;
     const profile = row ? profileByUser.get(row.user_id) : null;
     const account = row ? accountByUser.get(row.user_id) : null;
@@ -236,12 +281,12 @@ export async function listAdminModelInventory(): Promise<AdminModelInventory> {
 
     workspaces.push({
       conversationId,
-      title: row?.title ?? null,
-      type: row?.type ?? null,
+      title: row?.title || manifest?.title || null,
+      type: row?.type || manifest?.type || null,
       userId: row?.user_id ?? null,
       ownerLabel,
-      createdAt: row?.created_at ?? null,
-      updatedAt: row?.updated_at ?? null,
+      createdAt: row?.created_at || manifest?.createdAt || null,
+      updatedAt: row?.updated_at || manifest?.updatedAt || null,
       workspacePath,
       totalBytes: disk.totalBytes,
       fileCount: disk.fileCount,
