@@ -35,6 +35,11 @@ export const AdminModelInventorySchema = z.object({
   workspaces: z.array(AdminConversationWorkspaceSchema),
 });
 
+const AdminWorkspaceDeleteResultSchema = z.object({
+  success: z.literal(true),
+  orphaned: z.boolean(),
+});
+
 export type AdminModelFile = z.infer<typeof AdminModelFileSchema>;
 export type AdminConversationWorkspace = z.infer<
   typeof AdminConversationWorkspaceSchema
@@ -46,5 +51,16 @@ export function getAdminModelInventory() {
     'settings/adminModels',
     { method: 'GET' },
     AdminModelInventorySchema,
+  );
+}
+
+export function deleteAdminModelWorkspace(conversationId: string) {
+  return apiJson(
+    'settings/adminModels',
+    {
+      method: 'POST',
+      body: JSON.stringify({ conversationId }),
+    },
+    AdminWorkspaceDeleteResultSchema,
   );
 }
