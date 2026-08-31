@@ -1,0 +1,71 @@
+name: Verify local seed bootstrap
+
+on:
+  push:
+    branches:
+      - fix/local-seed-first-admin-bootstrap
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start fresh local Supabase with seed
+        run: npx supabase start
+
+      - name: Verify seeded first admin
+        run: |
+          test "$(docker exec supabase_db_brepia psql -U postgres -d postgres -Atc "SELECT a.role || ':' || a.status FROM public.user_accounts a JOIN auth.users u ON u.id = a.user_id WHERE u.email = 'test@brepia.invalid';")" = "admin:active"
+          test "$(docker exec supabase_db_brepia psql -U postgres -d postgres -Atc "SELECT raw_app_meta_data->>'pcad_bootstrap' FROM auth.users WHERE email = 'test@brepia.invalid';")" = "true"
+
+      - name: Confirm migrations are current
+        run: npx supabase migration up
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint -- --max-warnings 0
+
+      - name: Build
+        run: npm run build
+
+      - name: Keep generated route tree out of this fix
+        run: git checkout -- src/routeTree.gen.ts
+
+      - name: Remove temporary workflow
+        run: rm .github/workflows/verify-local-seed-bootstrap.yml
+
+      - name: Diff check
+        run: git diff --check
+
+      - name: Commit workflow cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/verify-local-seed-bootstrap.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Remove temporary fresh bootstrap verification"
+          git push
