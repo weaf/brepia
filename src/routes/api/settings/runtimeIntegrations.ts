@@ -34,7 +34,7 @@ export const Route = createFileRoute('/api/settings/runtimeIntegrations')({
               ? discoverLocalModels(user.id).catch(() => [])
               : Promise.resolve([]),
             includeCreativeModels
-              ? discoverCreativeRuntimeModels().catch(() => [])
+              ? discoverCreativeRuntimeModels()
               : Promise.resolve([]),
           ]);
 
@@ -77,14 +77,21 @@ export const Route = createFileRoute('/api/settings/runtimeIntegrations')({
               body[key] !== null &&
               (!Number.isInteger(body[key]) || body[key] <= 0)
             ) {
-              return json({ error: `${key} must be a positive integer or null` }, 400);
+              return json(
+                { error: `${key} must be a positive integer or null` },
+                400,
+              );
             }
           }
           if (
             body.displayName !== undefined &&
-            (typeof body.displayName !== 'string' || body.displayName.length > 200)
+            (typeof body.displayName !== 'string' ||
+              body.displayName.length > 200)
           ) {
-            return json({ error: 'displayName must be a string up to 200 characters' }, 400);
+            return json(
+              { error: 'displayName must be a string up to 200 characters' },
+              400,
+            );
           }
 
           return json(
