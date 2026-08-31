@@ -3,6 +3,12 @@ import type {
   MeshContextData,
   MeshPreferencesData,
 } from './chatAi.ts';
+import {
+  getOpenScadEntrypoint,
+  normalizeOpenScadProject,
+  replaceOpenScadProjectFileContent,
+  type OpenScadProject,
+} from './openScadProject.ts';
 import type { ParametricArtifact } from './types.ts';
 
 /**
@@ -146,6 +152,27 @@ export function hasPendingBuildParametricModel(parts: unknown): boolean {
   return part?.state === 'input-streaming' || part?.state === 'input-available';
 }
 
+export function getParametricArtifactEntrypointCode(
+  artifact: ParametricArtifact,
+): string {
+  return getOpenScadEntrypoint(artifact.project).content;
+}
+
+export function replaceParametricArtifactEntrypointCode(
+  artifact: ParametricArtifact,
+  code: string,
+): ParametricArtifact {
+  const project = normalizeOpenScadProject(artifact.project);
+  return {
+    ...artifact,
+    project: replaceOpenScadProjectFileContent(
+      project,
+      project.entrypointPath,
+      code,
+    ),
+  };
+}
+
 export function replaceBuildParametricModelOutput(
   parts: unknown,
   artifact: ParametricArtifact,
@@ -182,10 +209,18 @@ export function isParametricArtifact(
     return false;
   }
   const artifact = value as Partial<ParametricArtifact>;
-  // Title + code are the only load-bearing fields. `version` is metadata
-  // and `parts` is optional. Parameters are derived client-side from
-  // `code` via `parseParameters` so we don't check for them here either.
-  return (
-    typeof artifact.title === 'string' && typeof artifact.code === 'string'
-  );
+  if (
+    typeof artifact.title !== 'string' ||
+    typeof artifact.version !== 'string' ||
+    !artifact.project
+  ) {
+    return false;
+  }
+
+  try {
+    normalizeOpenScadProject(artifact.project as OpenScadProject);
+    return true;
+  } catch {
+    return false;
+  }
 }
