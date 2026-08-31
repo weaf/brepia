@@ -26,7 +26,7 @@ const COMMON_AI_SETTINGS_SECTIONS = [
 
 const ADVANCED_AI_SETTINGS_SECTIONS = [
   { value: 'model-catalog', label: 'Model catalog' },
-  { value: 'model-routing', label: 'Model routing' },
+  { value: 'creative-models', label: 'Creative models' },
   { value: 'local-models', label: 'Local Models' },
   { value: 'prompts', label: 'Prompts' },
   { value: 'runtime', label: 'Runtime' },
@@ -49,7 +49,8 @@ export function AiSettingsSection() {
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-adam-neutral-300">
           Start with your default models and AI profile. Advanced sections
-          control model visibility, runtimes, providers, prompts and vision.
+          control model visibility, Creative runtimes, providers, prompts and
+          vision.
         </p>
       </div>
 
@@ -149,7 +150,7 @@ export function AiSettingsSection() {
             <TabsContent value="model-catalog" className="mt-0 min-w-0">
               <AiModelsSettings />
             </TabsContent>
-            <TabsContent value="model-routing" className="mt-0 min-w-0">
+            <TabsContent value="creative-models" className="mt-0 min-w-0">
               <CreativeRuntimeModelSettings />
             </TabsContent>
             <TabsContent value="local-models" className="mt-0 min-w-0">
