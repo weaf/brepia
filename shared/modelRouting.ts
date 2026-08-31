@@ -128,14 +128,12 @@ export function getUsableLocalCreativeProfiles(
 export function getDefaultLocalCreativeProfile(
   routing: CreativeRuntimeModelRouting,
 ): LocalCreativeProfile | null {
-  const usable = getUsableLocalCreativeProfiles(routing);
-  if (routing.defaultLocalCreativeProfileId) {
-    const selected = usable.find(
+  if (!routing.defaultLocalCreativeProfileId) return null;
+  return (
+    getUsableLocalCreativeProfiles(routing).find(
       (profile) => profile.id === routing.defaultLocalCreativeProfileId,
-    );
-    if (selected) return selected;
-  }
-  return usable[0] ?? null;
+    ) ?? null
+  );
 }
 
 export function requireCreativeRuntimeModel(
