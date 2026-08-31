@@ -1,90 +1,81 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: false
 ---
 # Brepia - 3D Design Platform
 
 ## Project Overview
+
 Brepia is a web application for parametric and Creative 3D design. The platform combines editable OpenSCAD modelling, a browser-based 3D workspace, import/export tooling and optional AI-assisted generation workflows.
 
 ## Tech Stack
-- **Frontend**: React 19 + TypeScript + Vite
+
+- **Application**: React 19 + TypeScript + Vite
+- **Routing / server runtime**: TanStack Router + React Start + Nitro
 - **UI Framework**: Radix UI + Tailwind CSS + shadcn/ui
 - **3D Graphics**: Three.js + React Three Fiber
-- **Backend**: Supabase
-- **Authentication**: Supabase Auth
-- **AI Services**: Local and hosted model providers
+- **Data / auth / storage**: Supabase
+- **AI Services**: Local and hosted model providers, including OpenCode/CLI-agent integrations
 - **State Management**: React Query + Context API
-- **Routing**: TanStack Router / React Start
 
 ## Project Structure
-```
+
+```text
 brepia/
-├── src/                    # Frontend and server source code
+├── src/
 │   ├── components/         # Reusable UI components
-│   ├── views/              # Page-level components
+│   ├── views/              # Page-oriented UI implementations
+│   ├── routes/             # TanStack application and server API routes
+│   ├── server/             # Reusable server-side application logic
 │   ├── contexts/           # React contexts
 │   ├── hooks/              # Custom React hooks
-│   ├── services/           # API service functions
-│   ├── server/             # Server-side application logic
+│   ├── services/           # Client-side service functions
 │   ├── lib/                # Shared application libraries
 │   └── worker/             # Web Worker/OpenSCAD processing
-├── supabase/               # Backend configuration and database source
-│   ├── migrations/         # Database migrations
-│   ├── schemas/            # Declarative database schemas
-│   └── config.toml         # Supabase configuration
+├── supabase/
+│   ├── migrations/         # Generated/reviewed migration history
+│   ├── schemas/            # Declarative database schema source
+│   └── config.toml         # Local Supabase configuration
 ├── public/                 # Static assets
-└── shared/                 # Items shared between server and client
+├── shared/                 # Types/catalogs shared across boundaries
+└── scripts/                # Local runtime, export and maintenance tooling
 ```
 
 ## Development Conventions
 
-### Code Style
-- Use TypeScript for all new code
-- Follow current React patterns and hooks
-- Use functional components with hooks
-- Implement proper error boundaries
-- Use React Query for server state management
+### Routing and API
 
-### Component Structure
-- Components in `src/components/` are reusable
-- Views in `src/views/` are page-level components
-- Use proper TypeScript interfaces for props
-- Implement proper loading and error states
+- Use TanStack file routes under `src/routes/`; do not introduce React Router.
+- API endpoints live under `src/routes/api/` and delegate reusable logic to `src/server/`.
+- `src/routeTree.gen.ts` is generated; never edit it manually.
 
-### State Management
-- Use React Context for appropriate global client state
-- Use React Query for server state
-- Use local state for component-specific data
-- Implement proper loading states and error handling
+### UI and state
 
-### API Integration
-- Follow the existing TanStack/React Start API route patterns
-- Use React Query for caching and synchronization where appropriate
-- Implement proper error handling and retry logic
-- Use TypeScript interfaces for API responses
+- Components in `src/components/` are reusable and organized by feature/domain.
+- Views in `src/views/` contain page-oriented UI implementations.
+- Use React Query for server state and cache invalidation.
+- Use React Context for appropriate shared client state and local state for component-local concerns.
+- Preserve responsive behavior and accessibility when modifying existing UI.
 
-### 3D Graphics
-- Use Three.js for 3D rendering
-- Implement proper cleanup for Three.js resources
-- Use React Three Fiber for React integration
-- Handle WebGL context loss gracefully
+### Data and security
 
-### Security
-- Keep sensitive operations server-side
-- Implement proper CORS policies
-- Validate all user inputs
-- Use environment variables for sensitive data
+- Supabase owns PostgreSQL, authentication and storage concerns.
+- Use shared server auth/authorization helpers for Brepia API routes.
+- Keep secrets and service-role access server-side.
+- Follow the declarative schema workflow in `.cursor/rules/database-workflow.mdc`.
+- Brepia has no end-user billing/credits/subscription runtime.
 
-## Environment Setup
-- Frontend/runtime configuration: `.env.local`
-- Local database/runtime lifecycle: repository-local Supabase CLI through `npx supabase`
-- Follow `AGENTS.md` and `docs/local_supabase_lifecycle.md` for the current local workflow
+### 3D and generation
 
-## Common Patterns
-- Use React Query for data fetching and caching
-- Implement proper loading states with skeleton components
-- Use toast notifications for user feedback
-- Implement proper error boundaries
-- Follow the established component hierarchy
+- Three.js / React Three Fiber power browser rendering.
+- OpenSCAD compilation uses the existing worker/WASM integration.
+- Parametric and Creative workflows have separate behavior and persistence paths; do not alter one incidentally while changing the other.
+- Stable-runtime/recovery behavior is an architectural constraint, not cosmetic implementation detail.
+
+## Environment and validation
+
+- Runtime/development configuration uses `.env.local` and existing environment helpers.
+- `./start.sh` is the canonical local launcher.
+- Local Supabase uses the repository CLI through `npx supabase` and rootless Podman.
+- Follow `AGENTS.md` for current documentation precedence, compatibility boundaries and validation gates.
