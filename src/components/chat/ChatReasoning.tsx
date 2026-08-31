@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Streamdown } from 'streamdown';
 import { cjk } from '@streamdown/cjk';
-import { code } from '@streamdown/code';
 import { math } from '@streamdown/math';
 import { mermaid } from '@streamdown/mermaid';
+import { code } from '@/lib/streamdownCodePlugin';
 import {
   Reasoning,
   ReasoningTrigger,

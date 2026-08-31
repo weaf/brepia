@@ -18,7 +18,16 @@ export default tseslint.config(
       'react-refresh': reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // Keep the pre-ESLint-10 recommended policy for this cleanup. These
+      // rules were newly added to eslint:recommended in v10 and adopting them
+      // would require unrelated control-flow/error-chain refactors.
+      'no-unassigned-vars': 'off',
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'off',
+      // Core Hooks correctness rules. React Compiler diagnostics are adopted
+      // separately when/if the project enables that compiler workflow.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
@@ -35,6 +44,19 @@ export default tseslint.config(
           ignoreRestSiblings: true,
         },
       ],
+    },
+  },
+  {
+    // These modules intentionally co-locate components with shared variant,
+    // context, or hook exports. Splitting their public API solely for HMR lint
+    // would be unrelated to the warning-cleanup scope.
+    files: [
+      'src/components/ui/**/*.{ts,tsx}',
+      'src/components/ai-elements/reasoning.tsx',
+      'src/contexts/**/*.{ts,tsx}',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 );

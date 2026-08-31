@@ -16,6 +16,24 @@ import assert from 'node:assert/strict';
 import { describe, it, vi } from 'vitest';
 import { filterSelectableCatalog } from '../src/server/modelCatalog';
 
+vi.mock('../src/server/supabaseClient', () => ({
+  getServiceRoleSupabaseClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
+      }),
+    }),
+  }),
+}));
+
+vi.mock('../src/server/opencode', () => ({
+  opencodeModels: vi.fn(async () => []),
+}));
+
 // ===========================================================================
 // Authenticated request helper / route behavior
 // ===========================================================================
@@ -227,8 +245,6 @@ describe('B8 — provider connection-test contract', async () => {
       new URL(`../${testRoutePath}`, import.meta.url),
       'utf-8',
     );
-    // The route handles credential values but must never log them
-    // — no console.log / log methods should appear with credential data
     assert.ok(
       !code.includes('console.log') &&
         !code.includes('logger.log') &&
@@ -252,7 +268,6 @@ describe('B8 — provider connection-test contract', async () => {
 
 // ===========================================================================
 // Custom provider runtime resolution
-// (full coverage in customProviders.test.ts — B8 verifies export + existence)
 // ===========================================================================
 
 describe('B8 — custom provider runtime resolution', async () => {
@@ -350,20 +365,6 @@ describe('B8 — prompt profile detail/Edit behavior', async () => {
   });
 
   it('resolveConversationSystemPrompt throws for unknown profileId (no silent fallback)', async () => {
-    vi.mock('../src/server/supabaseClient', () => ({
-      getServiceRoleSupabaseClient: () => ({
-        from: () => ({
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                maybeSingle: () => Promise.resolve({ data: null, error: null }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    }));
-
     const { resolveConversationSystemPrompt } = await import(
       '../src/server/promptProfiles'
     );

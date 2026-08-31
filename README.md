@@ -58,7 +58,7 @@ The Supabase CLI is installed as a project dev dependency, so local commands sho
 ```bash
 git clone https://github.com/weaf/pCAD.git
 cd pCAD
-npm install
+npm ci
 cp .env.local.template .env.local
 ```
 
@@ -70,7 +70,7 @@ Start Brepia:
 ./start.sh
 ```
 
-On the current rootless-Podman development setup, `start.sh` enables the Podman socket, configures the compatibility shim and starts the local Supabase `cadam` stack with the repository-local CLI if it is not already running.
+On the current rootless-Podman development setup, `start.sh` enables the Podman socket, configures the compatibility shim and starts the local Brepia Supabase stack with the repository-local CLI if it is not already running.
 
 For explicit local Supabase lifecycle work, configure the same Podman environment and use:
 
@@ -121,7 +121,10 @@ Then configure `PCAD_STEP_EXPORT_RUNNER` in `.env.local`. Additional settings ar
 
 ## Development
 
+Use the same gate locally as the repository quality workflow:
+
 ```bash
+npm ci
 npm test
 npm run typecheck
 npm run lint

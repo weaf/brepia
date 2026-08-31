@@ -82,7 +82,10 @@ export function CreativePromptProfilesSettings() {
     staleTime: 0,
   });
 
-  const profiles = profilesQuery.data ?? [];
+  const profiles = useMemo(
+    () => profilesQuery.data ?? [],
+    [profilesQuery.data],
+  );
   const selected = selectedQuery.data ?? null;
   const builtin = builtinQuery.data ?? null;
   const defaultId =

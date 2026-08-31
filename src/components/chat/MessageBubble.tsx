@@ -199,7 +199,7 @@ function UserBubble({
           typeof p.mediaType === 'string' &&
           p.mediaType.startsWith('image/'),
       ),
-    [message.parts],
+    [message],
   );
   const meshContextParts = useMemo(
     () =>
@@ -211,7 +211,7 @@ function UserBubble({
           { type: 'data-mesh-context' }
         > => p.type === 'data-mesh-context',
       ),
-    [message.parts],
+    [message],
   );
   const meshPreferencesParts = useMemo(
     () =>
@@ -223,7 +223,7 @@ function UserBubble({
           { type: 'data-mesh-preferences' }
         > => p.type === 'data-mesh-preferences',
       ),
-    [message.parts],
+    [message],
   );
 
   const branchIndex = message.siblings.findIndex((b) => b.id === message.id);
@@ -492,7 +492,7 @@ function AssistantBubble({
             .map((p) => cleanAssistantText(p.text))
             .filter((visibleText) => !!visibleText)
             .join(''),
-    [conversation.type, message.parts, lastParametricBuildIndex],
+    [conversation.type, lastParametricBuildIndex, message],
   );
   const answerText = useMemo(
     () => message.parts.map(answerUserMessageText).filter(Boolean).join(''),

@@ -1,6 +1,5 @@
 import { Buffer } from 'node:buffer';
 import type { SupabaseClient } from './supabaseClient';
-import { GoogleGenAI, Modality } from '@google/genai';
 import { fal } from '@fal-ai/client';
 import OpenAI from 'openai';
 import { reformatSignedUrl } from './messageUtils';
@@ -45,91 +44,6 @@ function ensureFalConfig() {
   fal.config({ credentials: requiredEnv('FAL_KEY') });
   falConfigured = true;
 }
-
-/* DEPRECATED: Gemini 2.0 Flash discontinued March 2026
-   Keeping for potential rollback. Remove after migration confirmed stable.
-export const generateImageWithGemini = async (
-  supabaseClient: SupabaseClient,
-  googleGenAI: GoogleGenAI,
-  userId: string,
-  conversationId: string,
-  prompt: string,
-  images: string[],
-) => {
-  let generatedImageData;
-  if (images.length > 0) {
-    const { data: imageData } = await supabaseClient.storage
-      .from('images')
-      .download(`${userId}/${conversationId}/${images[0]}`);
-
-    if (!imageData) {
-      throw new Error('Failed to download image');
-    }
-    // Convert imageData to base64 for use with Gemini
-    const imageBytes = await imageData.arrayBuffer();
-    const base64Image = Buffer.from(imageBytes).toString('base64');
-
-    const contents = [
-      { text: prompt ? prompt : 'Generate an image similar to this' },
-      {
-        inlineData: {
-          mimeType: 'image/png',
-          data: base64Image,
-        },
-      },
-    ];
-
-    const result = await googleGenAI.models.generateContent({
-      contents: contents,
-      model: 'gemini-2.0-flash-preview-image-generation',
-      config: {
-        responseModalities: [Modality.TEXT, Modality.IMAGE],
-      },
-    });
-
-    if (
-      !result.candidates ||
-      !result.candidates[0] ||
-      !result.candidates[0].content ||
-      !result.candidates[0].content.parts
-    ) {
-      throw new Error('No result from Gemini');
-    }
-
-    for (const part of result.candidates[0].content.parts) {
-      // Based on the part type, either show the text or save the image
-      if (part.inlineData) {
-        generatedImageData = part.inlineData.data;
-      }
-    }
-  } else {
-    const result = await googleGenAI.models.generateImages({
-      prompt: prompt,
-      model: 'imagen-3.0-generate-002',
-      config: {
-        numberOfImages: 1,
-        aspectRatio: '1:1',
-        personGeneration: PersonGeneration.ALLOW_ADULT,
-      },
-    });
-
-    if (!result.generatedImages || result.generatedImages.length === 0) {
-      throw new Error('No generated images from Gemini');
-    }
-
-    for (const generatedImage of result.generatedImages) {
-      generatedImageData = generatedImage.image?.imageBytes;
-    }
-  }
-
-  if (!generatedImageData) {
-    throw new Error('No generated image data from Gemini');
-  }
-
-  const imageBytes = Buffer.from(generatedImageData, 'base64');
-  return imageBytes;
-};
-*/
 
 export type GptImageQuality = 'low' | 'medium' | 'high';
 
@@ -272,105 +186,6 @@ export const generateImageWithGptImage2 = async (
   };
 };
 
-export const generateImageWithGeminiMultiTurn = async (
-  supabaseClient: SupabaseClient,
-  googleGenAI: GoogleGenAI,
-  userId: string,
-  conversationId: string,
-  prompt: string,
-  images: string[],
-): Promise<Buffer> => {
-  const resolvedPrompt = await resolveFalImagePrompt(userId, prompt);
-  debugLog('Generating image with Gemini Multi-Turn', {
-    userId,
-    conversationId,
-    prompt: resolvedPrompt,
-    imagesCount: images.length,
-  });
-
-  let imagePart: { inlineData: { mimeType: string; data: string } } | undefined;
-
-  // If there are images, use the latest one as context for the multi-turn edit
-  if (images.length > 0) {
-    const latestImageId = images[images.length - 1]; // Use the last image for continuity
-    const { data: imageData } = await supabaseClient.storage
-      .from('images')
-      .download(`${userId}/${conversationId}/${latestImageId}`);
-
-    if (!imageData) {
-      throw new Error(`Failed to download image ${latestImageId}`);
-    }
-
-    const imageArrayBuffer = await imageData.arrayBuffer();
-    const buffer = Buffer.from(imageArrayBuffer);
-    const base64Image = buffer.toString('base64');
-    // Derive mimeType from the blob rather than hardcoding png —
-    // gpt-image-2 stores jpeg, so a Gemini fallback on a later turn
-    // would otherwise send jpeg bytes declared as png and get rejected
-    // (or produce corrupt output).
-    const mimeType =
-      imageData.type && imageData.type.startsWith('image/')
-        ? imageData.type
-        : 'image/png';
-
-    imagePart = {
-      inlineData: {
-        mimeType,
-        data: base64Image,
-      },
-    };
-  }
-
-  // Initialize chat with the new Gemini 3 Pro Image Preview model
-  const chat = googleGenAI.chats.create({
-    model: 'gemini-3-pro-image-preview',
-    config: {
-      responseModalities: [Modality.TEXT, Modality.IMAGE],
-      // Note: Google Search grounding is built into gemini-3-pro-image-preview
-      // and doesn't need to be explicitly enabled as a tool for image generation
-    },
-  });
-
-  const messageContent: {
-    text?: string;
-    inlineData?: { mimeType: string; data: string };
-  }[] = [{ text: resolvedPrompt }];
-  if (imagePart) {
-    messageContent.push(imagePart);
-  }
-
-  debugLog('Sending message to Gemini Multi-Turn Chat');
-  const response = await chat.sendMessage({
-    message: messageContent,
-  });
-
-  if (
-    !response.candidates ||
-    !response.candidates[0] ||
-    !response.candidates[0].content ||
-    !response.candidates[0].content.parts
-  ) {
-    throw new Error('No result from Gemini Multi-Turn');
-  }
-
-  let generatedImageData: string | undefined;
-
-  for (const part of response.candidates[0].content.parts) {
-    if (part.text) {
-      debugLog('Gemini Text Response:', part.text);
-    } else if (part.inlineData) {
-      generatedImageData = part.inlineData.data;
-    }
-  }
-
-  if (!generatedImageData) {
-    throw new Error('No generated image data from Gemini Multi-Turn');
-  }
-
-  const imageBytes = Buffer.from(generatedImageData, 'base64');
-  return imageBytes;
-};
-
 export const generateImageWithFalFlux = async (
   supabaseClient: SupabaseClient,
   userId: string,
@@ -432,63 +247,17 @@ export const generateImageWithFalFlux = async (
     const response = await fetch(imageUrl.url);
     const imageBytes = await response.arrayBuffer();
     return Buffer.from(imageBytes);
-  } else {
-    const result = await fal.run('fal-ai/flux-pro/v1.1', {
-      input: {
-        prompt: enhancedPrompt,
-        safety_tolerance: '6',
-      },
-    });
-
-    const imageUrl = result.data.images[0];
-    const response = await fetch(imageUrl.url);
-    const imageBytes = await response.arrayBuffer();
-    return Buffer.from(imageBytes);
-  }
-};
-
-/* DEPRECATED: Replaced by generateImageWithFalFlux
-   Keeping for potential rollback. Remove after migration confirmed stable.
-export const generateImageWithFlux = async (
-  supabaseClient: SupabaseClient,
-  replicateClient: Replicate,
-  userId: string,
-  conversationId: string,
-  prompt: string,
-  images: string[],
-) => {
-  let imageUrl;
-  if (images.length > 0) {
-    const { data: rawImageUrl } = await supabaseClient.storage
-      .from('images')
-      .createSignedUrl(`${userId}/${conversationId}/${images[0]}`, 60 * 60);
-
-    if (!rawImageUrl?.signedUrl) {
-      throw new Error('No image URL from Flux');
-    }
-
-    imageUrl = reformatSignedUrl(rawImageUrl.signedUrl);
   }
 
-  const input = {
-    prompt: prompt
-      ? `${INSTRUCTIONS_3D} ${prompt}`
-      : `${INSTRUCTIONS_3D} No prompt provided`,
-    ...(imageUrl && { image_prompt: imageUrl }),
-    width: 1024,
-    height: 1024,
-    prompt_upsampling: true,
-    guidance: 3,
-    safety_tolerance: 6,
-    output_format: 'png',
-    raw: true,
-  };
-
-  const output = await replicateClient.run('black-forest-labs/flux-1.1-pro', {
-    input,
+  const result = await fal.run('fal-ai/flux-pro/v1.1', {
+    input: {
+      prompt: enhancedPrompt,
+      safety_tolerance: '6',
+    },
   });
 
-  const imageBytes = output as FileOutput;
-  return imageBytes;
+  const imageUrl = result.data.images[0];
+  const response = await fetch(imageUrl.url);
+  const imageBytes = await response.arrayBuffer();
+  return Buffer.from(imageBytes);
 };
-*/

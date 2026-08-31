@@ -10,10 +10,11 @@ import { defineConfig, type Plugin } from 'vite';
 const appBase = '/';
 const legacyAppBase = '/cadam';
 const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim();
 
-function legacyCadamRedirectPlugin(): Plugin {
+function legacyBaseRedirectPlugin(): Plugin {
   return {
-    name: 'legacy-cadam-base-redirect',
+    name: 'legacy-base-redirect',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (!req.url) return next();
@@ -124,7 +125,7 @@ function supabaseProxyPlugin(): Plugin {
 
 function serveOpenScadWasm(): Plugin {
   const wasmPath = path.resolve(
-    __dirname,
+    import.meta.dirname,
     'src/vendor/openscad-wasm/openscad.wasm',
   );
 
@@ -161,10 +162,50 @@ function serveOpenScadWasm(): Plugin {
   };
 }
 
+const vendorChunkTest = (id: string) =>
+  id.includes('/node_modules/react/') ||
+  id.includes('/node_modules/react-dom/') ||
+  id.includes('/node_modules/@tanstack/react-router/') ||
+  id.includes('/node_modules/@tanstack/react-start/') ||
+  id.includes('/node_modules/lucide-react/');
+
+const radixChunkTest = (id: string) =>
+  id.includes('/node_modules/@radix-ui/');
+
+const aiSdkChunkTest = (id: string) =>
+  id.includes('/node_modules/ai/') || id.includes('/node_modules/@ai-sdk/');
+
+const supabaseChunkTest = (id: string) =>
+  id.includes('/node_modules/@supabase/');
+
+const threeChunkTest = (id: string) => id.includes('/node_modules/three/');
+
+const reactThreeChunkTest = (id: string) =>
+  id.includes('/node_modules/@react-three/') ||
+  id.includes('/node_modules/three-stdlib/');
+
+const streamdownCoreChunkTest = (id: string) =>
+  id.includes('/node_modules/streamdown/');
+
+const streamdownCjkChunkTest = (id: string) =>
+  id.includes('/node_modules/@streamdown/cjk/');
+
+const streamdownMathChunkTest = (id: string) =>
+  id.includes('/node_modules/@streamdown/math/') ||
+  id.includes('/node_modules/katex/');
+
+const streamdownMermaidChunkTest = (id: string) =>
+  id.includes('/node_modules/@streamdown/mermaid/');
+
+const shikiChunkTest = (id: string) =>
+  id.includes('/node_modules/shiki/dist/') ||
+  id.includes('/node_modules/@shikijs/core/') ||
+  id.includes('/node_modules/@shikijs/engine-javascript/');
+
 export default defineConfig({
   base: appBase,
   plugins: [
-    legacyCadamRedirectPlugin(),
+    legacyBaseRedirectPlugin(),
     serveOpenScadWasm(),
     supabaseProxyPlugin(),
     tanstackStart({
@@ -182,19 +223,22 @@ export default defineConfig({
       inlineDynamicImports: true,
     }),
     react(),
-    sentryVitePlugin({
-      org: 'adamcad',
-      project: 'adamcad',
-    }),
+    sentryAuthToken
+      ? sentryVitePlugin({
+          org: 'adamcad',
+          project: 'adamcad',
+          authToken: sentryAuthToken,
+        })
+      : null,
   ],
   resolve: {
     alias: {
       '@/vendor/openscad-wasm/openscad.js': path.resolve(
-        __dirname,
+        import.meta.dirname,
         './src/vendor/openscad-wasm/runtime.ts',
       ),
-      '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, './shared'),
+      '@': path.resolve(import.meta.dirname, './src'),
+      '@shared': path.resolve(import.meta.dirname, './shared'),
     },
   },
   build: {
@@ -209,18 +253,22 @@ export default defineConfig({
     client: {
       build: {
         outDir: 'dist/brepia',
-        rollupOptions: {
+        rolldownOptions: {
           output: {
-            manualChunks(id) {
-              if (
-                id.includes('/node_modules/react/') ||
-                id.includes('/node_modules/react-dom/') ||
-                id.includes('/node_modules/@tanstack/react-router/') ||
-                id.includes('/node_modules/@tanstack/react-start/') ||
-                id.includes('/node_modules/lucide-react/')
-              ) {
-                return 'vendor';
-              }
+            codeSplitting: {
+              groups: [
+                { name: 'vendor', test: vendorChunkTest },
+                { name: 'radix-ui', test: radixChunkTest },
+                { name: 'ai-sdk', test: aiSdkChunkTest },
+                { name: 'supabase', test: supabaseChunkTest },
+                { name: 'three', test: threeChunkTest },
+                { name: 'react-three', test: reactThreeChunkTest },
+                { name: 'streamdown-core', test: streamdownCoreChunkTest },
+                { name: 'streamdown-cjk', test: streamdownCjkChunkTest },
+                { name: 'streamdown-math', test: streamdownMathChunkTest },
+                { name: 'streamdown-mermaid', test: streamdownMermaidChunkTest },
+                { name: 'shiki', test: shikiChunkTest },
+              ],
             },
           },
         },

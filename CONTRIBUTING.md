@@ -18,16 +18,15 @@ Please note that this repository has a [code of conduct](CODE_OF_CONDUCT.md); fo
 
 5. **Request a review** - Request review from a maintainer. Once accepted, the PR can be merged.
 
-## Brepia compatibility boundaries
+## Compatibility boundaries
 
-Brepia still contains compatibility-sensitive identifiers inherited from pCAD/CADAM. Current product/runtime cleanup is staged rather than performed as a blind global rename.
+Brepia contains a small set of compatibility-sensitive identifiers that must not be changed as cosmetic cleanup.
 
-Before changing routing, environment variables, database/storage identifiers, agent IDs, external integration IDs, prompt/profile lineage or historical references, check:
+Before changing routing, environment variables, database/storage identifiers, external integration IDs, prompt/profile lineage or design-token compatibility names, check [`docs/brepia_branding.md`](docs/brepia_branding.md) and the relevant current architecture documentation.
 
-- [`docs/brepia_branding.md`](docs/brepia_branding.md)
-- [`docs/cadam_cleanup_plan.md`](docs/cadam_cleanup_plan.md)
+In particular, preserve the active `CADAM Original` profile lineage, the `/cadam` compatibility redirect, Sentry `adamcad`, `PCAD_*`, compatibility-sensitive `pcad_*`/`pcad.invalid`, and the `adam-*` design-token layer unless the change includes an explicit migration/deprecation plan.
 
-In particular, preserve `CADAM Original` lineage and historical/upstream attribution. Persistent or externally configured identifiers require an explicit migration/deprecation plan rather than a cosmetic rename.
+Upstream attribution in `README.md` and license files is part of project provenance and must not be removed as cosmetic cleanup.
 
 ## Style Guide
 

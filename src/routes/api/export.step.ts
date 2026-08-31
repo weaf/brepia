@@ -156,7 +156,9 @@ export const Route = createFileRoute('/api/export/step')({
           }
 
           const result = await exportScadToStep(body.sourceCode);
-          return new Response(result.bytes, {
+          const responseBytes = new Uint8Array(result.bytes.byteLength);
+          responseBytes.set(result.bytes);
+          return new Response(responseBytes.buffer, {
             status: 200,
             headers: {
               ...corsHeaders,
