@@ -1,8 +1,5 @@
 # STEP export
 
-Branch: `feature/step-export`
-Base master: `9cc16da0088a48e2d4144254b57c09f403507589`
-
 ## Product goal
 
 STEP is the 3D CAD interchange export for Brepia. Existing STL and DXF exports remain unchanged:
@@ -47,7 +44,7 @@ scad123d 0.5.0 + build123d/OCCT
 STEP Part 21 file
 ```
 
-The native OpenSCAD/scad123d process must never run directly inside the Brepia/Nitro host process. Brepia accepts user-imported SCAD and upstream scad123d explicitly warns that native OpenSCAD can access host paths.
+The native OpenSCAD/scad123d process must never run directly inside the Brepia/Nitro host process. Brepia accepts user-imported SCAD and native OpenSCAD can access host paths, so conversion remains isolated from the application host.
 
 ## Provider image
 
@@ -57,6 +54,8 @@ The repository supplies:
 - `scripts/step-export/build-image.sh`
 - `scripts/step-export/pcad-scad2step-sandbox`
 - `scripts/step-export/smoke-test.sh`
+- `scripts/step-export/corpus-test.sh`
+- `scripts/step-export/inspect-step.py`
 
 Build the default image:
 
@@ -70,6 +69,8 @@ Default image tag:
 localhost/pcad-step-export:scad123d-0.5.0
 ```
 
+The `pcad-*` image/script naming is retained as a technical compatibility identifier.
+
 The image pins scad123d to upstream commit:
 
 ```text
@@ -78,23 +79,23 @@ c5d126ac30e8f170e2082aa14ad4a44c6d70513e
 
 That immutable commit reports package version 0.5.0 and adopted `solid123d 0.5.0`.
 
-OpenSCAD is built from source instead of installing a distro package, Flatpak, or extracting an AppImage. The current OpenSCAD source pin is:
+OpenSCAD is built from source. The current OpenSCAD source pin is:
 
 ```text
 1ee676b0ea2e23a86553a931ff1d805fae7bbe7c
 ```
 
-This is the latest upstream OpenSCAD commit from 2026-08-13, the same source-generation date as the snapshot initially used during the STEP spike. The pin is immutable; it is intentionally not a floating branch or `latest` build.
+The pin is immutable and intentionally not a floating branch or `latest` build.
 
-The builder mirrors upstream's Linux CI for this source generation:
+The builder mirrors the required Linux build shape for this source generation:
 
-- Qt6 dependencies from OpenSCAD's own `scripts/uni-get-dependencies.sh qt6`;
+- Qt6 dependencies;
 - CMake/Ninja build;
 - `HEADLESS=ON`;
 - `ENABLE_MANIFOLD=ON`;
 - tests disabled inside the provider image build because Brepia has its own smoke/compatibility gates.
 
-The build is multi-stage. Compiler and development packages remain in the discarded builder stage. After OpenSCAD is built, the builder resolves the Debian packages owning the shared libraries reported by `ldd` for the exact resulting binary. The final runtime image installs that derived package set rather than maintaining a hand-written Qt/Harfbuzz/Boost runtime list. The final stage reruns `ldd`, `openscad --version`, and a real headless CSG compile before installing scad123d.
+The build is multi-stage. Compiler and development packages remain in the discarded builder stage. After OpenSCAD is built, the builder resolves the Debian packages owning the shared libraries reported by `ldd` for the exact resulting binary. The final runtime image installs that derived package set rather than maintaining a hand-written runtime library list. The final stage reruns `ldd`, `openscad --version`, and a real headless CSG compile before installing scad123d.
 
 The image also bakes in the exact `public/libraries/BOSL.zip`, `BOSL2.zip`, and `MCAD.zip` files from Brepia so server conversion resolves the same bundled libraries as browser OpenSCAD.
 
@@ -108,7 +109,7 @@ Do not replace the source pin with a floating branch. To update OpenSCAD:
 2. update `OPENSCAD_COMMIT` in both stages of `scripts/step-export/Containerfile`;
 3. rebuild the image;
 4. run the sandbox smoke test;
-5. rerun the representative Brepia model compatibility gate before merging the version change.
+5. run the representative Brepia STEP corpus and application regression gate before merging the converter change.
 
 A new OpenSCAD source pin is a converter-version change even when the scad123d version remains unchanged.
 
@@ -151,39 +152,26 @@ Do not weaken these without an explicit security review:
 11. Source/output sizes and execution time remain bounded.
 12. Sandbox image/tool versions are operator-controlled; no runtime package downloads.
 
-## Smoke test
+## Validation
 
-After building the image:
+After building the image, run the smoke test:
 
 ```bash
 export PCAD_STEP_EXPORT_RUNNER="$PWD/scripts/step-export/pcad-scad2step-sandbox"
 ./scripts/step-export/smoke-test.sh
 ```
 
-The smoke test verifies:
+The smoke test verifies that a STEP Part 21 file is produced and that a cylindrical hole remains an analytic `CYLINDRICAL_SURFACE` rather than being reduced to mesh triangles.
 
-- a STEP file is produced;
-- it is an ISO-10303-21 Part 21 file;
-- a cylindrical hole remains an analytic `CYLINDRICAL_SURFACE` rather than being reduced to mesh triangles.
+The repository also provides a representative compatibility corpus:
 
-## Current limitations / next gate
+```bash
+./scripts/step-export/corpus-test.sh
+```
 
-The first live compatibility gate should exercise representative Brepia/OpenSCAD models:
+The v1 corpus covers exact-B-Rep and expected-fallback cases, including primitives, boolean operations, extrusions, hull/minkowski cases, bundled BOSL/BOSL2/MCAD usage and colored multi-body geometry. `inspect-step.py` validates produced files through the provider image's build123d/OpenCascade stack.
 
-- cube / cylinder / sphere;
-- boolean hole/difference;
-- linear and rotate extrude;
-- hull and minkowski;
-- BOSL, BOSL2 and MCAD;
-- imported SCAD;
-- colored multi-body geometry;
-- models that intentionally trigger scad123d mesh fallback.
-
-Relative/custom project files and `import()` assets are not yet transferred into the STEP sandbox. Models depending on those should fail explicitly rather than exposing additional host paths.
-
-For each successful export verify dimensions, units, body count, holes and curved surfaces in at least FreeCAD/Rhino first, then AutoCAD and MicroStation when available.
-
-Required regression gate before merge:
+For application changes that affect STEP, also run:
 
 ```bash
 npm test
@@ -192,4 +180,12 @@ npm run lint
 npm run build
 ```
 
-STEP must remain a separate export path; no STL/DXF behavior should be changed as part of this feature.
+STEP must remain a separate export path; STL/DXF behavior must not change incidentally.
+
+## Known boundary
+
+STEP v1 transfers the complete SCAD source into the sandbox, but it does not transfer arbitrary relative project files or `import()` mesh/assets. Models depending on those files must fail explicitly rather than widening the sandbox to arbitrary host paths.
+
+Supporting multi-file/project assets requires an explicit normalized workspace-input design that preserves the sandbox security invariants above.
+
+Receiving-CAD checks in applications such as FreeCAD, Rhino, AutoCAD or MicroStation are useful compatibility tests but are not part of the runtime conversion contract.

@@ -1,94 +1,60 @@
 ---
 alwaysApply: true
 ---
-# Backend Architecture - Supabase
+# Backend Architecture - React Start and Supabase
 
 ## Overview
-The backend is built on Supabase, providing PostgreSQL database, authentication, and Edge Functions for serverless API endpoints.
 
-## Database Structure
+Brepia's application server is part of the TanStack React Start/Nitro application. Supabase provides PostgreSQL, authentication and storage. The repository does not use `supabase/functions/` as its primary HTTP API layer.
 
-### Core Tables
-- `conversations`: Chat conversations between users and AI
-- `messages`: Individual messages within conversations
+## Server layout
 
-### Key Relationships
-- Users have many conversations
-- Conversations have many messages
-- Users have one subscription
+- HTTP API routes live under `src/routes/api/` and use TanStack file-route server handlers.
+- Reusable server-side application logic lives under `src/server/`.
+- Keep route files thin where practical: validate/dispatch in the route, and put reusable domain logic in `src/server/`.
+- Do not introduce a Supabase Edge Function simply because functionality is server-side; follow the existing React Start API architecture unless a task explicitly changes that architecture.
 
-## Edge Functions (`supabase/functions/`)
+## Authentication and authorization
 
-### Authentication & User Management
-- User registration and login handled by Supabase Auth
-- JWT tokens for API authentication
+Use the shared server guards in `src/server/api.ts` rather than duplicating auth logic.
 
-### Core Functions
+- `authenticateUser(request)` verifies the Supabase bearer token.
+- `requireUser(request)` also enforces Brepia account access and rejects non-active accounts.
+- Admin-only operations must additionally use the existing account/admin authorization helpers for the required role.
+- A client-side guard is not a substitute for server-side authorization.
 
-#### Chat Functions
-- `chat/`: Parametric AI generation chat
+Reuse the existing response/CORS helpers (`json`, `preflight`, `corsHeaders`, etc.) when they fit the route instead of creating route-specific variants without a reason.
 
-### Shared Utilities (`_shared/`)
-- `cors.ts`: Simple file with cors headers
-- `messageUtils.ts`: Utility functions for formating user messages
-- `parseParameter.ts`: Parameter parsing utilities
-- `supabaseClient.ts`: Functions for getting supabase client
+## Database and storage
 
-## API Patterns
+Supabase remains authoritative for data and storage it owns.
 
-### Authentication
-- All sensitive functions require JWT authentication
-- Use Supabase client for user verification
-- Implement proper role-based access control
+- Declarative schema source lives in `supabase/schemas/`.
+- Generated migration history lives in `supabase/migrations/`.
+- Follow `.cursor/rules/database-workflow.mdc` and `AGENTS.md` for every schema change.
+- Never hand-edit `shared/database.ts`; regenerate it from the local stack.
+- Preserve RLS and ownership semantics. Do not bypass them with client-visible service credentials.
+- Server-only credentials and service-role access must never be exposed to browser code or API responses.
 
-### Error Handling
-- Consistent error response format
-- Proper HTTP status codes
-- Detailed error messages for debugging
+## API design
 
-### CORS Configuration
-- Configured for frontend domain
-- Handle preflight requests
-- Support for development and production
+- Validate request bodies and path/query parameters at the server boundary.
+- Return appropriate HTTP status codes and bounded error details.
+- Do not leak credentials, authorization headers, raw secrets or sensitive provider configuration in logs/errors.
+- Do not add silent provider/model fallbacks unless the product behavior explicitly requires them.
+- Keep long-running generation/export behavior compatible with request cancellation and the existing stable-runtime recovery model.
 
-### Environment Variables
-- Stored in `supabase/functions/.env`
-- Include API keys for external services
-- Environment-specific configurations
+## Environment and local runtime
 
-### Configuration
-- New functions should be put in config.toml
-- Persistent storage buckets can be put either in a migration or in config.toml
+- Runtime/development configuration is read from the repository's existing environment helpers and `.env.local` flow.
+- `./start.sh` is the canonical local launcher. It configures rootless Podman, local Supabase, llama-swap/OpenCode integration and the stable runtime.
+- Use `npx supabase ...`; do not assume a global Supabase CLI.
+- Do not use `supabase functions serve` as the normal Brepia application-server workflow.
 
-## External Service Integration
+## Billing
 
-### AI Services
-- **Anthropic Claude**: Text generation and chat
+Brepia has no end-user billing/credits/subscription runtime. Do not add subscription or credit checks to generation, authentication or API routes unless billing is explicitly reintroduced as a separately designed feature. See `docs/billing_free_architecture.md`.
 
-## Database Migrations
+## Compatibility
 
-### Migration Files
-- Located in `supabase/migrations/`
-- Version-controlled database schema changes
-- Include both schema and data migrations
-
-### Migration Patterns
-- Use descriptive migration names
-- Test migrations in development first
-
-## Development Workflow
-
-### Local Development
-- Use `supabase start` for local database
-- `supabase functions serve` for local functions
-- ngrok so model can access
-
-### Testing
-- Test functions locally before deployment
-- Use Supabase CLI for database operations
-- Validate webhook endpoints
-
-### Deployment
-- Functions deployed via Supabase CLI
-- Database migrations applied automatically
-- Environment variables configured in Supabase dashboard
+Preserve the compatibility-sensitive identifiers documented in `AGENTS.md` and `docs/brepia_branding.md`. Product naming cleanup is not permission to rename runtime/database/integration identifiers.

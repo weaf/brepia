@@ -1,48 +1,61 @@
-# Brepia Upstream-Safe Customization Skill
+# Brepia Compatibility-Safe Customization Skill
 
 ## Purpose
 
-Ensure every local customization task preserves upstream CADAM compatibility and minimizes future conflict surface.
+Keep Brepia changes narrow and maintainable while preserving compatibility-sensitive CADAM/pCAD lineage that still forms part of the live runtime contract.
 
-## Must Do (before and during implementation)
+The `pcad-upstream-safe-customization` skill name is retained as a technical identifier; it does not mean old pCAD implementation plans are current instructions.
 
-1. **Identify upstream-owned files** — List every file the task touches that is upstream-owned (not new local files).
-2. **Prefer additive modules** — Create new files under `src/server/` and `src/components/settings/` rather than modifying existing upstream-heavy files.
-3. **Keep built-in definitions intact** — Never modify `PARAMETRIC_MODELS` in `src/lib/utils.ts` or `PARAMETRIC_AGENT_PROMPT` in `src/server/aiChat.ts`.
-4. **No copy-paste of upstream source** — Do not duplicate upstream model catalogs, prompts, or provider configs into user-owned database tables or new source files.
-5. **Record unavoidable upstream edits** — If a task MUST touch an upstream-heavy file, list the exact changes and why in a "sync seam" comment at the top of the file.
+## Before editing
 
-## Must Do (before task completion)
+1. Read `AGENTS.md` and `docs/brepia_branding.md`.
+2. Inspect the live implementation and current tests for the area being changed.
+3. If a historical plan/checkpoint is referenced, reconcile it against current code before deciding anything remains to do.
+4. Identify generated files, compatibility identifiers and high-conflict integration points before editing.
 
-6. **Run diff checks:**
-   ```bash
-   git diff --check
-   git diff --stat
-   ```
-7. **Inspect diff for churn** — Verify there is no unnecessary whitespace, formatting changes to unrelated lines, or accidental refactoring.
-8. **Run validation gates:**
-   ```bash
-   npm run typecheck
-   npm run lint
-   npm run build
-   ```
+## Compatibility boundaries
 
-## Must NOT Do
+Do not rename or remove these as incidental cleanup:
 
-- Run formatting over unrelated files (no `prettier --write .` on broad paths).
-- Refactor unrelated upstream code while implementing a local feature.
-- Rename existing upstream symbols unless the plan explicitly requires it.
-- Change existing behavior unless the plan task explicitly describes the new behavior.
-- Store upstream model IDs, prompts, or provider configs in database tables.
+- `/cadam` compatibility routing;
+- `CADAM Original` prompt/profile lineage;
+- `PCAD_*` environment variables;
+- compatibility-sensitive `pcad_*` / `pcad.invalid` identifiers;
+- existing `pcad-*` integration/tool/script identifiers;
+- Sentry `adamcad`;
+- `adam-*` design tokens.
 
-## Sync Seam Convention
+Changing one of these requires an explicit migration/deprecation plan appropriate to that identifier.
 
-When you MUST edit an upstream-heavy file, add a comment block at the top describing the integration seam:
+## Implementation principles
 
-```typescript
-// BREPIA LOCAL CUSTOMIZATION — sync seam
-// Purpose: [why this upstream file is touched]
-// Task: [PxxX from plan]
-// Alternative considered: [what additive approach was rejected and why]
-// Future conflict risk: [how a future upstream change might conflict]
+- Prefer the smallest change that fits the current architecture.
+- Reuse existing modules and abstractions before adding parallel ones.
+- Keep route files thin and reusable server logic in `src/server/` where practical.
+- Preserve Parametric, Creative and stable-runtime semantics unless the task explicitly changes them.
+- Do not copy stale model catalogs, prompts or provider configuration out of historical documents.
+- Do not assume historical symbols still exist; verify current definitions and call sites first.
+- Do not hand-edit `src/routeTree.gen.ts` or `shared/database.ts`.
+- For schema changes, use the schema-first workflow in `.cursor/rules/database-workflow.mdc`.
+
+## Diff discipline
+
+Before completion:
+
+```bash
+git diff --check
+git diff --stat
 ```
+
+Inspect the complete diff for unrelated formatting, accidental refactors, generated-file churn and compatibility-name changes.
+
+Run the relevant repository gates:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Do not run broad formatting merely to normalize untouched files. Keep formatting changes scoped to the files being changed unless a dedicated formatting task explicitly says otherwise.

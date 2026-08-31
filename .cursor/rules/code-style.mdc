@@ -1,40 +1,42 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: true
 ---
 # Code Style Conventions
-version: 1.0.0
+version: 2.0.0
 
-## TypeScript Rules
+## Source of truth
 
-### Naming Conventions
-- Variables: `^[a-z][a-zA-Z0-9]*$`
-- Functions: `^[a-z][a-zA-Z0-9]*$`
-- Classes: `^[A-Z][a-zA-Z0-9]*$`
-- Interfaces: `^[A-Z][a-zA-Z0-9]*$`
-- Types: `^[A-Z][a-zA-Z0-9]*$`
+Do not impose a parallel style guide that conflicts with repository tooling. Existing ESLint configuration and Prettier are authoritative for formatting/style checks.
 
-### Formatting
-- Max line length: 100 characters
-- Indentation: 2 spaces
-- Semicolons: required
-- Quotes: single quotes
+`.prettierrc` currently enables single quotes and `prettier-plugin-tailwindcss`; other formatting behavior follows Prettier defaults unless repository configuration says otherwise.
 
-## React Rules
-- Component naming: `^[A-Z][a-zA-Z0-9]*$`
-- File naming: `^[A-Z][a-zA-Z0-9]*\.tsx$`
-- Props interface: `^[A-Z][a-zA-Z0-9]*Props$`
+## TypeScript and React
 
-## Import Rules
-### Order
-1. react
-2. external-libraries
-3. components
-4. hooks
-5. utils
-6. types
-7. styles
+- Follow existing naming patterns in the surrounding module.
+- Use clear camelCase names for values/functions and PascalCase for React components/types where appropriate.
+- Prefer explicit types at public/module boundaries when inference would make the contract unclear.
+- Preserve existing accessibility attributes and established shadcn/Radix patterns.
+- Do not enforce arbitrary filename or import-group regex rules unless ESLint/build tooling actually requires them.
 
-### Grouping
-- Use newlines between import groups
+## Formatting
+
+- Let Prettier decide wrapping/indentation rather than manually formatting to a competing line-length rule.
+- Use single quotes in formatted JavaScript/TypeScript.
+- Keep semicolons as produced by the current Prettier configuration.
+- Tailwind class ordering is handled by `prettier-plugin-tailwindcss`.
+- Avoid broad formatting churn in unrelated files. Format touched files or the smallest relevant scope.
+
+The repository provides `npm run format` (`prettier --write .`) but does not provide a `format:check` script. Do not invent or document a nonexistent npm script.
+
+## Validation
+
+Use:
+
+```bash
+npm run lint
+npm run typecheck
+```
+
+and the other relevant gates from `AGENTS.md`. If CI invokes lint with stricter warning limits, CI is authoritative for the PR.
