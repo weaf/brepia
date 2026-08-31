@@ -13,6 +13,23 @@ const nullableLocalCreativeProfileIdSchema = z.union([
   z.null(),
 ]);
 
+export const LOCAL_CREATIVE_PROFILE_DEFAULTS = {
+  resolution: '1024' as const,
+  imageGenerationTimeoutMs: 600_000,
+  meshGenerationTimeoutMs: 1_800_000,
+};
+
+const localCreativeTimeoutMsSchema = z
+  .number()
+  .int()
+  .min(60_000)
+  .max(14_400_000);
+
+export const LocalCreativeResolutionSchema = z.enum(['512', '1024', '1536']);
+export type LocalCreativeResolution = z.infer<
+  typeof LocalCreativeResolutionSchema
+>;
+
 export const LocalCreativeAdapterSchema = z.enum(['native-image-mesh-v1']);
 export type LocalCreativeAdapter = z.infer<typeof LocalCreativeAdapterSchema>;
 
@@ -22,6 +39,15 @@ export const LocalCreativeProfileSchema = z.object({
   adapter: LocalCreativeAdapterSchema.default('native-image-mesh-v1'),
   imageModelId: nullableRuntimeModelIdSchema.default(null),
   meshModelId: nullableRuntimeModelIdSchema.default(null),
+  resolution: LocalCreativeResolutionSchema.default(
+    LOCAL_CREATIVE_PROFILE_DEFAULTS.resolution,
+  ),
+  imageGenerationTimeoutMs: localCreativeTimeoutMsSchema.default(
+    LOCAL_CREATIVE_PROFILE_DEFAULTS.imageGenerationTimeoutMs,
+  ),
+  meshGenerationTimeoutMs: localCreativeTimeoutMsSchema.default(
+    LOCAL_CREATIVE_PROFILE_DEFAULTS.meshGenerationTimeoutMs,
+  ),
   enabled: z.boolean().default(true),
 });
 export type LocalCreativeProfile = z.infer<typeof LocalCreativeProfileSchema>;
@@ -30,7 +56,8 @@ const LocalCreativeProfilesSchema = z
   .array(LocalCreativeProfileSchema)
   .max(32)
   .refine(
-    (profiles) => new Set(profiles.map((profile) => profile.id)).size === profiles.length,
+    (profiles) =>
+      new Set(profiles.map((profile) => profile.id)).size === profiles.length,
     'Local Creative profile IDs must be unique',
   );
 
