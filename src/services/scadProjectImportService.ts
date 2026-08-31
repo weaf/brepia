@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import {
   boundedScadCompileError,
   isBlockingScadCompileError,
+  scadImportProjectPath,
   scadImportTitle,
 } from '@/lib/scadImport';
 import { persistImportedArtifact } from '@/services/importedArtifactService';
@@ -9,6 +10,7 @@ import { syncConversationWorkspace } from '@/services/conversationWorkspaceServi
 import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
 import type { ImportedArtifactBaseline } from '@shared/importedArtifact';
 import type { ImportedArtifactOrigin } from '@shared/chatAi';
+import { normalizeOpenScadProject } from '@shared/openScadProject';
 import type { Model } from '@shared/types';
 
 export type CreateImportedScadProjectInput = {
@@ -34,9 +36,18 @@ export async function createImportedScadProject({
   origin,
 }: CreateImportedScadProjectInput): Promise<CreateImportedScadProjectResult> {
   const title = scadImportTitle(filename);
+  const entrypointPath = scadImportProjectPath(filename);
+  const project = normalizeOpenScadProject({
+    schemaVersion: 1,
+    entrypointPath,
+    files: [{ path: entrypointPath, content: code }],
+  });
 
   let baseline: ImportedArtifactBaseline;
   try {
+    // Step 1 stores the project-native artifact. Browser execution becomes
+    // project-aware in Step 2; until then a one-file import can compile through
+    // the existing code-only worker path without changing its behavior.
     await previewScadColoredViaToolWorker(code);
     baseline = { status: 'success' };
   } catch (error) {
@@ -84,7 +95,7 @@ export async function createImportedScadProject({
   try {
     await persistImportedArtifact({
       conversationId,
-      artifact: { title, version: 'v1', code },
+      artifact: { title, version: 'v1', project },
       origin: {
         type: 'import',
         source: origin.source,
