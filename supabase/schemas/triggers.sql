@@ -12,6 +12,43 @@ $$;
 
 CREATE OR REPLACE TRIGGER "update_leaf_trigger" AFTER INSERT ON "public"."messages" FOR EACH ROW EXECUTE FUNCTION "public"."update_conversation_leaf"();
 
+-- Pin the current repository-backed instruction package for every new
+-- conversation unless the client explicitly supplies one.
+CREATE OR REPLACE FUNCTION public.pin_conversation_instruction_profile()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+declare
+  selected_profile text;
+begin
+  if coalesce(new.settings, '{}'::jsonb) ? 'instructionProfileId' then
+    return new;
+  end if;
+
+  select default_instruction_profile_id
+  into selected_profile
+  from public.user_ai_preferences
+  where user_id = new.user_id;
+
+  new.settings := coalesce(new.settings, '{}'::jsonb) ||
+    jsonb_build_object(
+      'instructionProfileId',
+      coalesce(selected_profile, 'standard')
+    );
+  return new;
+end;
+$$;
+
+DROP TRIGGER IF EXISTS conversations_pin_instruction_profile
+  ON public.conversations;
+
+CREATE TRIGGER conversations_pin_instruction_profile
+BEFORE INSERT ON public.conversations
+FOR EACH ROW
+EXECUTE FUNCTION public.pin_conversation_instruction_profile();
+
 -- Pin the current Local Creative profile when a new Creative conversation is
 -- created. Existing conversations are intentionally untouched: absence of the
 -- key remains the marker for Phase-1 compatibility routing.
