@@ -5,7 +5,7 @@ Base master: `9cc16da0088a48e2d4144254b57c09f403507589`
 
 ## Product goal
 
-STEP is the 3D CAD interchange export for pCAD. Existing STL and DXF exports remain unchanged:
+STEP is the 3D CAD interchange export for Brepia. Existing STL and DXF exports remain unchanged:
 
 - STL: broad mesh/3D-printing compatibility.
 - DXF: 2D projection/CAD exchange.
@@ -47,7 +47,7 @@ scad123d 0.5.0 + build123d/OCCT
 STEP Part 21 file
 ```
 
-The native OpenSCAD/scad123d process must never run directly inside the pCAD/Nitro host process. pCAD accepts user-imported SCAD and upstream scad123d explicitly warns that native OpenSCAD can access host paths.
+The native OpenSCAD/scad123d process must never run directly inside the Brepia/Nitro host process. Brepia accepts user-imported SCAD and upstream scad123d explicitly warns that native OpenSCAD can access host paths.
 
 ## Provider image
 
@@ -92,11 +92,11 @@ The builder mirrors upstream's Linux CI for this source generation:
 - CMake/Ninja build;
 - `HEADLESS=ON`;
 - `ENABLE_MANIFOLD=ON`;
-- tests disabled inside the provider image build because pCAD has its own smoke/compatibility gates.
+- tests disabled inside the provider image build because Brepia has its own smoke/compatibility gates.
 
 The build is multi-stage. Compiler and development packages remain in the discarded builder stage. After OpenSCAD is built, the builder resolves the Debian packages owning the shared libraries reported by `ldd` for the exact resulting binary. The final runtime image installs that derived package set rather than maintaining a hand-written Qt/Harfbuzz/Boost runtime list. The final stage reruns `ldd`, `openscad --version`, and a real headless CSG compile before installing scad123d.
 
-The image also bakes in the exact `public/libraries/BOSL.zip`, `BOSL2.zip`, and `MCAD.zip` files from pCAD so server conversion resolves the same bundled libraries as browser OpenSCAD.
+The image also bakes in the exact `public/libraries/BOSL.zip`, `BOSL2.zip`, and `MCAD.zip` files from Brepia so server conversion resolves the same bundled libraries as browser OpenSCAD.
 
 Runtime remains networkless. Source checkout and package installation happen only while the operator builds the image.
 
@@ -108,7 +108,7 @@ Do not replace the source pin with a floating branch. To update OpenSCAD:
 2. update `OPENSCAD_COMMIT` in both stages of `scripts/step-export/Containerfile`;
 3. rebuild the image;
 4. run the sandbox smoke test;
-5. rerun the representative pCAD model compatibility gate before merging the version change.
+5. rerun the representative Brepia model compatibility gate before merging the version change.
 
 A new OpenSCAD source pin is a converter-version change even when the scad123d version remains unchanged.
 
@@ -168,7 +168,7 @@ The smoke test verifies:
 
 ## Current limitations / next gate
 
-The first live compatibility gate should exercise representative pCAD/OpenSCAD models:
+The first live compatibility gate should exercise representative Brepia/OpenSCAD models:
 
 - cube / cylinder / sphere;
 - boolean hole/difference;
