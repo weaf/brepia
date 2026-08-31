@@ -2,35 +2,30 @@
   <img src="./public/brepia-logo.svg" alt="Brepia" width="420" />
 </div>
 
-<h1 align="center">AI-assisted parametric and Creative 3D design</h1>
+<h1 align="center">Brepia</h1>
 
 <div align="center">
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat)](https://www.gnu.org/licenses/gpl-3.0)
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%2B%20%7C%2022.12%2B-green.svg?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://react.dev/)
-[![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E.svg?style=flat&logo=supabase&logoColor=white)](https://supabase.com/)
 [![OpenSCAD](https://img.shields.io/badge/OpenSCAD-Parametric-F9D64F.svg?style=flat)](https://openscad.org/)
 
 </div>
 
-## About
-
-Brepia is an open-source 3D design workspace for AI-assisted modelling, editable OpenSCAD geometry and Creative 3D generation.
-
-Describe a model in natural language, inspect it in the 3D viewer, adjust parameters, import existing OpenSCAD, use reference images and export the result for printing or further CAD work.
+Brepia is an open-source browser-based workspace for parametric and Creative 3D design. It combines editable OpenSCAD models, a live 3D viewer, model history, import/export tools and optional AI-assisted workflows in one application.
 
 ## Features
 
-- Parametric 3D generation and editing with OpenSCAD.
-- Editable dimensions, colours and model parameters.
-- Import of local `.scad` files and OpenSCAD sources from GitHub.
-- Live 3D preview in the browser.
-- Text-to-3D and image-to-3D Creative workflows.
-- Local and hosted AI providers, including OpenAI-compatible endpoints.
-- OpenCode- and Codex-backed agent workflows.
-- Configurable vision models.
-- Conversation workspaces for generated models, revisions and exports.
+- Create and revise parametric OpenSCAD models.
+- Edit dimensions, colours and other model parameters.
+- Import local `.scad` files and OpenSCAD sources from GitHub.
+- Inspect models in a live browser-based 3D viewer.
+- Use text or reference images in Creative 3D workflows.
+- Work with local or hosted model providers, including OpenAI-compatible endpoints.
+- Use OpenCode- or Codex-backed agent workflows where configured.
+- Keep generated models, revisions and exports in conversation workspaces.
+- Configure model providers, profiles, vision models and instance settings from the application.
 
 ## Export formats
 
@@ -41,90 +36,62 @@ Describe a model in natural language, inspect it in the 3D viewer, adjust parame
 | **DXF**  | 2D CAD exchange                |
 | **STEP** | 3D CAD exchange                |
 
-Creative workflows can also provide GLB output where supported.
+Creative workflows can also provide GLB output when supported by the selected backend.
 
 ## Requirements
 
 - Node.js `^20.19.0` or `>=22.12.0`
 - npm `>=10`
 - Podman or another Docker-compatible runtime supported by the Supabase CLI
-- OpenCode for OpenCode-backed workflows
-- llama-swap for local AI models
 
-The Supabase CLI is installed as a project dev dependency, so local commands should be run through `npx supabase ...`; a global `supabase` binary is not required.
+Some optional workflows require additional local services such as OpenCode, llama-swap or a Creative 3D backend.
 
 ## Installation
 
 ```bash
-git clone https://github.com/weaf/pCAD.git
-cd pCAD
+git clone https://github.com/weaf/brepia.git
+cd brepia
 npm ci
 cp .env.local.template .env.local
 ```
 
-Configure the providers and integrations you want to use in `.env.local`.
-
-Start Brepia:
+Configure the services and providers you want to use in `.env.local`, then start Brepia:
 
 ```bash
 ./start.sh
 ```
 
-On the current rootless-Podman development setup, `start.sh` enables the Podman socket, configures the compatibility shim and starts the local Brepia Supabase stack with the repository-local CLI if it is not already running.
+The Supabase CLI is included as a project dependency, so a global `supabase` installation is not required.
 
-For explicit local Supabase lifecycle work, configure the same Podman environment and use:
+For local database setup and migration details, see [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md).
 
-```bash
-systemctl --user enable podman.socket --now
-export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
-export PATH="$PWD/scripts/podman:$PATH"
+## Optional local services
 
-npx supabase start
-npx supabase status
-npx supabase stop
-```
+### Creative 3D
 
-Apply local migrations and regenerate database types with:
-
-```bash
-npx supabase migration up
-npx supabase gen types typescript --local > shared/database.ts
-```
-
-For the complete local database workflow, see [`docs/local_supabase_lifecycle.md`](docs/local_supabase_lifecycle.md) and `.cursor/rules/database-workflow.mdc`.
-
-For Vite HMR:
-
-```bash
-PCAD_ENABLE_HMR=1 ./start.sh
-```
-
-## Local Creative 3D
-
-Install the local Creative runtime with:
+Install the supported local Creative runtime with:
 
 ```bash
 bash ./scripts/install-native-creative-backends.sh
 ```
 
-The installer configures the required local runtimes for llama-swap. See [`docs/local_creative_mesh_backends.md`](docs/local_creative_mesh_backends.md) for runtime and configuration details.
+See [`docs/local_creative_mesh_backends.md`](docs/local_creative_mesh_backends.md) for configuration details.
 
-## STEP export
+### STEP export
 
-Build the STEP export sandbox:
+Build the STEP export sandbox with:
 
 ```bash
 ./scripts/step-export/build-image.sh
 ```
 
-Then configure `PCAD_STEP_EXPORT_RUNNER` in `.env.local`. Additional settings are documented in `.env.local.template`.
+Then configure `PCAD_STEP_EXPORT_RUNNER` in `.env.local`. Available settings are documented in `.env.local.template`.
 
 ## Development
 
-Use the same gate locally as the repository quality workflow:
+Before submitting changes, run:
 
 ```bash
-npm ci
 npm test
 npm run typecheck
 npm run lint
@@ -133,9 +100,9 @@ npm run build
 
 `src/routeTree.gen.ts` is generated by TanStack Router and should not be edited manually.
 
-## Attribution
+## CADAM attribution
 
-Brepia evolved from the open-source **CADAM** project by Adam-CAD and retains code and design lineage from that work.
+Brepia is based on and evolved from the open-source **CADAM** project by Adam-CAD. The project retains code, design and architectural lineage from CADAM, and that upstream work made Brepia possible.
 
 Upstream project: [Adam-CAD/CADAM](https://github.com/Adam-CAD/CADAM)
 
