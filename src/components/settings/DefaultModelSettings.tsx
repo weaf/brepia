@@ -115,10 +115,9 @@ export function DefaultModelSettings() {
   );
   const savedLocalProfileId =
     preferences?.modelRouting.defaultLocalCreativeProfileId ?? null;
-  const selectedLocalProfile =
-    localCreativeProfiles.find(
-      (profile) => profile.id === savedLocalProfileId,
-    ) ?? localCreativeProfiles[0];
+  const selectedLocalProfile = savedLocalProfileId
+    ? localCreativeProfiles.find((profile) => profile.id === savedLocalProfileId)
+    : undefined;
 
   const isLoading = isCatalogLoading || isPreferencesLoading;
   const error =
@@ -236,33 +235,41 @@ export function DefaultModelSettings() {
                   Select the concrete local image/mesh runtime profile used by
                   Local Creative.
                 </p>
-                {localCreativeProfiles.length > 0 && selectedLocalProfile ? (
-                  <Select
-                    value={selectedLocalProfile.id}
-                    disabled={localProfileMutation.isPending}
-                    onValueChange={(profileId) => {
-                      const profile = localCreativeProfiles.find(
-                        (item) => item.id === profileId,
-                      );
-                      if (!profile) return;
-                      localProfileMutation.mutate({
-                        defaultLocalCreativeProfileId: profile.id,
-                        nativeImageModelId: profile.imageModelId,
-                        nativeMeshModelId: profile.meshModelId,
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="mt-2 w-full">
-                      <SelectValue placeholder="Select Local Creative profile" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {localCreativeProfiles.map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id}>
-                          {profile.name} · {profile.meshModelId}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {localCreativeProfiles.length > 0 ? (
+                  <>
+                    <Select
+                      value={selectedLocalProfile?.id}
+                      disabled={localProfileMutation.isPending}
+                      onValueChange={(profileId) => {
+                        const profile = localCreativeProfiles.find(
+                          (item) => item.id === profileId,
+                        );
+                        if (!profile) return;
+                        localProfileMutation.mutate({
+                          defaultLocalCreativeProfileId: profile.id,
+                          nativeImageModelId: profile.imageModelId,
+                          nativeMeshModelId: profile.meshModelId,
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="mt-2 w-full">
+                        <SelectValue placeholder="Select Local Creative profile" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {localCreativeProfiles.map((profile) => (
+                          <SelectItem key={profile.id} value={profile.id}>
+                            {profile.name} · {profile.meshModelId}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!selectedLocalProfile ? (
+                      <p className="mt-2 text-xs text-adam-amber">
+                        Choose a Local Creative profile to activate its runtime
+                        models and per-profile generation settings.
+                      </p>
+                    ) : null}
+                  </>
                 ) : (
                   <p className="mt-2 text-xs text-adam-amber">
                     No usable Local Creative profile is configured. Add one under
