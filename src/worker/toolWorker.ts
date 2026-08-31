@@ -4,11 +4,10 @@
 // request is bounded. A timeout/crash terminates the singleton and rejects all
 // in-flight callers; the next request lazily creates a fresh worker.
 
-import {
-  assertOpenScadOutputWithinLimit,
-  assertOpenScadSourceWithinLimit,
-} from '@/lib/openScadLimits';
+import { assertOpenScadOutputWithinLimit } from '@/lib/openScadLimits';
 import { OpenScadWorkerClient } from '@/worker/openScadWorkerClient';
+import type { OpenScadProject } from '@shared/openScadProject';
+import { normalizeOpenScadProject } from '@shared/openScadProject';
 import type { OpenSCADWorkerResponseData, WorkerMessage } from '@/worker/types';
 import { WorkerMessageType } from '@/worker/types';
 
@@ -27,15 +26,15 @@ function getToolWorkerClient(): OpenScadWorkerClient {
 }
 
 export async function previewScadColoredViaToolWorker(
-  code: string,
+  project: OpenScadProject,
 ): Promise<{ stl: Blob; off: Blob | undefined }> {
-  assertOpenScadSourceWithinLimit(code);
+  const normalizedProject = normalizeOpenScadProject(project);
 
   const requestId = `tool-preview-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const message: WorkerMessage & { id: string } = {
     id: requestId,
     type: WorkerMessageType.PREVIEW,
-    data: { code, params: [], fileType: 'stl' },
+    data: { project: normalizedProject, params: [], fileType: 'stl' },
   };
 
   const response =
