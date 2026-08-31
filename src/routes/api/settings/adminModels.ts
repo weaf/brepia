@@ -9,7 +9,10 @@ import {
 } from '@/server/api';
 import { AccountAdminError, requireAdmin } from '@/server/accountAdmin';
 import { listAdminModelInventory } from '@/server/adminModelInventory';
-import { deleteAdminModelWorkspace } from '@/server/adminModelManagement';
+import {
+  deleteAdminModelWorkspace,
+  readAdminWorkspaceImage,
+} from '@/server/adminModelManagement';
 
 function adminModelsError(error: unknown) {
   if (error instanceof AccountAdminError) {
@@ -18,8 +21,24 @@ function adminModelsError(error: unknown) {
   if (isUnauthorizedError(error)) {
     return json({ error: 'Unauthorized' }, 401);
   }
-  if (error instanceof Error && error.message === 'invalid_conversation_id') {
-    return json({ error: 'invalid_conversation_id' }, 400);
+  if (error instanceof Error) {
+    if (error.message === 'invalid_conversation_id') {
+      return json({ error: 'invalid_conversation_id' }, 400);
+    }
+    if (
+      error.message === 'invalid_asset_path' ||
+      error.message === 'invalid_asset_type'
+    ) {
+      return json({ error: error.message }, 400);
+    }
+  }
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  ) {
+    return json({ error: 'asset_not_found' }, 404);
   }
   console.error('[admin-model-inventory]', error);
   return json({ error: 'internal_error' }, 500);
@@ -33,6 +52,27 @@ export const Route = createFileRoute('/api/settings/adminModels')({
         try {
           const user = await requireUser(request);
           await requireAdmin(user);
+
+          const url = new URL(request.url);
+          const assetConversationId = url.searchParams.get('assetConversationId');
+          const assetPath = url.searchParams.get('assetPath');
+          if (assetConversationId || assetPath) {
+            if (!assetConversationId || !assetPath) {
+              return json({ error: 'asset_parameters_required' }, 400);
+            }
+            const asset = await readAdminWorkspaceImage(
+              assetConversationId,
+              assetPath,
+            );
+            return new Response(asset.bytes, {
+              status: 200,
+              headers: {
+                'Content-Type': asset.contentType,
+                'Cache-Control': 'private, no-store',
+              },
+            });
+          }
+
           return json(await listAdminModelInventory());
         } catch (error) {
           return adminModelsError(error);
