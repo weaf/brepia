@@ -2,108 +2,70 @@
 
 ## Purpose
 
-Guide implementation of Brepia settings UI components that match the project's visual conventions and accessibility standards.
+Guide changes to Brepia Settings while preserving the current responsive shell, access boundaries and existing component/service architecture.
 
-## Visual Conventions
+## Current structure
 
-### Reuse Existing Primitives
+`src/views/SettingsView.tsx` owns the Settings page shell and top-level tabs. Feature-specific settings UI is split into components under `src/components/settings/`, including AI, administration, debug and instance/legal sections.
 
-- Use existing shadcn/ui components (Button, Input, Select, Card, etc.).
-- Match existing Tailwind CSS classes and color palette from `SettingsView.tsx`.
-- Follow existing spacing, padding, and border radius conventions.
-- Do not introduce new UI libraries or styling frameworks.
+Do not move all settings logic back into `SettingsView.tsx`. Reuse existing section/panel components and service/API helpers.
 
-### Mobile-Safe Layout
+## Responsive and accessibility rules
 
-- All settings panels must work on mobile viewports (min-width 320px).
-- Use responsive grid/flex layouts.
-- Avoid fixed-width elements; use `max-w-*` constraints.
-- Touch targets must be at least 44px tall.
+- Preserve the existing mobile/desktop Settings shell and its `min-w-0`, wrapping and responsive-width patterns.
+- Reuse shadcn/Radix primitives and current Tailwind tokens/classes.
+- Preserve keyboard accessibility, labels, focus behavior and dialog semantics.
+- Use the existing `adam-*` design tokens; they are compatibility-sensitive and are not cosmetic rename targets.
+- Do not introduce a second UI framework or inline-style system for settings work.
 
-### Keyboard Accessibility
+Do not impose arbitrary pixel/timing requirements that are not already part of the component being changed. Inspect the current responsive implementation and tests before choosing new dimensions or debounce timings.
 
-- All interactive controls must be keyboard-accessible.
-- Focus indicators must match the project's focus style (visible outline).
-- Tab order must follow logical visual order.
-- Forms must have proper `<label>` associations.
+## Data and mutations
 
-## Component Structure
+- Use React Query and existing services/hooks for server state.
+- Use current TanStack Query object syntax, for example `invalidateQueries({ queryKey: [...] })`, matching surrounding code.
+- Authenticated `/api/...` calls should reuse Brepia's existing API helpers/patterns rather than raw unauthenticated fetches.
+- Keep loading, success, empty and failure states explicit.
+- Disable or guard repeated mutations while an operation is pending when the existing interaction requires it.
+- Do not silently substitute another provider/model/profile when a selected item is unavailable.
 
-### Location
+## Access boundaries
 
-- New settings panels go in `src/components/settings/`.
-- Each panel is a separate component file (e.g., `AiModelsSettings.tsx`, `PromptProfilesSettings.tsx`, `ProvidersSettings.tsx`).
-- `SettingsView.tsx` imports and renders these panels as children — it does NOT embed their internal logic.
+- Administration UI must remain gated by the current account-access role checks.
+- Debug/lifecycle controls must preserve their current environment/runtime visibility rules.
+- Client-side hiding is not authorization; server API routes must keep their own authorization checks.
 
-### Pattern
+## Secrets
 
-```tsx
-// src/components/settings/AiModelsSettings.tsx
-import { useQuery, useMutation } from '@tanstack/react-query';
-// ... imports
+Provider credentials must never be rendered back to the user or written to browser logs.
 
-export function AiModelsSettings() {
-  // Query for model list, user preferences
-  // Mutations for hide/show, etc.
-  return <div className="space-y-4">{/* Panel content */}</div>;
-}
-```
+Use the current provider DTO contract (`hasCredential`) and existing credential update/removal UX. Do not create masked fake secret values that could accidentally be submitted as real credentials unless the existing component explicitly uses that pattern.
 
-## State Management
+## Destructive actions
 
-### React Query
+Use existing confirmation/dialog patterns for destructive actions such as account deletion, provider deletion or profile deletion. The confirmation text should match the actual server-side effect.
 
-- Use `@tanstack/react-query` for data fetching and caching.
-- Invalidate cache after mutations (e.g., `queryClient.invalidateQueries(['ai-models'])`).
-- Show loading states during data fetching.
-- Show error states with retry options.
-- Show empty states when no data exists.
+## Component placement
 
-### Form State
+- Reusable settings feature panels belong under `src/components/settings/`.
+- Shared data access belongs in existing hooks/services/server modules, not embedded into a large page component.
+- Keep `SettingsView.tsx` focused on page-level layout, account-level UI and composing feature sections.
 
-- Use controlled components with `useState` for form inputs.
-- Debounce search/filter inputs (e.g., 300ms).
-- Save buttons should be disabled during mutation.
+## Completion
 
-## Security
+For Settings changes:
 
-### Never Render Secrets
+1. inspect desktop and mobile behavior for the affected section;
+2. verify access-role and secret-handling boundaries;
+3. run focused tests where available;
+4. run:
 
-- After saving provider credentials, never render them in the UI.
-- Show masked values (`****`) if displaying credential status.
-- Never log credential values in console output from browser code.
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   npm run build
+   git diff --check
+   ```
 
-### Destructive Actions
-
-- Delete/archive actions must have confirmation dialogs.
-- Confirmation dialogs must clearly describe what will be deleted.
-
-## Save/Cancel Pattern
-
-1. User makes changes.
-2. "Save" button is disabled until there are unsaved changes.
-3. On save, show loading state.
-4. On success, invalidate cache, show success message (auto-dismiss after 3s).
-5. On error, show error message with retry option.
-6. "Cancel" reverts to last loaded state.
-
-## Must Do
-
-- Reuse shadcn/ui components for consistency.
-- Support mobile viewports.
-- Keyboard-accessible controls.
-- Clear save/cancel/destructive actions.
-- React Query cache invalidation after mutations.
-- Loading/error/empty states.
-- No secret values rendered after save.
-- Separate components for each settings panel.
-
-## Must NOT Do
-
-- Put all AI settings logic inside `SettingsView.tsx`.
-- Use inline styles instead of Tailwind classes.
-- Introduce new UI libraries.
-- Remove existing accessibility attributes.
-- Hard-code API endpoint URLs — use existing API route patterns.
-- Bypass React Query for data fetching.
-- Render credential values in plaintext in the UI.
+5. preserve stable-runtime and Parametric/Creative behavior unless the task explicitly changes them.
