@@ -51,12 +51,18 @@ export function writePreferredCreativeAgentModel(modelId: Model): void {
   window.localStorage.setItem(CREATIVE_AGENT_STORAGE_KEY, modelId);
 }
 
-export function resolvePreferredCreativeAgentModel<T extends CreativeAgentCandidate>(
+export function resolvePreferredCreativeAgentModel<
+  T extends CreativeAgentCandidate,
+>(
   models: readonly T[],
-  preferredModelId: string | null | undefined = readPreferredCreativeAgentModel(),
+  preferredModelId:
+    string | null | undefined = readPreferredCreativeAgentModel(),
 ): Model | undefined {
   const candidates = creativeAgentCandidates(models);
-  if (preferredModelId && candidates.some((model) => model.id === preferredModelId)) {
+  if (
+    preferredModelId &&
+    candidates.some((model) => model.id === preferredModelId)
+  ) {
     return preferredModelId;
   }
   return candidates[0]?.id;

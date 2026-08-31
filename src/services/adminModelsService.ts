@@ -98,9 +98,9 @@ export async function getAdminWorkspaceImage(
   if (!response.ok) {
     const contentType = response.headers.get('Content-Type') ?? '';
     if (contentType.includes('application/json')) {
-      const data = (await response.json().catch(() => null)) as
-        | { error?: unknown }
-        | null;
+      const data = (await response.json().catch(() => null)) as {
+        error?: unknown;
+      } | null;
       if (typeof data?.error === 'string') throw new Error(data.error);
     }
     throw new Error(response.statusText || 'Could not load workspace image');

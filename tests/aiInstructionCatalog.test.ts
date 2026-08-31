@@ -25,7 +25,9 @@ describe('repository-driven AI instruction catalog', () => {
       expect(keys.has(definition.key)).toBe(false);
       keys.add(definition.key);
       expect(isAiInstructionKey(definition.key)).toBe(true);
-      expect(loadBundledInstruction(definition.key).trim().length).toBeGreaterThan(0);
+      expect(
+        loadBundledInstruction(definition.key).trim().length,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -114,11 +116,9 @@ describe('AI instruction profile packages', () => {
   });
 
   it('exposes only registered package IDs', () => {
-    expect(AI_INSTRUCTION_PROFILE_DEFINITIONS.map((profile) => profile.id)).toEqual([
-      'cadam',
-      'standard',
-      'test',
-    ]);
+    expect(
+      AI_INSTRUCTION_PROFILE_DEFINITIONS.map((profile) => profile.id),
+    ).toEqual(['cadam', 'standard', 'test']);
     expect(isAiInstructionProfileId('qwen')).toBe(false);
     expect(isAiInstructionProfileId('builtin:parametric')).toBe(false);
   });

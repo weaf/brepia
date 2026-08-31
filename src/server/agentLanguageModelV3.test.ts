@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { cliAgentChatModel } from './cliAgents.ts';
-import {
-  opencodeChatModel,
-  streamingOpencodeChatModel,
-} from './opencode.ts';
+import { opencodeChatModel, streamingOpencodeChatModel } from './opencode.ts';
 
 describe('native AI SDK v3 agent adapters', () => {
   it('exposes the OpenCode HTTP/SSE adapters as LanguageModelV3', () => {

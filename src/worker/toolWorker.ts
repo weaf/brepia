@@ -9,10 +9,7 @@ import {
   assertOpenScadSourceWithinLimit,
 } from '@/lib/openScadLimits';
 import { OpenScadWorkerClient } from '@/worker/openScadWorkerClient';
-import type {
-  OpenSCADWorkerResponseData,
-  WorkerMessage,
-} from '@/worker/types';
+import type { OpenSCADWorkerResponseData, WorkerMessage } from '@/worker/types';
 import { WorkerMessageType } from '@/worker/types';
 
 let client: OpenScadWorkerClient | null = null;
@@ -41,9 +38,8 @@ export async function previewScadColoredViaToolWorker(
     data: { code, params: [], fileType: 'stl' },
   };
 
-  const response = await getToolWorkerClient().request<OpenSCADWorkerResponseData>(
-    message,
-  );
+  const response =
+    await getToolWorkerClient().request<OpenSCADWorkerResponseData>(message);
   assertOpenScadOutputWithinLimit(response);
 
   if (!response.output) {

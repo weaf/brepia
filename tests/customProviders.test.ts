@@ -198,17 +198,15 @@ describe('B5 — buildCustomChatModel', () => {
 
   describe('ID parsing', () => {
     it('parses custom model ID format custom/<providerId>/<modelId>', async () => {
-      const { parseCustomProviderModelId } = await import(
-        '@shared/customModelIds'
-      );
+      const { parseCustomProviderModelId } =
+        await import('@shared/customModelIds');
       const result = parseCustomProviderModelId('custom/prov-001/model-001');
       expect(result).toEqual({ providerId: 'prov-001', modelId: 'model-001' });
     });
 
     it('handles native model IDs containing /', async () => {
-      const { parseCustomProviderModelId } = await import(
-        '@shared/customModelIds'
-      );
+      const { parseCustomProviderModelId } =
+        await import('@shared/customModelIds');
       const result = parseCustomProviderModelId('custom/prov-001/openai/gpt-4');
       expect(result).toEqual({
         providerId: 'prov-001',
@@ -217,9 +215,8 @@ describe('B5 — buildCustomChatModel', () => {
     });
 
     it('returns null for non-custom model IDs', async () => {
-      const { parseCustomProviderModelId } = await import(
-        '@shared/customModelIds'
-      );
+      const { parseCustomProviderModelId } =
+        await import('@shared/customModelIds');
       expect(parseCustomProviderModelId('gpt-4')).toBeNull();
       expect(parseCustomProviderModelId('builtin:parametric')).toBeNull();
       expect(parseCustomProviderModelId('opencode/hy3-free')).toBeNull();

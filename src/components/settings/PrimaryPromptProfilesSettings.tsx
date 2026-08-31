@@ -178,7 +178,9 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
       toast({
         title: 'Error',
         description:
-          error instanceof Error ? error.message : 'Failed to set prompt default.',
+          error instanceof Error
+            ? error.message
+            : 'Failed to set prompt default.',
         variant: 'destructive',
       });
     },
@@ -225,7 +227,8 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to save prompt.',
+        description:
+          error instanceof Error ? error.message : 'Failed to save prompt.',
         variant: 'destructive',
       });
     },
@@ -258,7 +261,7 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
       description: '',
       promptTemplate: '',
       mode,
-      baseRevision: mode === 'fork' ? bundled?.fingerprint ?? null : null,
+      baseRevision: mode === 'fork' ? (bundled?.fingerprint ?? null) : null,
     });
   };
 
@@ -297,7 +300,9 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
   const selectedPromptLabel = useMemo(() => {
     if (!selected) return 'Prompt';
     if (!selected.editable) return 'Bundled repository template';
-    return selected.mode === 'fork' ? 'Full replacement prompt' : 'Overlay instructions';
+    return selected.mode === 'fork'
+      ? 'Full replacement prompt'
+      : 'Overlay instructions';
   }, [selected]);
 
   if (isLoading) {
@@ -319,7 +324,9 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-medium text-adam-neutral-50">{config.title}</h3>
+        <h3 className="text-sm font-medium text-adam-neutral-50">
+          {config.title}
+        </h3>
         <p className="mt-1 text-xs leading-relaxed text-adam-neutral-400">
           {config.description}
         </p>
@@ -367,11 +374,21 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
           })}
 
           <div className="grid grid-cols-2 gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => beginNew('fork')}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => beginNew('fork')}
+            >
               <Plus className="mr-1 h-3.5 w-3.5" />
               New
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => beginNew('overlay')}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => beginNew('overlay')}
+            >
               <Plus className="mr-1 h-3.5 w-3.5" />
               Overlay
             </Button>
@@ -403,14 +420,18 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
                   value={draft.name}
                   onChange={(event) =>
                     setDraft((current) =>
-                      current ? { ...current, name: event.target.value } : current,
+                      current
+                        ? { ...current, name: event.target.value }
+                        : current,
                     )
                   }
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-adam-neutral-300">Description</label>
+                <label className="text-xs text-adam-neutral-300">
+                  Description
+                </label>
                 <Input
                   value={draft.description}
                   onChange={(event) =>
@@ -426,7 +447,9 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
 
               <div className="space-y-2">
                 <label className="text-xs text-adam-neutral-300">
-                  {draft.mode === 'fork' ? 'Full replacement prompt' : 'Overlay instructions'}
+                  {draft.mode === 'fork'
+                    ? 'Full replacement prompt'
+                    : 'Overlay instructions'}
                 </label>
                 <Textarea
                   value={draft.promptTemplate}
@@ -503,12 +526,22 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
                     </Button>
                   ) : null}
                   {selected.editable ? (
-                    <Button type="button" variant="outline" size="sm" onClick={beginEdit}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={beginEdit}
+                    >
                       <Pencil className="mr-1 h-3.5 w-3.5" />
                       Edit
                     </Button>
                   ) : null}
-                  <Button type="button" variant="outline" size="sm" onClick={beginCopy}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={beginCopy}
+                  >
                     <Copy className="mr-1 h-3.5 w-3.5" />
                     Copy
                   </Button>
@@ -528,7 +561,9 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-adam-neutral-300">{selectedPromptLabel}</label>
+                <label className="text-xs text-adam-neutral-300">
+                  {selectedPromptLabel}
+                </label>
                 <Textarea
                   readOnly
                   value={selected.promptTemplate ?? ''}
@@ -538,8 +573,9 @@ export function PrimaryPromptProfilesSettings({ scope }: Props) {
 
               {!selected.editable && defaultId !== null ? (
                 <p className="text-xs text-adam-neutral-400">
-                  This bundled template is a repository reference. To use its text again,
-                  copy it into a profile and set that profile as default.
+                  This bundled template is a repository reference. To use its
+                  text again, copy it into a profile and set that profile as
+                  default.
                 </p>
               ) : null}
             </div>

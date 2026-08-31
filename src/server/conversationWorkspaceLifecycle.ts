@@ -72,9 +72,7 @@ async function loadOwnedConversation(
 
   const { data, error } = await supabase
     .from('conversations')
-    .select(
-      'id, title, type, created_at, updated_at, current_message_leaf_id',
-    )
+    .select('id, title, type, created_at, updated_at, current_message_leaf_id')
     .eq('id', conversationId)
     .eq('user_id', user.id)
     .maybeSingle();

@@ -426,9 +426,7 @@ function UserEditor({
         <select
           className="h-10 w-full rounded-md border border-adam-neutral-700 bg-adam-background-1 px-3 text-sm text-adam-neutral-50"
           value={role}
-          onChange={(event) =>
-            setRole(event.target.value as 'admin' | 'user')
-          }
+          onChange={(event) => setRole(event.target.value as 'admin' | 'user')}
         >
           <option value="user">User</option>
           <option value="admin">Admin</option>

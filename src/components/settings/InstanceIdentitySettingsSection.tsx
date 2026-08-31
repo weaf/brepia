@@ -55,7 +55,7 @@ export function InstanceIdentitySettingsSection({
           <ActivityIndicator label="Loading instance identity" />
         </div>
       ) : isError ? (
-        <div className="rounded-lg border border-adam-red-400/30 bg-adam-red-400/5 p-4 text-sm text-adam-red-300">
+        <div className="border-adam-red-400/30 bg-adam-red-400/5 text-adam-red-300 rounded-lg border p-4 text-sm">
           Could not load instance identity settings. Make sure the latest
           Supabase migration has been applied.
         </div>

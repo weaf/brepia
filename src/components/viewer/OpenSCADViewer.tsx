@@ -307,7 +307,9 @@ function compileErrorDetail(error?: OpenSCADError | Error): string | null {
   if (!error) return null;
   if ('stdErr' in error && Array.isArray(error.stdErr)) {
     const lines = error.stdErr
-      .filter((line): line is string => typeof line === 'string' && !!line.trim())
+      .filter(
+        (line): line is string => typeof line === 'string' && !!line.trim(),
+      )
       .slice(-2);
     if (lines.length > 0) return lines.join(' ');
   }

@@ -11,10 +11,7 @@ import {
 } from './customProviders';
 
 export type BuiltinProviderDriver =
-  | 'anthropic'
-  | 'google'
-  | 'openrouter'
-  | 'openai-compatible';
+  'anthropic' | 'google' | 'openrouter' | 'openai-compatible';
 
 export const BUILTIN_PROVIDER_DRIVERS: BuiltinProviderDriver[] = [
   'anthropic',
@@ -78,7 +75,9 @@ function serverBaseUrl(driver: BuiltinProviderDriver): string {
         'https://generativelanguage.googleapis.com/v1beta'
       );
     case 'openrouter':
-      return env('OPENROUTER_BASE_URL').trim() || 'https://openrouter.ai/api/v1';
+      return (
+        env('OPENROUTER_BASE_URL').trim() || 'https://openrouter.ai/api/v1'
+      );
     case 'openai-compatible':
       return env('LOCAL_LLM_BASE_URL').trim() || 'http://localhost:11434/v1';
   }
@@ -159,7 +158,9 @@ export async function listBuiltinProviderSettings(
   user: User,
 ): Promise<BuiltinProviderSettingsDto[]> {
   const providers = await getUserProviders(user);
-  const summaries = new Map(providers.map((provider) => [provider.slug, provider]));
+  const summaries = new Map(
+    providers.map((provider) => [provider.slug, provider]),
+  );
 
   return Promise.all(
     BUILTIN_PROVIDER_DRIVERS.map(async (driver) => {
@@ -258,7 +259,9 @@ export async function loadBuiltinProviderRuntimeOverrides(
     .in('slug', slugs);
 
   if (error) {
-    throw new Error(`Failed to load built-in provider overrides: ${error.message}`);
+    throw new Error(
+      `Failed to load built-in provider overrides: ${error.message}`,
+    );
   }
 
   const driverBySlug = new Map(

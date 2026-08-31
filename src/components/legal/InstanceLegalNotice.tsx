@@ -67,8 +67,8 @@ export function InstanceLegalNotice({ kind }: { kind: LegalKind }) {
               </div>
             ) : (
               <div className="rounded-lg border border-adam-neutral-700 bg-adam-background-1 p-5">
-                No {kind === 'terms' ? 'Terms of Service' : 'Privacy Policy'} has
-                been published through this Brepia installation.
+                No {kind === 'terms' ? 'Terms of Service' : 'Privacy Policy'}{' '}
+                has been published through this Brepia installation.
               </div>
             )}
 

@@ -132,11 +132,7 @@ export function VisionSettings() {
   if (isLoading) {
     return (
       <div className="py-6 text-sm text-adam-neutral-400">
-        <ActivityIndicator
-          label="Loading vision models…"
-          showLabel
-          size="sm"
-        />
+        <ActivityIndicator label="Loading vision models…" showLabel size="sm" />
       </div>
     );
   }
@@ -217,8 +213,7 @@ export function VisionSettings() {
             onValueChange={(value) =>
               save({
                 visionFastModelId: fastId,
-                visionDeepModelId:
-                  value === SAME_AS_FAST_VALUE ? null : value,
+                visionDeepModelId: value === SAME_AS_FAST_VALUE ? null : value,
               })
             }
           >
@@ -235,7 +230,9 @@ export function VisionSettings() {
             </SelectContent>
           </Select>
           <SelectedModelSummary
-            entry={deepId ? byId.get(deepId) : fastId ? byId.get(fastId) : undefined}
+            entry={
+              deepId ? byId.get(deepId) : fastId ? byId.get(fastId) : undefined
+            }
             emptyText="Deep inspection also needs a Fast model when no separate Deep model is selected."
           />
         </div>
@@ -249,8 +246,8 @@ export function VisionSettings() {
         </div>
       ) : (
         <p className="text-xs text-adam-neutral-500">
-          Hidden models remain available here, so dedicated vision helper
-          models do not need to appear in the normal model picker.
+          Hidden models remain available here, so dedicated vision helper models
+          do not need to appear in the normal model picker.
         </p>
       )}
     </div>

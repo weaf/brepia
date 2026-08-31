@@ -27,12 +27,7 @@ import type { CatalogEntry } from '@/server/modelCatalog';
 
 type VisibilityFilter = 'all' | 'visible' | 'hidden';
 type SourceFilter =
-  | 'all'
-  | 'builtin'
-  | 'local'
-  | 'opencode'
-  | 'codex'
-  | 'custom';
+  'all' | 'builtin' | 'local' | 'opencode' | 'codex' | 'custom';
 type CapabilityFilter = 'tools' | 'thinking' | 'vision';
 
 type ModelGroup = {
@@ -324,9 +319,9 @@ function ModelRow({
               source === 'builtin'
                 ? 'shrink-0 bg-adam-blue/15 text-adam-blue hover:bg-adam-blue/20'
                 : source === 'local'
-                  ? 'shrink-0 bg-adam-emerald/15 text-adam-emerald hover:bg-adam-emerald/20'
+                  ? 'bg-adam-emerald/15 text-adam-emerald hover:bg-adam-emerald/20 shrink-0'
                   : source === 'opencode'
-                    ? 'shrink-0 bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20'
+                    ? 'bg-adam-amber/15 text-adam-amber hover:bg-adam-amber/20 shrink-0'
                     : source === 'codex'
                       ? 'shrink-0 bg-adam-neutral-700 text-adam-neutral-200 hover:bg-adam-neutral-700'
                       : 'shrink-0'
@@ -399,9 +394,9 @@ export function AiModelsSettings() {
   const [visibilityFilter, setVisibilityFilter] =
     useState<VisibilityFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-  const [capabilityFilters, setCapabilityFilters] = useState<CapabilityFilter[]>(
-    [],
-  );
+  const [capabilityFilters, setCapabilityFilters] = useState<
+    CapabilityFilter[]
+  >([]);
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
 
   const filteredEntries = useMemo(
@@ -513,7 +508,9 @@ export function AiModelsSettings() {
   if (error) {
     return (
       <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
-        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">Models</h2>
+        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
+          Models
+        </h2>
         <div className="text-adam-red-400 text-sm">
           Failed to load model settings: {error}
         </div>
@@ -742,7 +739,8 @@ export function AiModelsSettings() {
                         </Badge>
                       </div>
                       <div className="mt-0.5 text-[11px] text-adam-neutral-300">
-                        {group.models.length} model{group.models.length === 1 ? '' : 's'}
+                        {group.models.length} model
+                        {group.models.length === 1 ? '' : 's'}
                         {group.detail ? ` · ${group.detail}` : ''}
                       </div>
                     </div>

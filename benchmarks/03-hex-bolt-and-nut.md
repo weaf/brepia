@@ -18,9 +18,9 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `screw_length` | `45` | `[10:1:100]` | Length of the screw shaft |
+| Parameter      | Default | Range / options | Description               |
+| -------------- | ------- | --------------- | ------------------------- |
+| `screw_length` | `45`    | `[10:1:100]`    | Length of the screw shaft |
 
 <details>
 <summary>OpenSCAD source — <code>03-hex-bolt-and-nut.scad</code></summary>
@@ -31,7 +31,7 @@ include <BOSL2/screws.scad>
 
 /* [Screw Parameters] */
 // The screw size and pitch specification
-screw_spec = "M12x1.75"; 
+screw_spec = "M12x1.75";
 
 // Length of the screw shaft
 screw_length = 45;      // [10:1:100]

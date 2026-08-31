@@ -582,7 +582,9 @@ async function persistMeshResult({
       upsert: true,
     });
   if (uploadError) {
-    throw new Error(`Failed to store native Creative mesh: ${uploadError.message}`);
+    throw new Error(
+      `Failed to store native Creative mesh: ${uploadError.message}`,
+    );
   }
 
   const { error: updateError } = await supabase
@@ -686,9 +688,7 @@ export async function handleNativeCreativeMeshRequest(
     return localError('Conversation not found', 404);
   }
 
-  let profileResolution: ReturnType<
-    typeof resolveCreativeConversationProfile
-  >;
+  let profileResolution: ReturnType<typeof resolveCreativeConversationProfile>;
   try {
     profileResolution = resolveCreativeConversationProfile(
       modelRouting,

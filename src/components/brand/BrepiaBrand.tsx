@@ -19,10 +19,7 @@ export function BrepiaBrand({
 }: BrepiaBrandProps) {
   return (
     <div className={cn('inline-flex items-center gap-3', className)}>
-      <BrepiaMark
-        tone={tone}
-        className={cn('h-8 w-8', markClassName)}
-      />
+      <BrepiaMark tone={tone} className={cn('h-8 w-8', markClassName)} />
       <div className="flex min-w-0 flex-col">
         <span
           className={cn(

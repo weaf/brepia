@@ -82,22 +82,12 @@ function ModelDropdown({
   // submitting an unavailable backend ID. This applies only to the public 3D
   // selector; the Creative controller uses its own validation/pinning logic.
   useEffect(() => {
-    if (
-      !registerBinding ||
-      currentType !== 'creative' ||
-      models.length === 0
-    ) {
+    if (!registerBinding || currentType !== 'creative' || models.length === 0) {
       return;
     }
     if (models.some((model) => model.id === selectedModel)) return;
     onModelChange(models[0].id);
-  }, [
-    currentType,
-    models,
-    onModelChange,
-    registerBinding,
-    selectedModel,
-  ]);
+  }, [currentType, models, onModelChange, registerBinding, selectedModel]);
 
   // Track previous model name for slide animation
   const [prevModelName, setPrevModelName] = useState<string | null>(null);
@@ -105,7 +95,8 @@ function ModelDropdown({
   const [slideDirection, setSlideDirection] = useState<'up' | 'down'>('up');
 
   const selectedModelConfig = models.find((m) => m.id === selectedModel);
-  const selectedModelName = selectedModelConfig?.name || selectedModel || emptyLabel;
+  const selectedModelName =
+    selectedModelConfig?.name || selectedModel || emptyLabel;
 
   // Store previous selected model name and type
   const prevNameRef = useRef<string | undefined>(selectedModelName);
@@ -174,7 +165,7 @@ function ModelDropdown({
           }}
           variant="ghost"
           className={cn(
-            'flex h-8 min-w-0 w-auto items-center gap-1.5 rounded-lg px-3 text-sm transition-all duration-200 hover:border-[#333333] hover:bg-adam-neutral-800',
+            'flex h-8 w-auto min-w-0 items-center gap-1.5 rounded-lg px-3 text-sm transition-all duration-200 hover:border-[#333333] hover:bg-adam-neutral-800',
             focused
               ? 'text-white hover:text-white'
               : 'text-adam-text-secondary hover:text-adam-text-primary',
@@ -327,8 +318,8 @@ function CreativeAgentSelector({
     [catalogModels],
   );
   const pinnedAgentModel = conversation.settings?.creativeAgentModel;
-  const [selectedAgentModel, setSelectedAgentModel] = useState<Model>(() =>
-    pinnedAgentModel ?? readPreferredCreativeAgentModel() ?? '',
+  const [selectedAgentModel, setSelectedAgentModel] = useState<Model>(
+    () => pinnedAgentModel ?? readPreferredCreativeAgentModel() ?? '',
   );
 
   useEffect(() => {
@@ -359,12 +350,7 @@ function CreativeAgentSelector({
         },
       });
     }
-  }, [
-    agentModels,
-    conversation,
-    pinnedAgentModel,
-    updateConversation,
-  ]);
+  }, [agentModels, conversation, pinnedAgentModel, updateConversation]);
 
   const handleAgentModelChange = (modelId: Model) => {
     setSelectedAgentModel(modelId);

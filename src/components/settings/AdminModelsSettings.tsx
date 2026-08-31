@@ -43,7 +43,10 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
 }
 
-function matchesWorkspace(workspace: AdminConversationWorkspace, query: string) {
+function matchesWorkspace(
+  workspace: AdminConversationWorkspace,
+  query: string,
+) {
   if (!query) return true;
   const haystack = [
     workspace.conversationId,
@@ -92,8 +95,9 @@ export function AdminModelsSettings() {
   });
   const deleteMutation = useMutation({
     mutationFn: async (conversationIds: string[]) => {
-      const results: Array<Awaited<ReturnType<typeof deleteAdminModelWorkspace>>> =
-        [];
+      const results: Array<
+        Awaited<ReturnType<typeof deleteAdminModelWorkspace>>
+      > = [];
 
       for (const conversationId of conversationIds) {
         try {
@@ -157,7 +161,9 @@ export function AdminModelsSettings() {
   const syncMutation = useMutation({
     mutationFn: syncConversationWorkspace,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin-model-inventory'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['admin-model-inventory'],
+      });
       toast({ title: 'Workspace synchronized' });
     },
     onError: (error) =>
@@ -247,7 +253,10 @@ export function AdminModelsSettings() {
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Summary label="Conversations" value={String(inventory.conversationCount)} />
+        <Summary
+          label="Conversations"
+          value={String(inventory.conversationCount)}
+        />
         <Summary label="Workspaces" value={String(inventory.workspaceCount)} />
         <Summary label="Models" value={String(inventory.modelCount)} />
         <Summary label="Disk usage" value={formatBytes(inventory.totalBytes)} />
@@ -419,7 +428,8 @@ export function AdminModelsSettings() {
                   false)
               }
               canSync={
-                workspace.missingWorkspace && workspace.userId === access?.userId
+                workspace.missingWorkspace &&
+                workspace.userId === access?.userId
               }
               onSync={(conversationId) => syncMutation.mutate(conversationId)}
               syncing={
@@ -710,7 +720,10 @@ function WorkspaceCard({
                 onClick={() => onSync(workspace.conversationId)}
               >
                 {syncing ? (
-                  <ActivityIndicator label="Synchronizing workspace" size="sm" />
+                  <ActivityIndicator
+                    label="Synchronizing workspace"
+                    size="sm"
+                  />
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}

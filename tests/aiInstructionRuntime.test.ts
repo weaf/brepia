@@ -70,9 +70,8 @@ describe('per-request AI instruction snapshot', () => {
   });
 
   it('bulk-loads selected profiles once and resolves the rest of the turn in memory', async () => {
-    const { createUserAiRuntimeContext } = await import(
-      '../src/server/aiInstructionRuntime'
-    );
+    const { createUserAiRuntimeContext } =
+      await import('../src/server/aiInstructionRuntime');
 
     const runtime = await createUserAiRuntimeContext('user-id');
 
@@ -106,9 +105,8 @@ describe('per-request AI instruction snapshot', () => {
       visionDeepModelId: null,
     });
 
-    const { createUserAiRuntimeContext } = await import(
-      '../src/server/aiInstructionRuntime'
-    );
+    const { createUserAiRuntimeContext } =
+      await import('../src/server/aiInstructionRuntime');
 
     const runtime = await createUserAiRuntimeContext('user-id');
     const instruction = await runtime.instruction('tool.answer_user');

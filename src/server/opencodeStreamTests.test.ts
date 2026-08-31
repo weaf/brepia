@@ -43,9 +43,7 @@ describe('extractText — opencode incremental processing', () => {
   });
 
   it('returns undefined usage when step.ended has no tokens', () => {
-    const result = extractText([
-      { type: 'session.next.step.ended', data: {} },
-    ]);
+    const result = extractText([{ type: 'session.next.step.ended', data: {} }]);
     assert.strictEqual(result.tokens, undefined);
   });
 
@@ -110,9 +108,7 @@ describe('extractText — edge cases', () => {
   });
 
   it('handles missing text field on text.ended event', () => {
-    const result = extractText([
-      { type: 'session.next.text.ended', data: {} },
-    ]);
+    const result = extractText([{ type: 'session.next.text.ended', data: {} }]);
     assert.strictEqual(result.text, '');
   });
 

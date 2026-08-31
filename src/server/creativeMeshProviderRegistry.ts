@@ -118,7 +118,9 @@ export function getCreativeMeshCatalog(): CreativeMeshCatalog {
   });
 
   const enabledProviderIds = new Set(
-    providers.filter((provider) => provider.enabled).map((provider) => provider.id),
+    providers
+      .filter((provider) => provider.enabled)
+      .map((provider) => provider.id),
   );
 
   return {

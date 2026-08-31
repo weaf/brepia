@@ -224,9 +224,7 @@ export function ThreeScene({
             }
             aria-pressed={uprightLocked}
             title={
-              uprightLocked
-                ? 'Free rotate'
-                : 'Lock upright like Mesh view'
+              uprightLocked ? 'Free rotate' : 'Lock upright like Mesh view'
             }
             onClick={() => setUprightLocked((locked) => !locked)}
           >

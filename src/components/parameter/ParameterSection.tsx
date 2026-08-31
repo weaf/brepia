@@ -1,9 +1,4 @@
-import {
-  RefreshCcw,
-  Download,
-  ChevronUp,
-  ChevronDown,
-} from 'lucide-react';
+import { RefreshCcw, Download, ChevronUp, ChevronDown } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';

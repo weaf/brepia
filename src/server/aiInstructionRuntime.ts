@@ -98,7 +98,9 @@ function resolveInstructionTemplateFromSnapshot(
     );
   }
   if (profile.scope !== key) {
-    throw new Error(`Prompt profile ${profileId} is ${profile.scope}, not ${key}.`);
+    throw new Error(
+      `Prompt profile ${profileId} is ${profile.scope}, not ${key}.`,
+    );
   }
   if (profile.mode === 'overlay') {
     return `${bundled}\n\n--- User Custom Instructions ---\n\n${profile.prompt_template}`;
@@ -118,8 +120,7 @@ export async function resolveInstructionTemplateFromPreferences(
   userId: string,
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
-  instructionProfileId: AiInstructionProfileId =
-    preferences.defaultInstructionProfileId,
+  instructionProfileId: AiInstructionProfileId = preferences.defaultInstructionProfileId,
 ): Promise<string> {
   return resolveInstructionProfile({
     userId,
@@ -134,8 +135,7 @@ export async function resolveInstructionFromPreferences(
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
   values: InstructionValues = {},
-  instructionProfileId: AiInstructionProfileId =
-    preferences.defaultInstructionProfileId,
+  instructionProfileId: AiInstructionProfileId = preferences.defaultInstructionProfileId,
 ): Promise<string> {
   const template = await resolveInstructionTemplateFromPreferences(
     userId,

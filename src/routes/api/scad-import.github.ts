@@ -7,9 +7,7 @@ import {
   preflight,
   requireUser,
 } from '@/server/api';
-import {
-  GithubScadImportError,
-} from '@/lib/githubScadImport';
+import { GithubScadImportError } from '@/lib/githubScadImport';
 import { ScadImportError } from '@/lib/scadImport';
 import {
   GithubScadResolveError,

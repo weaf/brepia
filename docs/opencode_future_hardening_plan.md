@@ -42,7 +42,10 @@ Future changes must not regress the following verified behavior.
 - Canonical final result remains:
 
 ```json
-{"code":"complete runnable OpenSCAD source or empty string","message":"short user-facing status"}
+{
+  "code": "complete runnable OpenSCAD source or empty string",
+  "message": "short user-facing status"
+}
 ```
 
 - CAD request:
@@ -154,11 +157,7 @@ Create one narrow type, for example:
 
 ```ts
 type OpenCodeProgressStage =
-  | 'connecting'
-  | 'generating'
-  | 'validating'
-  | 'repairing'
-  | 'building';
+  'connecting' | 'generating' | 'validating' | 'repairing' | 'building';
 ```
 
 Optional metadata:

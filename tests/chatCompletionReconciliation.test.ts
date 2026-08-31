@@ -264,7 +264,11 @@ describe('chat completion reconciliation', () => {
           },
         ],
       },
-      { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'Change it' }] },
+      {
+        id: 'user-2',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Change it' }],
+      },
       {
         id: 'assistant-final',
         role: 'assistant',
@@ -291,7 +295,11 @@ describe('chat completion reconciliation', () => {
     ];
     const persisted = [
       ...live,
-      { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'Change it' }] },
+      {
+        id: 'user-2',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Change it' }],
+      },
       {
         id: 'assistant-new',
         role: 'assistant',

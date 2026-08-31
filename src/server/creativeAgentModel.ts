@@ -2,10 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import { isInternalCreativeRuntimeModelId } from '@shared/creativeRuntimeModels';
 import { normalizeModelId } from '@shared/models';
 import type { Conversation, Model } from '@shared/types';
-import {
-  buildSelectableCatalog,
-  type CatalogEntry,
-} from './modelCatalog';
+import { buildSelectableCatalog, type CatalogEntry } from './modelCatalog';
 
 export type CreativeAgentModelSource = 'request' | 'conversation' | 'catalog';
 

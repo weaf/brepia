@@ -54,7 +54,9 @@ describe('OpenScadWorkerClient', () => {
       fakeEvent({ data: { id: 'one', data: { output: new Uint8Array([1]) } } }),
     );
 
-    await expect(promise).resolves.toMatchObject({ output: new Uint8Array([1]) });
+    await expect(promise).resolves.toMatchObject({
+      output: new Uint8Array([1]),
+    });
     expect(worker.terminate).not.toHaveBeenCalled();
     expect(client.pendingCount()).toBe(0);
     expect(client.getGeneration()).toBe(0);
@@ -88,9 +90,13 @@ describe('OpenScadWorkerClient', () => {
     const recovered = client.request(previewMessage('good'), [], 1000);
     worker.dispatch(
       'message',
-      fakeEvent({ data: { id: 'good', data: { output: new Uint8Array([4]) } } }),
+      fakeEvent({
+        data: { id: 'good', data: { output: new Uint8Array([4]) } },
+      }),
     );
-    await expect(recovered).resolves.toMatchObject({ output: new Uint8Array([4]) });
+    await expect(recovered).resolves.toMatchObject({
+      output: new Uint8Array([4]),
+    });
   });
 
   it('times out, terminates the worker, rejects all pending requests and clears state', async () => {
@@ -100,8 +106,12 @@ describe('OpenScadWorkerClient', () => {
 
     const first = client.request(previewMessage('one'), [], 25);
     const second = client.request(previewMessage('two'), [], 1000);
-    const firstAssertion = expect(first).rejects.toThrow('timed out after 25 ms');
-    const secondAssertion = expect(second).rejects.toThrow('timed out after 25 ms');
+    const firstAssertion = expect(first).rejects.toThrow(
+      'timed out after 25 ms',
+    );
+    const secondAssertion = expect(second).rejects.toThrow(
+      'timed out after 25 ms',
+    );
     expect(client.pendingCount()).toBe(2);
 
     await vi.advanceTimersByTimeAsync(25);
@@ -130,13 +140,16 @@ describe('OpenScadWorkerClient', () => {
     await timedOutAssertion;
 
     const recovered = client.request(previewMessage('two'), [], 1000);
-    const activeWorker = createWorker.mock.results[1]?.value as unknown as FakeWorker;
+    const activeWorker = createWorker.mock.results[1]
+      ?.value as unknown as FakeWorker;
     activeWorker.dispatch(
       'message',
       fakeEvent({ data: { id: 'two', data: { output: new Uint8Array([2]) } } }),
     );
 
-    await expect(recovered).resolves.toMatchObject({ output: new Uint8Array([2]) });
+    await expect(recovered).resolves.toMatchObject({
+      output: new Uint8Array([2]),
+    });
     expect(createWorker).toHaveBeenCalledTimes(2);
     expect(client.getGeneration()).toBe(1);
   });
@@ -150,7 +163,8 @@ describe('OpenScadWorkerClient', () => {
 
     const crashed = client.request(previewMessage('one'), [], 1000);
     const crashedAssertion = expect(crashed).rejects.toThrow('boom');
-    const firstWorker = createWorker.mock.results[0]?.value as unknown as FakeWorker;
+    const firstWorker = createWorker.mock.results[0]
+      ?.value as unknown as FakeWorker;
     firstWorker.dispatch('error', fakeEvent({ message: 'boom' }));
 
     await crashedAssertion;
@@ -158,12 +172,15 @@ describe('OpenScadWorkerClient', () => {
     expect(client.hasWorker()).toBe(false);
 
     const recovered = client.request(previewMessage('two'), [], 1000);
-    const secondWorker = createWorker.mock.results[1]?.value as unknown as FakeWorker;
+    const secondWorker = createWorker.mock.results[1]
+      ?.value as unknown as FakeWorker;
     secondWorker.dispatch(
       'message',
       fakeEvent({ data: { id: 'two', data: { output: new Uint8Array([3]) } } }),
     );
-    await expect(recovered).resolves.toMatchObject({ output: new Uint8Array([3]) });
+    await expect(recovered).resolves.toMatchObject({
+      output: new Uint8Array([3]),
+    });
   });
 
   it('resets on messageerror and rejects pending work', async () => {

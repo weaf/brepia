@@ -28,7 +28,9 @@ async function withWorkspaceRoot(
   }
 }
 
-function storageOnlyClient(removed: Array<{ bucket: string; paths: string[] }>) {
+function storageOnlyClient(
+  removed: Array<{ bucket: string; paths: string[] }>,
+) {
   return {
     storage: {
       from(bucket: string) {
@@ -55,7 +57,10 @@ describe('conversation teardown', { concurrency: false }, () => {
     await withWorkspaceRoot(async (root) => {
       const workspace = join(root, CONVERSATION_A);
       await mkdir(join(workspace, 'models', 'generated'), { recursive: true });
-      await writeFile(join(workspace, 'models', 'generated', 'mesh.glb'), 'mesh');
+      await writeFile(
+        join(workspace, 'models', 'generated', 'mesh.glb'),
+        'mesh',
+      );
 
       const removed: Array<{ bucket: string; paths: string[] }> = [];
       await deleteConversationArtifacts(

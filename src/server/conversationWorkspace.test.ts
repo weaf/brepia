@@ -143,7 +143,10 @@ describe('conversation workspace', { concurrency: false }, () => {
         join(configuredRoot, ID_A, 'logs', 'agent-events.jsonl'),
       );
 
-      assert.throws(() => conversationRoot('../escape'), /Invalid conversation UUID/);
+      assert.throws(
+        () => conversationRoot('../escape'),
+        /Invalid conversation UUID/,
+      );
       assert.throws(
         () => conversationAgentDir(ID_A, '../escape'),
         /Invalid agent workspace name/,
@@ -214,7 +217,11 @@ describe('conversation workspace', { concurrency: false }, () => {
         unknown
       >;
       raw.keepMe = 'preserved';
-      await writeFile(manifestPath, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(raw, null, 2)}\n`,
+        'utf8',
+      );
 
       const second = await initializeConversationWorkspace({
         conversationId: ID_A,
@@ -241,15 +248,23 @@ describe('conversation workspace', { concurrency: false }, () => {
 
       assert.notEqual(conversationRoot(ID_A), conversationRoot(ID_B));
       assert.equal(
-        (JSON.parse(await readFile(conversationManifestPath(ID_A), 'utf8')) as {
-          id: string;
-        }).id,
+        (
+          JSON.parse(
+            await readFile(conversationManifestPath(ID_A), 'utf8'),
+          ) as {
+            id: string;
+          }
+        ).id,
         ID_A,
       );
       assert.equal(
-        (JSON.parse(await readFile(conversationManifestPath(ID_B), 'utf8')) as {
-          id: string;
-        }).id,
+        (
+          JSON.parse(
+            await readFile(conversationManifestPath(ID_B), 'utf8'),
+          ) as {
+            id: string;
+          }
+        ).id,
         ID_B,
       );
 

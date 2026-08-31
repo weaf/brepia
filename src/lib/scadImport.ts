@@ -208,7 +208,10 @@ export async function readScadImportFile(file: File): Promise<string> {
     );
   }
 
-  return decodeScadImportBytes(file.name, new Uint8Array(await file.arrayBuffer()));
+  return decodeScadImportBytes(
+    file.name,
+    new Uint8Array(await file.arrayBuffer()),
+  );
 }
 
 export function scadImportTitle(filename: string): string {

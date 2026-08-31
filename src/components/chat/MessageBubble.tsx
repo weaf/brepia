@@ -515,7 +515,8 @@ function AssistantBubble({
             return false;
           }
           return (
-            !hasAnswerUserMessage && Boolean(cleanAssistantText(part.text).trim())
+            !hasAnswerUserMessage &&
+            Boolean(cleanAssistantText(part.text).trim())
           );
         }
         if (part.type === 'tool-answer_user') {
@@ -533,8 +534,7 @@ function AssistantBubble({
       message.parts,
     ],
   );
-  const showPreparingModel =
-    isLoading && isLastMessage && !hasVisibleProgress;
+  const showPreparingModel = isLoading && isLastMessage && !hasVisibleProgress;
   const branchIndex = message.siblings.findIndex((b) => b.id === message.id);
   const leafNodes = useMemo(
     () =>

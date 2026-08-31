@@ -44,7 +44,8 @@ export const ssoManaged = Boolean(ssoProvider && accountUrl);
 // for a self-hoster). undefined when SSO isn't managing the profile.
 export function ssoClaims(user: User | null) {
   if (!ssoManaged || !user) return undefined;
-  return user.identities?.find((i) => i.provider === ssoProvider)?.identity_data;
+  return user.identities?.find((i) => i.provider === ssoProvider)
+    ?.identity_data;
 }
 
 // Fallback values keep the client constructable so imports don't throw

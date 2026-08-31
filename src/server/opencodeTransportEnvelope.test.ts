@@ -73,10 +73,10 @@ describe('OpenCode terminal envelope conversion', () => {
     ]);
 
     const text = parts.find(
-      (part): part is Extract<
-        LanguageModelV3StreamPart,
-        { type: 'text-delta' }
-      > => part.type === 'text-delta',
+      (
+        part,
+      ): part is Extract<LanguageModelV3StreamPart, { type: 'text-delta' }> =>
+        part.type === 'text-delta',
     );
     assert.equal(text?.delta, 'Hej från OpenCode');
     assert.ok(!text?.delta.includes('"code"'));
@@ -97,10 +97,10 @@ describe('OpenCode terminal envelope conversion', () => {
     ]);
 
     const text = parts.find(
-      (part): part is Extract<
-        LanguageModelV3StreamPart,
-        { type: 'text-delta' }
-      > => part.type === 'text-delta',
+      (
+        part,
+      ): part is Extract<LanguageModelV3StreamPart, { type: 'text-delta' }> =>
+        part.type === 'text-delta',
     );
     assert.equal(text?.delta, 'Ett vanligt svar utan CAD.');
   });

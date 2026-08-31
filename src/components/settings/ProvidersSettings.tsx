@@ -30,10 +30,7 @@ import { cn } from '@/lib/utils';
 import type { TestProviderResultDto } from '@shared/aiSettings';
 
 type ProviderDriver =
-  | 'openai-compatible'
-  | 'anthropic'
-  | 'google'
-  | 'openrouter';
+  'openai-compatible' | 'anthropic' | 'google' | 'openrouter';
 
 interface ProviderSummary {
   id: string;
@@ -610,7 +607,8 @@ function BuiltinProviderForm({
   const [enabled, setEnabled] = useState(provider.enabled);
   const [credential, setCredential] = useState('');
   const [showCredential, setShowCredential] = useState(false);
-  const [removeOverrideCredential, setRemoveOverrideCredential] = useState(false);
+  const [removeOverrideCredential, setRemoveOverrideCredential] =
+    useState(false);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -637,7 +635,9 @@ function BuiltinProviderForm({
         </div>
         <div className="text-xs text-adam-neutral-300">
           Override the server defaults for your account. Leave the credential
-          blank to keep using the current {provider.credentialSource === 'server' ? 'server' : 'saved'} credential.
+          blank to keep using the current{' '}
+          {provider.credentialSource === 'server' ? 'server' : 'saved'}{' '}
+          credential.
         </div>
       </div>
 
@@ -714,7 +714,9 @@ function BuiltinProviderForm({
 
       <div className="flex items-center justify-between gap-3 rounded-md border border-adam-neutral-700 px-3 py-2">
         <div>
-          <div className="text-xs font-medium text-adam-neutral-100">Enabled</div>
+          <div className="text-xs font-medium text-adam-neutral-100">
+            Enabled
+          </div>
           <div className="text-[11px] text-adam-neutral-400">
             Disabled providers cannot be used for new requests.
           </div>
@@ -824,7 +826,9 @@ function ProviderForm({
       className="space-y-4 rounded-lg border border-adam-neutral-700 bg-adam-background-1 p-4"
     >
       <div className="text-sm font-medium text-adam-neutral-50">
-        {mode === 'create' ? 'Add provider' : `Edit ${initialData?.name ?? 'provider'}`}
+        {mode === 'create'
+          ? 'Add provider'
+          : `Edit ${initialData?.name ?? 'provider'}`}
       </div>
 
       <div>
@@ -931,7 +935,11 @@ function ProviderForm({
           {busy ? (
             <ActivityIndicator
               className="mr-1"
-              label={mode === 'create' ? 'Creating provider' : 'Saving provider settings'}
+              label={
+                mode === 'create'
+                  ? 'Creating provider'
+                  : 'Saving provider settings'
+              }
               size="sm"
             />
           ) : (
@@ -958,15 +966,17 @@ function CustomProviderCard({
   const detailQuery = useProviderDetail(summary.id);
   const updateMutation = useUpdateProvider();
   const testMutation = useTestProvider();
-  const [testResult, setTestResult] = useState<TestProviderResultDto | null>(null);
+  const [testResult, setTestResult] = useState<TestProviderResultDto | null>(
+    null,
+  );
   const detail = detailQuery.data;
   const Icon = DRIVER_ICONS[summary.driver] ?? Code2;
 
   if (!detail) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-adam-neutral-700 px-4 py-4 text-xs text-adam-neutral-300">
-        <ActivityIndicator label={`Loading ${summary.name}`} size="sm" /> Loading{' '}
-        {summary.name}…
+        <ActivityIndicator label={`Loading ${summary.name}`} size="sm" />{' '}
+        Loading {summary.name}…
       </div>
     );
   }
@@ -1070,7 +1080,7 @@ function CustomProviderCard({
           variant="ghost"
           size="sm"
           onClick={() => onDelete(detail.id)}
-          className="h-7 rounded-full px-2 text-xs text-adam-red-400 hover:text-adam-red-300"
+          className="text-adam-red-400 hover:text-adam-red-300 h-7 rounded-full px-2 text-xs"
         >
           <Trash2 className="mr-1 h-3 w-3" /> Delete
         </Button>
@@ -1154,8 +1164,12 @@ function ProviderModelForm({
   busy: boolean;
 }) {
   const [modelId, setModelId] = useState(initialData?.modelId ?? '');
-  const [displayName, setDisplayName] = useState(initialData?.displayName ?? '');
-  const [description, setDescription] = useState(initialData?.description ?? '');
+  const [displayName, setDisplayName] = useState(
+    initialData?.displayName ?? '',
+  );
+  const [description, setDescription] = useState(
+    initialData?.description ?? '',
+  );
   const [supportsTools, setSupportsTools] = useState(
     initialData?.supportsTools ?? false,
   );
@@ -1206,7 +1220,9 @@ function ProviderModelForm({
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs text-adam-neutral-300">Model ID</label>
+          <label className="mb-1 block text-xs text-adam-neutral-300">
+            Model ID
+          </label>
           <Input
             value={modelId}
             onChange={(event) => setModelId(event.target.value)}
@@ -1228,7 +1244,9 @@ function ProviderModelForm({
         </div>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-adam-neutral-300">Description</label>
+        <label className="mb-1 block text-xs text-adam-neutral-300">
+          Description
+        </label>
         <Textarea
           value={description}
           onChange={(event) => setDescription(event.target.value)}
@@ -1295,7 +1313,11 @@ function ProviderModelForm({
           <Button
             type="submit"
             size="sm"
-            disabled={busy || !displayName.trim() || (mode === 'create' && !modelId.trim())}
+            disabled={
+              busy ||
+              !displayName.trim() ||
+              (mode === 'create' && !modelId.trim())
+            }
             className="h-7 rounded-full px-2 text-xs"
           >
             {busy && (
@@ -1326,7 +1348,9 @@ function ProviderModelsPanel({
   const deleteMutation = useDeleteProviderModel();
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
-  const editingModel = modelsQuery.data?.find((model) => model.id === editingRowId);
+  const editingModel = modelsQuery.data?.find(
+    (model) => model.id === editingRowId,
+  );
 
   const save = (input: CreateProviderModelInput | UpdateProviderModelInput) => {
     if (formMode === 'edit' && editingRowId) {
@@ -1411,9 +1435,15 @@ function ProviderModelsPanel({
                     {model.displayName}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {model.supportsTools && <Badge variant="outline">Tools</Badge>}
-                    {model.supportsThinking && <Badge variant="outline">Thinking</Badge>}
-                    {model.supportsVision && <Badge variant="outline">Vision</Badge>}
+                    {model.supportsTools && (
+                      <Badge variant="outline">Tools</Badge>
+                    )}
+                    {model.supportsThinking && (
+                      <Badge variant="outline">Thinking</Badge>
+                    )}
+                    {model.supportsVision && (
+                      <Badge variant="outline">Vision</Badge>
+                    )}
                     {model.contextLimit && (
                       <span className="text-[11px] text-adam-neutral-400">
                         {model.contextLimit.toLocaleString()} ctx
@@ -1444,7 +1474,7 @@ function ProviderModelsPanel({
                         });
                       }
                     }}
-                    className="h-7 px-2 text-adam-red-400"
+                    className="text-adam-red-400 h-7 px-2"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -1472,11 +1502,15 @@ export function ProvidersSettings() {
   const deleteMutation = useDeleteProvider();
   const builtinMutation = useSaveBuiltinProvider();
 
-  const [editingBuiltin, setEditingBuiltin] = useState<ProviderDriver | null>(null);
-  const [customFormMode, setCustomFormMode] = useState<'create' | 'edit' | null>(
+  const [editingBuiltin, setEditingBuiltin] = useState<ProviderDriver | null>(
     null,
   );
-  const [editingCustom, setEditingCustom] = useState<ProviderDetail | null>(null);
+  const [customFormMode, setCustomFormMode] = useState<
+    'create' | 'edit' | null
+  >(null);
+  const [editingCustom, setEditingCustom] = useState<ProviderDetail | null>(
+    null,
+  );
   const [modelProviderId, setModelProviderId] = useState<string | null>(null);
 
   const providers = providersQuery.data ?? [];
@@ -1512,7 +1546,9 @@ export function ProvidersSettings() {
   if (providersQuery.isLoading || builtinQuery.isLoading) {
     return (
       <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 sm:p-6">
-        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">Providers</h2>
+        <h2 className="mb-5 text-sm font-medium text-adam-neutral-50">
+          Providers
+        </h2>
         <div className="flex justify-center py-8">
           <ActivityIndicator label="Loading providers" />
         </div>
@@ -1524,9 +1560,12 @@ export function ProvidersSettings() {
     <section className="rounded-xl border border-adam-neutral-800 bg-adam-background-2 p-4 text-adam-neutral-100 sm:p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-medium text-adam-neutral-50">Providers</h2>
+          <h2 className="text-sm font-medium text-adam-neutral-50">
+            Providers
+          </h2>
           <p className="mt-1 text-xs text-adam-neutral-300">
-            Configure endpoints, credentials, availability and custom model metadata from one place.
+            Configure endpoints, credentials, availability and custom model
+            metadata from one place.
           </p>
         </div>
         <Button
@@ -1549,7 +1588,7 @@ export function ProvidersSettings() {
           <span className="text-xs font-semibold">Built-in providers</span>
         </div>
         {builtinQuery.isError ? (
-          <div className="rounded-md border border-adam-red-400/30 bg-adam-red-400/5 px-3 py-2 text-xs text-adam-red-300">
+          <div className="border-adam-red-400/30 bg-adam-red-400/5 text-adam-red-300 rounded-md border px-3 py-2 text-xs">
             Failed to load built-in provider settings.
           </div>
         ) : (
@@ -1599,7 +1638,7 @@ export function ProvidersSettings() {
             Discovering runtimes…
           </div>
         ) : runtimeQuery.isError ? (
-          <div className="rounded-md border border-adam-amber/30 bg-adam-amber/5 px-3 py-2 text-xs text-adam-amber">
+          <div className="border-adam-amber/30 bg-adam-amber/5 text-adam-amber rounded-md border px-3 py-2 text-xs">
             Failed to discover runtime integrations.
           </div>
         ) : (
@@ -1649,7 +1688,8 @@ export function ProvidersSettings() {
                 onDelete={(providerId) => {
                   if (window.confirm('Delete this provider and its models?')) {
                     deleteMutation.mutate(providerId);
-                    if (modelProviderId === providerId) setModelProviderId(null);
+                    if (modelProviderId === providerId)
+                      setModelProviderId(null);
                   }
                 }}
                 onManageModels={(providerId) =>
@@ -1667,7 +1707,8 @@ export function ProvidersSettings() {
               No custom providers configured
             </div>
             <div className="mt-1 text-xs text-adam-neutral-400">
-              Add a provider to connect another API or local OpenAI-compatible endpoint.
+              Add a provider to connect another API or local OpenAI-compatible
+              endpoint.
             </div>
           </div>
         )}

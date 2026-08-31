@@ -19,7 +19,11 @@ const InstructionTemplatePathSchema = z
   .refine((value) => !value.split('/').includes('..'), 'invalid template path');
 
 const InstructionDefinitionSchema = z.object({
-  key: z.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9_.-]*$/),
+  key: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[a-z0-9][a-z0-9_.-]*$/),
   label: z.string().min(1),
   description: z.string(),
   category: z.enum([
@@ -56,7 +60,11 @@ const InstructionRevisionSchema = z.record(
 );
 
 const InstructionProfileDefinitionSchema = z.object({
-  id: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/),
+  id: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9-]*$/),
   label: z.string().min(1),
   description: z.string(),
   managedBy: z.enum(['upstream', 'brepia']),
@@ -123,7 +131,9 @@ const manifest = ManifestSchema.parse(JSON.parse(manifestRaw) as unknown);
 const profilesManifest = InstructionProfilesManifestSchema.parse(
   JSON.parse(profilesRaw) as unknown,
 );
-const runtimeConfig = RuntimeConfigSchema.parse(JSON.parse(runtimeRaw) as unknown);
+const runtimeConfig = RuntimeConfigSchema.parse(
+  JSON.parse(runtimeRaw) as unknown,
+);
 
 const instructionKeys = new Set(
   manifest.instructions.map((definition) => definition.key),
@@ -181,7 +191,9 @@ for (const profile of profilesManifest.profiles) {
     );
   }
   if (profile.extends === profile.id) {
-    throw new Error(`AI instruction profile ${profile.id} cannot extend itself`);
+    throw new Error(
+      `AI instruction profile ${profile.id} cannot extend itself`,
+    );
   }
   if (profile.revision && !profilesManifest.revisions[profile.revision]) {
     throw new Error(
@@ -219,7 +231,8 @@ export const AI_INSTRUCTION_KEYS: readonly string[] = manifest.instructions.map(
 );
 export const AI_INSTRUCTION_PROFILE_DEFINITIONS: readonly AiInstructionProfileDefinition[] =
   profilesManifest.profiles;
-export const DEFAULT_AI_INSTRUCTION_PROFILE_ID = profilesManifest.defaultProfile;
+export const DEFAULT_AI_INSTRUCTION_PROFILE_ID =
+  profilesManifest.defaultProfile;
 
 export function isAiInstructionKey(value: unknown): value is AiInstructionKey {
   return typeof value === 'string' && instructionKeys.has(value);
@@ -256,7 +269,9 @@ function resolveProfileTemplate(
 
   while (current) {
     if (visited.has(current.id)) {
-      throw new Error(`AI instruction profile inheritance cycle at ${current.id}`);
+      throw new Error(
+        `AI instruction profile inheritance cycle at ${current.id}`,
+      );
     }
     visited.add(current.id);
 
@@ -264,7 +279,8 @@ function resolveProfileTemplate(
     if (override) return override;
 
     if (current.revision) {
-      const revisionTemplate = profilesManifest.revisions[current.revision]?.[key];
+      const revisionTemplate =
+        profilesManifest.revisions[current.revision]?.[key];
       if (revisionTemplate) return revisionTemplate;
     }
 
@@ -313,7 +329,10 @@ export function renderBundledInstruction(
   values: Record<string, string | number | boolean | null | undefined> = {},
   profileId: AiInstructionProfileId = DEFAULT_AI_INSTRUCTION_PROFILE_ID,
 ): string {
-  return renderInstructionTemplate(loadBundledInstruction(key, profileId), values);
+  return renderInstructionTemplate(
+    loadBundledInstruction(key, profileId),
+    values,
+  );
 }
 
 export type AiRuntimeLimitKey = string;
@@ -341,10 +360,15 @@ export const AI_RUNTIME_LIMIT_DEFINITIONS: readonly AiRuntimeLimitDefinition[] =
   }));
 
 const runtimeDefinitionByKey = new Map(
-  AI_RUNTIME_LIMIT_DEFINITIONS.map((definition) => [definition.key, definition]),
+  AI_RUNTIME_LIMIT_DEFINITIONS.map((definition) => [
+    definition.key,
+    definition,
+  ]),
 );
 
-export function isAiRuntimeLimitKey(value: unknown): value is AiRuntimeLimitKey {
+export function isAiRuntimeLimitKey(
+  value: unknown,
+): value is AiRuntimeLimitKey {
   return typeof value === 'string' && runtimeDefinitionByKey.has(value);
 }
 

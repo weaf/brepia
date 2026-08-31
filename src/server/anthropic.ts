@@ -10,10 +10,7 @@ type AnthropicContent =
             | {
                 type: 'base64';
                 media_type:
-                  | 'image/jpeg'
-                  | 'image/png'
-                  | 'image/gif'
-                  | 'image/webp';
+                  'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
                 data: string;
               }
             | { type: 'url'; url: string };

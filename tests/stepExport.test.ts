@@ -18,11 +18,9 @@ async function fakeRunner(body: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'pcad-step-test-runner-'));
   tempDirs.push(dir);
   const runner = path.join(dir, 'runner.sh');
-  await writeFile(
-    runner,
-    `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`,
-    { mode: 0o700 },
-  );
+  await writeFile(runner, `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`, {
+    mode: 0o700,
+  });
   return runner;
 }
 
@@ -76,9 +74,9 @@ describe('server STEP export boundary', () => {
       process.env.PCAD_STEP_TEST_MARKER = previousMarker;
     }
     await Promise.all(
-      tempDirs.splice(0).map((dir) =>
-        rm(dir, { recursive: true, force: true }),
-      ),
+      tempDirs
+        .splice(0)
+        .map((dir) => rm(dir, { recursive: true, force: true })),
     );
   });
 
@@ -104,9 +102,7 @@ echo 'WARNING: mesh fallback used for hull()' >&2
 
     expect(text).toContain('ISO-10303-21');
     expect(result.provider).toBe(`scad123d@${STEP_EXPORT_PROVIDER_VERSION}`);
-    expect(result.warnings).toEqual([
-      'WARNING: mesh fallback used for hull()',
-    ]);
+    expect(result.warnings).toEqual(['WARNING: mesh fallback used for hull()']);
   });
 
   it('maps an unavailable sandbox image/runner exit to provider_unavailable', async () => {

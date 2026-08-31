@@ -18,21 +18,21 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `flange_length` | `80` | `[40:1:150]` | Length of each flange from the outer corner |
-| `bracket_width` | `80` | `[40:1:150]` | Width of the bracket |
-| `thickness` | `5` | `[2:1:15]` | Thickness of the flanges |
-| `corner_fillet` | `5` | `[1:1:15]` | Radius of the inner corner fillet |
-| `hole_dia` | `5.2` | `[2:0.1:10]` | Diameter of the mounting holes (M5 clearance) |
-| `hole_boss_dia` | `16` | `[8:1:30]` | Solid boundary diameter around each hole |
-| `hole_offset_x` | `45` | `[10:1:100]` | Hole X position (distance from outer corner) |
-| `hole_offset_y1` | `20` | `[10:1:100]` | Hole Y1 position (distance from side edge) |
-| `hole_offset_y2` | `60` | `[10:1:100]` | Hole Y2 position (distance from side edge) |
-| `hex_flat_to_flat` | `12` | `[5:1:30]` | Flat-to-flat inner diameter of each hexagon |
-| `hex_wall` | `3` | `[1:0.5:10]` | Wall thickness between hexagons |
-| `border_thickness` | `6` | `[2:1:20]` | Solid border thickness around the edges |
-| `bracket_color` | `"#4682B4"` | `color` |  |
+| Parameter          | Default     | Range / options | Description                                   |
+| ------------------ | ----------- | --------------- | --------------------------------------------- |
+| `flange_length`    | `80`        | `[40:1:150]`    | Length of each flange from the outer corner   |
+| `bracket_width`    | `80`        | `[40:1:150]`    | Width of the bracket                          |
+| `thickness`        | `5`         | `[2:1:15]`      | Thickness of the flanges                      |
+| `corner_fillet`    | `5`         | `[1:1:15]`      | Radius of the inner corner fillet             |
+| `hole_dia`         | `5.2`       | `[2:0.1:10]`    | Diameter of the mounting holes (M5 clearance) |
+| `hole_boss_dia`    | `16`        | `[8:1:30]`      | Solid boundary diameter around each hole      |
+| `hole_offset_x`    | `45`        | `[10:1:100]`    | Hole X position (distance from outer corner)  |
+| `hole_offset_y1`   | `20`        | `[10:1:100]`    | Hole Y1 position (distance from side edge)    |
+| `hole_offset_y2`   | `60`        | `[10:1:100]`    | Hole Y2 position (distance from side edge)    |
+| `hex_flat_to_flat` | `12`        | `[5:1:30]`      | Flat-to-flat inner diameter of each hexagon   |
+| `hex_wall`         | `3`         | `[1:0.5:10]`    | Wall thickness between hexagons               |
+| `border_thickness` | `6`         | `[2:1:20]`      | Solid border thickness around the edges       |
+| `bracket_color`    | `"#4682B4"` | `color`         |                                               |
 
 <details>
 <summary>OpenSCAD source — <code>04-honeycomb-bracket.scad</code></summary>

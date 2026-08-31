@@ -428,7 +428,8 @@ export function useCachedAiChat({
     const recoveredInterruptedBuild =
       chat.status === 'error' &&
       !!chat.error &&
-      userFacingChatError(chat.error).message === CONNECTION_INTERRUPTED_MESSAGE &&
+      userFacingChatError(chat.error).message ===
+        CONNECTION_INTERRUPTED_MESSAGE &&
       persistedResolvedBuildMatchesLive;
 
     // A genuine provider/model error must remain visible to the user. Clear a

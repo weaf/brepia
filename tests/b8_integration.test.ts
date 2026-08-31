@@ -195,9 +195,8 @@ describe('B8 — provider CRUD ownership', async () => {
   });
 
   it('getCustomProviderModels rejects null user', async () => {
-    const { getCustomProviderModels } = await import(
-      '../src/server/modelCatalog'
-    );
+    const { getCustomProviderModels } =
+      await import('../src/server/modelCatalog');
     const result = await getCustomProviderModels(null);
     assert.deepStrictEqual(result, []);
   });
@@ -280,9 +279,8 @@ describe('B8 — custom provider runtime resolution', async () => {
   });
 
   it('buildCustomChatModel rejects invalid model IDs', async () => {
-    const { buildCustomChatModel } = await import(
-      '../src/server/customProviders'
-    );
+    const { buildCustomChatModel } =
+      await import('../src/server/customProviders');
     await assert.rejects(buildCustomChatModel('invalid-id', 'user-1', false), {
       message: /Invalid custom model ID/,
     });
@@ -331,9 +329,8 @@ describe('B8 — prompt profile detail/Edit behavior', async () => {
     const profile = loadBuiltinProfile();
     assert.strictEqual(profile.id, 'builtin:parametric');
 
-    const { updatePromptProfile } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { updatePromptProfile } =
+      await import('../src/server/promptProfiles');
     await assert.rejects(
       updatePromptProfile('test-user-id', 'builtin:parametric', {
         name: 'Hacked',
@@ -343,9 +340,8 @@ describe('B8 — prompt profile detail/Edit behavior', async () => {
   });
 
   it('resolveConversationSystemPrompt returns built-in for null profileId', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
     const result = await resolveConversationSystemPrompt({
       userId: 'test-user',
       profileId: null as string | null,
@@ -354,9 +350,8 @@ describe('B8 — prompt profile detail/Edit behavior', async () => {
   });
 
   it('resolveConversationSystemPrompt returns built-in for builtin:parametric', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
     const result = await resolveConversationSystemPrompt({
       userId: 'test-user',
       profileId: 'builtin:parametric',
@@ -365,9 +360,8 @@ describe('B8 — prompt profile detail/Edit behavior', async () => {
   });
 
   it('resolveConversationSystemPrompt throws for unknown profileId (no silent fallback)', async () => {
-    const { resolveConversationSystemPrompt } = await import(
-      '../src/server/promptProfiles'
-    );
+    const { resolveConversationSystemPrompt } =
+      await import('../src/server/promptProfiles');
     await assert.rejects(
       resolveConversationSystemPrompt({
         userId: 'test-user',

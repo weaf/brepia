@@ -33,9 +33,10 @@ function truncateAtWordBoundary(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   const shortened = value.slice(0, maxLength + 1);
   const boundary = shortened.lastIndexOf(' ');
-  const candidate = boundary >= Math.floor(maxLength * 0.6)
-    ? shortened.slice(0, boundary)
-    : shortened.slice(0, maxLength);
+  const candidate =
+    boundary >= Math.floor(maxLength * 0.6)
+      ? shortened.slice(0, boundary)
+      : shortened.slice(0, maxLength);
   return candidate.trimEnd();
 }
 
@@ -49,7 +50,8 @@ function cleanTitleCandidate(value: string): string {
 function fallbackFromContext(context: ConversationTitleContext): string {
   const imageCount = context.imageCount ?? 0;
   const meshCount = context.meshCount ?? 0;
-  if (imageCount > 0 && meshCount > 0) return 'CAD from image and mesh references';
+  if (imageCount > 0 && meshCount > 0)
+    return 'CAD from image and mesh references';
   if (imageCount > 0) return 'CAD from image reference';
   if (meshCount > 0) return 'CAD model edit';
   return DEFAULT_CONVERSATION_TITLE;

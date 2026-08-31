@@ -52,12 +52,12 @@ OpenSCAD artifact/tool-call detection should happen from the **complete final Op
 
 Partial text such as:
 
-```text
+````text
 Here is the model:
 
 ```scad
 cube(
-```
+````
 
 is not yet a valid completed artifact and must not trigger `build_parametric_model`.
 

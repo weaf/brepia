@@ -167,7 +167,10 @@ function imageKind(relativePath: string): AdminImageFileKind | null {
   return null;
 }
 
-async function walkWorkspace(root: string, directory: string): Promise<WalkResult> {
+async function walkWorkspace(
+  root: string,
+  directory: string,
+): Promise<WalkResult> {
   let entries: Dirent[];
   try {
     entries = await readdir(directory, { withFileTypes: true });
@@ -275,7 +278,10 @@ export async function listAdminModelInventory(): Promise<AdminModelInventory> {
   for (const batch of chunks(userIds)) {
     if (batch.length === 0) continue;
     const [profileResult, accountResult] = await Promise.all([
-      supabase.from('profiles').select('user_id,full_name').in('user_id', batch),
+      supabase
+        .from('profiles')
+        .select('user_id,full_name')
+        .in('user_id', batch),
       supabase
         .from('user_accounts')
         .select('user_id,username,contact_email')
@@ -353,9 +359,18 @@ export async function listAdminModelInventory(): Promise<AdminModelInventory> {
       (workspace) => workspace.missingWorkspace,
     ).length,
     orphanedCount: workspaces.filter((workspace) => workspace.orphaned).length,
-    modelCount: workspaces.reduce((sum, workspace) => sum + workspace.modelCount, 0),
-    imageCount: workspaces.reduce((sum, workspace) => sum + workspace.imageCount, 0),
-    totalBytes: workspaces.reduce((sum, workspace) => sum + workspace.totalBytes, 0),
+    modelCount: workspaces.reduce(
+      (sum, workspace) => sum + workspace.modelCount,
+      0,
+    ),
+    imageCount: workspaces.reduce(
+      (sum, workspace) => sum + workspace.imageCount,
+      0,
+    ),
+    totalBytes: workspaces.reduce(
+      (sum, workspace) => sum + workspace.totalBytes,
+      0,
+    ),
     workspaces,
   };
 }

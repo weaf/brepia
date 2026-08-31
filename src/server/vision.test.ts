@@ -129,7 +129,9 @@ describe('pCAD vision routing', () => {
       },
     ] as unknown as LanguageModelV3Prompt;
 
-    const rewritten = await rewritePromptForVisionFallback(prompt, { analyzer });
+    const rewritten = await rewritePromptForVisionFallback(prompt, {
+      analyzer,
+    });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].kind, 'reference');
     assert.equal(calls[0].images.length, 2);
@@ -138,7 +140,10 @@ describe('pCAD vision routing', () => {
     const user = rewritten[0];
     assert.equal(user.role, 'user');
     if (user.role !== 'user') return;
-    assert.equal(user.content.some((part) => part.type === 'file'), false);
+    assert.equal(
+      user.content.some((part) => part.type === 'file'),
+      false,
+    );
     assert.match(
       user.content
         .filter((part) => part.type === 'text')
@@ -169,7 +174,9 @@ describe('pCAD vision routing', () => {
 
     await assert.rejects(
       rewritePromptForVisionFallback(prompt, { analyzer }),
-      new RegExp(VISION_NOT_CONFIGURED_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      new RegExp(
+        VISION_NOT_CONFIGURED_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      ),
     );
   });
 
@@ -182,9 +189,7 @@ describe('pCAD vision routing', () => {
     const prompt = [
       {
         role: 'user',
-        content: [
-          { type: 'text', text: 'Make a case with a front opening.' },
-        ],
+        content: [{ type: 'text', text: 'Make a case with a front opening.' }],
       },
       {
         role: 'tool',
@@ -205,13 +210,12 @@ describe('pCAD vision routing', () => {
       },
     ] as unknown as LanguageModelV3Prompt;
 
-    const rewritten = await rewritePromptForVisionFallback(prompt, { analyzer });
+    const rewritten = await rewritePromptForVisionFallback(prompt, {
+      analyzer,
+    });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].kind, 'inspection');
-    assert.equal(
-      calls[0].userRequest,
-      'Make a case with a front opening.',
-    );
+    assert.equal(calls[0].userRequest, 'Make a case with a front opening.');
 
     const tool = rewritten[1];
     assert.equal(tool.role, 'tool');

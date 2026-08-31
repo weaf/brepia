@@ -250,7 +250,10 @@ export function parseCodexCliOutput(stdout: string): ParsedCliOutput {
         thread_id?: string;
         item?: { type?: string; text?: string };
       };
-      if (event.type === 'thread.started' && typeof event.thread_id === 'string') {
+      if (
+        event.type === 'thread.started' &&
+        typeof event.thread_id === 'string'
+      ) {
         sessionId = event.thread_id;
       }
       if (

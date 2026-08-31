@@ -88,7 +88,9 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
     const onPreferenceChanged = (event: Event) => {
       const detail = (event as CustomEvent<boolean>).detail;
       setShowConversationIds(
-        typeof detail === 'boolean' ? detail : readAdminConversationIdsEnabled(),
+        typeof detail === 'boolean'
+          ? detail
+          : readAdminConversationIdsEnabled(),
       );
     };
     const onStorage = () =>
@@ -217,10 +219,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                 />
               </div>
             ) : (
-              <BrepiaMark
-                title="Brepia"
-                className="h-8 w-8 min-w-8"
-              />
+              <BrepiaMark title="Brepia" className="h-8 w-8 min-w-8" />
             )}
           </button>
         </ConditionalWrapper>
@@ -418,11 +417,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
             )}
 
             {discordUrl && isSidebarOpen && (
-              <a
-                href={discordUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={discordUrl} target="_blank" rel="noopener noreferrer">
                 <Button
                   variant="adam_dark"
                   className="flex h-10 w-full items-center justify-start gap-2"
@@ -460,11 +455,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
             )}
 
             {communityUrl && isSidebarOpen && (
-              <a
-                href={communityUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={communityUrl} target="_blank" rel="noopener noreferrer">
                 <Button
                   variant="adam_dark"
                   className="flex h-10 w-full items-center justify-start gap-2"
@@ -513,8 +504,14 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                     </Link>
                   </DropdownMenuItem>
                   <div className="flex items-center justify-between gap-3 bg-adam-background-2 px-2 py-2">
-                    <span className="text-sm text-adam-text-primary">Appearance</span>
-                    <div className="flex items-center gap-1" role="group" aria-label="Appearance">
+                    <span className="text-sm text-adam-text-primary">
+                      Appearance
+                    </span>
+                    <div
+                      className="flex items-center gap-1"
+                      role="group"
+                      aria-label="Appearance"
+                    >
                       {appearanceOptions.map(({ value, label, icon: Icon }) => (
                         <button
                           key={value}
@@ -572,9 +569,7 @@ function MobileSidebar({
         {/* For aria stuff */}
         <SheetHeader className="hidden">
           <SheetTitle className="text-adam-text-primary">Brepia</SheetTitle>
-          <SheetDescription>
-            AI-assisted parametric 3D design
-          </SheetDescription>
+          <SheetDescription>AI-assisted parametric 3D design</SheetDescription>
         </SheetHeader>
         <DesktopSidebar isSidebarOpen={true} setIsSidebarOpen={setOpen} />
       </SheetContent>

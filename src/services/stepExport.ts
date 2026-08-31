@@ -7,7 +7,9 @@ export type StepExportResponse = {
   warningCount: number;
 };
 
-export async function exportStep(sourceCode: string): Promise<StepExportResponse> {
+export async function exportStep(
+  sourceCode: string,
+): Promise<StepExportResponse> {
   const token = (await supabase.auth.getSession()).data.session?.access_token;
   const response = await fetch(apiUrl('export/step'), {
     method: 'POST',
@@ -30,7 +32,9 @@ export async function exportStep(sourceCode: string): Promise<StepExportResponse
     throw new Error(message);
   }
 
-  const warningCount = Number(response.headers.get('X-PCAD-Step-Warning-Count') ?? '0');
+  const warningCount = Number(
+    response.headers.get('X-PCAD-Step-Warning-Count') ?? '0',
+  );
   return {
     file: await response.blob(),
     provider: response.headers.get('X-PCAD-Step-Provider'),

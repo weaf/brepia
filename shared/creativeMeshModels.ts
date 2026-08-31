@@ -61,68 +61,70 @@ export type CreativeMeshProviderDefinition = {
 };
 
 /** Built-in local Creative product mode; upstream models come from Settings. */
-export const CORE_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
-  {
-    id: NATIVE_CREATIVE_MESH_MODEL_ID,
-    name: 'Local Creative',
-    description:
-      'Local configurable image-to-mesh runtime; concrete image and mesh models are selected in AI Settings',
-    provider: 'local',
-    providerLabel: 'Local',
-    supportsText: true,
-    supportsImage: true,
-    supportsMeshEdit: false,
-    outputFormats: ['glb'],
-    maxReferenceImages: 1,
-  },
-] as const;
+export const CORE_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] =
+  [
+    {
+      id: NATIVE_CREATIVE_MESH_MODEL_ID,
+      name: 'Local Creative',
+      description:
+        'Local configurable image-to-mesh runtime; concrete image and mesh models are selected in AI Settings',
+      provider: 'local',
+      providerLabel: 'Local',
+      supportsText: true,
+      supportsImage: true,
+      supportsMeshEdit: false,
+      outputFormats: ['glb'],
+      maxReferenceImages: 1,
+    },
+  ] as const;
 
 /**
  * Product modes supplied by the optional hosted Creative adapter. The product
  * mode IDs are stable contracts; the concrete provider model for each mode is
  * selected in AI Settings > Model routing.
  */
-export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
-  {
-    id: 'ultra',
-    name: 'Max Quality',
-    description: 'Hosted high-quality textured generation',
-    provider: 'fal',
-    providerLabel: 'fal.ai',
-    supportsText: true,
-    supportsImage: true,
-    supportsMeshEdit: true,
-    outputFormats: ['glb', 'fbx'],
-    timeEstimate: '5-6 minutes',
-    maxReferenceImages: 1,
-  },
-  {
-    id: 'quality',
-    name: 'Draft',
-    description: 'Hosted draft generation',
-    provider: 'fal',
-    providerLabel: 'fal.ai',
-    supportsText: true,
-    supportsImage: true,
-    supportsMeshEdit: true,
-    outputFormats: ['glb'],
-    timeEstimate: '~45 seconds',
-    maxReferenceImages: 1,
-  },
-  {
-    id: 'fast',
-    name: 'Textureless',
-    description: 'Hosted fast textureless generation',
-    provider: 'fal',
-    providerLabel: 'fal.ai',
-    supportsText: true,
-    supportsImage: true,
-    supportsMeshEdit: true,
-    outputFormats: ['glb'],
-    timeEstimate: '60-90 seconds',
-    maxReferenceImages: 1,
-  },
-] as const;
+export const OPTIONAL_CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] =
+  [
+    {
+      id: 'ultra',
+      name: 'Max Quality',
+      description: 'Hosted high-quality textured generation',
+      provider: 'fal',
+      providerLabel: 'fal.ai',
+      supportsText: true,
+      supportsImage: true,
+      supportsMeshEdit: true,
+      outputFormats: ['glb', 'fbx'],
+      timeEstimate: '5-6 minutes',
+      maxReferenceImages: 1,
+    },
+    {
+      id: 'quality',
+      name: 'Draft',
+      description: 'Hosted draft generation',
+      provider: 'fal',
+      providerLabel: 'fal.ai',
+      supportsText: true,
+      supportsImage: true,
+      supportsMeshEdit: true,
+      outputFormats: ['glb'],
+      timeEstimate: '~45 seconds',
+      maxReferenceImages: 1,
+    },
+    {
+      id: 'fast',
+      name: 'Textureless',
+      description: 'Hosted fast textureless generation',
+      provider: 'fal',
+      providerLabel: 'fal.ai',
+      supportsText: true,
+      supportsImage: true,
+      supportsMeshEdit: true,
+      outputFormats: ['glb'],
+      timeEstimate: '60-90 seconds',
+      maxReferenceImages: 1,
+    },
+  ] as const;
 
 /** All known Creative product-mode definitions. */
 export const CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
@@ -130,20 +132,21 @@ export const CREATIVE_MESH_MODELS: readonly CreativeMeshModelDefinition[] = [
   ...OPTIONAL_CREATIVE_MESH_MODELS,
 ] as const;
 
-export const CREATIVE_MESH_PROVIDERS: readonly CreativeMeshProviderDefinition[] = [
-  {
-    id: 'local',
-    label: 'Local',
-    optional: false,
-    modelIds: [NATIVE_CREATIVE_MESH_MODEL_ID],
-  },
-  {
-    id: 'fal',
-    label: 'fal.ai',
-    optional: true,
-    modelIds: FAL_CREATIVE_MESH_MODEL_IDS,
-  },
-] as const;
+export const CREATIVE_MESH_PROVIDERS: readonly CreativeMeshProviderDefinition[] =
+  [
+    {
+      id: 'local',
+      label: 'Local',
+      optional: false,
+      modelIds: [NATIVE_CREATIVE_MESH_MODEL_ID],
+    },
+    {
+      id: 'fal',
+      label: 'fal.ai',
+      optional: true,
+      modelIds: FAL_CREATIVE_MESH_MODEL_IDS,
+    },
+  ] as const;
 
 const CREATIVE_MESH_MODEL_BY_ID = new Map(
   CREATIVE_MESH_MODELS.map((definition) => [definition.id, definition]),
@@ -194,7 +197,8 @@ export function getCreativeMeshInputCapability(
   const definition = getCreativeMeshModelDefinition(id);
   if (!definition) return undefined;
   if (definition.requiresReferenceImage) return 'Image required';
-  if (definition.supportsText && definition.supportsImage) return 'Text + image';
+  if (definition.supportsText && definition.supportsImage)
+    return 'Text + image';
   if (definition.supportsText) return 'Text only';
   if (definition.supportsImage) return 'Image only';
   return 'Unsupported';

@@ -38,7 +38,7 @@ export function ActivityIndicator({
       <span
         aria-hidden="true"
         className={cn(
-          'rounded-full bg-adam-blue animate-pulse motion-reduce:animate-none',
+          'animate-pulse rounded-full bg-adam-blue motion-reduce:animate-none',
           dotSize[size],
           dotClassName,
         )}

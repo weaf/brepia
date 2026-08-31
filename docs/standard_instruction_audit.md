@@ -43,25 +43,25 @@ Further testing of V1 is unnecessary unless a specific scenario is identified wh
 
 ## 17-key audit record
 
-| Instruction key | Audit observation | Current action |
-| --- | --- | --- |
-| `parametric` | CADAM is long and mixes behavior, examples and coding guidance. | **Keep baseline.** Revisit only for a measured problem. |
-| `creative` | Creative/TRELLIS behavior is a separate domain. | Defer. |
-| `tool.build_parametric_model` | Concise and correctly owns build/revision action. | Keep. |
-| `tool.answer_user` | Concise and correctly owns final user-facing messaging. | Keep. |
-| `tool.create_mesh` | Creative backend contract. | Defer. |
-| `vision.reference` | Concise factual visual extraction with uncertainty discipline. | Keep. |
-| `vision.inspection` | Correctly scopes multi-view QA and avoids code generation. | Keep. |
-| `conversation.title` | Independent utility instruction. | Keep. |
-| `suggestions.parametric` | Small deterministic contract. | Keep. |
-| `suggestions.creative` | Creative track. | Defer. |
-| `context.parametric_attachment` | Contains a hard-coded `rotation_x = 90` rule that may be wrong for some attached models. | Keep for now; revisit with an attachment-specific failure case. |
-| `context.creative_reference_mesh` | Creative track. | Defer. |
-| `context.mesh_preferences` | Creative mesh preference context. | Defer. |
-| `context.parametric_inspection_output` | Simple factual bridge from visual inspection back to CAD worker. | Keep. |
-| `transport.opencode` | Owns OpenCode-specific validation/environment/continuation behavior. | Keep. |
-| `transport.codex` | Owns Codex-specific environment/continuation behavior. | Keep. |
-| `provider.fal.image_conditioning` | Optional hosted provider. | Defer. |
+| Instruction key                        | Audit observation                                                                        | Current action                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `parametric`                           | CADAM is long and mixes behavior, examples and coding guidance.                          | **Keep baseline.** Revisit only for a measured problem.         |
+| `creative`                             | Creative/TRELLIS behavior is a separate domain.                                          | Defer.                                                          |
+| `tool.build_parametric_model`          | Concise and correctly owns build/revision action.                                        | Keep.                                                           |
+| `tool.answer_user`                     | Concise and correctly owns final user-facing messaging.                                  | Keep.                                                           |
+| `tool.create_mesh`                     | Creative backend contract.                                                               | Defer.                                                          |
+| `vision.reference`                     | Concise factual visual extraction with uncertainty discipline.                           | Keep.                                                           |
+| `vision.inspection`                    | Correctly scopes multi-view QA and avoids code generation.                               | Keep.                                                           |
+| `conversation.title`                   | Independent utility instruction.                                                         | Keep.                                                           |
+| `suggestions.parametric`               | Small deterministic contract.                                                            | Keep.                                                           |
+| `suggestions.creative`                 | Creative track.                                                                          | Defer.                                                          |
+| `context.parametric_attachment`        | Contains a hard-coded `rotation_x = 90` rule that may be wrong for some attached models. | Keep for now; revisit with an attachment-specific failure case. |
+| `context.creative_reference_mesh`      | Creative track.                                                                          | Defer.                                                          |
+| `context.mesh_preferences`             | Creative mesh preference context.                                                        | Defer.                                                          |
+| `context.parametric_inspection_output` | Simple factual bridge from visual inspection back to CAD worker.                         | Keep.                                                           |
+| `transport.opencode`                   | Owns OpenCode-specific validation/environment/continuation behavior.                     | Keep.                                                           |
+| `transport.codex`                      | Owns Codex-specific environment/continuation behavior.                                   | Keep.                                                           |
+| `provider.fal.image_conditioning`      | Optional hosted provider.                                                                | Defer.                                                          |
 
 ## Historical findings from the V1 audit
 

@@ -108,292 +108,296 @@ function request() {
   });
 }
 
-describe('conversation workspace OpenSCAD revisions', { concurrency: false }, () => {
-  it('collects successful builds only from the active branch', () => {
-    const builds = collectSuccessfulParametricBuilds(rows(), ASSISTANT_2);
-    assert.deepEqual(
-      builds.map((build) => build.toolCallId),
-      ['tool-call-1', 'tool-call-2'],
-    );
-    assert.deepEqual(
-      builds.map((build) => build.source),
-      ['build', 'build'],
-    );
-    assert.equal(builds[0]?.code, CODE_1);
-    assert.equal(builds[1]?.code, CODE_2);
-  });
-
-  it('creates immutable numbered revisions and updates current.scad idempotently', async () => {
-    await withWorkspaceRoot(async () => {
-      await initializeConversationWorkspace({
-        conversationId: CONVERSATION_ID,
-        title: 'Model revision test',
-        type: 'parametric',
-      });
-
-      const messages = rows();
-      const dependencies = { loadMessages: async () => messages };
-      const first = await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_2,
-        dependencies,
+describe(
+  'conversation workspace OpenSCAD revisions',
+  { concurrency: false },
+  () => {
+    it('collects successful builds only from the active branch', () => {
+      const builds = collectSuccessfulParametricBuilds(rows(), ASSISTANT_2);
+      assert.deepEqual(
+        builds.map((build) => build.toolCallId),
+        ['tool-call-1', 'tool-call-2'],
       );
-      assert.deepEqual(first, {
-        discovered: 2,
-        revisionsCreated: 2,
-        currentRevision: 2,
-      });
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 1),
-          'utf8',
-        ),
-        CODE_1,
+      assert.deepEqual(
+        builds.map((build) => build.source),
+        ['build', 'build'],
       );
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 2),
-          'utf8',
-        ),
-        CODE_2,
-      );
-      assert.equal(
-        await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
-        CODE_2,
-      );
+      assert.equal(builds[0]?.code, CODE_1);
+      assert.equal(builds[1]?.code, CODE_2);
+    });
 
-      const metadata = JSON.parse(
-        await readFile(
-          conversationModelRevisionMetadataPath(CONVERSATION_ID, 2),
-          'utf8',
-        ),
-      ) as { revision: number; toolCallId: string; source: string };
-      assert.equal(metadata.revision, 2);
-      assert.equal(metadata.toolCallId, 'tool-call-2');
-      assert.equal(metadata.source, 'build');
+    it('creates immutable numbered revisions and updates current.scad idempotently', async () => {
+      await withWorkspaceRoot(async () => {
+        await initializeConversationWorkspace({
+          conversationId: CONVERSATION_ID,
+          title: 'Model revision test',
+          type: 'parametric',
+        });
 
-      const currentMetadata = JSON.parse(
-        await readFile(
-          conversationCurrentModelMetadataPath(CONVERSATION_ID),
-          'utf8',
-        ),
-      ) as { revision: number; toolCallId: string };
-      assert.equal(currentMetadata.revision, 2);
-      assert.equal(currentMetadata.toolCallId, 'tool-call-2');
-
-      const second = await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_2,
-        dependencies,
-      );
-      assert.deepEqual(second, {
-        discovered: 2,
-        revisionsCreated: 0,
-        currentRevision: 2,
-      });
-
-      const revisionFiles = (
-        await readdir(
-          join(
-            process.env.PCAD_CONVERSATIONS_DIR!,
-            CONVERSATION_ID,
-            'models',
-            'revisions',
+        const messages = rows();
+        const dependencies = { loadMessages: async () => messages };
+        const first = await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_2,
+          dependencies,
+        );
+        assert.deepEqual(first, {
+          discovered: 2,
+          revisionsCreated: 2,
+          currentRevision: 2,
+        });
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 1),
+            'utf8',
           ),
-        )
-      ).sort();
-      assert.deepEqual(revisionFiles, [
-        '001.json',
-        '001.scad',
-        '002.json',
-        '002.scad',
-      ]);
+          CODE_1,
+        );
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 2),
+            'utf8',
+          ),
+          CODE_2,
+        );
+        assert.equal(
+          await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
+          CODE_2,
+        );
+
+        const metadata = JSON.parse(
+          await readFile(
+            conversationModelRevisionMetadataPath(CONVERSATION_ID, 2),
+            'utf8',
+          ),
+        ) as { revision: number; toolCallId: string; source: string };
+        assert.equal(metadata.revision, 2);
+        assert.equal(metadata.toolCallId, 'tool-call-2');
+        assert.equal(metadata.source, 'build');
+
+        const currentMetadata = JSON.parse(
+          await readFile(
+            conversationCurrentModelMetadataPath(CONVERSATION_ID),
+            'utf8',
+          ),
+        ) as { revision: number; toolCallId: string };
+        assert.equal(currentMetadata.revision, 2);
+        assert.equal(currentMetadata.toolCallId, 'tool-call-2');
+
+        const second = await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_2,
+          dependencies,
+        );
+        assert.deepEqual(second, {
+          discovered: 2,
+          revisionsCreated: 0,
+          currentRevision: 2,
+        });
+
+        const revisionFiles = (
+          await readdir(
+            join(
+              process.env.PCAD_CONVERSATIONS_DIR!,
+              CONVERSATION_ID,
+              'models',
+              'revisions',
+            ),
+          )
+        ).sort();
+        assert.deepEqual(revisionFiles, [
+          '001.json',
+          '001.scad',
+          '002.json',
+          '002.scad',
+        ]);
+      });
     });
-  });
 
-  it('moves current.scad with the selected branch without duplicating revisions', async () => {
-    await withWorkspaceRoot(async () => {
-      await initializeConversationWorkspace({
-        conversationId: CONVERSATION_ID,
-        type: 'parametric',
+    it('moves current.scad with the selected branch without duplicating revisions', async () => {
+      await withWorkspaceRoot(async () => {
+        await initializeConversationWorkspace({
+          conversationId: CONVERSATION_ID,
+          type: 'parametric',
+        });
+        const messages = rows();
+        const dependencies = { loadMessages: async () => messages };
+
+        await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_2,
+          dependencies,
+        );
+        const switched = await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_1,
+          dependencies,
+        );
+
+        assert.deepEqual(switched, {
+          discovered: 1,
+          revisionsCreated: 0,
+          currentRevision: 1,
+        });
+        assert.equal(
+          await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
+          CODE_1,
+        );
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 2),
+            'utf8',
+          ),
+          CODE_2,
+        );
       });
-      const messages = rows();
-      const dependencies = { loadMessages: async () => messages };
+    });
 
-      await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_2,
-        dependencies,
-      );
-      const switched = await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_1,
-        dependencies,
-      );
+    it('preserves the original build and creates a new revision for a persisted parameter edit', async () => {
+      await withWorkspaceRoot(async () => {
+        await initializeConversationWorkspace({
+          conversationId: CONVERSATION_ID,
+          type: 'parametric',
+        });
 
-      assert.deepEqual(switched, {
-        discovered: 1,
-        revisionsCreated: 0,
-        currentRevision: 1,
+        const editedRows = rows().map((row) =>
+          row.id === ASSISTANT_1
+            ? {
+                ...row,
+                metadata: { originalCode: CODE_1 },
+                parts: [buildPart('tool-call-1', 'Cube', CODE_1_EDITED)],
+              }
+            : row,
+        );
+
+        const first = await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_1,
+          { loadMessages: async () => editedRows },
+        );
+        assert.deepEqual(first, {
+          discovered: 2,
+          revisionsCreated: 2,
+          currentRevision: 2,
+        });
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 1),
+            'utf8',
+          ),
+          CODE_1,
+        );
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 2),
+            'utf8',
+          ),
+          CODE_1_EDITED,
+        );
+        assert.equal(
+          await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
+          CODE_1_EDITED,
+        );
+
+        const originalMetadata = JSON.parse(
+          await readFile(
+            conversationModelRevisionMetadataPath(CONVERSATION_ID, 1),
+            'utf8',
+          ),
+        ) as { source: string };
+        const editedMetadata = JSON.parse(
+          await readFile(
+            conversationModelRevisionMetadataPath(CONVERSATION_ID, 2),
+            'utf8',
+          ),
+        ) as { source: string };
+        assert.equal(originalMetadata.source, 'build');
+        assert.equal(editedMetadata.source, 'parameter-edit');
+
+        const repeated = await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_1,
+          { loadMessages: async () => editedRows },
+        );
+        assert.deepEqual(repeated, {
+          discovered: 2,
+          revisionsCreated: 0,
+          currentRevision: 2,
+        });
+
+        const found = await findConversationModelRevisionByCodeSha(
+          CONVERSATION_ID,
+          conversationModelCodeSha256(CODE_1_EDITED),
+        );
+        assert.equal(found?.revision, 2);
+        assert.equal(found?.source, 'parameter-edit');
       });
-      assert.equal(
-        await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
-        CODE_1,
+    });
+
+    it('creates a new immutable revision if the same tool call changes source without legacy metadata', async () => {
+      await withWorkspaceRoot(async () => {
+        await initializeConversationWorkspace({
+          conversationId: CONVERSATION_ID,
+          type: 'parametric',
+        });
+        await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_1,
+          { loadMessages: async () => rows() },
+        );
+
+        const changedRows = rows().map((row) =>
+          row.id === ASSISTANT_1
+            ? {
+                ...row,
+                parts: [buildPart('tool-call-1', 'Cube', CODE_1_EDITED)],
+              }
+            : row,
+        );
+        const changed = await syncConversationModelSources(
+          request(),
+          CONVERSATION_ID,
+          ASSISTANT_1,
+          { loadMessages: async () => changedRows },
+        );
+        assert.deepEqual(changed, {
+          discovered: 1,
+          revisionsCreated: 1,
+          currentRevision: 2,
+        });
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 1),
+            'utf8',
+          ),
+          CODE_1,
+        );
+        assert.equal(
+          await readFile(
+            conversationModelRevisionPath(CONVERSATION_ID, 2),
+            'utf8',
+          ),
+          CODE_1_EDITED,
+        );
+      });
+    });
+
+    it('rejects invalid revision numbers at the workspace path boundary', () => {
+      assert.throws(
+        () => conversationModelRevisionPath(CONVERSATION_ID, 0),
+        /Invalid model revision/,
       );
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 2),
-          'utf8',
-        ),
-        CODE_2,
+      assert.throws(
+        () => conversationModelRevisionPath(CONVERSATION_ID, 1.5),
+        /Invalid model revision/,
       );
     });
-  });
-
-  it('preserves the original build and creates a new revision for a persisted parameter edit', async () => {
-    await withWorkspaceRoot(async () => {
-      await initializeConversationWorkspace({
-        conversationId: CONVERSATION_ID,
-        type: 'parametric',
-      });
-
-      const editedRows = rows().map((row) =>
-        row.id === ASSISTANT_1
-          ? {
-              ...row,
-              metadata: { originalCode: CODE_1 },
-              parts: [buildPart('tool-call-1', 'Cube', CODE_1_EDITED)],
-            }
-          : row,
-      );
-
-      const first = await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_1,
-        { loadMessages: async () => editedRows },
-      );
-      assert.deepEqual(first, {
-        discovered: 2,
-        revisionsCreated: 2,
-        currentRevision: 2,
-      });
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 1),
-          'utf8',
-        ),
-        CODE_1,
-      );
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 2),
-          'utf8',
-        ),
-        CODE_1_EDITED,
-      );
-      assert.equal(
-        await readFile(conversationCurrentModelPath(CONVERSATION_ID), 'utf8'),
-        CODE_1_EDITED,
-      );
-
-      const originalMetadata = JSON.parse(
-        await readFile(
-          conversationModelRevisionMetadataPath(CONVERSATION_ID, 1),
-          'utf8',
-        ),
-      ) as { source: string };
-      const editedMetadata = JSON.parse(
-        await readFile(
-          conversationModelRevisionMetadataPath(CONVERSATION_ID, 2),
-          'utf8',
-        ),
-      ) as { source: string };
-      assert.equal(originalMetadata.source, 'build');
-      assert.equal(editedMetadata.source, 'parameter-edit');
-
-      const repeated = await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_1,
-        { loadMessages: async () => editedRows },
-      );
-      assert.deepEqual(repeated, {
-        discovered: 2,
-        revisionsCreated: 0,
-        currentRevision: 2,
-      });
-
-      const found = await findConversationModelRevisionByCodeSha(
-        CONVERSATION_ID,
-        conversationModelCodeSha256(CODE_1_EDITED),
-      );
-      assert.equal(found?.revision, 2);
-      assert.equal(found?.source, 'parameter-edit');
-    });
-  });
-
-  it('creates a new immutable revision if the same tool call changes source without legacy metadata', async () => {
-    await withWorkspaceRoot(async () => {
-      await initializeConversationWorkspace({
-        conversationId: CONVERSATION_ID,
-        type: 'parametric',
-      });
-      await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_1,
-        { loadMessages: async () => rows() },
-      );
-
-      const changedRows = rows().map((row) =>
-        row.id === ASSISTANT_1
-          ? {
-              ...row,
-              parts: [buildPart('tool-call-1', 'Cube', CODE_1_EDITED)],
-            }
-          : row,
-      );
-      const changed = await syncConversationModelSources(
-        request(),
-        CONVERSATION_ID,
-        ASSISTANT_1,
-        { loadMessages: async () => changedRows },
-      );
-      assert.deepEqual(changed, {
-        discovered: 1,
-        revisionsCreated: 1,
-        currentRevision: 2,
-      });
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 1),
-          'utf8',
-        ),
-        CODE_1,
-      );
-      assert.equal(
-        await readFile(
-          conversationModelRevisionPath(CONVERSATION_ID, 2),
-          'utf8',
-        ),
-        CODE_1_EDITED,
-      );
-    });
-  });
-
-  it('rejects invalid revision numbers at the workspace path boundary', () => {
-    assert.throws(
-      () => conversationModelRevisionPath(CONVERSATION_ID, 0),
-      /Invalid model revision/,
-    );
-    assert.throws(
-      () => conversationModelRevisionPath(CONVERSATION_ID, 1.5),
-      /Invalid model revision/,
-    );
-  });
-});
+  },
+);

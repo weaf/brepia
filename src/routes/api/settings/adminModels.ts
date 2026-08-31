@@ -54,7 +54,9 @@ export const Route = createFileRoute('/api/settings/adminModels')({
           await requireAdmin(user);
 
           const url = new URL(request.url);
-          const assetConversationId = url.searchParams.get('assetConversationId');
+          const assetConversationId = url.searchParams.get(
+            'assetConversationId',
+          );
           const assetPath = url.searchParams.get('assetPath');
           if (assetConversationId || assetPath) {
             if (!assetConversationId || !assetPath) {

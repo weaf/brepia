@@ -26,13 +26,7 @@ export function SignUpEmailView() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const {
-    signUp,
-    signIn,
-    session,
-    user,
-    isLoading: authLoading,
-  } = useAuth();
+  const { signUp, signIn, session, user, isLoading: authLoading } = useAuth();
   const { data: registration, isLoading: policyLoading } = useQuery({
     queryKey: ['registration-settings'],
     queryFn: getRegistrationSettings,

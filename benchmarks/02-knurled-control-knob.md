@@ -18,23 +18,23 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `knob_diameter` | `40` | `[20:1:80]` | Outer diameter of the knob |
-| `knob_height` | `22` | `[10:1:50]` | Total height of the knob |
-| `knurl_density` | `36` | `[16:2:100]` | Number of knurl ridges |
-| `knurl_depth` | `1.2` | `[0.5:0.1:3.0]` | Depth of the diamond knurl pattern |
-| `shaft_diameter` | `6.0` | `[3:0.1:12]` | Diameter of the D-shaft |
-| `shaft_clearance` | `0.2` | `[0:0.05:0.5]` | Extra clearance for easy fit |
-| `shaft_flat_depth` | `1.5` | `[0:0.1:4.0]` | Depth of the flat portion on the D-shaft |
-| `shaft_bore_depth` | `18` | `[5:1:40]` | How deep the shaft hole goes into the knob |
-| `set_screw_diameter` | `3.0` | `[2:0.1:6.0]` | Thread diameter for the set screw (M3 = 3.0) |
-| `set_screw_height` | `8` | `[2:1:30]` | Height of the set screw hole from the bottom |
-| `set_screw_cb_diameter` | `6.0` | `[3:0.1:10.0]` | Diameter of the counterbore for the set screw head |
-| `set_screw_cb_depth` | `12` | `[0:1:30]` | Depth of the counterbore |
-| `pointer_angle` | `180` | `[0:15:345]` | Rotational angle of the pointer (180 points opposite to flat) |
-| `pointer_width` | `4` | `[2:0.5:10]` | Width of the pointer base |
-| … | | | _+1 more_ |
+| Parameter               | Default | Range / options | Description                                                   |
+| ----------------------- | ------- | --------------- | ------------------------------------------------------------- |
+| `knob_diameter`         | `40`    | `[20:1:80]`     | Outer diameter of the knob                                    |
+| `knob_height`           | `22`    | `[10:1:50]`     | Total height of the knob                                      |
+| `knurl_density`         | `36`    | `[16:2:100]`    | Number of knurl ridges                                        |
+| `knurl_depth`           | `1.2`   | `[0.5:0.1:3.0]` | Depth of the diamond knurl pattern                            |
+| `shaft_diameter`        | `6.0`   | `[3:0.1:12]`    | Diameter of the D-shaft                                       |
+| `shaft_clearance`       | `0.2`   | `[0:0.05:0.5]`  | Extra clearance for easy fit                                  |
+| `shaft_flat_depth`      | `1.5`   | `[0:0.1:4.0]`   | Depth of the flat portion on the D-shaft                      |
+| `shaft_bore_depth`      | `18`    | `[5:1:40]`      | How deep the shaft hole goes into the knob                    |
+| `set_screw_diameter`    | `3.0`   | `[2:0.1:6.0]`   | Thread diameter for the set screw (M3 = 3.0)                  |
+| `set_screw_height`      | `8`     | `[2:1:30]`      | Height of the set screw hole from the bottom                  |
+| `set_screw_cb_diameter` | `6.0`   | `[3:0.1:10.0]`  | Diameter of the counterbore for the set screw head            |
+| `set_screw_cb_depth`    | `12`    | `[0:1:30]`      | Depth of the counterbore                                      |
+| `pointer_angle`         | `180`   | `[0:15:345]`    | Rotational angle of the pointer (180 points opposite to flat) |
+| `pointer_width`         | `4`     | `[2:0.5:10]`    | Width of the pointer base                                     |
+| …                       |         |                 | _+1 more_                                                     |
 
 <details>
 <summary>OpenSCAD source — <code>02-knurled-control-knob.scad</code></summary>
@@ -161,10 +161,10 @@ rotate([0, 0, pointer_angle])
 translate([0, 0, knob_height - 0.05])
 hull() {
     // Outer tip
-    translate([0, knob_diameter/2 - 4, 0]) 
+    translate([0, knob_diameter/2 - 4, 0])
         cylinder(d=pointer_width/2, h=pointer_height, $fn=32);
     // Inner base
-    translate([0, 4, 0]) 
+    translate([0, 4, 0])
         cylinder(d=pointer_width, h=pointer_height, $fn=32);
 }
 ```

@@ -2,8 +2,7 @@ import type { AppUIMessage, ImportedArtifactOrigin } from './chatAi.ts';
 import type { ParametricArtifact } from './types.ts';
 
 export type ImportedArtifactBaseline =
-  | { status: 'success' }
-  | { status: 'error'; errorText: string };
+  { status: 'success' } | { status: 'error'; errorText: string };
 
 export type ImportedArtifactMessageRow = {
   id: string;

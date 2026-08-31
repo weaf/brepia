@@ -45,7 +45,10 @@ export type InstructionProfileDefaults = Partial<
 >;
 
 const runtimeDefinitionByKey = new Map(
-  AI_RUNTIME_LIMIT_DEFINITIONS.map((definition) => [definition.key, definition]),
+  AI_RUNTIME_LIMIT_DEFINITIONS.map((definition) => [
+    definition.key,
+    definition,
+  ]),
 );
 
 export const RuntimeOverridesSchema = z
@@ -63,10 +66,7 @@ export const RuntimeOverridesSchema = z
       }
 
       if (definition.kind === 'enum') {
-        if (
-          typeof raw !== 'string' ||
-          !definition.options?.includes(raw)
-        ) {
+        if (typeof raw !== 'string' || !definition.options?.includes(raw)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: [key],

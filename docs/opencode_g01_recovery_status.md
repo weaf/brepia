@@ -524,8 +524,7 @@ Files changed:
   - explicit artifact final results: fenced SCAD, CLI JSON, bare JSON ->
     exactly 1 build call each, correct toolName/input.
   - terminal-event contract: partial unclosed fence -> 0; completed fence at
-    terminal -> 1; repeated/snapshot content -> 1; same-batch artifact ->
-    1.
+    terminal -> 1; repeated/snapshot content -> 1; same-batch artifact -> 1.
   - follow-up prose with CAD keywords after a tool result -> 0 accidental
     calls; ordinary final text -> 0 and finishReason preserved.
   - finishReason transformation: `tool-calls` when a call is emitted; the

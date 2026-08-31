@@ -18,19 +18,19 @@ Fully parametric OpenSCAD built from the prompt above — adjustable dimensions 
 
 **Editable parameters**
 
-| Parameter | Default | Range / options | Description |
-| --- | --- | --- | --- |
-| `impeller_diameter` | `90` | `[50:1:150]` | Outer diameter of the impeller back-plate |
-| `bore_diameter` | `12` | `[4:0.5:30]` | Diameter of the central bore hole |
-| `backplate_thickness` | `3` | `[1:0.5:10]` | Thickness of the main back-plate |
-| `hub_diameter` | `26` | `[15:1:50]` | Outer diameter of the raised central hub |
-| `hub_height` | `20` | `[10:1:60]` | Total height of the hub from the bottom of the back-plate |
-| `blade_count` | `7` | `[3:1:15]` | Number of backward-curved blades |
-| `blade_height` | `12` | `[2:1:40]` | Height of the blades above the back-plate |
-| `blade_thickness` | `3` | `[1:0.5:8]` | Thickness of each blade |
-| `sweep_angle` | `75` | `[10:1:180]` | The angle (in degrees) that the blades sweep backwards |
-| `part_color` | `"#B0C4DE"` | `LightSteelBlue` |  |
-| `steps` | `48` | `Curve resolution` |  |
+| Parameter             | Default     | Range / options    | Description                                               |
+| --------------------- | ----------- | ------------------ | --------------------------------------------------------- |
+| `impeller_diameter`   | `90`        | `[50:1:150]`       | Outer diameter of the impeller back-plate                 |
+| `bore_diameter`       | `12`        | `[4:0.5:30]`       | Diameter of the central bore hole                         |
+| `backplate_thickness` | `3`         | `[1:0.5:10]`       | Thickness of the main back-plate                          |
+| `hub_diameter`        | `26`        | `[15:1:50]`        | Outer diameter of the raised central hub                  |
+| `hub_height`          | `20`        | `[10:1:60]`        | Total height of the hub from the bottom of the back-plate |
+| `blade_count`         | `7`         | `[3:1:15]`         | Number of backward-curved blades                          |
+| `blade_height`        | `12`        | `[2:1:40]`         | Height of the blades above the back-plate                 |
+| `blade_thickness`     | `3`         | `[1:0.5:8]`        | Thickness of each blade                                   |
+| `sweep_angle`         | `75`        | `[10:1:180]`       | The angle (in degrees) that the blades sweep backwards    |
+| `part_color`          | `"#B0C4DE"` | `LightSteelBlue`   |                                                           |
+| `steps`               | `48`        | `Curve resolution` |                                                           |
 
 <details>
 <summary>OpenSCAD source — <code>08-centrifugal-impeller.scad</code></summary>
@@ -71,7 +71,7 @@ sweep_angle = 75; // [10:1:180]
 /* [Appearance] */
 part_color = "#B0C4DE"; // LightSteelBlue
 
-$fn = 64; 
+$fn = 64;
 
 module centrifugal_impeller() {
     difference() {
@@ -84,12 +84,12 @@ module centrifugal_impeller() {
 
             // Blades (logarithmic spiral for constant incidence angle)
             // Inner radius overlaps the hub slightly to ensure a solid union
-            blade_inner_r = (hub_diameter / 2) - 0.5; 
+            blade_inner_r = (hub_diameter / 2) - 0.5;
             // Outer radius stops slightly short of the rim so the round endcaps don't overhang
             blade_outer_r = (impeller_diameter / 2) - (blade_thickness / 2);
-            
+
             steps = 48; // Curve resolution
-            
+
             // Calculate the 2D path of the sweeping blade
             pts = [
                 for(i = [0 : steps])

@@ -6,11 +6,7 @@ import {
   normalizeCreativeMeshModelId,
 } from '@shared/creativeMeshModels';
 import { MessageItem } from '../types/misc.ts';
-import {
-  useCallback,
-  type Dispatch,
-  type SetStateAction,
-} from 'react';
+import { useCallback, type Dispatch, type SetStateAction } from 'react';
 
 export function useItemSelection() {
   const { images, setImages: setImagesRaw, mesh, setMesh } = useSelectedItems();

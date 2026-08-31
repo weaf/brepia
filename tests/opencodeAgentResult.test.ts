@@ -26,7 +26,7 @@ describe('OpenCode agent result parsing', () => {
   it('repairs raw newlines inside a provider JSON code string', () => {
     const response =
       '{"code":"// Cube parameters\n' +
-      '// Size of the cube\'s sides\n' +
+      "// Size of the cube's sides\n" +
       'cube_size = 30;\n\n' +
       'color(\\"SteelBlue\\")\n' +
       'cube(size = cube_size);\n' +

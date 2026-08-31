@@ -190,7 +190,10 @@ export async function recordConversationAgentSession(
 
   await atomicWriteJson(path, record);
   const event: AgentEvent = { type: 'agent-session', at: now, record };
-  await appendJsonLine(conversationAgentEventsLogPath(input.conversationId), event);
+  await appendJsonLine(
+    conversationAgentEventsLogPath(input.conversationId),
+    event,
+  );
   return record;
 }
 
@@ -211,7 +214,9 @@ function buildTurnRecord(
     finishedAt: input.finishedAt,
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
     ...(input.resultKind ? { resultKind: input.resultKind } : {}),
-    ...(input.admittedSeq !== undefined ? { admittedSeq: input.admittedSeq } : {}),
+    ...(input.admittedSeq !== undefined
+      ? { admittedSeq: input.admittedSeq }
+      : {}),
     ...(input.validationAttempts !== undefined
       ? { validationAttempts: input.validationAttempts }
       : {}),
@@ -259,7 +264,9 @@ export async function recordConversationAgentTurn(
       // evolved in the authoritative chat history. First write wins.
       return existing;
     }
-    throw new Error(`Immutable agent turn identity mismatch: ${input.agent}/${input.id}`);
+    throw new Error(
+      `Immutable agent turn identity mismatch: ${input.agent}/${input.id}`,
+    );
   }
 
   const event: AgentEvent = {
@@ -267,7 +274,10 @@ export async function recordConversationAgentTurn(
     at: input.finishedAt,
     record,
   };
-  await appendJsonLine(conversationAgentEventsLogPath(input.conversationId), event);
+  await appendJsonLine(
+    conversationAgentEventsLogPath(input.conversationId),
+    event,
+  );
   return record;
 }
 

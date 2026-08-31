@@ -23,7 +23,10 @@ const USER_2 = 'cccccccc-3333-4333-8333-333333333333';
 const ASSISTANT_2 = 'dddddddd-4444-4444-8444-444444444444';
 const SIBLING = 'eeeeeeee-5555-4555-8555-555555555555';
 
-function buildPart(toolCallId: string, state: 'output-available' | 'output-error' = 'output-available') {
+function buildPart(
+  toolCallId: string,
+  state: 'output-available' | 'output-error' = 'output-available',
+) {
   return {
     type: 'tool-build_parametric_model',
     toolCallId,

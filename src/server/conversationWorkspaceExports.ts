@@ -1,12 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
   conversationExportRevisionMetadataPath,
@@ -78,7 +71,8 @@ async function readExistingMetadata(
 ): Promise<ConversationExportMetadata | null> {
   if (!(await pathExists(path))) return null;
   const raw: unknown = JSON.parse(await readFile(path, 'utf8'));
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+    return null;
   const record = raw as Record<string, unknown>;
   if (
     typeof record.revision !== 'number' ||
@@ -141,10 +135,7 @@ export async function persistConversationExportArtifact(
   };
 
   await atomicWrite(artifactPath, input.bytes);
-  await atomicWriteText(
-    metadataPath,
-    `${JSON.stringify(metadata, null, 2)}\n`,
-  );
+  await atomicWriteText(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
 
   return {
     revision: input.revision,
