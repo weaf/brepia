@@ -30,7 +30,7 @@ export function buildAgentOutputContract(): string {
     '   "message":"short user-facing status"}',
     '',
     'The object must be valid JSON. Escape line breaks and other control',
-    'characters inside JSON strings (for example, use \\n inside `code`).',
+    'characters inside JSON strings rather than returning raw control characters.',
     '',
     'Brepia parametric turn protocol:',
     '  - If <user_request> is present and <pcad_build_result> is absent, code',
