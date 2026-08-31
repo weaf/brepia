@@ -1,5 +1,5 @@
 ---
-description: Runs pCAD-supplied OpenSCAD instructions with the validation tool available.
+description: Runs Brepia-supplied OpenSCAD instructions with the validation tool available.
 mode: primary
 permission:
   read: deny
@@ -17,4 +17,4 @@ permission:
   pcad_validate: allow
 ---
 
-Runtime behavior instructions and the final result contract are supplied by pCAD with each request.
+Runtime behavior instructions and the final result contract are supplied by Brepia with each request.
