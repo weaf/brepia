@@ -10,6 +10,11 @@ import {
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
+  getOpenScadEntrypoint,
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
+import {
   conversationCurrentModelMetadataPath,
   conversationCurrentModelPath,
   conversationModelRevisionMetadataPath,
@@ -89,6 +94,17 @@ function originalCodeFromMessage(
     : null;
 }
 
+function projectEntrypointCode(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  try {
+    return getOpenScadEntrypoint(
+      normalizeOpenScadProject(value as OpenScadProject),
+    ).content;
+  } catch {
+    return null;
+  }
+}
+
 function parseSuccessfulBuildPart(
   part: unknown,
   message: ConversationMessageRow,
@@ -102,14 +118,13 @@ function parseSuccessfulBuildPart(
 
   const title = part.input.title;
   const version = part.input.version;
-  const code = part.input.code;
+  const code = projectEntrypointCode(part.input.project);
   if (
     typeof title !== 'string' ||
     !title.trim() ||
     typeof version !== 'string' ||
     !version.trim() ||
-    typeof code !== 'string' ||
-    !code.trim()
+    !code?.trim()
   ) {
     return [];
   }
@@ -138,8 +153,9 @@ function parseSuccessfulBuildPart(
  *
  * Parameter edits are persisted in-place on the original tool part. When the
  * UI has captured `metadata.originalCode`, emit both the original build and the
- * currently edited source. This keeps immutable history without pretending a
- * changed source is the same revision merely because its toolCallId is stable.
+ * currently edited entrypoint source. This keeps immutable history without
+ * pretending a changed source is the same revision merely because its
+ * toolCallId is stable.
  */
 export function collectSuccessfulParametricBuilds(
   rows: ConversationMessageRow[],
@@ -468,10 +484,10 @@ async function withConversationLock<T>(
 }
 
 /**
- * Persist successful OpenSCAD sources from the active conversation branch.
+ * Persist successful OpenSCAD entrypoint sources from the active conversation
+ * branch. Full project snapshots are added in Step 6; until then these files
+ * remain the entrypoint-only operational mirror used by existing local tools.
  * Revisions are immutable and idempotent by toolCallId + source hash.
- * `current.scad` always follows the newest active source, including persisted
- * parameter edits.
  */
 export async function syncConversationModelSources(
   request: Request,
