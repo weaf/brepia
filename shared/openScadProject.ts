@@ -39,12 +39,19 @@ export class OpenScadProjectError extends Error {
   }
 }
 
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 const WINDOWS_DRIVE_PATTERN = /^[a-zA-Z]:[\\/]/;
 const SCAD_EXTENSION_PATTERN = /\.scad$/i;
 
 function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 31 || codePoint === 127) return true;
+  }
+  return false;
 }
 
 export function normalizeOpenScadProjectPath(input: string): string {
@@ -54,7 +61,7 @@ export function normalizeOpenScadProjectPath(input: string): string {
       'OpenSCAD project paths must be non-empty relative paths.',
     );
   }
-  if (CONTROL_CHARACTER_PATTERN.test(input)) {
+  if (hasControlCharacter(input)) {
     throw new OpenScadProjectError(
       'invalid_path',
       'OpenSCAD project paths cannot contain control characters.',
