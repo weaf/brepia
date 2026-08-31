@@ -1,11 +1,11 @@
 ---
 name: pcad-openscad-review
-description: Use when creating or repairing a pCAD OpenSCAD model. Requires validation with pcad_validate before returning the final JSON artifact.
+description: Use when creating or repairing a Brepia OpenSCAD model. Requires validation with pcad_validate before returning the final JSON artifact.
 ---
 
-# pCAD OpenSCAD review
+# Brepia OpenSCAD review
 
-Use this workflow for every pCAD CAD request.
+Use this workflow for every Brepia CAD request.
 
 1. Produce one complete OpenSCAD candidate with meaningful named parameters.
 2. Call `pcad_validate` with that entire candidate.
@@ -17,4 +17,4 @@ Use this workflow for every pCAD CAD request.
    an explanation around it.
 
 The validator is the compile authority. A visually plausible draft is not a
-valid pCAD artifact until it passes.
+valid Brepia artifact until it passes.
