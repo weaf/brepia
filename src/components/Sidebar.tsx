@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   LayoutGrid,
@@ -45,6 +45,11 @@ import { Conversation, ConversationSettings } from '@shared/types';
 import { UserAvatar } from '@/components/chat/UserAvatar';
 import { useProfile } from '@/services/profileService';
 import { getInstanceIdentity } from '@/services/instanceIdentityService';
+import { getAccountAccess } from '@/services/accountAdminService';
+import {
+  ADMIN_CONVERSATION_IDS_EVENT,
+  readAdminConversationIdsEnabled,
+} from '@/lib/adminConversationIdentifiers';
 import { BrepiaBrand, BrepiaMark } from '@/components/brand';
 
 interface SidebarProps {
@@ -66,11 +71,42 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
   const { appearance, setAppearance } = useAppearance();
   const isMobile = useIsMobile();
   const { data: profile } = useProfile();
+  const { data: access } = useQuery({
+    queryKey: ['account-access'],
+    queryFn: getAccountAccess,
+  });
+  const [showConversationIds, setShowConversationIds] = useState(
+    readAdminConversationIdsEnabled,
+  );
   const { data: instanceIdentity } = useQuery({
     queryKey: ['instance-identity'],
     queryFn: getInstanceIdentity,
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    const onPreferenceChanged = (event: Event) => {
+      const detail = (event as CustomEvent<boolean>).detail;
+      setShowConversationIds(
+        typeof detail === 'boolean' ? detail : readAdminConversationIdsEnabled(),
+      );
+    };
+    const onStorage = () =>
+      setShowConversationIds(readAdminConversationIdsEnabled());
+
+    window.addEventListener(ADMIN_CONVERSATION_IDS_EVENT, onPreferenceChanged);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(
+        ADMIN_CONVERSATION_IDS_EVENT,
+        onPreferenceChanged,
+      );
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  const showAdminConversationIds =
+    access?.role === 'admin' && showConversationIds;
   const communityUrl =
     instanceIdentity?.showCommunityLink && instanceIdentity.communityUrl
       ? instanceIdentity.communityUrl
@@ -287,10 +323,15 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                               }
                             }}
                           >
-                            <li key={conversation.id}>
-                              <span className="line-clamp-1 text-ellipsis text-nowrap rounded-md p-1 text-xs font-medium text-adam-neutral-400 transition-colors duration-200 ease-in-out [@media(hover:hover)]:hover:bg-adam-neutral-950 [@media(hover:hover)]:hover:text-adam-neutral-10">
-                                {conversation.title}
+                            <li className="rounded-md p-1 transition-colors duration-200 ease-in-out [@media(hover:hover)]:hover:bg-adam-neutral-950">
+                              <span className="line-clamp-1 text-ellipsis text-nowrap text-xs font-medium text-adam-neutral-400 [@media(hover:hover)]:hover:text-adam-neutral-10">
+                                {conversation.title || conversation.id}
                               </span>
+                              {showAdminConversationIds && (
+                                <span className="mt-0.5 block font-mono text-[10px] text-adam-neutral-500">
+                                  {conversation.id.slice(0, 8)}
+                                </span>
+                              )}
                             </li>
                           </Link>
                         );
