@@ -2,6 +2,37 @@ import { z } from 'zod';
 
 const runtimeModelIdSchema = z.string().trim().min(1).max(512);
 const nullableRuntimeModelIdSchema = z.union([runtimeModelIdSchema, z.null()]);
+const localCreativeProfileIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^[a-zA-Z0-9._:-]+$/);
+const nullableLocalCreativeProfileIdSchema = z.union([
+  localCreativeProfileIdSchema,
+  z.null(),
+]);
+
+export const LocalCreativeAdapterSchema = z.enum(['native-image-mesh-v1']);
+export type LocalCreativeAdapter = z.infer<typeof LocalCreativeAdapterSchema>;
+
+export const LocalCreativeProfileSchema = z.object({
+  id: localCreativeProfileIdSchema,
+  name: z.string().trim().min(1).max(100),
+  adapter: LocalCreativeAdapterSchema.default('native-image-mesh-v1'),
+  imageModelId: nullableRuntimeModelIdSchema.default(null),
+  meshModelId: nullableRuntimeModelIdSchema.default(null),
+  enabled: z.boolean().default(true),
+});
+export type LocalCreativeProfile = z.infer<typeof LocalCreativeProfileSchema>;
+
+const LocalCreativeProfilesSchema = z
+  .array(LocalCreativeProfileSchema)
+  .max(32)
+  .refine(
+    (profiles) => new Set(profiles.map((profile) => profile.id)).size === profiles.length,
+    'Local Creative profile IDs must be unique',
+  );
 
 export const CreativeImageProviderSchema = z.enum(['openai', 'fal']);
 export type CreativeImageProvider = z.infer<typeof CreativeImageProviderSchema>;
@@ -11,6 +42,9 @@ const nullableCreativeImageProviderSchema = z.union([
 ]);
 
 export const CreativeRuntimeModelRoutingSchema = z.object({
+  localCreativeProfiles: LocalCreativeProfilesSchema.default([]),
+  defaultLocalCreativeProfileId:
+    nullableLocalCreativeProfileIdSchema.default(null),
   creativeImagePrimaryProvider:
     nullableCreativeImageProviderSchema.default(null),
   creativeImageFallbackProvider:
@@ -19,6 +53,12 @@ export const CreativeRuntimeModelRoutingSchema = z.object({
   openAiImageModelId: nullableRuntimeModelIdSchema.default(null),
   falImageTextModelId: nullableRuntimeModelIdSchema.default(null),
   falImageReferenceModelId: nullableRuntimeModelIdSchema.default(null),
+  /**
+   * Compatibility materialization for the currently active local profile.
+   * Runtime code still reads these fields while profile-aware conversation
+   * pinning is introduced. They remain explicit user settings, never hidden
+   * concrete defaults.
+   */
   nativeImageModelId: nullableRuntimeModelIdSchema.default(null),
   nativeMeshModelId: nullableRuntimeModelIdSchema.default(null),
   falUltraMeshModelId: nullableRuntimeModelIdSchema.default(null),
@@ -41,8 +81,35 @@ export const EMPTY_CREATIVE_RUNTIME_MODEL_ROUTING: CreativeRuntimeModelRouting =
 
 export type CreativeRuntimeModelKey = Exclude<
   keyof CreativeRuntimeModelRouting,
-  'creativeImagePrimaryProvider' | 'creativeImageFallbackProvider'
+  | 'localCreativeProfiles'
+  | 'defaultLocalCreativeProfileId'
+  | 'creativeImagePrimaryProvider'
+  | 'creativeImageFallbackProvider'
 >;
+
+export function getUsableLocalCreativeProfiles(
+  routing: CreativeRuntimeModelRouting,
+): LocalCreativeProfile[] {
+  return routing.localCreativeProfiles.filter(
+    (profile) =>
+      profile.enabled &&
+      typeof profile.meshModelId === 'string' &&
+      profile.meshModelId.trim().length > 0,
+  );
+}
+
+export function getDefaultLocalCreativeProfile(
+  routing: CreativeRuntimeModelRouting,
+): LocalCreativeProfile | null {
+  const usable = getUsableLocalCreativeProfiles(routing);
+  if (routing.defaultLocalCreativeProfileId) {
+    const selected = usable.find(
+      (profile) => profile.id === routing.defaultLocalCreativeProfileId,
+    );
+    if (selected) return selected;
+  }
+  return usable[0] ?? null;
+}
 
 export function requireCreativeRuntimeModel(
   routing: CreativeRuntimeModelRouting,
@@ -51,7 +118,7 @@ export function requireCreativeRuntimeModel(
   const value = routing[key];
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(
-      `Creative runtime model ${key} is not configured. Select it in AI Settings > Model routing.`,
+      `Creative runtime model ${key} is not configured. Select it in AI Settings > Creative models.`,
     );
   }
   return value.trim();

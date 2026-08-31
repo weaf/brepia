@@ -11,6 +11,7 @@ import {
   discoverLocalModels,
   updateLocalModelMetadata,
 } from '@/server/localModels';
+import { discoverCreativeRuntimeModels } from '@/server/creativeRuntimeModels';
 
 export const Route = createFileRoute('/api/settings/runtimeIntegrations')({
   server: {
@@ -20,12 +21,28 @@ export const Route = createFileRoute('/api/settings/runtimeIntegrations')({
         try {
           const user = await requireUser(request);
           const integrations = await discoverRuntimeIntegrations(user.id);
-          const includeModels =
-            new URL(request.url).searchParams.get('includeModels') === '1';
-          if (!includeModels) return json(integrations);
+          const searchParams = new URL(request.url).searchParams;
+          const includeModels = searchParams.get('includeModels') === '1';
+          const includeCreativeModels =
+            searchParams.get('includeCreativeModels') === '1';
+          if (!includeModels && !includeCreativeModels) {
+            return json(integrations);
+          }
 
-          const localModels = await discoverLocalModels(user.id).catch(() => []);
-          return json({ integrations, localModels });
+          const [localModels, creativeRuntimeModels] = await Promise.all([
+            includeModels
+              ? discoverLocalModels(user.id).catch(() => [])
+              : Promise.resolve([]),
+            includeCreativeModels
+              ? discoverCreativeRuntimeModels().catch(() => [])
+              : Promise.resolve([]),
+          ]);
+
+          return json({
+            integrations,
+            ...(includeModels ? { localModels } : {}),
+            ...(includeCreativeModels ? { creativeRuntimeModels } : {}),
+          });
         } catch (err) {
           return json(
             {

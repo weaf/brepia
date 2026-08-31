@@ -7,6 +7,7 @@ const runtimeFiles = [
   'src/server/imageGen.ts',
   'src/server/falMesh.ts',
   'src/server/nativeCreativeMesh.ts',
+  'src/server/creativeRuntimeModels.ts',
 ];
 
 const historicalModelIds = [
