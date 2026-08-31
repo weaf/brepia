@@ -63,7 +63,7 @@ Implementation goals:
 
 `conversations.settings.localCreativeProfileId` is the conversation-level pin.
 
-- Declarative database source is `supabase/schemas/creative_conversation_profile_pinning.sql`; the migration must be generated from it with the repository-local `npx supabase db diff` workflow.
+- Declarative database source is the Creative pinning function/trigger section in `supabase/schemas/triggers.sql`; the migration must be generated from it with the repository-local `npx supabase db diff` workflow.
 - New Creative conversations receive the current `defaultLocalCreativeProfileId` in a `BEFORE INSERT` database trigger. This keeps pinning consistent for every client that creates a conversation rather than relying on one React view.
 - The trigger always writes the key for new Creative conversations. A JSON `null` value records that no Local Creative profile was selected at creation time.
 - Existing conversations are not backfilled. Absence of the key therefore remains an unambiguous legacy marker and preserves Phase-1 compatibility behavior.
