@@ -6,6 +6,7 @@ import {
   parseStructuredAgentResult,
   resolveAgentResultChannels,
 } from '../src/server/opencodeAgentResult';
+import { getOpenScadEntrypoint, type OpenScadProject } from '@shared/openScadProject';
 
 describe('OpenCode agent result parsing', () => {
   it('extracts a terminal JSON artifact embedded after reasoning prose', () => {
@@ -61,8 +62,9 @@ describe('OpenCode agent result parsing', () => {
     assert.equal(parts[0]?.type, 'tool-call');
     if (parts[0]?.type === 'tool-call') {
       assert.equal(parts[0].toolName, 'build_parametric_model');
-      const input = JSON.parse(parts[0].input) as { code?: string };
-      assert.equal(input.code, parsed.code);
+      const input = JSON.parse(parts[0].input) as { project: OpenScadProject };
+      assert.equal(getOpenScadEntrypoint(input.project).content, parsed.code);
+      assert.equal(input.project.entrypointPath, 'main.scad');
     }
   });
 
