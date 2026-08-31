@@ -39,6 +39,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   asParametricParts,
   getBuildParametricModelOutput,
+  getParametricArtifactEntrypointCode,
 } from '@shared/parametricParts';
 import type { MeshFileType } from '@shared/types';
 import { cn } from '@/lib/utils';
@@ -321,12 +322,13 @@ function findLatestVisualPreview(
     }
     if (part.type === 'tool-build_parametric_model') {
       const artifact = getBuildParametricModelOutput([part]);
-      if (artifact?.code) {
+      if (artifact) {
+        const code = getParametricArtifactEntrypointCode(artifact);
         const key =
           'toolCallId' in part && typeof part.toolCallId === 'string'
             ? part.toolCallId
             : messageId;
-        return { type: 'artifact', key, code: artifact.code };
+        return { type: 'artifact', key, code };
       }
     }
   }
