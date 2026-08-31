@@ -15,6 +15,23 @@ describe('Local Creative profiles', () => {
     expect(getDefaultLocalCreativeProfile(routing)).toBeNull();
   });
 
+  it('does not implicitly activate the first usable profile', () => {
+    const routing = CreativeRuntimeModelRoutingSchema.parse({
+      localCreativeProfiles: [
+        {
+          id: 'available',
+          name: 'Available runtime',
+          meshModelId: 'creative/mesh-a',
+          enabled: true,
+        },
+      ],
+      defaultLocalCreativeProfileId: null,
+    });
+
+    expect(getUsableLocalCreativeProfiles(routing)).toHaveLength(1);
+    expect(getDefaultLocalCreativeProfile(routing)).toBeNull();
+  });
+
   it('adds safe runtime defaults to existing profiles', () => {
     const routing = CreativeRuntimeModelRoutingSchema.parse({
       localCreativeProfiles: [
