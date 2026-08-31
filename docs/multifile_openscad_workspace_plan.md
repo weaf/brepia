@@ -8,25 +8,28 @@ Baseline: `master` at `9048df8131d9cd1ce24330727c39ee8da29f18fe`.
 
 ## Goal
 
-Extend Brepia's working single-file OpenSCAD flow into a normalized project workspace that can safely preserve and execute multiple OpenSCAD source files and, in a later step of this feature, explicitly supported relative assets.
+Replace Brepia's current single-source Parametric artifact model with a normalized OpenSCAD project workspace that safely preserves and executes one or many OpenSCAD source files and, in a later step of this feature, explicitly supported relative assets.
 
-The feature must preserve existing single-file Parametric conversations, imports, parameter editing, preview/export behavior, conversation trees, stable runtime behavior and the STEP sandbox security model.
+Backward compatibility with existing pre-project Parametric artifacts is **not a product requirement** for this post-1.0 change. Existing models are primarily test data and can be re-imported from their `.scad` source files when needed.
 
-This is an OpenSCAD project-workspace feature. It must not become a premature generalized CAD-backend rewrite. The normalized project concepts should nevertheless avoid assumptions that would prevent a later Rhino/Grasshopper or other CAD integration from using similar workspace primitives.
+The feature must preserve current product behavior for newly created/imported models: parameter editing, preview/export behavior, conversation trees, stable runtime behavior and the STEP sandbox security model. The implementation may deliberately replace the internal artifact shape used by existing persisted test conversations.
+
+This is an OpenSCAD project-workspace feature. It must not become a premature generalized CAD-backend rewrite. The normalized project concepts should nevertheless avoid assumptions that would prevent a later Rhino/Grasshopper or other CAD integration from reusing workspace primitives where appropriate.
 
 ## Non-goals
 
-- Do not replace OpenSCAD.
+- Do not replace OpenSCAD as part of this feature.
 - Do not add Rhino/Grasshopper in this branch.
 - Do not add RepliCAD/build123d/CadQuery as generation backends.
 - Do not redesign the conversation/version tree.
 - Do not weaken rootless STEP sandbox isolation.
 - Do not make the local filesystem workspace the authoritative persistence layer; it remains an operational mirror. Supabase/message/storage state remains authoritative.
-- Do not require a migration of existing single-file Parametric messages.
+- Do not build a compatibility adapter solely to keep old Parametric test messages executable.
+- Do not migrate old Parametric messages solely for backward compatibility.
 
 ## Reconciled current implementation
 
-### Artifact/tool contract is single-source
+### Artifact/tool contract is single-source today
 
 `ParametricArtifact` is currently:
 
@@ -38,7 +41,9 @@ This is an OpenSCAD project-workspace feature. It must not become a premature ge
 }
 ```
 
-`parametricArtifactSchema` and `build_parametric_model` likewise accept one `code` string. Existing message history, restore/retry, parameter editing, share UI, preview and workspace revision extraction all depend on that shape.
+`parametricArtifactSchema` and `build_parametric_model` likewise accept one `code` string. Current message rendering, restore/retry, parameter editing, sharing, preview and workspace revision extraction read that field directly.
+
+Because backward compatibility is not required, this feature should migrate those current consumers to a project-native accessor/model rather than preserving `code` as a duplicate compatibility field.
 
 ### Local import explicitly rejects project dependencies
 
@@ -56,21 +61,19 @@ This means the geometry runtime does not need to be replaced; the request contra
 
 ### Conversation workspace already persists Parametric revisions
 
-The local conversation workspace already mirrors active Parametric source revisions as immutable `.scad` files plus metadata and maintains `models/current.scad`. This is useful compatibility infrastructure, but it only snapshots the entrypoint source today.
+The local conversation workspace already mirrors active Parametric source revisions as immutable `.scad` files plus metadata and maintains `models/current.scad`. It currently snapshots only the single source string.
+
+Because old local workspace compatibility is not required for the test-era Parametric data, this feature can replace the model revision layout with project snapshots instead of maintaining two permanent parallel representations.
 
 ### STEP is intentionally one-input-only
 
 `POST /api/export/step` accepts `sourceCode`. The STEP runner mounts exactly one read-only SCAD input file. `docs/step_export.md` already identifies normalized multi-file workspace input as the required design before arbitrary relative project files/assets can be supported.
 
-## Product behavior
+## Product artifact model
 
-### Existing single-file project
+Every Parametric artifact becomes an OpenSCAD project, including a simple model containing only one `.scad` file.
 
-Nothing changes for an existing artifact or imported `.scad` file. It remains valid with only `title`, `version`, and `code`.
-
-### Multi-file project
-
-A multi-file artifact has one explicit entrypoint and zero or more support files. The initial compatibility representation should extend, not replace, the existing artifact:
+Initial source-only contract:
 
 ```ts
 type ParametricProjectTextFile = {
@@ -87,20 +90,36 @@ type OpenScadProject = {
 type ParametricArtifact = {
   title: string;
   version: string;
-  code: string;
-  project?: OpenScadProject;
+  project: OpenScadProject;
 };
 ```
 
-Compatibility invariant:
+Core invariants:
 
-- `code` remains the complete contents of `entrypointPath`.
-- `project.files` contains support source files and MUST NOT duplicate the entrypoint.
-- if `project` is absent, the artifact behaves exactly as it does in Brepia 1.0.
+- `project.files` contains **all** project source files, including the entrypoint;
+- exactly one file path equals `entrypointPath`;
+- there is no duplicated top-level `code` field;
+- a normal one-file model is simply `entrypointPath: 'main.scad'` plus one file in `files`;
+- all source-reading consumers use shared helpers such as `getProjectEntrypoint()` rather than reaching into array structure themselves;
+- project equality/checksum is defined over the complete normalized project, not only the entrypoint.
 
-This keeps all existing consumers functional while allowing project-aware paths to mount the support files.
+This removes the risk of `code` and `project.files[entrypoint]` diverging and gives AI editing, history, imports and exports one authoritative artifact representation.
 
-A future backend-neutral artifact is a separate project. Do not add `backend`, `language`, Rhino, RepliCAD or similar fields merely to solve multi-file OpenSCAD.
+A future backend-neutral artifact is still a separate architectural decision. Do not add Rhino, RepliCAD or generic backend identifiers merely to solve OpenSCAD project support.
+
+## Existing persisted Parametric data
+
+No migration is required for existing test-era Parametric conversations.
+
+Expected behavior after the project-native contract lands:
+
+- new AI generations use the project contract;
+- new local imports use the project contract;
+- new GitHub imports use the project contract;
+- old models that matter can be imported again from `.scad` source;
+- old incompatible Parametric message history may be discarded/reset in development rather than forcing permanent compatibility code into the product.
+
+Any required database cleanup should be explicit and development-safe. Do not introduce hidden fallback paths that keep the old artifact shape alive indefinitely.
 
 ## Normalized project path model
 
@@ -111,7 +130,7 @@ Required invariants:
 - relative paths only;
 - `/` is the canonical separator;
 - reject absolute paths and Windows drive paths;
-- reject empty segments, `.` and `..` segments;
+- reject empty segments, `.` and `..` segments in stored normalized paths;
 - reject NUL/control characters;
 - enforce bounded segment/path lengths and bounded nesting depth;
 - enforce unique normalized paths, case-collision checks where appropriate, file-count limits, per-file limits and total-project byte limits;
@@ -120,86 +139,93 @@ Required invariants:
 
 Centralize this in one shared project validator/normalizer rather than duplicating path checks in upload, GitHub, worker and STEP code.
 
+Source references such as `../shared/foo.scad` may be valid only if resolution from the calling file normalizes back inside the project root. The stored project path itself never contains `..`.
+
 ## OpenSCAD path semantics
 
-Preserve the user's directory hierarchy when mounting the project. OpenSCAD resolves non-fully-qualified `include`/`use` paths relative to the calling `.scad` file before library search paths. Therefore nested helpers must be mounted under the same relative path tree as the imported project.
+Preserve the user's directory hierarchy when mounting the project. Nested helpers must be mounted under the same relative path tree as the imported project so OpenSCAD resolves relative `include`/`use` and later relative assets correctly.
 
-The browser runtime should execute a normalized path such as:
+The browser runtime should execute:
 
 ```text
 /project/<entrypointPath>
 ```
 
-rather than rewriting the source to flatten includes or continuing to force every model into `/input.scad`.
+rather than rewriting source to flatten includes or continuing to force every model into `/input.scad`.
 
 ## Implementation steps
 
-### Step 1 — Project contracts and validation
+### Step 1 — Replace the artifact contract with project-native types
 
-Add project types and a central path/project validator with focused tests.
+Create project types, shared accessors and central path/project validation with focused tests.
 
 Requirements:
 
-- optional `project` on `ParametricArtifact` and the Zod tool schema;
-- backward-compatible `isParametricArtifact` handling;
+- replace top-level `code` in `ParametricArtifact` with required `project`;
+- replace the Zod `build_parametric_model` input schema accordingly;
+- update `isParametricArtifact` for the new required contract;
+- provide shared helpers to resolve the entrypoint file/content;
 - deterministic project normalization;
 - explicit bounds/constants for file count, path depth, per-file source bytes and total source bytes;
-- no DB migration solely for the optional JSON shape.
+- a one-file helper for AI/import call sites that need to construct the simplest project;
+- no compatibility branch for the old `{ title, version, code }` shape.
 
-Do not change runtime compilation in this step.
+In the same step, migrate compile/parameter/share/viewer call sites enough for the application to typecheck against the new artifact contract, but do not implement multi-file execution yet.
 
 Gate:
 
-- old artifact fixtures remain valid;
-- malformed project paths, duplicates, traversal attempts and oversized projects fail deterministically;
-- `npm test`, typecheck and lint for touched code.
+- one-file project artifact validates and exposes its entrypoint deterministically;
+- malformed/missing entrypoint, traversal paths, duplicates, case collisions and oversized projects fail deterministically;
+- no remaining production consumer assumes `artifact.code`;
+- focused tests, `npm run typecheck`, lint for touched code.
 
 ### Step 2 — Project-aware browser OpenSCAD execution
 
-Extend the worker compile request to carry the normalized entrypoint path plus support files for that compile.
+Extend the worker compile request to carry the normalized project snapshot and entrypoint path for every compile.
 
 Important design decision: do not depend on state left in the singleton worker from a previous conversation/project. Each preview/export must be reproducible from the request itself and each fresh OpenSCAD instance.
 
 Worker behavior:
 
 1. create `/project`;
-2. mount the entrypoint at `/project/<entrypointPath>`;
-3. mount all support files under `/project/...`;
-4. scan all active project source files for bundled BOSL/BOSL2/MCAD dependencies, not only the entrypoint;
-5. execute the actual entrypoint path;
-6. keep current manifold/color preview behavior and output limits.
+2. mount every project file under `/project/<path>`;
+3. scan all active project source files for bundled BOSL/BOSL2/MCAD dependencies, not only the entrypoint;
+4. execute `/project/<entrypointPath>`;
+5. keep current manifold/color preview behavior and output limits.
 
-Update the normal preview and STL/DXF export paths to pass the project when present.
+The one-file project path goes through this same runtime. There is no separate legacy single-file compiler path.
 
 Gate corpus:
 
-- legacy one-file model;
+- one-file `main.scad` project;
 - `main.scad -> include <lib/a.scad>`;
 - nested `a.scad -> use <nested/b.scad>`;
-- sibling and parent-directory traversal in source references only when the normalized target remains inside the project; attempts to escape the project must fail;
+- sibling/parent references that resolve inside the project;
+- attempts to escape the project fail;
 - bundled BOSL2 referenced from a support file;
 - parameterized entrypoint with support modules;
 - 2D DXF and 3D STL regression.
 
-### Step 3 — Local directory/project import
+### Step 3 — Local file and directory/project import
 
-Keep the current `Import SCAD` single-file action and add a separate project-folder path rather than changing the semantics of the existing button silently.
+Unify import around the project contract.
+
+A selected single `.scad` file becomes a one-file project automatically. A selected folder becomes a multi-file project while preserving relative hierarchy.
 
 Modern browsers expose directory selection through `webkitdirectory` and preserve hierarchy in `File.webkitRelativePath`. Use that for the primary folder picker, with a graceful fallback/manual multi-file path if needed.
 
 Import flow:
 
 1. collect selected regular files and relative paths;
-2. normalize/validate before reading them into the project;
+2. normalize/validate before constructing the project;
 3. identify `.scad` candidates;
-4. choose the entrypoint deterministically when unambiguous; otherwise present an entrypoint choice to the user;
-5. build the project artifact;
-6. perform a baseline compile using the complete project;
-7. persist the imported artifact through the existing conversation/message path.
+4. for a single-file import, use that file as the entrypoint;
+5. for a folder import, choose the entrypoint deterministically when unambiguous; otherwise present an entrypoint choice;
+6. build the complete project artifact;
+7. perform a baseline compile using the complete project;
+8. persist the imported artifact through the normal conversation/message path.
 
 Initial Step 3 supports `.scad` project sources. Binary/other assets remain explicitly rejected until Step 7 below.
-
-Single-file import must continue to use the existing fast path.
 
 ### Step 4 — GitHub project dependency resolution
 
@@ -217,61 +243,62 @@ For `include`/`use`:
 
 GitHub's tree/content APIs may be used as metadata/fetch primitives, but the import must remain bounded. Never recursively ingest an unlimited repository because one SCAD file was selected.
 
-Gists can retain their existing exactly-one-SCAD behavior in the first implementation. Multi-file Gist support is optional after regular repository projects are stable.
+A GitHub URL to a standalone SCAD still returns the same project-native shape with a single file.
 
-### Step 5 — Project-aware AI editing and message persistence
+Gists can retain exactly-one-SCAD support initially. Multi-file Gist support is optional after normal repository projects are stable.
 
-`build_parametric_model` must treat the project snapshot as complete when `project` is present.
+### Step 5 — Project-native AI editing and message persistence
+
+`build_parametric_model` always emits a complete project snapshot.
 
 Rules for agent instructions:
 
-- preserve unchanged support files across follow-up edits;
+- emit an entrypoint and complete required source-file set;
+- preserve unchanged files across follow-up edits;
 - change only files needed for the requested modification;
-- keep `code` as the entrypoint content;
-- keep `entrypointPath` stable unless the task explicitly restructures the project;
-- never emit traversal/absolute paths.
+- keep `entrypointPath` stable unless restructuring is required;
+- never emit traversal/absolute stored paths;
+- never omit a support file required by the generated source.
 
-Current parameter UI continues to derive Customizer parameters from the entrypoint `code`. Support-file variables are not promoted into the parameter panel in this feature unless there is a compelling compatibility-safe reason.
+Current Customizer parameter UI derives parameters from the entrypoint content returned by the shared project helper. Support-file variables are not promoted into the parameter panel in this feature unless a later explicit product decision changes that.
 
-Parameter edits modify only the entrypoint code and preserve `artifact.project` unchanged. Existing `metadata.originalCode` behavior remains entrypoint-only.
+Parameter edits update the entrypoint file inside the project snapshot. The entire updated project remains the artifact persisted in the assistant message.
 
-The current conversation tree remains authoritative; project versions follow the same message branches and restore/retry semantics as single-file artifacts.
+Replace entrypoint-only `metadata.originalCode` with project-aware baseline handling where needed. At minimum, Reset/default parameter semantics need an immutable original **entrypoint source** associated with that message; avoid retaining the old top-level artifact contract just for this purpose.
+
+The existing conversation tree remains authoritative. Project versions follow the same message branches and restore/retry semantics.
 
 ### Step 6 — Conversation workspace project snapshots
 
-Extend the best-effort local conversation workspace without removing existing files.
+Replace the Parametric model mirror with project-native snapshots rather than permanently maintaining `current.scad` plus a second project hierarchy.
 
-Compatibility files stay:
-
-```text
-models/current.scad
-models/revisions/001.scad
-...
-```
-
-Add project-aware mirrors, for example:
+Recommended layout:
 
 ```text
-models/current-project/
+models/current/
+  project.json
   <entrypointPath>
   <support files...>
-  project.json
 
-models/project-revisions/001/
+models/revisions/001/
+  project.json
   <entrypointPath>
   <support files...>
-  project.json
+
+models/revisions/002/
+  ...
 ```
 
-Exact naming can be adjusted during implementation, but these invariants matter:
+Invariants:
 
-- existing `current.scad` remains available to tooling;
-- project snapshots are immutable per revision;
-- identity/checksum covers the whole normalized project, not just entrypoint code;
-- active conversation branch determines current project just as it determines current SCAD today;
-- local workspace remains a mirror, not the only copy.
+- a revision is an immutable normalized project snapshot;
+- checksum/identity covers the whole normalized project;
+- `project.json` records schema version, entrypoint, title/version metadata, source/tool/message identity and checksums;
+- active conversation branch determines `models/current/`;
+- local workspace remains a best-effort mirror, not the authoritative database;
+- OpenCode/other local agents receive a coherent real project tree instead of a synthetic one-file representation.
 
-This also gives OpenCode/other local agents a coherent project tree to inspect later without inventing another transport.
+Old `models/current.scad` and one-file revision layout do not need permanent compatibility support. Development workspaces may be cleared/rebuilt after this migration.
 
 ### Step 7 — Explicit relative asset support
 
@@ -290,6 +317,8 @@ Do not enable arbitrary extensions. First verify the exact formats required by t
 For local folder import, assets can originate from selected files. For GitHub, only literal bounded relative asset paths should be auto-resolved. Dynamic filenames that cannot be determined safely must produce a clear missing/unsupported dependency error rather than broad repository access.
 
 Because the local conversation workspace is not authoritative, binary assets must be persisted in private Supabase storage (or an equivalent authoritative Brepia storage contract) and referenced by project metadata; do not store arbitrary binary blobs directly in message JSON.
+
+The source-only `files: { path, content }[]` contract may need to evolve at this step into a discriminated source/asset representation. Make that change when the actual asset persistence contract is known rather than over-generalizing Step 1.
 
 A schema-first migration may be required for asset metadata/ownership. If so, follow the repository's Supabase workflow and regenerate types; do not hand-edit `shared/database.ts`.
 
@@ -321,13 +350,15 @@ OpenSCAD/scad123d on /input-project/<entrypoint>
 
 Critical security difference from mounting user paths: the server constructs the temporary tree itself exclusively from normalized project bytes/storage objects. No host directory selected by the user is ever mounted into the sandbox.
 
+Change the STEP API from `sourceCode` to a bounded normalized project request; do not keep both transports solely for compatibility with test-era artifacts.
+
 Update `docs/step_export.md` when this step lands and replace the current single-file security invariant with the normalized-project equivalent.
 
 STEP tests must cover includes, nested includes, project assets that the provider supports, missing dependency failure, path traversal rejection and analytic-surface regression from the existing corpus.
 
 ### Step 9 — Project file UX
 
-A multi-file project must be inspectable, not invisible metadata.
+A project must be inspectable, not invisible metadata.
 
 Add a bounded project-file UI integrated with the existing Parametric editor rather than a broad redesign:
 
@@ -337,6 +368,7 @@ Add a bounded project-file UI integrated with the existing Parametric editor rat
 - clearly mark the entrypoint;
 - allow support-file edits to update the complete project artifact and recompile;
 - parameter panel continues to target the entrypoint;
+- a one-file project should not feel more cumbersome than today's single-file model;
 - mobile UX may use a sheet/dialog instead of permanently consuming preview space.
 
 Do not build an IDE or a second conversation versioning model.
@@ -357,9 +389,9 @@ When STEP is touched also run the provider smoke/corpus tests documented in `doc
 
 Manual acceptance corpus should include at least:
 
-1. existing one-file Brepia-generated artifact;
-2. existing one-file local import;
-3. existing one-file GitHub import;
+1. newly AI-generated one-file project;
+2. re-imported standalone `.scad` file;
+3. standalone GitHub `.scad` import;
 4. local multi-file SCAD folder;
 5. GitHub entrypoint with nested repository-local includes;
 6. bundled BOSL/BOSL2/MCAD from entrypoint and from helper file;
@@ -373,17 +405,23 @@ Manual acceptance corpus should include at least:
 14. supported asset case after Step 7;
 15. explicit missing/unsupported asset failure.
 
-## Compatibility strategy
+Existing pre-project test conversations are not an acceptance requirement.
 
-The key compatibility rule is additive evolution:
+## Migration strategy
 
-- old artifacts have no `project` and execute exactly as today;
-- `code` remains the entrypoint for all artifacts in this feature;
-- old persisted messages need no migration;
-- old workspace `current.scad` and revision files remain;
+This is a deliberate contract replacement rather than additive compatibility evolution:
+
+- `ParametricArtifact.code` is removed;
+- `ParametricArtifact.project` becomes required;
+- every new model, even one source file, uses the same project execution path;
+- current production code is migrated to shared project-entrypoint helpers;
+- old Parametric test history does not define the new architecture;
+- models worth keeping can be re-imported from `.scad`;
+- old local conversation workspaces can be regenerated/cleared;
 - bundled libraries remain supported;
-- STEP still runs in a networkless rootless sandbox;
-- project-aware paths opt in only when `artifact.project` exists.
+- STEP remains a networkless rootless sandbox but receives a normalized project instead of one source string.
+
+This intentionally reduces permanent branching and duplicated state in the codebase.
 
 ## Expected files/areas affected
 
@@ -392,7 +430,7 @@ Likely touch points include:
 - `shared/types.ts`
 - `shared/chatAi.ts`
 - `shared/parametricParts.ts`
-- new shared project normalization/limits module(s)
+- new shared project normalization/accessor/limits module(s)
 - `src/lib/scadImport.ts`
 - `src/lib/githubScadImport.ts`
 - `src/server/githubScadImport.ts`
@@ -412,10 +450,14 @@ The actual implementation must still reconcile each step against the then-curren
 
 ## Recommended implementation order
 
-Start with **Steps 1 and 2 only**. They establish the project contract and prove that the existing WASM runtime can compile a safe nested multi-file project without changing import, persistence or STEP yet.
+Start with **Steps 1 and 2 only**.
 
-Only after that gate is green should local/GitHub import and persistence be layered on. This avoids mixing browser-runtime uncertainty, import resolution, DB persistence and native sandbox changes in one change set.
+Step 1 is now a clean cut-over to the project-native artifact shape, not an additive compatibility layer. Step 2 then proves that both one-file and nested multi-file projects compile through the same WASM runtime.
+
+Only after that gate is green should local/GitHub import, AI persistence, conversation-workspace persistence and STEP be layered on. This avoids mixing browser-runtime uncertainty, import resolution, persistent-storage changes and native sandbox changes in one change set.
 
 ## Current decision
 
-Proceed with multi-file OpenSCAD as the selected feature. Rhino/Grasshopper remains intentionally deferred until this project-workspace work is complete and evaluated; no Rhino architecture decision is required by this branch.
+Proceed with multi-file OpenSCAD as the selected feature using a **project-native artifact contract with no legacy Parametric artifact compatibility requirement**.
+
+Rhino/Grasshopper remains intentionally deferred until this project-workspace work is complete and evaluated; no Rhino architecture decision is required by this branch.
