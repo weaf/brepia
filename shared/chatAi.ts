@@ -7,6 +7,7 @@ import {
   OPENSCAD_PROJECT_SCHEMA_VERSION,
   normalizeOpenScadProject,
   type OpenScadProject,
+  type OpenScadProjectAsset,
 } from './openScadProject.ts';
 import type { MeshFileType, Model } from './types.ts';
 
@@ -54,7 +55,10 @@ export const openScadProjectSchema = z
       .array(openScadProjectFileSchema)
       .min(1)
       .max(OPENSCAD_PROJECT_MAX_FILES),
-    assets: z.array(openScadProjectAssetSchema).max(OPENSCAD_PROJECT_MAX_ASSETS).optional(),
+    assets: z
+      .array(openScadProjectAssetSchema)
+      .max(OPENSCAD_PROJECT_MAX_ASSETS)
+      .optional(),
   })
   .superRefine((project, context) => {
     try {
@@ -118,6 +122,8 @@ export type MeshContextData = {
   fileType: MeshFileType;
   filename?: string;
   boundingBox?: { x: number; y: number; z: number };
+  /** Authoritative descriptor for a Parametric import()/surface() asset. */
+  asset?: OpenScadProjectAsset;
 };
 
 export type MeshPreferencesData = {
@@ -168,6 +174,7 @@ export const meshContextDataSchema = z.object({
   boundingBox: z
     .object({ x: z.number(), y: z.number(), z: z.number() })
     .optional(),
+  asset: openScadProjectAssetSchema.optional(),
 });
 
 export const meshPreferencesDataSchema = z.object({
