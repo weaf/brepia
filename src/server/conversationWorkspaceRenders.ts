@@ -111,6 +111,13 @@ function renderOwningRevisions(
     (a, b) => a.revision - b.revision,
   )) {
     if (metadata.source !== 'build') continue;
+
+    // Imported OpenSCAD artifacts use a synthetic build-shaped message so the
+    // normal editor/history path can consume them, but their baseline preview
+    // is rendered locally and no preview/inspection objects are uploaded to
+    // Supabase Storage. Do not probe storage for objects that cannot exist.
+    if (metadata.toolCallId.startsWith('tool_import_')) continue;
+
     if (!firstBuildByToolCall.has(metadata.toolCallId)) {
       firstBuildByToolCall.set(metadata.toolCallId, metadata);
     }
@@ -129,6 +136,8 @@ function renderOwningRevisions(
  * A render storage object is keyed by toolCallId, so exactly the first `build`
  * revision for each tool call owns it. Parameter edits and legacy repeated
  * source variants must never receive a stale copy of that build-time render.
+ * Synthetic `tool_import_...` builds are intentionally renderless in storage
+ * and are excluded from mirroring.
  */
 export async function syncConversationRenderArtifacts(
   request: Request,
