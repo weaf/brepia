@@ -19,8 +19,10 @@ jobs:
           ref: feature/multifile-openscad-workspace
           fetch-depth: 0
 
-      - name: Apply deterministic Step 5 codemod
-        run: python3 scripts/apply-step5-project-native.py
+      - name: Apply deterministic Step 5 codemods
+        run: |
+          python3 scripts/apply-step5-project-native.py
+          python3 scripts/apply-step5-project-tests.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -49,6 +51,7 @@ jobs:
       - name: Commit verified Step 5 transport changes
         run: |
           rm scripts/apply-step5-project-native.py
+          rm scripts/apply-step5-project-tests.py
           rm .github/workflows/step5-project-native-codemod.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
