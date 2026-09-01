@@ -10,38 +10,61 @@ import { syncConversationWorkspace } from '@/services/conversationWorkspaceServi
 import { previewScadColoredViaToolWorker } from '@/worker/toolWorker';
 import type { ImportedArtifactBaseline } from '@shared/importedArtifact';
 import type { ImportedArtifactOrigin } from '@shared/chatAi';
-import { normalizeOpenScadProject } from '@shared/openScadProject';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 import type { Model } from '@shared/types';
 
-export type CreateImportedScadProjectInput = {
+type CreateImportedScadProjectBase = {
   userId: string;
   model: Model;
   executionMode: 'cli' | 'streaming';
   filename: string;
-  code: string;
   origin: Omit<ImportedArtifactOrigin, 'type' | 'filename' | 'importedAt'>;
 };
+
+export type CreateImportedScadProjectInput = CreateImportedScadProjectBase &
+  (
+    | {
+        code: string;
+        project?: never;
+        title?: never;
+      }
+    | {
+        project: OpenScadProject;
+        title: string;
+        code?: never;
+      }
+  );
 
 export type CreateImportedScadProjectResult = {
   conversationId: string;
   baseline: ImportedArtifactBaseline;
 };
 
-export async function createImportedScadProject({
-  userId,
-  model,
-  executionMode,
-  filename,
-  code,
-  origin,
-}: CreateImportedScadProjectInput): Promise<CreateImportedScadProjectResult> {
-  const title = scadImportTitle(filename);
-  const entrypointPath = scadImportProjectPath(filename);
-  const project = normalizeOpenScadProject({
-    schemaVersion: 1,
-    entrypointPath,
-    files: [{ path: entrypointPath, content: code }],
-  });
+export async function createImportedScadProject(
+  input: CreateImportedScadProjectInput,
+): Promise<CreateImportedScadProjectResult> {
+  const { userId, model, executionMode, filename, origin } = input;
+
+  let title: string;
+  let project: OpenScadProject;
+  if (input.project) {
+    title = input.title;
+    project = normalizeOpenScadProject(input.project);
+  } else {
+    if (typeof input.code !== 'string') {
+      throw new Error('Imported OpenSCAD source is missing.');
+    }
+    title = scadImportTitle(filename);
+    const entrypointPath = scadImportProjectPath(filename);
+    project = normalizeOpenScadProject({
+      schemaVersion: 1,
+      entrypointPath,
+      files: [{ path: entrypointPath, content: input.code }],
+    });
+  }
 
   let baseline: ImportedArtifactBaseline;
   try {

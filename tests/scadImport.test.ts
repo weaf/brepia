@@ -3,14 +3,25 @@ import { OPENSCAD_MAX_SOURCE_BYTES } from '@/lib/openScadLimits';
 import {
   ScadImportError,
   boundedScadCompileError,
+  decodeScadFolderImportEntries,
   decodeScadImportBytes,
+  finalizeScadFolderImport,
   findUnsupportedScadDependencies,
   isBlockingScadCompileError,
   scadImportTitle,
+  type ScadFolderSourceInput,
 } from '@/lib/scadImport';
 
 function bytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
+}
+
+function folderEntry(
+  relativePath: string,
+  source: string,
+  name = relativePath.split('/').at(-1) ?? relativePath,
+): ScadFolderSourceInput {
+  return { name, relativePath, bytes: bytes(source) };
 }
 
 const VALID_SOURCE = 'size = 20;\ncube([size, size, size]);\n';
@@ -140,5 +151,168 @@ ${VALID_SOURCE}
     const bounded = boundedScadCompileError(new Error(diagnostic));
     expect(bounded.length).toBeLessThanOrEqual(12_000);
     expect(bounded.endsWith('-tail')).toBe(true);
+  });
+});
+
+describe('local OpenSCAD folder import', () => {
+  it('preserves nested source paths and auto-selects top-level main.scad', () => {
+    const result = decodeScadFolderImportEntries([
+      folderEntry(
+        'Bracket/main.scad',
+        'include <parts/body.scad>\nbody();\n',
+      ),
+      folderEntry(
+        'Bracket/parts/body.scad',
+        'use <nested/rib.scad>\nmodule body() { rib(); }\n',
+      ),
+      folderEntry(
+        'Bracket/parts/nested/rib.scad',
+        'module rib() { cube([1, 2, 3]); }\n',
+      ),
+    ]);
+
+    expect(result.kind).toBe('project');
+    if (result.kind !== 'project') throw new Error('Expected ready project');
+    expect(result.title).toBe('Bracket');
+    expect(result.project.entrypointPath).toBe('main.scad');
+    expect(result.project.files.map((file) => file.path)).toEqual([
+      'main.scad',
+      'parts/body.scad',
+      'parts/nested/rib.scad',
+    ]);
+  });
+
+  it('auto-selects the only top-level source when it is not named main.scad', () => {
+    const result = decodeScadFolderImportEntries([
+      folderEntry(
+        'Widget/model.scad',
+        'include <parts/helper.scad>\ncube([4, 4, 4]);\n',
+      ),
+      folderEntry(
+        'Widget/parts/helper.scad',
+        'module helper() { sphere(1); }\n',
+      ),
+    ]);
+
+    expect(result.kind).toBe('project');
+    if (result.kind !== 'project') throw new Error('Expected ready project');
+    expect(result.project.entrypointPath).toBe('model.scad');
+  });
+
+  it('uses the dependency graph when the only project root is nested', () => {
+    const result = decodeScadFolderImportEntries([
+      folderEntry(
+        'Nested/models/assembly.scad',
+        'include <../parts/body.scad>\nbody();\n',
+      ),
+      folderEntry(
+        'Nested/parts/body.scad',
+        'module body() { cube([2, 2, 2]); }\n',
+      ),
+    ]);
+
+    expect(result.kind).toBe('project');
+    if (result.kind !== 'project') throw new Error('Expected ready project');
+    expect(result.project.entrypointPath).toBe('models/assembly.scad');
+  });
+
+  it('requires an explicit entrypoint for multiple independent models', () => {
+    const result = decodeScadFolderImportEntries([
+      folderEntry('Examples/alpha.scad', 'cube([1, 1, 1]);\n'),
+      folderEntry('Examples/beta.scad', 'sphere(2);\n'),
+    ]);
+
+    expect(result.kind).toBe('entrypoint-required');
+    if (result.kind !== 'entrypoint-required') {
+      throw new Error('Expected entrypoint chooser');
+    }
+    expect(result.pending.entrypointCandidates).toEqual([
+      'alpha.scad',
+      'beta.scad',
+    ]);
+
+    const project = finalizeScadFolderImport(result.pending, 'beta.scad');
+    expect(project.entrypointPath).toBe('beta.scad');
+    expect(project.files).toHaveLength(2);
+  });
+
+  it('ignores non-SCAD files but normalizes .scad.txt aliases inside the project', () => {
+    const result = decodeScadFolderImportEntries([
+      folderEntry('PhoneExport/README.md', '# notes\n', 'README.md'),
+      folderEntry(
+        'PhoneExport/main.scad.txt',
+        'include <parts/helper.scad>\nhelper();\n',
+      ),
+      folderEntry(
+        'PhoneExport/parts/helper.scad.txt',
+        'module helper() { cube([1, 2, 3]); }\n',
+      ),
+    ]);
+
+    expect(result.kind).toBe('project');
+    if (result.kind !== 'project') throw new Error('Expected ready project');
+    expect(result.project.files.map((file) => file.path)).toEqual([
+      'main.scad',
+      'parts/helper.scad',
+    ]);
+  });
+
+  it('rejects missing project-local include/use dependencies clearly', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry(
+          'Broken/main.scad',
+          'include <parts/missing.scad>\ncube([1, 1, 1]);\n',
+        ),
+      ]),
+    ).toThrow(/does not resolve to a project file/i);
+  });
+
+  it('rejects folder source references that escape the project root', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry(
+          'Broken/main.scad',
+          'include <../outside.scad>\ncube([1, 1, 1]);\n',
+        ),
+      ]),
+    ).toThrow(/escapes project root/i);
+  });
+
+  it('rejects malformed picker paths instead of flattening them', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry('../main.scad', 'cube([1, 1, 1]);\n'),
+      ]),
+    ).toThrow(/invalid OpenSCAD project path/i);
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry('Project/../main.scad', 'cube([1, 1, 1]);\n'),
+      ]),
+    ).toThrow(/invalid OpenSCAD project path/i);
+  });
+
+  it('rejects external import/surface assets during the source-only folder phase', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry('Assets/main.scad', 'import("mesh.stl");\ncube(1);\n'),
+      ]),
+    ).toThrow(/external asset/i);
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry(
+          'Assets/main.scad',
+          'surface(file="heightmap.dat");\ncube(1);\n',
+        ),
+      ]),
+    ).toThrow(/external asset/i);
+  });
+
+  it('rejects folders without supported OpenSCAD source files', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry('Notes/README.md', '# notes\n', 'README.md'),
+      ]),
+    ).toThrow(/does not contain any \.scad files/i);
   });
 });
