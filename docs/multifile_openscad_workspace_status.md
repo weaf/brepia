@@ -10,7 +10,7 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 Step 1 is complete.
 
-Step 2 implementation and automated verification are complete. The primary real browser/WASM multi-file smoke is green. The targeted closeout corpus has now confirmed STL export, multi-file DXF export, support-file-only BOSL2 loading, and the existing uploaded-STL/import flow. Only the revised mobile GIF download interaction needs one final manual retest before Step 2 is formally closed.
+Step 2 is complete. The project-native browser OpenSCAD runtime, full multi-file preview/export propagation, bundled-library detection, existing uploaded-STL compatibility bridge, and targeted mobile closeout fixes have all passed automated verification and the real browser/WASM acceptance corpus. The final mobile Share `Generate GIF` → `Download GIF` interaction was manually verified on 2026-09-01.
 
 Current project-native browser-runtime implementation commit:
 
@@ -28,7 +28,11 @@ Final GIF user-activation fix:
 
 `af9157635cd0fef0e82e2b4986d1e7377b28760d` — `Make GIF download preserve mobile user activation`
 
-The isolated gate that produced `af9157635cd0fef0e82e2b4986d1e7377b28760d` passed all 400 tests, typecheck, lint, build, explicit two-stage GIF-contract checks, and `git diff --check` before the production commit was created.
+Watermark/export hardening:
+
+`210b98156c6363b718c0b8caee65f96db8311ad0` — `Fix GIF watermark asset handling`
+
+The isolated gate that produced `af9157635cd0fef0e82e2b4986d1e7377b28760d` passed all 400 tests, typecheck, lint, build, explicit two-stage GIF-contract checks, and `git diff --check` before the production commit was created. The ordinary Quality Gate for `210b98156c6363b718c0b8caee65f96db8311ad0` also completed successfully after the final watermark-path/export hardening.
 
 ## Step 1 — completed
 
@@ -56,7 +60,7 @@ Step 1 full PR quality gate:
 - lint passed;
 - build passed.
 
-## Step 2 — project-aware browser OpenSCAD runtime
+## Step 2 — completed: project-aware browser OpenSCAD runtime
 
 ### Project reference resolution
 
@@ -115,10 +119,11 @@ This is a compatibility bridge for the existing mesh-upload flow, not the genera
 
 ### Mobile closeout fixes
 
-The targeted browser corpus exposed two issues outside the project snapshot model itself:
+The targeted browser corpus exposed issues outside the project snapshot model itself:
 
-1. Parametric STL upload was already supported internally, but the same picker mixed image MIME types and `.stl`. Android could therefore route to its image picker and hide STL files. Image upload and 3D-file upload are now separate picker actions; the 3D-file action advertises STL MIME/extension variants in Parametric mode while existing post-selection validation remains authoritative. The user has manually verified this revised STL upload path works.
-2. Share/GIF preview rendered correctly, but mobile `Download GIF` remained a no-op after the first anchor/blob lifetime fix. The remaining failure matched transient user-activation loss: GIF generation is asynchronous and the synthetic anchor click happened several seconds after the original tap. `af9157635cd0fef0e82e2b4986d1e7377b28760d` therefore changes GIF output to a two-stage interaction. The first tap is `Generate GIF` and creates/caches the GIF blob URL. Once generation completes the action becomes `Download GIF`; that second fresh tap performs the anchor click synchronously before any `await`, preserving mobile browser user activation. The prepared blob URL is released after download, model change, or unmount. The same contract is used by the existing Creative `DownloadMenu`, whose old `setTimeout` indirection was removed from the GIF action.
+1. Parametric STL upload was already supported internally, but the same picker mixed image MIME types and `.stl`. Android could therefore route to its image picker and hide STL files. Image upload and 3D-file upload are now separate picker actions; the 3D-file action advertises STL MIME/extension variants in Parametric mode while existing post-selection validation remains authoritative. The user manually verified this revised STL upload path works.
+2. Share/GIF preview rendered correctly, but mobile `Download GIF` remained a no-op after the first anchor/blob lifetime fix. The remaining failure matched transient user-activation loss: GIF generation is asynchronous and the synthetic anchor click happened several seconds after the original tap. `af9157635cd0fef0e82e2b4986d1e7377b28760d` changes GIF output to a two-stage interaction. The first tap is `Generate GIF` and creates/caches the GIF blob URL. Once generation completes the action becomes `Download GIF`; that second fresh tap performs the anchor click synchronously before any `await`, preserving mobile browser user activation. The prepared blob URL is released after download, model change, or unmount. The same contract is used by the existing Creative `DownloadMenu`, whose old `setTimeout` indirection was removed from the GIF action.
+3. The Share preview exposed a malformed watermark asset URL when `BASE_URL` already ended in `/`. `210b98156c6363b718c0b8caee65f96db8311ad0` normalizes the Brepia watermark URL and makes GIF generation tolerate a watermark decode/load failure instead of allowing `drawImage()` to abort the export.
 
 These fixes do not expand the Step 7 asset model. They only make the already-supported v1 mesh-context and GIF flows reachable and reliable on mobile.
 
@@ -154,6 +159,8 @@ The follow-up isolated GIF user-activation gate that produced `af9157635cd0fef0e
 - `git diff --check` before commit;
 - cleanup of both temporary patch scripts and the one-off workflow before the production commit.
 
+The ordinary Quality Gate for `210b98156c6363b718c0b8caee65f96db8311ad0` (`run 221`) completed successfully, covering dependency audit, tests, typecheck, lint and build after the final watermark/export hardening.
+
 The local container available to this ChatGPT session cannot resolve GitHub, so repository-local `npm` commands are not claimed as local verification. GitHub Actions is the executable code gate for this implementation session.
 
 ## Manual Step 2 browser/WASM verification
@@ -182,14 +189,15 @@ This confirms the real vendored OpenSCAD WASM runtime can mount and resolve the 
 Manual results reported on 2026-09-01:
 
 1. **STL export — PASS.** Export from the working multi-file model succeeded.
-2. **Share/GIF preview — PASS; final download retest pending.** The preview renders correctly, proving the complete project reaches the Share/GIF renderer. Direct mobile download remained a no-op through `d98ec055a00acfb0d278dd4922a1021dfa7b954e`; `af9157635cd0fef0e82e2b4986d1e7377b28760d` replaces that with the explicit `Generate GIF` → `Download GIF` two-tap user-activation flow and needs one final manual retest.
+2. **Share/GIF preview and download — PASS.** The preview renders correctly, the Brepia watermark loads through the normalized asset path, GIF generation completes, and the explicit `Generate GIF` → `Download GIF` two-tap mobile flow successfully downloads the GIF.
 3. **Support-file BOSL2 — PASS.** The user verified a project whose `main.scad` only included `parts/body.scad`, while the support source used the benchmark implementation from `benchmarks/03-hex-bolt-and-nut.scad`. That benchmark imports both `BOSL2/std.scad` and `BOSL2/screws.scad` and rendered successfully, proving bundled-library detection works when BOSL2 is referenced from the support file rather than the entrypoint.
 4. **Uploaded STL `import()` regression — PASS.** The separate 3D/STL picker works on the tested mobile browser and the existing Parametric STL flow is reachable again.
 5. **Multi-file 2D + DXF export — PASS.** The user confirmed the multi-file DXF case works.
 
+Step 2 acceptance is therefore complete.
+
 ## Not completed yet
 
-- one final mobile Share `Generate GIF` → `Download GIF` retest after `af9157635cd0fef0e82e2b4986d1e7377b28760d`;
 - Step 3 local directory/multi-file import;
 - Step 4 recursive GitHub project dependency resolution;
 - Step 5 full multi-file AI/external-agent editing protocol;
@@ -201,7 +209,4 @@ Manual results reported on 2026-09-01:
 
 ## Next checkpoint
 
-1. pull the latest feature branch;
-2. in Share, tap `Generate GIF`, let generation finish, then tap the resulting `Download GIF` action;
-3. if the GIF is downloaded, mark Step 2 complete;
-4. continue immediately with Step 3 local file/folder project import.
+Begin Step 3: local file/folder project import. Reconcile the Step 3 plan against the now-closed Step 2 implementation before changing import behavior, then implement the bounded local directory/multi-file import path while keeping standalone `.scad` import on the same normalized project contract.
