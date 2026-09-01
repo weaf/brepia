@@ -10,7 +10,7 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 Step 1 is complete.
 
-Step 2 implementation and automated verification are complete. The primary real browser/WASM multi-file smoke is also green. A small set of targeted regression checks remains before Step 2 is formally closed.
+Step 2 implementation and automated verification are complete. The primary real browser/WASM multi-file smoke is green. The targeted closeout corpus has now also confirmed STL export and multi-file DXF export. Two mobile/browser UX regressions found during closeout have been fixed and need a short manual retest before Step 2 is formally closed.
 
 Current project-native browser-runtime implementation commit:
 
@@ -20,7 +20,11 @@ Verified automated checkpoint:
 
 `a614006e0491ff1bcf9da7ecdc8e72dabe8c05bf` — `Record project-native browser runtime checkpoint`
 
-The ordinary PR Quality Gate for that checkpoint passed all tests, typecheck, lint and build.
+Mobile closeout fix:
+
+`d98ec055a00acfb0d278dd4922a1021dfa7b954e` — `Fix mobile GIF download and STL picker`
+
+The isolated gate for that closeout fix passed all 400 tests, typecheck, lint and build before the production commit was created.
 
 ## Step 1 — completed
 
@@ -105,6 +109,15 @@ The existing external mesh cache is therefore still separate from the project ar
 
 This is a compatibility bridge for the existing mesh-upload flow, not the generalized relative-asset architecture planned for Step 7.
 
+### Mobile closeout fixes
+
+The targeted browser corpus exposed two issues outside the project snapshot model itself:
+
+1. Share/GIF preview rendered correctly, but pressing `Download GIF` could be a no-op on mobile. The download path now attaches the temporary anchor to the DOM, guarantees a `.gif` filename, and delays `URL.revokeObjectURL()` so the mobile download manager can consume the blob URL.
+2. Parametric STL upload was already supported internally, but the same picker mixed image MIME types and `.stl`. Android could therefore route to its image picker and hide STL files. Image upload and 3D-file upload are now separate picker actions; the 3D-file action advertises STL MIME/extension variants in Parametric mode while existing post-selection validation remains authoritative.
+
+These fixes do not expand the Step 7 asset model. They only make the already-supported v1 mesh-context upload/download flows reachable and reliable on mobile.
+
 ## Step 2 automated verification
 
 The isolated migration gate that produced `e26e7e0ee8619c42b3eacb5180e9b6d907ade29a` passed all of the following after the complete runtime migration and mesh-compatibility fix:
@@ -124,6 +137,14 @@ Because the implementation commit was created by GitHub Actions, its immediate P
 - typecheck;
 - lint;
 - build.
+
+The isolated mobile closeout gate that produced `d98ec055a00acfb0d278dd4922a1021dfa7b954e` also passed:
+
+- all 400 tests;
+- typecheck;
+- lint;
+- build;
+- explicit checks for the robust GIF download path and separate STL upload action.
 
 The local container available to this ChatGPT session cannot resolve GitHub, so repository-local `npm` commands are not claimed as local verification. GitHub Actions is the executable code gate for this implementation session.
 
@@ -148,21 +169,21 @@ Verified PASS on 2026-09-01:
 
 This confirms the real vendored OpenSCAD WASM runtime can mount and resolve the normalized multi-file `/project` hierarchy and that parameter edits/reload/history preserve the complete project snapshot.
 
-### Remaining targeted Step 2 regression checks
+### Targeted closeout results
 
-Before formal Step 2 closeout, verify:
+Manual results reported on 2026-09-01:
 
-1. STL export from the working three-file project;
-2. Share/GIF preview from the working three-file project;
-3. a project where a support file, not `main.scad`, references `BOSL2/std.scad` and uses a BOSL2 primitive;
-4. an existing uploaded STL flow with entrypoint-relative `import("filename.stl")`;
-5. a small 2D multi-file project followed by DXF export.
-
-If any case fails, capture the visible Brepia error plus browser-console output if present.
+1. **STL export — PASS.** Export from the working multi-file model succeeded.
+2. **Share/GIF preview — PARTIAL PASS.** Preview rendered correctly, proving the complete project reaches the Share/GIF renderer. The Download button was a no-op; this produced the mobile download fix in `d98ec055a00acfb0d278dd4922a1021dfa7b954e` and now needs retest.
+3. **Support-file BOSL2 — awaiting render confirmation.** The generated `main.scad` was reported as `include <parts/body.scad>` followed by `create_bosldemo_bracket();`, which is the intended entrypoint structure because `main.scad` itself does not reference BOSL2. Confirm only that the resulting model visibly rendered without a BOSL2/library error.
+4. **Uploaded STL `import()` regression — blocked by picker UX.** The implementation did support `.stl`, but Android exposed only images from the mixed picker. `d98ec055a00acfb0d278dd4922a1021dfa7b954e` adds a separate 3D-file upload action; retest the existing STL `import("filename.stl")` flow through that action.
+5. **Multi-file 2D + DXF export — PASS.** The user confirmed the multi-file DXF case works.
 
 ## Not completed yet
 
-- remaining targeted Step 2 browser regressions listed above;
+- retest mobile `Download GIF` after `d98ec055a00acfb0d278dd4922a1021dfa7b954e`;
+- retest Parametric STL upload/import through the new 3D-file picker;
+- confirm the support-file-only BOSL2 test visibly rendered;
 - Step 3 local directory/multi-file import;
 - Step 4 recursive GitHub project dependency resolution;
 - Step 5 full multi-file AI/external-agent editing protocol;
@@ -174,6 +195,7 @@ If any case fails, capture the visible Brepia error plus browser-console output 
 
 ## Next checkpoint
 
-1. finish the five targeted Step 2 browser regression checks;
-2. if they pass, mark Step 2 complete;
-3. continue immediately with Step 3 local file/folder project import.
+1. pull the latest feature branch and retest GIF download plus STL upload/import;
+2. confirm whether the BOSL2 support-file model rendered;
+3. if those checks pass, mark Step 2 complete;
+4. continue immediately with Step 3 local file/folder project import.
