@@ -22,6 +22,7 @@ import {
   readScadImportFile,
   readScadImportFolder,
   type PendingScadFolderImport,
+  type ScadFolderAssetInput,
 } from '@/lib/scadImport';
 import { createImportedScadProject } from '@/services/scadProjectImportService';
 import type { OpenScadProject } from '@shared/openScadProject';
@@ -34,6 +35,7 @@ type LocalImportMutationInput =
       filename: string;
       title: string;
       project: OpenScadProject;
+      assets: ScadFolderAssetInput[];
     };
 
 export function ScadImportButton({
@@ -98,6 +100,7 @@ export function ScadImportButton({
               filename,
               title: input.title,
               project: input.project,
+              assets: input.assets,
               origin: { source: 'upload' },
             });
 
@@ -107,6 +110,7 @@ export function ScadImportButton({
         source: 'upload',
         import_kind: input.kind,
         file_count: input.kind === 'file' ? 1 : input.project.files.length,
+        asset_count: input.kind === 'file' ? 0 : input.assets.length,
         compile_status: result.baseline.status,
       });
 
@@ -145,6 +149,7 @@ export function ScadImportButton({
         filename: result.filename,
         title: result.title,
         project: result.project,
+        assets: result.assets,
       });
     } catch (error) {
       reportImportError(error);
@@ -160,7 +165,7 @@ export function ScadImportButton({
         pendingFolder,
         selectedEntrypoint,
       );
-      const { filename, title } = pendingFolder;
+      const { filename, title, assets } = pendingFolder;
       setPendingFolder(null);
       setSelectedEntrypoint('');
       importMutation.mutate({
@@ -168,6 +173,7 @@ export function ScadImportButton({
         filename,
         title,
         project,
+        assets,
       });
     } catch (error) {
       reportImportError(error);
@@ -194,7 +200,7 @@ export function ScadImportButton({
         <input
           ref={folderInputRef}
           type="file"
-          accept=".scad,.scad.txt"
+          accept=".scad,.scad.txt,.stl,.off,.dxf,.svg,.dat"
           multiple
           className="hidden"
           disabled={isBusy}
@@ -276,8 +282,8 @@ export function ScadImportButton({
               ))}
             </select>
             <p className="text-xs text-adam-text-secondary">
-              All .scad files and their relative folder paths will remain in
-              the imported project.
+              All .scad files and referenced relative assets keep their project
+              paths in the imported project.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:space-x-0">
