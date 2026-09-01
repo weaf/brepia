@@ -24,6 +24,7 @@ import {
   resolveAgentResultChannels,
 } from './opencodeAgentResult';
 import { validateOpenScadProject } from './openScadValidation';
+import { createServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
 import { logError, logWarning } from './serverLog';
 import { isRequestAbort } from './requestAbort';
 
@@ -1278,6 +1279,9 @@ async function* streamParts(
     });
     let state = makeState(admittedSeq ?? 0);
     let validationAttempts = 0;
+    const resolveAsset = conversationId
+      ? createServerOpenScadProjectAssetResolver(conversationId)
+      : undefined;
 
     while (!state.isErrored) {
       if (ac.signal.aborted) break;
@@ -1340,6 +1344,7 @@ async function* streamParts(
       const validation = await validateOpenScadProject(
         candidate.project,
         ac.signal,
+        resolveAsset,
       );
       if (validation.valid) break;
 
