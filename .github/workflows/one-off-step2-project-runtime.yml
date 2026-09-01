@@ -20,6 +20,18 @@ jobs:
         with:
           ref: feature/multifile-openscad-workspace
           fetch-depth: 0
+      - name: Reconcile ShareView migration match
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/one-off-step2-project-runtime.py')
+          text = p.read_text()
+          old = '    "              scadCode={activePreview.artifact.code}",'
+          new = '    "              scadCode={activeArtifactCode}",'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one ShareView script match, found {text.count(old)}')
+          p.write_text(text.replace(old, new))
+          PY
       - name: Apply project-runtime migration
         run: python3 scripts/one-off-step2-project-runtime.py
       - name: Setup Node.js
