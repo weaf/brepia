@@ -55,6 +55,7 @@ export function ScadImportButton({
   const [pendingFolder, setPendingFolder] =
     useState<PendingScadFolderImport | null>(null);
   const [selectedEntrypoint, setSelectedEntrypoint] = useState('');
+  const [pickerGeneration, setPickerGeneration] = useState(0);
 
   useEffect(() => {
     const input = folderInputRef.current;
@@ -64,7 +65,7 @@ export function ScadImportButton({
     // DOM node so Chromium/WebKit can preserve File.webkitRelativePath.
     input.setAttribute('webkitdirectory', '');
     input.setAttribute('directory', '');
-  }, []);
+  }, [pickerGeneration]);
 
   const reportImportError = (error: unknown) => {
     Sentry.captureException(error, { extra: { hook: 'SCAD import' } });
@@ -182,8 +183,14 @@ export function ScadImportButton({
         {/* Android file pickers do not reliably map the custom .scad extension
             to a MIME type. Use an explicit wildcard so the native document
             picker exposes both .scad and .scad.txt; Brepia validates the
-            selected filenames and contents after the picker returns. */}
+            selected filenames and contents after the picker returns.
+
+            Some Android document providers also retain stale state after a
+            completed selection. Re-key both hidden inputs after every picker
+            result instead of relying on `input.value = ''`, so a second import
+            always starts from a fresh native file-input element. */}
         <input
+          key={`scad-file-${pickerGeneration}`}
           ref={fileInputRef}
           type="file"
           accept="*/*"
@@ -191,11 +198,12 @@ export function ScadImportButton({
           disabled={isBusy}
           onChange={(event) => {
             const file = event.target.files?.[0];
-            event.currentTarget.value = '';
+            setPickerGeneration((generation) => generation + 1);
             if (file) importMutation.mutate({ kind: 'file', file });
           }}
         />
         <input
+          key={`scad-folder-${pickerGeneration}`}
           ref={folderInputRef}
           type="file"
           accept="*/*"
@@ -204,7 +212,7 @@ export function ScadImportButton({
           disabled={isBusy}
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
-            event.currentTarget.value = '';
+            setPickerGeneration((generation) => generation + 1);
             void prepareFolder(files);
           }}
         />
