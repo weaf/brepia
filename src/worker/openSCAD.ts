@@ -15,7 +15,10 @@ import {
   normalizeOpenScadProject,
   type OpenScadProject,
 } from '@shared/openScadProject';
-import { validateOpenScadProjectSourceReferences } from '@shared/openScadProjectReferences';
+import {
+  validateOpenScadProjectAssetReferences,
+  validateOpenScadProjectSourceReferences,
+} from '@shared/openScadProjectReferences';
 
 const fontsConf = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
@@ -365,6 +368,9 @@ class OpenSCADWrapper {
     const normalizedProject = normalizeOpenScadProject(project);
     const references =
       validateOpenScadProjectSourceReferences(normalizedProject);
+    if (normalizedProject.assets?.length) {
+      validateOpenScadProjectAssetReferences(normalizedProject);
+    }
     const bundledLibraryNames = new Set(
       references
         .filter((reference) => reference.bundledLibrary)
@@ -379,9 +385,7 @@ class OpenSCADWrapper {
     const instance = await this.getInstance();
     const importLibraries: string[] = [];
 
-    // Mount exactly this request's normalized project into the fresh WASM FS.
-    // Persistent external mesh files are loaded by getInstance() separately;
-    // project source never relies on state from an earlier compile.
+    // Mount exactly this request's normalized source project into the fresh WASM FS.
     this.createDirectoryRecursive(instance, projectRoot);
     for (const file of normalizedProject.files) {
       const projectPath = `${projectRoot}/${file.path}`;
@@ -394,36 +398,67 @@ class OpenSCADWrapper {
       instance.FS.writeFile(projectPath, file.content);
     }
 
-    // Existing uploaded mesh files are intentionally still an external cache
-    // until the explicit project-asset phase. OpenSCAD resolves import()
-    // relative to the importing script, so mirror each cached basename beside
-    // the entrypoint to preserve the v1 import("mesh.stl") behavior after
-    // moving the script from /input.scad into /project/<entrypoint>.
-    const entrypointSegments = normalizedProject.entrypointPath.split('/');
-    entrypointSegments.pop();
-    const entrypointDir = entrypointSegments.join('/');
-    const projectSourcePaths = new Set(
-      normalizedProject.files.map((file) => `${projectRoot}/${file.path}`),
-    );
-    for (const externalFile of this.files) {
-      if (!externalFile.path) continue;
-      const externalName = externalFile.path
-        .replace(/\\/g, '/')
-        .split('/')
-        .pop();
-      if (!externalName || externalName === '.' || externalName === '..') {
-        continue;
+    const projectSourcePaths = new Set(normalizedProject.files.map((file) => file.path));
+
+    if (normalizedProject.assets?.length) {
+      // Explicit assets are hydrated into the persistent worker cache under
+      // their exact project-relative manifest path. Mount only declared assets
+      // into /project so imports from support files keep their normal relative
+      // semantics and unrelated cached files cannot leak into the project.
+      const cachedFiles = new Map(
+        this.files
+          .filter((file): file is WorkspaceFile & { path: string } => !!file.path)
+          .map((file) => [file.path, file]),
+      );
+      for (const asset of normalizedProject.assets) {
+        if (projectSourcePaths.has(asset.path)) {
+          throw new Error(
+            `OpenSCAD project asset collides with project source: ${asset.path}`,
+          );
+        }
+        const cachedAsset = cachedFiles.get(asset.path);
+        if (!cachedAsset) {
+          throw new Error(
+            `OpenSCAD project asset is not hydrated: ${asset.path}`,
+          );
+        }
+        const projectPath = `${projectRoot}/${asset.path}`;
+        const pathParts = projectPath.split('/');
+        pathParts.pop();
+        const dir = pathParts.join('/');
+        if (dir && !this.fileExists(instance, dir)) {
+          this.createDirectoryRecursive(instance, dir);
+        }
+        const content = await cachedAsset.arrayBuffer();
+        instance.FS.writeFile(projectPath, new Int8Array(content));
       }
-      const externalPath = `${projectRoot}/${
-        entrypointDir ? `${entrypointDir}/` : ''
-      }${externalName}`;
-      if (projectSourcePaths.has(externalPath)) {
-        throw new Error(
-          `External OpenSCAD asset collides with project source: ${externalName}`,
-        );
+    } else {
+      // Compatibility path for pre-Step-7 projects: old uploads live in the
+      // worker cache without an explicit manifest and were historically
+      // mirrored by basename next to the entrypoint. Keep that behavior only
+      // while no explicit asset contract is present.
+      const entrypointSegments = normalizedProject.entrypointPath.split('/');
+      entrypointSegments.pop();
+      const entrypointDir = entrypointSegments.join('/');
+      for (const externalFile of this.files) {
+        if (!externalFile.path) continue;
+        const externalName = externalFile.path
+          .replace(/\\/g, '/')
+          .split('/')
+          .pop();
+        if (!externalName || externalName === '.' || externalName === '..') {
+          continue;
+        }
+        const externalRelativePath = `${entrypointDir ? `${entrypointDir}/` : ''}${externalName}`;
+        if (projectSourcePaths.has(externalRelativePath)) {
+          throw new Error(
+            `External OpenSCAD asset collides with project source: ${externalName}`,
+          );
+        }
+        const externalPath = `${projectRoot}/${externalRelativePath}`;
+        const externalContent = await externalFile.arrayBuffer();
+        instance.FS.writeFile(externalPath, new Int8Array(externalContent));
       }
-      const externalContent = await externalFile.arrayBuffer();
-      instance.FS.writeFile(externalPath, new Int8Array(externalContent));
     }
 
     if (!this.fileExists(instance, '/libraries')) {
@@ -437,9 +472,6 @@ class OpenSCADWrapper {
     // every source file, so bundled libraries used only by support files are
     // loaded just like libraries referenced by the entrypoint.
     for (const library of libraries) {
-      // Match a real `include <BOSL2/...>` / `use <BOSL2/...>` statement, not a
-      // bare substring: "BOSL2" contains "BOSL", so substring matching mounted
-      // BOSL alongside BOSL2 on every compile.
       if (
         bundledLibraryNames.has(library.name) &&
         !importLibraries.includes(library.name)
@@ -452,17 +484,12 @@ class OpenSCADWrapper {
             throw new Error(`HTTP ${response.status} fetching ${library.url}`);
           }
 
-          // Unzip the file
           const zip = await response.blob();
           const files = await new ZipReader(new BlobReader(zip)).getEntries();
 
-          // Libraries should go into the library folder
           await Promise.all(
             files
-              // We don't want any directories, they are included in the filename anyway
               .filter((f) => f.directory === false)
-
-              // Collect all files into an WorkspaceFile array
               .map(async (f) => {
                 const writer = new Uint8ArrayWriter();
                 const fileName = f.filename;
@@ -484,10 +511,6 @@ class OpenSCADWrapper {
               }),
           );
         } catch (error) {
-          // Fail the compile rather than continuing without the library:
-          // OpenSCAD would only report "Ignoring unknown module ..." per call
-          // site, which hides the real cause from both the user and the AI
-          // build loop.
           throw new Error(
             `Failed to load OpenSCAD library ${library.name}: ` +
               (error instanceof Error ? error.message : String(error)),
@@ -511,10 +534,6 @@ class OpenSCADWrapper {
     try {
       exitCode = instance.callMain(args);
     } catch (error) {
-      // Throw OpenSCADError (not plain Error) so the stderr OpenSCAD printed
-      // before dying survives the worker boundary — it usually names the real
-      // problem (syntax error, unknown module) while the thrown value is often
-      // just an opaque number from the wasm runtime.
       throw new OpenSCADError(
         'Adam exited with an error' +
           (error instanceof Error ? ': ' + error.message : ''),
