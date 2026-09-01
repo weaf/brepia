@@ -10,7 +10,7 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 Step 1 is complete.
 
-Step 2 implementation and automated verification are complete. A real browser/WASM multi-file smoke test is still required before Step 2 is considered product-verified and closed.
+Step 2 implementation and automated verification are complete. The primary real browser/WASM multi-file smoke is also green. A small set of targeted regression checks remains before Step 2 is formally closed.
 
 Current project-native browser-runtime implementation commit:
 
@@ -48,7 +48,7 @@ Step 1 full PR quality gate:
 - lint passed;
 - build passed.
 
-## Step 2 — implementation and automated gate complete, browser smoke pending
+## Step 2 — project-aware browser OpenSCAD runtime
 
 ### Project reference resolution
 
@@ -127,17 +127,11 @@ Because the implementation commit was created by GitHub Actions, its immediate P
 
 The local container available to this ChatGPT session cannot resolve GitHub, so repository-local `npm` commands are not claimed as local verification. GitHub Actions is the executable code gate for this implementation session.
 
-## Manual Step 2 browser/WASM smoke still required
+## Manual Step 2 browser/WASM verification
 
-Automated TypeScript/Vitest/build coverage does not prove that the vendored OpenSCAD WASM build resolves a real multi-file `/project` hierarchy correctly in the browser.
+### Primary multi-file smoke — PASS
 
-For the first smoke, use a normal Parametric tool-calling model/transport that emits the `build_parametric_model` tool input directly. Do not use the current external OpenCode/Codex code-result adapter for this specific multi-file smoke: those adapters intentionally remain one-file boundaries until Step 5.
-
-Suggested first prompt:
-
-> Create a simple OpenSCAD model as a three-file project. Use `main.scad` as the entrypoint. Put the main body module in `parts/body.scad` and a rib module in `parts/nested/rib.scad`. `main.scad` must include or use the support files and render a visible 3D object. Put one editable numeric parameter named `width` in `main.scad`, default 30, so changing it visibly changes the model. Keep all source necessary to render the model inside those three project files.
-
-Expected project hierarchy:
+The user manually verified a generated three-file Parametric project in the real Brepia browser runtime:
 
 ```text
 main.scad
@@ -145,24 +139,30 @@ parts/body.scad
 parts/nested/rib.scad
 ```
 
-Required smoke checks:
+Verified PASS on 2026-09-01:
 
-1. visible 3D preview succeeds with nested `include`/`use` and no missing-file error;
-2. change `width` in the parameter UI and confirm the preview updates without losing the support files;
-3. reload the conversation and confirm the model still renders;
-4. confirm the message/history thumbnail renders;
-5. export STL;
-6. open Share and confirm the OpenSCAD GIF preview renders;
-7. run a second model where `parts/body.scad` includes `BOSL2/std.scad` and uses a BOSL2 primitive, proving bundled-library detection works when the library is referenced only by a support file;
-8. regression-check an existing uploaded STL model with `import("filename.stl")`.
+1. the visible 3D preview rendered successfully with nested `include`/`use` and no missing-file error;
+2. changing the entrypoint `width` Customizer parameter updated the model without losing support files;
+3. reloading the conversation preserved and re-rendered the project correctly;
+4. the message/history thumbnail rendered correctly.
 
-After the 3D corpus passes, run a small 2D multi-file model and export DXF.
+This confirms the real vendored OpenSCAD WASM runtime can mount and resolve the normalized multi-file `/project` hierarchy and that parameter edits/reload/history preserve the complete project snapshot.
 
-If a smoke step fails, capture the visible Brepia error plus the browser console error if one exists. That is sufficient to continue debugging.
+### Remaining targeted Step 2 regression checks
+
+Before formal Step 2 closeout, verify:
+
+1. STL export from the working three-file project;
+2. Share/GIF preview from the working three-file project;
+3. a project where a support file, not `main.scad`, references `BOSL2/std.scad` and uses a BOSL2 primitive;
+4. an existing uploaded STL flow with entrypoint-relative `import("filename.stl")`;
+5. a small 2D multi-file project followed by DXF export.
+
+If any case fails, capture the visible Brepia error plus browser-console output if present.
 
 ## Not completed yet
 
-- Step 2 manual browser/WASM smoke;
+- remaining targeted Step 2 browser regressions listed above;
 - Step 3 local directory/multi-file import;
 - Step 4 recursive GitHub project dependency resolution;
 - Step 5 full multi-file AI/external-agent editing protocol;
@@ -174,6 +174,6 @@ If a smoke step fails, capture the visible Brepia error plus the browser console
 
 ## Next checkpoint
 
-1. run the manual browser/WASM Step 2 corpus;
-2. if the smoke passes, mark Step 2 complete;
-3. continue with Step 3 local file/folder project import.
+1. finish the five targeted Step 2 browser regression checks;
+2. if they pass, mark Step 2 complete;
+3. continue immediately with Step 3 local file/folder project import.
