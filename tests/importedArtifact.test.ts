@@ -379,7 +379,7 @@ describe('imported artifact persistence primitive', () => {
       messageId: assistant.id,
       title: artifact.title,
       version: 'v1',
-      code,
+      project: artifact.project,
       source: 'build',
     });
   });
