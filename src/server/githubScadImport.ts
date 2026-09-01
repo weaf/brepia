@@ -1,15 +1,31 @@
 import { Buffer } from 'node:buffer';
 import { OPENSCAD_MAX_SOURCE_BYTES } from '@/lib/openScadLimits';
-import { decodeScadImportBytes } from '@/lib/scadImport';
+import {
+  decodeScadImportBytes,
+  findUnsupportedScadDependencies,
+} from '@/lib/scadImport';
 import {
   normalizeGithubScadUrl,
   type GithubScadSource,
 } from '@/lib/githubScadImport';
+import {
+  OPENSCAD_PROJECT_MAX_FILES,
+  OPENSCAD_PROJECT_MAX_TOTAL_BYTES,
+  normalizeOpenScadProject,
+  normalizeOpenScadProjectPath,
+  type OpenScadProject,
+  type OpenScadProjectFile,
+} from '@shared/openScadProject';
+import {
+  resolveOpenScadProjectReference,
+  stripOpenScadStringsAndComments,
+  validateOpenScadProjectSourceReferences,
+} from '@shared/openScadProjectReferences';
 import { env } from './env';
 
 export type ResolvedGithubScadImport = {
   filename: string;
-  code: string;
+  project: OpenScadProject;
   canonicalUrl: string;
 };
 
@@ -18,9 +34,13 @@ export type GithubScadResolveErrorCode =
   | 'github_rate_limited'
   | 'github_fetch_failed'
   | 'github_invalid_response'
+  | 'github_dependency_missing'
+  | 'github_dependency_invalid'
+  | 'github_non_regular_file'
   | 'gist_ambiguous'
   | 'gist_truncated'
-  | 'too_large';
+  | 'too_large'
+  | 'too_many_files';
 
 export class GithubScadResolveError extends Error {
   constructor(
@@ -33,6 +53,9 @@ export class GithubScadResolveError extends Error {
 }
 
 const FETCH_TIMEOUT_MS = 10_000;
+const PROJECT_RESOLVE_BUDGET_MS = 30_000;
+const BUNDLED_LIBRARY_ROOTS = new Set(['BOSL', 'BOSL2', 'MCAD']);
+const SCAD_EXTENSION_PATTERN = /\.scad$/i;
 
 function githubHeaders(): Headers {
   const headers = new Headers({
@@ -115,14 +138,74 @@ function decodeGithubBase64(content: unknown): Uint8Array {
   }
 }
 
-async function resolveGithubFile(
-  source: Extract<GithubScadSource, { kind: 'file' }>,
-): Promise<ResolvedGithubScadImport> {
+function decodeProjectSource(path: string, bytes: Uint8Array): string {
+  if (bytes.byteLength > OPENSCAD_MAX_SOURCE_BYTES) {
+    throw new GithubScadResolveError(
+      'too_large',
+      `OpenSCAD source ${path} exceeds ${OPENSCAD_MAX_SOURCE_BYTES} UTF-8 bytes.`,
+    );
+  }
+
+  let source: string;
+  try {
+    source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new GithubScadResolveError(
+      'github_dependency_invalid',
+      `OpenSCAD source ${path} is not valid UTF-8 text.`,
+    );
+  }
+  if (source.charCodeAt(0) === 0xfeff) source = source.slice(1);
+  if (source.includes('\0')) {
+    throw new GithubScadResolveError(
+      'github_dependency_invalid',
+      `OpenSCAD source ${path} contains binary/NUL data.`,
+    );
+  }
+  return source;
+}
+
+type RepositoryFile = {
+  path: string;
+  content: string;
+  bytes: number;
+};
+
+async function fetchRepositoryScadFile({
+  owner,
+  repo,
+  ref,
+  path,
+  requestedBy,
+}: {
+  owner: string;
+  repo: string;
+  ref: string;
+  path: string;
+  requestedBy: string | null;
+}): Promise<RepositoryFile> {
   const endpoint =
-    `https://api.github.com/repos/${encodeURIComponent(source.owner)}` +
-    `/${encodeURIComponent(source.repo)}/contents/${encodedContentPath(source.path)}` +
-    `?ref=${encodeURIComponent(source.ref)}`;
-  const response = await githubFetch(endpoint);
+    `https://api.github.com/repos/${encodeURIComponent(owner)}` +
+    `/${encodeURIComponent(repo)}/contents/${encodedContentPath(path)}` +
+    `?ref=${encodeURIComponent(ref)}`;
+
+  let response: Response;
+  try {
+    response = await githubFetch(endpoint);
+  } catch (error) {
+    if (
+      requestedBy &&
+      error instanceof GithubScadResolveError &&
+      error.code === 'github_not_found'
+    ) {
+      throw new GithubScadResolveError(
+        'github_dependency_missing',
+        `OpenSCAD dependency ${path} referenced from ${requestedBy} could not be found at the selected GitHub ref.`,
+      );
+    }
+    throw error;
+  }
+
   const payload = (await response.json().catch(() => null)) as Record<
     string,
     unknown
@@ -130,7 +213,7 @@ async function resolveGithubFile(
   if (!payload || Array.isArray(payload)) {
     throw new GithubScadResolveError(
       'github_invalid_response',
-      'GitHub did not return a single file.',
+      `GitHub did not return a single file for ${path}.`,
     );
   }
 
@@ -138,32 +221,168 @@ async function resolveGithubFile(
   if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
     throw new GithubScadResolveError(
       'github_invalid_response',
-      'GitHub file size metadata is invalid.',
+      `GitHub file size metadata is invalid for ${path}.`,
     );
   }
   if (size > OPENSCAD_MAX_SOURCE_BYTES) {
     throw new GithubScadResolveError(
       'too_large',
-      `OpenSCAD source exceeds ${OPENSCAD_MAX_SOURCE_BYTES} UTF-8 bytes.`,
+      `OpenSCAD source ${path} exceeds ${OPENSCAD_MAX_SOURCE_BYTES} UTF-8 bytes.`,
     );
   }
-  if (payload['type'] !== 'file' || payload['encoding'] !== 'base64') {
+
+  if (
+    payload['type'] !== 'file' ||
+    payload['encoding'] !== 'base64' ||
+    typeof payload['submodule_git_url'] === 'string'
+  ) {
     throw new GithubScadResolveError(
-      'github_invalid_response',
-      'GitHub import must resolve to one normal file.',
+      'github_non_regular_file',
+      `GitHub dependency ${path} must resolve to a normal repository file. Symlinks and submodules are not followed.`,
     );
   }
 
   const bytes = decodeGithubBase64(payload['content']);
-  if (bytes.byteLength > OPENSCAD_MAX_SOURCE_BYTES) {
+  return {
+    path,
+    content: decodeProjectSource(path, bytes),
+    bytes: bytes.byteLength,
+  };
+}
+
+function collectStaticSourceTargets(
+  sourcePath: string,
+  content: string,
+): string[] {
+  const assetIssue = findUnsupportedScadDependencies(content).find(
+    (issue) => issue.kind === 'import' || issue.kind === 'surface',
+  );
+  if (assetIssue) {
     throw new GithubScadResolveError(
-      'too_large',
-      `OpenSCAD source exceeds ${OPENSCAD_MAX_SOURCE_BYTES} UTF-8 bytes.`,
+      'github_dependency_invalid',
+      `${assetIssue.kind}(...) in ${sourcePath} requires an external asset. GitHub project import currently resolves .scad include/use dependencies only.`,
     );
   }
+
+  const active = stripOpenScadStringsAndComments(content);
+  const includeUseRegex = /\b(?:include|use)\s*<([^>\r\n]+)>/g;
+  const targets: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = includeUseRegex.exec(active)) !== null) {
+    const target = match[1].trim();
+    const root = target.replace(/\\/g, '/').split('/', 1)[0];
+    if (BUNDLED_LIBRARY_ROOTS.has(root)) continue;
+
+    let resolvedPath: string;
+    try {
+      resolvedPath = resolveOpenScadProjectReference(sourcePath, target);
+    } catch (error) {
+      throw new GithubScadResolveError(
+        'github_dependency_invalid',
+        error instanceof Error
+          ? error.message
+          : `Invalid OpenSCAD dependency ${target} in ${sourcePath}.`,
+      );
+    }
+
+    if (!SCAD_EXTENSION_PATTERN.test(resolvedPath)) {
+      throw new GithubScadResolveError(
+        'github_dependency_invalid',
+        `OpenSCAD dependency ${target} in ${sourcePath} must resolve to a .scad project source.`,
+      );
+    }
+    targets.push(resolvedPath);
+  }
+  return targets;
+}
+
+function normalizeRepositoryProjectPath(path: string): string {
+  try {
+    return normalizeOpenScadProjectPath(path);
+  } catch (error) {
+    throw new GithubScadResolveError(
+      'github_dependency_invalid',
+      error instanceof Error
+        ? error.message
+        : `Invalid GitHub OpenSCAD project path: ${path}.`,
+    );
+  }
+}
+
+async function resolveGithubFileProject(
+  source: Extract<GithubScadSource, { kind: 'file' }>,
+): Promise<ResolvedGithubScadImport> {
+  const startedAt = Date.now();
+  const entrypointPath = normalizeRepositoryProjectPath(source.path);
+  const pending: Array<{ path: string; requestedBy: string | null }> = [
+    { path: entrypointPath, requestedBy: null },
+  ];
+  const scheduled = new Set([entrypointPath]);
+  const files: OpenScadProjectFile[] = [];
+  let totalBytes = 0;
+
+  while (pending.length > 0) {
+    if (Date.now() - startedAt > PROJECT_RESOLVE_BUDGET_MS) {
+      throw new GithubScadResolveError(
+        'github_fetch_failed',
+        'GitHub OpenSCAD project resolution exceeded the import time budget.',
+      );
+    }
+
+    const current = pending.shift()!;
+    const resolved = await fetchRepositoryScadFile({
+      owner: source.owner,
+      repo: source.repo,
+      ref: source.ref,
+      path: current.path,
+      requestedBy: current.requestedBy,
+    });
+
+    totalBytes += resolved.bytes;
+    if (totalBytes > OPENSCAD_PROJECT_MAX_TOTAL_BYTES) {
+      throw new GithubScadResolveError(
+        'too_large',
+        `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_TOTAL_BYTES} UTF-8 bytes.`,
+      );
+    }
+    files.push({ path: resolved.path, content: resolved.content });
+
+    for (const dependencyPath of collectStaticSourceTargets(
+      resolved.path,
+      resolved.content,
+    )) {
+      if (scheduled.has(dependencyPath)) continue;
+      if (scheduled.size >= OPENSCAD_PROJECT_MAX_FILES) {
+        throw new GithubScadResolveError(
+          'too_many_files',
+          `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_FILES} source files.`,
+        );
+      }
+      scheduled.add(dependencyPath);
+      pending.push({ path: dependencyPath, requestedBy: resolved.path });
+    }
+  }
+
+  let project: OpenScadProject;
+  try {
+    project = normalizeOpenScadProject({
+      schemaVersion: 1,
+      entrypointPath,
+      files,
+    });
+    validateOpenScadProjectSourceReferences(project);
+  } catch (error) {
+    throw new GithubScadResolveError(
+      'github_dependency_invalid',
+      error instanceof Error
+        ? error.message
+        : 'The resolved GitHub OpenSCAD project is invalid.',
+    );
+  }
+
   return {
     filename: source.filename,
-    code: decodeScadImportBytes(source.filename, bytes),
+    project,
     canonicalUrl: source.canonicalUrl,
   };
 }
@@ -253,9 +472,15 @@ async function resolveGist(
       `OpenSCAD source exceeds ${OPENSCAD_MAX_SOURCE_BYTES} UTF-8 bytes.`,
     );
   }
+  const code = decodeScadImportBytes(filename, bytes);
+  const project = normalizeOpenScadProject({
+    schemaVersion: 1,
+    entrypointPath: filename,
+    files: [{ path: filename, content: code }],
+  });
   return {
     filename,
-    code: decodeScadImportBytes(filename, bytes),
+    project,
     canonicalUrl: source.canonicalUrl,
   };
 }
@@ -265,6 +490,6 @@ export async function resolveGithubScadImport(
 ): Promise<ResolvedGithubScadImport> {
   const source = normalizeGithubScadUrl(input);
   return source.kind === 'file'
-    ? resolveGithubFile(source)
+    ? resolveGithubFileProject(source)
     : resolveGist(source);
 }
