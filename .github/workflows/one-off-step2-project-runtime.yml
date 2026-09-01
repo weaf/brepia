@@ -55,12 +55,12 @@ jobs:
           replace_exact(
               'src/components/chat/ChatTitle.tsx',
               "  activeOpenscadCode?: string | null;\n}",
-              "  activeOpenscadCode?: string | null;\n  activeOpenscadProject?: OpenScadProject | null;\n}",
+              "  activeOpenscadProject?: OpenScadProject | null;\n}",
           )
           replace_exact(
               'src/components/chat/ChatTitle.tsx',
               "  activeMeshId,\n  activeOpenscadCode,\n}: ChatTitleProps = {}) {",
-              "  activeMeshId,\n  activeOpenscadCode,\n  activeOpenscadProject,\n}: ChatTitleProps = {}) {",
+              "  activeMeshId,\n  activeOpenscadProject,\n}: ChatTitleProps = {}) {",
           )
           replace_exact(
               'src/components/chat/ChatTitle.tsx',
@@ -70,12 +70,12 @@ jobs:
           replace_exact(
               'src/views/EditorView.tsx',
               "                  activeOpenscadCode={shareArtifactCode}\n                />",
-              "                  activeOpenscadCode={shareArtifactCode}\n                  activeOpenscadProject={\n                    sharePreview?.type === 'artifact'\n                      ? sharePreview.artifact.project\n                      : undefined\n                  }\n                />",
+              "                  activeOpenscadProject={\n                    sharePreview?.type === 'artifact'\n                      ? sharePreview.artifact.project\n                      : undefined\n                  }\n                />",
           )
           replace_exact(
               'src/views/ShareView.tsx',
               "                activeOpenscadCode={activeArtifactCode}\n              />",
-              "                activeOpenscadCode={activeArtifactCode}\n                activeOpenscadProject={\n                  activePreview?.type === 'artifact'\n                    ? activePreview.artifact.project\n                    : undefined\n                }\n              />",
+              "                activeOpenscadProject={\n                  activePreview?.type === 'artifact'\n                    ? activePreview.artifact.project\n                    : undefined\n                }\n              />",
           )
           PY
       - name: Setup Node.js
@@ -99,6 +99,7 @@ jobs:
           ! grep -R "previewScadColored(preview.code)" -n src
           ! grep -R "data.code" -n src/worker/openSCAD.ts src/worker/worker.ts
           ! grep -R "openscadCode=" -n src/components/chat/ChatTitle.tsx src/components/ui/ShareContent.tsx
+          ! grep -R "activeOpenscadCode" -n src/components/chat/ChatTitle.tsx
       - name: Remove one-off migration files
         run: |
           rm scripts/one-off-step2-project-runtime.py
