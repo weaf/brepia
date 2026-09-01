@@ -14,7 +14,7 @@ Step 2 is complete. The project-native browser OpenSCAD runtime, full multi-file
 
 Step 3 is complete. Local folder import constructs a bounded normalized `OpenScadProject`, preserves nested `.scad` paths, validates project-local `include`/`use` dependencies, chooses an unambiguous entrypoint automatically, and presents an explicit entrypoint chooser when several independent model roots exist. The real browser acceptance corpus passed on 2026-09-01 using the stable `./start.sh` runtime.
 
-Step 4 implementation and automated verification are complete. A selected repository `.scad` remains the entrypoint while Brepia recursively resolves bounded repository-local static `include`/`use` dependencies at the same Git ref. Real browser acceptance is still required before Step 4 is formally closed.
+Step 4 implementation and automated verification are complete. The two primary real-browser import checks also passed on 2026-09-01: standalone GitHub `.scad` import and repository-local recursive dependency import. Persistence/reload and bundled-library regression remain to close Step 4 formally.
 
 Current Step 4 implementation head:
 
@@ -140,7 +140,7 @@ The temporary inability to pick `.scad` files was reproduced only while running 
 
 Step 3 acceptance is complete.
 
-## Step 4 — implementation complete, manual acceptance pending
+## Step 4 — core browser acceptance passed, closeout checks pending
 
 ### Entrypoint-driven repository resolution
 
@@ -187,17 +187,17 @@ Focused GitHub import coverage includes standalone project-native import, percen
 
 The ordinary Quality Gate does not run `git diff --check`; this status does not claim that check for the Step 4 checkpoint.
 
-### Step 4 manual acceptance to run
+### Step 4 manual acceptance
 
-Use the stable `./start.sh` runtime, not HMR.
+Stable-runtime checks with normal `./start.sh`:
 
-1. **Standalone GitHub regression:** import a normal standalone GitHub `.scad`; it should render as a one-file project as before.
-2. **Repository-local dependency:** import `https://github.com/bmsleight/lasercut/blob/master/readme/example-001.scad`. It contains `include <../lasercut.scad>`; Brepia should automatically fetch `lasercut.scad` from the same repository/ref and render without asking for a folder.
-3. **Persistence:** reopen/reload the multi-file GitHub-imported conversation and confirm it still renders.
-4. **Bundled-library regression:** import a GitHub SCAD that uses bundled BOSL/BOSL2/MCAD; bundled libraries should continue to resolve through the browser runtime rather than repository fetching.
-5. **Failure path:** a repository entrypoint with a missing local `.scad` dependency should fail clearly and must not create a broken imported conversation.
+1. **PASS 2026-09-01 — Standalone GitHub regression:** a normal standalone GitHub `.scad` imported and rendered correctly.
+2. **PASS 2026-09-01 — Repository-local dependency:** `https://github.com/bmsleight/lasercut/blob/master/readme/example-001.scad` imported successfully and resolved `include <../lasercut.scad>` automatically from the same repository/ref.
+3. **Pending — Persistence:** reopen/reload the multi-file GitHub-imported conversation and confirm it still renders.
+4. **Pending — Bundled-library regression:** import a GitHub SCAD that uses bundled BOSL/BOSL2/MCAD; bundled libraries should continue to resolve through the browser runtime rather than repository fetching.
+5. **Optional closeout failure-path smoke:** a repository entrypoint with a missing local `.scad` dependency should fail clearly and must not create a broken imported conversation. Automated coverage already exercises this path.
 
-If these real browser checks pass, Step 4 can be marked complete.
+The initial error seen during manual testing (`expected string` at `code`) was caused by a stale browser bundle after the server was updated; reloading the page loaded the project-native client and both primary import checks passed. No compatibility code was added for the stale bundle.
 
 ## UX follow-up outside Step 3
 
@@ -205,7 +205,7 @@ The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobi
 
 ## Not completed yet
 
-- Step 4 real browser acceptance;
+- Step 4 persistence/reload and bundled-library browser regressions;
 - Step 5 full multi-file AI/external-agent editing protocol;
 - Step 6 complete project snapshots in the local conversation-workspace mirror;
 - Step 7 explicit normalized relative assets;
@@ -215,4 +215,4 @@ The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobi
 
 ## Next checkpoint
 
-Pull the latest feature branch and run the Step 4 browser acceptance corpus above. If it is green, mark Step 4 complete and continue to Step 5 project-native AI/external-agent editing.
+Run the two remaining Step 4 browser checks: reopen/reload the imported `bmsleight/lasercut` project, then import a GitHub SCAD using bundled BOSL/BOSL2/MCAD. If both pass, mark Step 4 complete and switch to a fresh chat before Step 5 project-native AI/external-agent editing.
