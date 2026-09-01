@@ -19,7 +19,8 @@ Primary Step 4 implementation checkpoint:
 Step 4 closeout documentation commits:
 
 - `8b2cdbebd6b2c5d07fc54b6966b9ed31cea0e87f` — `Mark multi-file OpenSCAD Step 4 complete`;
-- `030b24b8ef613f77913b59f08b8b0739f09cd5ab` — `Record Step 4 acceptance in multi-file plan`.
+- `030b24b8ef613f77913b59f08b8b0739f09cd5ab` — `Record Step 4 acceptance in multi-file plan`;
+- `e67838fa1e3114fdf37acce82e6a50cb4c81a751` — `Record Step 5 fresh-chat handoff`.
 
 ## Step 1 — complete
 
