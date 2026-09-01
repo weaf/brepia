@@ -8,15 +8,18 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–4 are complete.
+Steps 1–4 are complete and manually accepted.
 
-The Parametric artifact is project-native, browser OpenSCAD execution is project-aware, local file/folder import is complete, and GitHub import now resolves bounded repository-local static `include`/`use` dependencies recursively from the selected entrypoint. The real browser acceptance corpus for Step 4 passed on 2026-09-01 using the stable `./start.sh` runtime.
+The Parametric artifact is project-native, browser OpenSCAD execution is project-aware, local file/folder import is complete, and GitHub import resolves bounded repository-local static `include`/`use` dependencies recursively from the selected entrypoint. Step 4 browser acceptance passed on 2026-09-01 using normal `./start.sh`.
 
 Primary Step 4 implementation checkpoint:
 
 `e285af99f3d0ba8be0e4361fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`
 
-Step 4 closeout status commit follows that implementation checkpoint and records the final manual acceptance.
+Step 4 closeout documentation commits:
+
+- `8b2cdbebd6b2c5d07fc54b6966b9ed31cea0e87f` — `Mark multi-file OpenSCAD Step 4 complete`;
+- `030b24b8ef613f77913b59f08b8b0739f09cd5ab` — `Record Step 4 acceptance in multi-file plan`.
 
 ## Step 1 — complete
 
@@ -93,9 +96,7 @@ The pasted GitHub blob/raw `.scad` remains the project entrypoint. Brepia recurs
 - `import()` and `surface()` remain deferred to Step 7;
 - Gists intentionally remain exactly-one-`.scad` and return the same one-file project-native artifact.
 
-Project/source size limits reuse the normalized project bounds, and repository resolution has bounded request and overall discovery time.
-
-The GitHub API/client transport is project-native: `{ filename, project, canonicalUrl }`. `GithubScadImportButton` persists the complete project through the normal imported-project path and baseline-compiles it before creating the conversation artifact.
+The GitHub API/client transport is project-native: `{ filename, project, canonicalUrl }`. Complete projects baseline-compile before the imported conversation artifact is created.
 
 Important Step 4 commits:
 
@@ -114,8 +115,6 @@ Quality Gate run `237` (`33532720138`) for `e285af99f3d0ba8be0e4361fc8a471dc559c
 - typecheck: PASS;
 - lint with zero warnings: PASS;
 - production client/SSR/Nitro build: PASS.
-
-Focused coverage includes standalone project-native import, percent-encoded paths, nested same-ref dependencies, parent/sibling references, cycle deduplication, bundled-library skipping, missing dependencies, root escape rejection, non-regular responses, deferred relative assets, file/source bounds, Gist behavior and fixed-host transport failure behavior.
 
 The ordinary Quality Gate does not run `git diff --check`; this status does not claim that check for the Step 4 implementation checkpoint.
 
@@ -145,8 +144,29 @@ The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at
 - Step 9 project file UX;
 - Step 10 final hardening/closeout.
 
-## Next checkpoint
+## Fresh-chat handoff for Step 5
 
-Start a fresh chat before Step 5. Reconcile `docs/multifile_openscad_workspace_plan.md`, this status document, `shared/chatAi.ts`, Parametric tool schemas/instructions, current AI message persistence, parameter reset/original-source handling and external-agent/OpenCode integration before editing.
+Start the next chat on the same branch: `feature/multifile-openscad-workspace`.
 
-Step 5 must make AI/external-agent editing project-native: complete project snapshots, unchanged-file preservation across follow-ups, support-file edits, stable entrypoint semantics, and project-aware message persistence without reintroducing the removed top-level `artifact.code` compatibility model.
+Read and reconcile before editing:
+
+- `AGENTS.md`;
+- `docs/multifile_openscad_workspace_plan.md`;
+- `docs/multifile_openscad_workspace_status.md`;
+- `shared/chatAi.ts` and the current Parametric tool schemas/instructions;
+- current AI message/artifact persistence and restore/retry/branch behavior;
+- parameter reset/default and any `metadata.originalCode` or equivalent baseline-source handling;
+- OpenCode/external-agent transport and existing persistent-session integration.
+
+Step 5 objective:
+
+- `build_parametric_model` and external-agent results carry complete normalized project snapshots;
+- unchanged support files survive follow-up edits;
+- AI can intentionally edit either entrypoint or support files;
+- `entrypointPath` stays stable unless a restructure is explicitly needed;
+- no traversal/absolute paths or omitted required support files;
+- message persistence/restore/retry works with the whole project;
+- Customizer remains entrypoint-focused;
+- do not reintroduce top-level `artifact.code` compatibility.
+
+Do not begin Step 6 workspace-snapshot migration until Step 5 is implemented and verified.
