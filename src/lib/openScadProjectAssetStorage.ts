@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase';
 import {
+  OPENSCAD_PROJECT_MAX_ASSET_BYTES,
   normalizeOpenScadProject,
   normalizeOpenScadProjectPath,
+  openScadProjectAssetMediaTypeForPath,
   type OpenScadProject,
   type OpenScadProjectAsset,
 } from '@shared/openScadProject';
@@ -26,6 +28,32 @@ function bytesToHex(bytes: Uint8Array): string {
 export async function sha256Blob(blob: Blob): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
   return bytesToHex(new Uint8Array(digest));
+}
+
+export async function createOpenScadProjectAssetDescriptor(input: {
+  path: string;
+  storagePath: string;
+  blob: Blob;
+}): Promise<OpenScadProjectAsset> {
+  const path = normalizeOpenScadProjectPath(input.path);
+  const storagePath = normalizeOpenScadProjectPath(input.storagePath);
+  const mediaType = openScadProjectAssetMediaTypeForPath(path);
+  if (!mediaType) {
+    throw new Error(`Unsupported OpenSCAD project asset type: ${path}`);
+  }
+  if (input.blob.size <= 0 || input.blob.size > OPENSCAD_PROJECT_MAX_ASSET_BYTES) {
+    throw new Error(
+      `OpenSCAD project asset ${path} must be between 1 and ${OPENSCAD_PROJECT_MAX_ASSET_BYTES} bytes.`,
+    );
+  }
+
+  return {
+    path,
+    storagePath,
+    mediaType,
+    byteLength: input.blob.size,
+    sha256: await sha256Blob(input.blob),
+  };
 }
 
 export function openScadProjectAssetStoragePrefix(
@@ -70,9 +98,7 @@ export async function hydrateOpenScadProjectAssets(
       );
     }
     if (data.size !== asset.byteLength) {
-      throw new Error(
-        `OpenSCAD project asset size mismatch for ${asset.path}.`,
-      );
+      throw new Error(`OpenSCAD project asset size mismatch for ${asset.path}.`);
     }
 
     const digest = await sha256Blob(data);
