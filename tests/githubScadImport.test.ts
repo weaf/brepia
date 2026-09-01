@@ -26,6 +26,17 @@ function repositoryFilePayload(
   };
 }
 
+function repositoryAssetMetadata(
+  byteLength: number,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    type: 'file',
+    size: byteLength,
+    ...overrides,
+  };
+}
+
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -165,6 +176,7 @@ describe('trusted GitHub SCAD retrieval', () => {
         entrypointPath: 'model.scad',
         files: [{ path: 'model.scad', content: scad }],
       },
+      assets: [],
       canonicalUrl: 'https://github.com/example/cad/blob/main/model.scad',
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -190,6 +202,7 @@ describe('trusted GitHub SCAD retrieval', () => {
       entrypointPath: 'Flexible figure/kropp4.scad',
       files: [{ path: 'Flexible figure/kropp4.scad', content: scad }],
     });
+    expect(result.assets).toEqual([]);
     expect(result.canonicalUrl).toBe(
       'https://github.com/Noty-design/Parametric-designs/blob/main/Flexible%20figure/kropp4.scad',
     );
@@ -219,6 +232,7 @@ describe('trusted GitHub SCAD retrieval', () => {
       { path: 'models/parts/body.scad', content: body },
       { path: 'models/shared/rib.scad', content: rib },
     ]);
+    expect(result.assets).toEqual([]);
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       'https://api.github.com/repos/example/cad/contents/models/main.scad?ref=release',
       'https://api.github.com/repos/example/cad/contents/models/parts/body.scad?ref=release',
@@ -317,8 +331,78 @@ describe('trusted GitHub SCAD retrieval', () => {
     ).rejects.toMatchObject({ code: 'github_non_regular_file' });
   });
 
-  it('keeps relative import()/surface() assets deferred to the explicit asset phase', async () => {
-    const main = 'import("mesh.stl");\ncube(1);\n';
+  it('resolves only statically referenced relative assets at the same Git ref', async () => {
+    const main =
+      'include <parts/body.scad>\nbody();\n';
+    const body =
+      'module body() { import("../assets/body.stl"); }\n';
+    const assetBytes = new Uint8Array([0, 1, 2, 3, 255]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(repositoryFilePayload(main)))
+      .mockResolvedValueOnce(jsonResponse(repositoryFilePayload(body)))
+      .mockResolvedValueOnce(
+        jsonResponse(repositoryAssetMetadata(assetBytes.byteLength)),
+      )
+      .mockResolvedValueOnce(new Response(assetBytes));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await resolveGithubScadImport(
+      'https://github.com/example/cad/blob/release/models/main.scad',
+    );
+
+    expect(result.assets).toEqual([
+      {
+        path: 'models/assets/body.stl',
+        contentBase64: Buffer.from(assetBytes).toString('base64'),
+      },
+    ]);
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      'https://api.github.com/repos/example/cad/contents/models/main.scad?ref=release',
+      'https://api.github.com/repos/example/cad/contents/models/parts/body.scad?ref=release',
+      'https://api.github.com/repos/example/cad/contents/models/assets/body.stl?ref=release',
+      'https://api.github.com/repos/example/cad/contents/models/assets/body.stl?ref=release',
+    ]);
+    const rawRequestHeaders = fetchMock.mock.calls[3]?.[1]?.headers;
+    expect(rawRequestHeaders).toBeInstanceOf(Headers);
+    expect((rawRequestHeaders as Headers).get('Accept')).toBe(
+      'application/vnd.github.raw+json',
+    );
+  });
+
+  it('rejects dynamic GitHub asset filenames before fetching an asset', async () => {
+    const main = 'name = "mesh.stl"; import(name);\ncube(1);\n';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(repositoryFilePayload(main)));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      resolveGithubScadImport(
+        'https://github.com/example/cad/blob/main/main.scad',
+      ),
+    ).rejects.toMatchObject({ code: 'github_dependency_invalid' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a missing statically referenced GitHub asset clearly', async () => {
+    const main = 'import("assets/missing.stl");\ncube(1);\n';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(repositoryFilePayload(main)))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      resolveGithubScadImport(
+        'https://github.com/example/cad/blob/main/main.scad',
+      ),
+    ).rejects.toMatchObject({ code: 'github_dependency_missing' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects import/surface kind-extension mismatches before fetching an asset', async () => {
+    const main = 'surface(file="mesh.stl");\ncube(1);\n';
     const fetchMock = vi
       .fn()
       .mockResolvedValue(jsonResponse(repositoryFilePayload(main)));
@@ -401,6 +485,7 @@ describe('trusted GitHub SCAD retrieval', () => {
       entrypointPath: 'model.scad',
       files: [{ path: 'model.scad', content: scad }],
     });
+    expect(result.assets).toEqual([]);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.github.com/gists/aa5a315d61ae9438b18d',
     );
