@@ -10,7 +10,7 @@ import {
 export type ConversationExportMetadata = {
   revision: number;
   format: ConversationExportFormat;
-  codeSha256: string;
+  projectSha256: string;
   artifactSha256: string;
   byteLength: number;
   savedAt: string;
@@ -20,7 +20,7 @@ export type PersistConversationExportInput = {
   conversationId: string;
   format: ConversationExportFormat;
   revision: number;
-  codeSha256: string;
+  projectSha256: string;
   bytes: Uint8Array;
 };
 
@@ -79,7 +79,7 @@ async function readExistingMetadata(
     (record.format !== 'stl' &&
       record.format !== '3mf' &&
       record.format !== 'dxf') ||
-    typeof record.codeSha256 !== 'string' ||
+    typeof record.projectSha256 !== 'string' ||
     typeof record.artifactSha256 !== 'string' ||
     typeof record.byteLength !== 'number' ||
     typeof record.savedAt !== 'string'
@@ -92,7 +92,7 @@ async function readExistingMetadata(
 /**
  * Persist the canonical exported representation for a model revision. A repeat
  * export with identical bytes is a no-op. If the exporter produces different
- * bytes for the same source revision, replace the canonical export atomically
+ * bytes for the same project revision, replace the canonical export atomically
  * and update its sidecar rather than accumulating timestamped duplicates.
  */
 export async function persistConversationExportArtifact(
@@ -113,7 +113,7 @@ export async function persistConversationExportArtifact(
 
   if (
     existing?.artifactSha256 === hash &&
-    existing.codeSha256 === input.codeSha256 &&
+    existing.projectSha256 === input.projectSha256 &&
     existing.byteLength === input.bytes.byteLength &&
     (await pathExists(artifactPath))
   ) {
@@ -128,7 +128,7 @@ export async function persistConversationExportArtifact(
   const metadata: ConversationExportMetadata = {
     revision: input.revision,
     format: input.format,
-    codeSha256: input.codeSha256,
+    projectSha256: input.projectSha256,
     artifactSha256: hash,
     byteLength: input.bytes.byteLength,
     savedAt: new Date().toISOString(),
