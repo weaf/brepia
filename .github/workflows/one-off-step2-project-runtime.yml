@@ -69,6 +69,11 @@ jobs:
           )
           replace_exact(
               'src/views/EditorView.tsx',
+              "  const shareArtifactCode =\n    sharePreview?.type === 'artifact'\n      ? getParametricArtifactEntrypointCode(sharePreview.artifact)\n      : undefined;\n",
+              "",
+          )
+          replace_exact(
+              'src/views/EditorView.tsx',
               "                  activeOpenscadCode={shareArtifactCode}\n                />",
               "                  activeOpenscadProject={\n                    sharePreview?.type === 'artifact'\n                      ? sharePreview.artifact.project\n                      : undefined\n                  }\n                />",
           )
@@ -100,6 +105,7 @@ jobs:
           ! grep -R "data.code" -n src/worker/openSCAD.ts src/worker/worker.ts
           ! grep -R "openscadCode=" -n src/components/chat/ChatTitle.tsx src/components/ui/ShareContent.tsx
           ! grep -R "activeOpenscadCode" -n src/components/chat/ChatTitle.tsx
+          ! grep -R "shareArtifactCode" -n src/views/EditorView.tsx
       - name: Remove one-off migration files
         run: |
           rm scripts/one-off-step2-project-runtime.py
