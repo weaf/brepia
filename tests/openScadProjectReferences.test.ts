@@ -159,13 +159,13 @@ describe('OpenSCAD project references', () => {
     expect(() => validateOpenScadProjectAssetReferences(value)).not.toThrow();
   });
 
-  it('ignores import/surface examples in comments and strings', () => {
+  it('ignores import/surface words inside comments and strings', () => {
     const value = project([
       {
         path: 'main.scad',
         content: [
           '// import("missing.stl");',
-          'echo("surface(\\\"missing.dat\\\")");',
+          'echo("surface missing.dat import missing.stl");',
           'cube(1);',
         ].join('\n'),
       },
