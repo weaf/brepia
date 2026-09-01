@@ -8,7 +8,7 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–4 are complete and manually accepted. Step 5 is implemented and automatically verified.
+Steps 1–6 are complete. Steps 1–4 have their recorded manual acceptance; Steps 5–6 are implemented and automatically verified.
 
 The Parametric artifact is project-native, browser OpenSCAD execution is project-aware, local file/folder import is complete, and GitHub import resolves bounded repository-local static `include`/`use` dependencies recursively from the selected entrypoint. Step 4 browser acceptance passed on 2026-09-01 using normal `./start.sh`.
 
@@ -161,18 +161,38 @@ Automated Step 5 implementation verification before closeout:
 - production client/SSR/Nitro build: PASS;
 - `git diff --check`: PASS.
 
+## Step 6 — complete
+
+The best-effort local conversation-workspace mirror now stores complete normalized project snapshots instead of reducing Parametric revisions to one entrypoint string:
+
+- `models/current/` contains `project.json` plus every materialized project `.scad` file under its normalized relative path;
+- `models/revisions/NNN/` uses the same complete layout and numbered revision directories are immutable;
+- revision metadata uses `projectSha256` and `entrypointPath`; the checksum covers the entire normalized project, not just the entrypoint;
+- support-file-only changes therefore create distinct revisions, while normalization makes identity independent of input file ordering;
+- the selected conversation branch controls `models/current/`, and current is replaced as one staged snapshot so stale support files are removed;
+- Customizer parameter history reconstructs the original complete project by replacing only the entrypoint with `metadata.originalCode`, preserving all support files;
+- generated legacy `current.scad`, `current.json` and numbered flat revision files are removed during synchronization;
+- STL/DXF workspace persistence now submits and normalizes the complete active project, resolves the exact revision by whole-project SHA and records `projectSha256` in export metadata. User-facing export generation itself is unchanged.
+
+Regression coverage includes full two-file snapshots, immutable revisions, idempotence, active-branch switching, parameter edits with preserved support files, support-file-only revisions, stable normalized identity, nested entrypoints, stale-current cleanup, legacy-mirror cleanup and project-native imported-artifact discovery.
+
+Primary Step 6 implementation checkpoint:
+
+`90fd3cdeb698f926eafbe439a23d176339cfcf79` — `Finish Step 6 project identity wiring`
+
+Quality Gate run `285` (`33547820131`) on that exact implementation checkpoint passed dependency audit, the full test suite, typecheck, lint and production client/SSR/Nitro build. The closeout also verifies the complete branch diff with `git diff --check` before recording Step 6 complete.
+
 ## UX follow-up outside the current step
 
 The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact orientation control exposing deterministic Top/Front/Right views. This is a separate UX follow-up and must not be mixed into the project-workspace implementation steps.
 
 ## Not completed yet
 
-- Step 6 complete project snapshots in the local conversation-workspace mirror;
 - Step 7 explicit normalized relative assets;
 - Step 8 project-aware STEP sandbox input;
 - Step 9 project file UX;
 - Step 10 final hardening/closeout.
 
-## Next — Step 6
+## Next — Step 7
 
-Step 6 is now the next bounded implementation step: project-native local conversation-workspace snapshots. Reconcile the existing best-effort local mirror against the complete persisted `OpenScadProject` artifact before changing it. Do not mix Step 7 relative assets or later workspace UX into Step 6.
+Step 7 is now the next bounded implementation step: explicit normalized relative asset support for approved `import()`/`surface()` formats. Reconcile the completed project snapshot model before adding assets. Do not mix the Step 8 STEP sandbox migration or Step 9 project-file UX into Step 7.

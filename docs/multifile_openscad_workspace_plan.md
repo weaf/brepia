@@ -1,6 +1,6 @@
 # Multi-file OpenSCAD / project workspace plan
 
-Status: selected post-1.0 feature; Steps 1–4 complete and manually accepted. Step 5 is next.
+Status: selected post-1.0 feature; Steps 1–6 complete. Step 7 is next.
 
 Branch: `feature/multifile-openscad-workspace`
 
@@ -153,9 +153,9 @@ The existing conversation tree remains authoritative. Project versions follow th
 
 Step 5 closeout confirms `shared/chatAi.ts` and persisted `build_parametric_model` parts already use full project artifacts; retry/branch/restore keep the selected message-tree project snapshot; Customizer `metadata.originalCode` remains an entrypoint-only reset baseline while parameter edits replace only the entrypoint inside the full project; and OpenCode/Codex now receive, validate and return complete normalized projects rather than `{code,...}` payloads. New external-agent writes reject the legacy top-level `code` contract.
 
-### Step 6 — Conversation workspace project snapshots
+### Step 6 — Conversation workspace project snapshots — COMPLETE
 
-Replace the Parametric local mirror with project-native snapshots such as:
+The Parametric local mirror is project-native:
 
 ```text
 models/current/
@@ -169,7 +169,11 @@ models/revisions/001/
   <support files...>
 ```
 
-A revision is an immutable normalized project snapshot whose identity covers the whole project. The local workspace remains a best-effort mirror; Supabase/message/storage state remains authoritative.
+Each snapshot contains the complete normalized `OpenScadProject`, its materialized `.scad` hierarchy and revision metadata. Revision identity is a deterministic SHA-256 over the whole normalized project rather than only the entrypoint, so a support-file-only change creates a distinct revision while reordered input files normalize to the same identity. Numbered revision directories are immutable; `models/current/` follows the selected conversation branch and is replaced as a complete snapshot so removed or renamed support files cannot linger.
+
+Customizer `metadata.originalCode` remains entrypoint-only by design: when reconstructing its original revision, only the entrypoint is replaced and all support files are retained. The generated legacy flat mirror (`current.scad` plus numbered `.scad`/`.json` files) is cleaned during synchronization. Browser STL/DXF workspace persistence also resolves its source revision by the complete project hash, preventing support-file-only changes from being attached to the wrong revision.
+
+The local workspace remains a best-effort operational mirror; Supabase/message/storage state remains authoritative.
 
 ### Step 7 — Explicit relative asset support
 
@@ -205,6 +209,6 @@ Final manual acceptance should cover AI one-file generation, local/GitHub multi-
 
 Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–5 are complete. Step 6 is next and must begin from the verified Step 5 checkpoint after reconciling the current branch against this plan and `docs/multifile_openscad_workspace_status.md`.
+Steps 1–6 are complete. Step 7 is next and must add only explicit normalized relative asset support; do not mix STEP sandbox migration or project-file UX into that step.
 
 Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.
