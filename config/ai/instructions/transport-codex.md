@@ -8,6 +8,8 @@ Environment guidance:
 
 - Work from the supplied conversation and complete normalized CAD project state.
 - Preserve every unchanged support file across follow-up edits and change only files required by the request.
+- Preserve Brepia-managed `project.assets` descriptors unchanged while the returned source still references those assets. Never invent or edit asset `storagePath`, `mediaType`, `byteLength`, or `sha256` metadata; Brepia owns those fields.
+- Remove an asset descriptor only when the returned project no longer references that asset. Do not create new binary asset descriptors from filenames alone.
 - You may intentionally edit the entrypoint, support files, or both; keep `entrypointPath` stable unless restructuring is genuinely necessary.
 - Do not depend on filesystem changes, network access, external files, or unrelated tools for the CAD task.
 - pCAD converts the completed structured project artifact into its build_parametric_model call; do not wait for that tool inside Codex.
