@@ -1,0 +1,75 @@
+name: Step 6 workspace codemod
+
+on:
+  push:
+    branches:
+      - feature/multifile-openscad-workspace
+
+permissions:
+  contents: write
+
+jobs:
+  codemod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/multifile-openscad-workspace
+      - name: Apply mechanical Step 6 updates
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              found = text.count(old)
+              if found != count:
+                  raise SystemExit(f'{path}: expected {count} occurrences, found {found}')
+              p.write_text(text.replace(old, new))
+
+          editor_project = """project={\n              activePreview?.type === 'artifact'\n                ? activePreview.artifact.project\n                : undefined\n            }"""
+          replace_exact(
+              'src/views/EditorView.tsx',
+              'dxfExporter={dxfExporter}\n            code={activeArtifactCode}',
+              f'dxfExporter={{dxfExporter}}\n            {editor_project}\n            code={{activeArtifactCode}}',
+              2,
+          )
+
+          share_project = """project={\n              activePreview?.type === 'artifact'\n                ? activePreview.artifact.project\n                : undefined\n            }"""
+          replace_exact(
+              'src/views/ShareView.tsx',
+              'dxfExporter={null}\n            code={activeArtifactCode}',
+              f'dxfExporter={{null}}\n            {share_project}\n            code={{activeArtifactCode}}',
+              2,
+          )
+
+          replace_exact(
+              'src/server/conversationWorkspaceRenders.test.ts',
+              "    codeSha256: `${number}`.padStart(64, '0'),\n",
+              "    projectSha256: `${number}`.padStart(64, '0'),\n    entrypointPath: 'main.scad',\n",
+          )
+
+          models = Path('src/server/conversationWorkspaceModels.ts')
+          text = models.read_text()
+          text = text.replace('  stat,\n', '')
+          text = text.replace('  conversationCurrentModelFilePath,\n', '')
+          text = text.replace('  conversationCurrentModelProjectPath,\n', '')
+          block = """async function pathIsDirectory(path: string): Promise<boolean> {\n  try {\n    return (await stat(path)).isDirectory();\n  } catch (error) {\n    if (\n      typeof error === 'object' &&\n      error !== null &&\n      'code' in error &&\n      error.code === 'ENOENT'\n    ) {\n      return false;\n    }\n    throw error;\n  }\n}\n\n"""
+          if text.count(block) != 1:
+              raise SystemExit('conversationWorkspaceModels.ts: unexpected pathIsDirectory block')
+          models.write_text(text.replace(block, ''))
+          PY
+
+          rm .github/workflows/step6-codemod.yml
+          git diff --check
+      - name: Commit codemod and self-cleanup
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/views/EditorView.tsx src/views/ShareView.tsx src/server/conversationWorkspaceRenders.test.ts src/server/conversationWorkspaceModels.ts .github/workflows/step6-codemod.yml
+          git commit -m 'Finish Step 6 project identity wiring'
+          git push origin HEAD:feature/multifile-openscad-workspace
