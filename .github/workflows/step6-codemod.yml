@@ -21,6 +21,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           def replace_exact(path, old, new, count=1):
               p = Path(path)
@@ -30,21 +31,27 @@ jobs:
                   raise SystemExit(f'{path}: expected {count} occurrences, found {found}')
               p.write_text(text.replace(old, new))
 
-          editor_project = """project={\n              activePreview?.type === 'artifact'\n                ? activePreview.artifact.project\n                : undefined\n            }"""
-          replace_exact(
-              'src/views/EditorView.tsx',
-              'dxfExporter={dxfExporter}\n            code={activeArtifactCode}',
-              f'dxfExporter={{dxfExporter}}\n            {editor_project}\n            code={{activeArtifactCode}}',
-              2,
-          )
+          def add_project_props(path):
+              p = Path(path)
+              text = p.read_text()
+              pattern = re.compile(r'(?m)^(?P<i>\s*)code=\{activeArtifactCode\}$')
+              matches = list(pattern.finditer(text))
+              if len(matches) != 2:
+                  raise SystemExit(f'{path}: expected 2 activeArtifactCode props, found {len(matches)}')
+              def replacement(match):
+                  i = match.group('i')
+                  return (
+                      f"{i}project={{\n"
+                      f"{i}  activePreview?.type === 'artifact'\n"
+                      f"{i}    ? activePreview.artifact.project\n"
+                      f"{i}    : undefined\n"
+                      f"{i}}}\n"
+                      f"{i}code={{activeArtifactCode}}"
+                  )
+              p.write_text(pattern.sub(replacement, text))
 
-          share_project = """project={\n              activePreview?.type === 'artifact'\n                ? activePreview.artifact.project\n                : undefined\n            }"""
-          replace_exact(
-              'src/views/ShareView.tsx',
-              'dxfExporter={null}\n            code={activeArtifactCode}',
-              f'dxfExporter={{null}}\n            {share_project}\n            code={{activeArtifactCode}}',
-              2,
-          )
+          add_project_props('src/views/EditorView.tsx')
+          add_project_props('src/views/ShareView.tsx')
 
           replace_exact(
               'src/server/conversationWorkspaceRenders.test.ts',
