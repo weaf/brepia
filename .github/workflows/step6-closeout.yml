@@ -1,0 +1,86 @@
+name: Step 6 closeout
+
+on:
+  push:
+    branches:
+      - feature/multifile-openscad-workspace
+
+permissions:
+  contents: write
+
+jobs:
+  closeout:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/multifile-openscad-workspace
+          fetch-depth: 0
+      - name: Update Step 6 documentation and verify full diff
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 occurrence, found {count}')
+              p.write_text(text.replace(old, new))
+
+          plan = 'docs/multifile_openscad_workspace_plan.md'
+          replace_exact(
+              plan,
+              'Status: selected post-1.0 feature; Steps 1–4 complete and manually accepted. Step 5 is next.',
+              'Status: selected post-1.0 feature; Steps 1–6 complete. Step 7 is next.',
+          )
+          replace_exact(
+              plan,
+              '''### Step 6 — Conversation workspace project snapshots\n\nReplace the Parametric local mirror with project-native snapshots such as:\n\n```text\nmodels/current/\n  project.json\n  <entrypointPath>\n  <support files...>\n\nmodels/revisions/001/\n  project.json\n  <entrypointPath>\n  <support files...>\n```\n\nA revision is an immutable normalized project snapshot whose identity covers the whole project. The local workspace remains a best-effort mirror; Supabase/message/storage state remains authoritative.''',
+              '''### Step 6 — Conversation workspace project snapshots — COMPLETE\n\nThe Parametric local mirror is project-native:\n\n```text\nmodels/current/\n  project.json\n  <entrypointPath>\n  <support files...>\n\nmodels/revisions/001/\n  project.json\n  <entrypointPath>\n  <support files...>\n```\n\nEach snapshot contains the complete normalized `OpenScadProject`, its materialized `.scad` hierarchy and revision metadata. Revision identity is a deterministic SHA-256 over the whole normalized project rather than only the entrypoint, so a support-file-only change creates a distinct revision while reordered input files normalize to the same identity. Numbered revision directories are immutable; `models/current/` follows the selected conversation branch and is replaced as a complete snapshot so removed or renamed support files cannot linger.\n\nCustomizer `metadata.originalCode` remains entrypoint-only by design: when reconstructing its original revision, only the entrypoint is replaced and all support files are retained. The generated legacy flat mirror (`current.scad` plus numbered `.scad`/`.json` files) is cleaned during synchronization. Browser STL/DXF workspace persistence also resolves its source revision by the complete project hash, preventing support-file-only changes from being attached to the wrong revision.\n\nThe local workspace remains a best-effort operational mirror; Supabase/message/storage state remains authoritative.''',
+          )
+          replace_exact(
+              plan,
+              '''Steps 1–5 are complete. Step 6 is next and must begin from the verified Step 5 checkpoint after reconciling the current branch against this plan and `docs/multifile_openscad_workspace_status.md`.''',
+              '''Steps 1–6 are complete. Step 7 is next and must add only explicit normalized relative asset support; do not mix STEP sandbox migration or project-file UX into that step.''',
+          )
+
+          status = 'docs/multifile_openscad_workspace_status.md'
+          replace_exact(
+              status,
+              'Steps 1–4 are complete and manually accepted. Step 5 is implemented and automatically verified.',
+              'Steps 1–6 are complete. Steps 1–4 have their recorded manual acceptance; Steps 5–6 are implemented and automatically verified.',
+          )
+          marker = '## UX follow-up outside the current step'
+          p = Path(status)
+          text = p.read_text()
+          if text.count(marker) != 1:
+              raise SystemExit('status: UX marker not unique')
+          step6 = '''## Step 6 — complete\n\nThe best-effort local conversation-workspace mirror now stores complete normalized project snapshots instead of reducing Parametric revisions to one entrypoint string:\n\n- `models/current/` contains `project.json` plus every materialized project `.scad` file under its normalized relative path;\n- `models/revisions/NNN/` uses the same complete layout and numbered revision directories are immutable;\n- revision metadata uses `projectSha256` and `entrypointPath`; the checksum covers the entire normalized project, not just the entrypoint;\n- support-file-only changes therefore create distinct revisions, while normalization makes identity independent of input file ordering;\n- the selected conversation branch controls `models/current/`, and current is replaced as one staged snapshot so stale support files are removed;\n- Customizer parameter history reconstructs the original complete project by replacing only the entrypoint with `metadata.originalCode`, preserving all support files;\n- generated legacy `current.scad`, `current.json` and numbered flat revision files are removed during synchronization;\n- STL/DXF workspace persistence now submits and normalizes the complete active project, resolves the exact revision by whole-project SHA and records `projectSha256` in export metadata. User-facing export generation itself is unchanged.\n\nRegression coverage includes full two-file snapshots, immutable revisions, idempotence, active-branch switching, parameter edits with preserved support files, support-file-only revisions, stable normalized identity, nested entrypoints, stale-current cleanup, legacy-mirror cleanup and project-native imported-artifact discovery.\n\nPrimary Step 6 implementation checkpoint:\n\n`90fd3cdeb698f926eafbe439a23d176339cfcf79` — `Finish Step 6 project identity wiring`\n\nQuality Gate run `285` (`33547820131`) on that exact implementation checkpoint passed dependency audit, the full test suite, typecheck, lint and production client/SSR/Nitro build. The closeout also verifies the complete branch diff with `git diff --check` before recording Step 6 complete.\n\n'''
+          p.write_text(text.replace(marker, step6 + marker))
+          replace_exact(
+              status,
+              '- Step 6 complete project snapshots in the local conversation-workspace mirror;\n- Step 7 explicit normalized relative assets;',
+              '- Step 7 explicit normalized relative assets;',
+          )
+          replace_exact(
+              status,
+              '''## Next — Step 6\n\nStep 6 is now the next bounded implementation step: project-native local conversation-workspace snapshots. Reconcile the existing best-effort local mirror against the complete persisted `OpenScadProject` artifact before changing it. Do not mix Step 7 relative assets or later workspace UX into Step 6.''',
+              '''## Next — Step 7\n\nStep 7 is now the next bounded implementation step: explicit normalized relative asset support for approved `import()`/`surface()` formats. Reconcile the completed project snapshot model before adding assets. Do not mix the Step 8 STEP sandbox migration or Step 9 project-file UX into Step 7.''',
+          )
+          PY
+
+          rm .github/workflows/step6-closeout.yml
+          git fetch origin master
+          git diff --check origin/master
+      - name: Commit documentation and self-cleanup
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/multifile_openscad_workspace_plan.md docs/multifile_openscad_workspace_status.md .github/workflows/step6-closeout.yml
+          git commit -m 'Mark multi-file OpenSCAD Step 6 complete'
+          git push origin HEAD:feature/multifile-openscad-workspace
