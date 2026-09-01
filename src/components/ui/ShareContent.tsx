@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { ClipboardCheck, CopyIcon } from 'lucide-react';
-import { Suspense, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import {
   FacebookIcon,
   TwitterIcon,
@@ -11,7 +11,10 @@ import {
   handleTwitterShare,
   handleWhatsAppShare,
 } from '@/utils/shareUtils';
-import { MeshGifPreview } from '../viewer/MeshGifPreview';
+import {
+  MeshGifPreview,
+  type GifDownloadHandle,
+} from '../viewer/MeshGifPreview';
 import { OpenSCADGifPreview } from '../viewer/OpenSCADGifPreview';
 import { cn } from '@/lib/utils';
 import type React from 'react';
@@ -37,10 +40,9 @@ export function ShareContent({
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [readyToDownload, setReadyToDownload] = useState(false);
+  const [gifPrepared, setGifPrepared] = useState(false);
 
-  const downloadGifRef = useRef<{ downloadGIF: () => Promise<void> } | null>(
-    null,
-  );
+  const downloadGifRef = useRef<GifDownloadHandle | null>(null);
 
   const shareLink = `${window.location.origin}${import.meta.env.BASE_URL}share/${conversationId}`;
   const isPublic = privacy === 'public';
@@ -54,6 +56,15 @@ export function ShareContent({
   const handlePublicClick = () => {
     onPrivacyChange('public');
     copyToClipboard();
+  };
+
+  useEffect(() => {
+    setGifPrepared(false);
+  }, [meshId, openscadProject]);
+
+  const handleGifAction = async () => {
+    const result = await downloadGifRef.current?.downloadGIF();
+    setGifPrepared(result === 'prepared');
   };
 
   return (
@@ -157,7 +168,7 @@ export function ShareContent({
 
       {readyToDownload && (meshId || openscadProject) ? (
         <Button
-          onClick={() => downloadGifRef.current?.downloadGIF()}
+          onClick={handleGifAction}
           disabled={isGenerating}
           className="relative overflow-hidden disabled:opacity-100"
           variant="light"
@@ -174,8 +185,10 @@ export function ShareContent({
               <ActivityIndicator label="Generating GIF" size="sm" />
               Generating...
             </div>
-          ) : (
+          ) : gifPrepared ? (
             'Download GIF'
+          ) : (
+            'Generate GIF'
           )}
         </Button>
       ) : null}

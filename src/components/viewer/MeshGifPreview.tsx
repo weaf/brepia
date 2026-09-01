@@ -29,6 +29,12 @@ const vertexShader = `
 
 const fragmentShader = quantizeFragmentShader;
 
+export type GifDownloadActionResult = 'prepared' | 'downloaded' | 'unavailable';
+
+export type GifDownloadHandle = {
+  downloadGIF: () => Promise<GifDownloadActionResult>;
+};
+
 export function MeshGifPreview({
   ref,
   meshId,
@@ -37,7 +43,7 @@ export function MeshGifPreview({
   setProgress,
   setReadyToDownload,
 }: {
-  ref: React.RefObject<{ downloadGIF: () => Promise<void> } | null>;
+  ref: React.RefObject<GifDownloadHandle | null>;
   meshId?: string;
   externalGltf?: GLTF | null;
   setIsGenerating: (isGenerating: boolean) => void;
@@ -58,6 +64,16 @@ export function MeshGifPreview({
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const pmremGeneratorRef = useRef<THREE.PMREMGenerator | null>(null);
+  const preparedDownloadRef = useRef<{
+    objectUrl: string;
+    filename: string;
+  } | null>(null);
+
+  const revokePreparedDownload = useCallback(() => {
+    if (!preparedDownloadRef.current) return;
+    URL.revokeObjectURL(preparedDownloadRef.current.objectUrl);
+    preparedDownloadRef.current = null;
+  }, []);
 
   // Cleanup function for Three.js objects
   const cleanupThreeJS = useCallback(() => {
@@ -111,16 +127,18 @@ export function MeshGifPreview({
   useEffect(() => {
     return () => {
       cleanupThreeJS();
+      revokePreparedDownload();
     };
-  }, [cleanupThreeJS]);
+  }, [cleanupThreeJS, revokePreparedDownload]);
 
   useEffect(() => {
+    revokePreparedDownload();
     if (externalGltf !== undefined) {
       setGltf(externalGltf);
       return;
     }
     setGltf(null);
-  }, [meshId, externalGltf]);
+  }, [meshId, externalGltf, revokePreparedDownload]);
 
   const {
     data: { data: meshData, isLoading: isMeshDataLoading },
@@ -593,56 +611,69 @@ export function MeshGifPreview({
     [canvas, render, setProgress, logoImage],
   );
 
-  const downloadGIF = useCallback(async () => {
-    if (!canvas) {
-      return;
-    }
+  const downloadGIF =
+    useCallback(async (): Promise<GifDownloadActionResult> => {
+      // Mobile browsers can drop transient user activation while the GIF is
+      // generated. If a GIF is already prepared, perform the anchor click
+      // synchronously before the first await so the download remains tied to
+      // this fresh user gesture.
+      const preparedDownload = preparedDownloadRef.current;
+      if (preparedDownload) {
+        const link = document.createElement('a');
+        link.href = preparedDownload.objectUrl;
+        link.download = preparedDownload.filename;
+        link.rel = 'noopener';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
 
-    setIsGenerating(true);
-    isGeneratingRef.current = true;
+        preparedDownloadRef.current = null;
+        window.setTimeout(
+          () => URL.revokeObjectURL(preparedDownload.objectUrl),
+          1000,
+        );
+        return 'downloaded';
+      }
 
-    let buffer: BlobPart | undefined;
+      if (!canvas) {
+        return 'unavailable';
+      }
 
-    try {
-      buffer = await generateGIF(4, 30);
-    } catch (error) {
-      console.error('Error generating GIF:', error);
-    } finally {
-      setIsGenerating(false);
-      isGeneratingRef.current = false;
-    }
+      setIsGenerating(true);
+      isGeneratingRef.current = true;
 
-    // Download
-    if (!buffer) {
-      return;
-    }
+      let buffer: BlobPart | undefined;
 
-    const blob = new Blob([buffer], { type: 'image/gif' });
+      try {
+        buffer = await generateGIF(4, 30);
+      } catch (error) {
+        console.error('Error generating GIF:', error);
+      } finally {
+        setIsGenerating(false);
+        isGeneratingRef.current = false;
+      }
 
-    const objectUrl = URL.createObjectURL(blob);
-    const safeBaseName = getSafeFilename(
-      conversation.title || 'animation',
-      'animation',
-    );
-    const filename = safeBaseName.toLowerCase().endsWith('.gif')
-      ? safeBaseName
-      : `${safeBaseName}.gif`;
+      if (!buffer) {
+        return 'unavailable';
+      }
 
-    // Keep the anchor attached and the object URL alive long enough for
-    // mobile browsers to hand the download off to their download manager.
-    // Revoking synchronously after click() can turn an otherwise valid
-    // blob download into a no-op on Android/WebKit-based browsers.
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = filename;
-    link.rel = 'noopener';
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+      const blob = new Blob([buffer], { type: 'image/gif' });
+      const objectUrl = URL.createObjectURL(blob);
+      const safeBaseName = getSafeFilename(
+        conversation.title || 'animation',
+        'animation',
+      );
+      const filename = safeBaseName.toLowerCase().endsWith('.gif')
+        ? safeBaseName
+        : `${safeBaseName}.gif`;
 
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-  }, [canvas, generateGIF, conversation.title, setIsGenerating]);
+      // Keep the prepared URL alive until the user explicitly taps Download
+      // (or until the model changes/unmounts). The second tap is then a pure
+      // synchronous download gesture, which is reliable on Android browsers.
+      preparedDownloadRef.current = { objectUrl, filename };
+      return 'prepared';
+    }, [canvas, generateGIF, conversation.title, setIsGenerating]);
 
   useImperativeHandle(ref, () => ({
     downloadGIF,

@@ -8,7 +8,7 @@ import {
   buildColoredGroupFromOff,
   disposeColoredGroup,
 } from '@/utils/coloredOffMesh';
-import { MeshGifPreview } from './MeshGifPreview';
+import { MeshGifPreview, type GifDownloadHandle } from './MeshGifPreview';
 
 const FALLBACK_COLOR_HEX = 0x00a6ff;
 
@@ -17,7 +17,7 @@ const FALLBACK_COLOR_HEX = 0x00a6ff;
 const FALLBACK_COLOR_RGB = FALLBACK_COLOR_HEX;
 
 interface OpenSCADGifPreviewProps {
-  ref: React.RefObject<{ downloadGIF: () => Promise<void> } | null>;
+  ref: React.RefObject<GifDownloadHandle | null>;
   project: OpenScadProject;
   setIsGenerating: (isGenerating: boolean) => void;
   setProgress: (progress: number) => void;
@@ -37,12 +37,13 @@ export function OpenSCADGifPreview({
   // reproduce OpenSCAD's `color()` calls in the GIF.
   const { previewProjectColored } = useOpenSCAD();
   const [gltf, setGltf] = useState<GLTF | null>(null);
-  const meshGifRef = useRef<{ downloadGIF: () => Promise<void> } | null>(null);
+  const meshGifRef = useRef<GifDownloadHandle | null>(null);
   const lastColoredGroupRef = useRef<THREE.Group | null>(null);
 
   useImperativeHandle(ref, () => ({
     downloadGIF: async () => {
-      await meshGifRef.current?.downloadGIF();
+      const handle = meshGifRef.current;
+      return handle ? handle.downloadGIF() : 'unavailable';
     },
   }));
 
