@@ -619,15 +619,29 @@ export function MeshGifPreview({
 
     const blob = new Blob([buffer], { type: 'image/gif' });
 
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = getSafeFilename(
+    const objectUrl = URL.createObjectURL(blob);
+    const safeBaseName = getSafeFilename(
       conversation.title || 'animation',
       'animation',
     );
-    link.click();
+    const filename = safeBaseName.toLowerCase().endsWith('.gif')
+      ? safeBaseName
+      : `${safeBaseName}.gif`;
 
-    URL.revokeObjectURL(link.href);
+    // Keep the anchor attached and the object URL alive long enough for
+    // mobile browsers to hand the download off to their download manager.
+    // Revoking synchronously after click() can turn an otherwise valid
+    // blob download into a no-op on Android/WebKit-based browsers.
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.rel = 'noopener';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   }, [canvas, generateGIF, conversation.title, setIsGenerating]);
 
   useImperativeHandle(ref, () => ({
