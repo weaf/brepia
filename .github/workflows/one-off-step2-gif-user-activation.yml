@@ -21,7 +21,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply two-stage mobile GIF patch
-        run: python3 scripts/one_off_step2_gif_user_activation.py
+        run: |
+          python3 scripts/one_off_step2_gif_user_activation.py
+          python3 scripts/one_off_step2_gif_downloadmenu_fix.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,10 +52,13 @@ jobs:
           grep -q "'downloaded'" src/components/viewer/MeshGifPreview.tsx
           grep -q "Generate GIF" src/components/ui/ShareContent.tsx
           grep -q "preparedDownloadRef" src/components/viewer/MeshGifPreview.tsx
+          grep -q "GifDownloadHandle" src/components/viewer/DownloadMenu.tsx
+          grep -q "Generate animation" src/components/viewer/DownloadMenu.tsx
 
       - name: Remove one-off files
         run: |
           rm scripts/one_off_step2_gif_user_activation.py
+          rm scripts/one_off_step2_gif_downloadmenu_fix.py
           rm .github/workflows/one-off-step2-gif-user-activation.yml
 
       - name: Commit GIF mobile fix
