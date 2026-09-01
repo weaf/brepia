@@ -14,15 +14,11 @@ Step 2 is complete. The project-native browser OpenSCAD runtime, full multi-file
 
 Step 3 is complete. Local folder import constructs a bounded normalized `OpenScadProject`, preserves nested `.scad` paths, validates project-local `include`/`use` dependencies, chooses an unambiguous entrypoint automatically, and presents an explicit entrypoint chooser when several independent model roots exist. The real browser acceptance corpus passed on 2026-09-01 using the stable `./start.sh` runtime.
 
-Primary Step 3 implementation commit:
+Step 4 implementation and automated verification are complete. A selected repository `.scad` remains the entrypoint while Brepia recursively resolves bounded repository-local static `include`/`use` dependencies at the same Git ref. Real browser acceptance is still required before Step 4 is formally closed.
 
-`2a710ac7d35a4f907c0074e1a866ed3d8f30a7df` — `Add local OpenSCAD folder project import`
+Current Step 4 implementation head:
 
-Step 3 closeout fixes:
-
-- `53e8cbc8c3dc4e43af17d3ff542593c6ce93e9fc` — skip render mirroring for synthetic imported SCAD revisions;
-- `ae4e89fbc201dcc34b5e56da283b78feaa02d98d` — constrain parameterless mobile OpenSCAD preview height;
-- `7b5811c77710a07695962126baf8309611948033` — restore the original `.scad,.scad.txt` picker behavior after identifying HMR as the source of the temporary picker failure.
+`e285af99f3d0ba8be0e4361fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`
 
 ## Step 1 — completed
 
@@ -72,7 +68,7 @@ Manual Step 2 acceptance passed:
 
 ### Local folder acquisition
 
-`ScadImportButton` exposes separate local actions for `Import SCAD` and `Import folder`, alongside the existing GitHub import action.
+`ScadImportButton` exposes separate local actions for `Import SCAD` and `Import folder`, alongside the GitHub import action.
 
 Folder selection uses the browser directory picker attributes (`webkitdirectory` plus `directory`) and consumes `File.webkitRelativePath` so source hierarchy is preserved. Non-SCAD files are ignored during this source-only phase. `.scad.txt` aliases are accepted and normalized to `.scad` paths.
 
@@ -109,7 +105,7 @@ If more than one plausible independent root remains, Brepia opens an entrypoint 
 
 ### Persistence and baseline compile
 
-`createImportedScadProject` accepts either the existing single-file `{ filename, code }` input or a complete `{ filename, title, project }` input. This preserves the existing standalone and GitHub one-file callers while letting local folder import persist the complete normalized project through the same conversation/artifact path.
+`createImportedScadProject` accepts either the existing single-file `{ filename, code }` input or a complete `{ filename, title, project }` input. This preserves standalone callers while letting local folder and project-aware GitHub import persist complete normalized projects through the same conversation/artifact path.
 
 The complete project is baseline-compiled through the project-aware browser worker before persistence. Synthetic `tool_import_...` revisions are excluded from Supabase render mirroring because their baseline render is local and no corresponding private Storage object exists.
 
@@ -124,8 +120,6 @@ GitHub Actions Quality Gate run `223` (`33476451763`) for `2a710ac7d35a4f907c007
 - typecheck: PASS;
 - lint with zero warnings: PASS;
 - production build, including client, SSR and Nitro: PASS.
-
-The added folder-import tests cover nested source preservation, automatic `main.scad` selection, a single non-main top-level source, dependency-graph root detection, ambiguous entrypoint selection, `.scad.txt` normalization, ignored non-SCAD files, missing dependencies, project-root escape attempts, malformed picker paths, unsupported external assets, and folders without SCAD sources.
 
 The final picker-restoration commit `7b5811c77710a07695962126baf8309611948033` also passed Quality Gate run `231` (`33529279483`).
 
@@ -146,13 +140,72 @@ The temporary inability to pick `.scad` files was reproduced only while running 
 
 Step 3 acceptance is complete.
 
+## Step 4 — implementation complete, manual acceptance pending
+
+### Entrypoint-driven repository resolution
+
+GitHub repository import remains entrypoint-driven rather than ingesting an arbitrary repository tree. The pasted GitHub blob/raw `.scad` URL identifies both the selected repository/ref and the project entrypoint. `src/server/githubScadImport.ts` then fetches only the transitive static `.scad` source dependencies required by that entrypoint.
+
+Repository source behavior:
+
+- the selected repository path is preserved as `project.entrypointPath`;
+- static non-bundled `include`/`use` targets resolve relative to the calling source using the shared Step 2 path semantics;
+- every dependency is fetched from the same owner/repository/ref through the fixed GitHub contents API host;
+- dependency traversal is deduplicated and cycle-protected;
+- bundled BOSL/BOSL2/MCAD references are left to the existing bundled-library runtime and are never fetched from the repository;
+- root-escaping, invalid or non-`.scad` source references fail before an outbound dependency fetch;
+- missing repository-local source files fail with a dependency-specific error;
+- symlink/submodule/non-regular responses are rejected rather than followed;
+- `import()` and `surface()` remain explicitly unsupported until Step 7 relative assets;
+- Gists intentionally remain exactly-one-`.scad` and now return the same one-file project-native response shape.
+
+### Bounds and transport
+
+Resolution reuses the normalized project limits: 64 source files, 256,000 UTF-8 bytes per source and 1,048,576 UTF-8 bytes total. Source payloads must be valid UTF-8 and may not contain NUL/binary data. In addition to the existing 10-second per-request timeout, repository project discovery has a bounded overall resolution budget.
+
+The client/API response is now `{ filename, project, canonicalUrl }` instead of `{ filename, code, canonicalUrl }`. `GithubScadImportButton` persists the returned complete project through `createImportedScadProject`, records file count/import kind telemetry and still baseline-compiles the complete project before creating the imported conversation artifact.
+
+Important Step 4 commits:
+
+- `5473e914b069504f416498db91e39feef6f78d44` — `Resolve GitHub OpenSCAD project dependencies`;
+- `443d9f4b1234b99dd668db0847ef7a0a3c35b2e2` — `Import resolved GitHub OpenSCAD projects`;
+- `e285af99f3d0ba8be0e4361fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`.
+
+### Step 4 automated verification
+
+GitHub Actions Quality Gate run `237` (`33532720138`) for `e285af99f3d0ba8be0e4361fc8a471dc559c9556` passed:
+
+- dependency audit: PASS, 0 vulnerabilities;
+- 52 test files: PASS;
+- 418 tests: PASS;
+- `tests/githubScadImport.test.ts`: 20 tests PASS;
+- typecheck: PASS;
+- lint with zero warnings: PASS;
+- production build, including client, SSR and Nitro: PASS.
+
+Focused GitHub import coverage includes standalone project-native import, percent-encoded paths, nested same-ref dependency resolution, parent/sibling references, cycle deduplication, bundled-library skipping, missing dependencies, root escape rejection, non-regular-file rejection, deferred relative assets, file-count bounds, per-file source bounds, Gist behavior and fixed-host transport failure behavior.
+
+The ordinary Quality Gate does not run `git diff --check`; this status does not claim that check for the Step 4 checkpoint.
+
+### Step 4 manual acceptance to run
+
+Use the stable `./start.sh` runtime, not HMR.
+
+1. **Standalone GitHub regression:** import a normal standalone GitHub `.scad`; it should render as a one-file project as before.
+2. **Repository-local dependency:** import `https://github.com/bmsleight/lasercut/blob/master/readme/example-001.scad`. It contains `include <../lasercut.scad>`; Brepia should automatically fetch `lasercut.scad` from the same repository/ref and render without asking for a folder.
+3. **Persistence:** reopen/reload the multi-file GitHub-imported conversation and confirm it still renders.
+4. **Bundled-library regression:** import a GitHub SCAD that uses bundled BOSL/BOSL2/MCAD; bundled libraries should continue to resolve through the browser runtime rather than repository fetching.
+5. **Failure path:** a repository entrypoint with a missing local `.scad` dependency should fail clearly and must not create a broken imported conversation.
+
+If these real browser checks pass, Step 4 can be marked complete.
+
 ## UX follow-up outside Step 3
 
 The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobile still exposes the projection and rotation controls, but not a direct Top/Front/Right orientation control. Add at least a compact mobile orientation button that opens or exposes the same deterministic orientation actions; a permanently visible full-size cube is optional. This is a later UX follow-up and is not part of the completed Step 3 scope.
 
 ## Not completed yet
 
-- Step 4 recursive GitHub project dependency resolution;
+- Step 4 real browser acceptance;
 - Step 5 full multi-file AI/external-agent editing protocol;
 - Step 6 complete project snapshots in the local conversation-workspace mirror;
 - Step 7 explicit normalized relative assets;
@@ -162,4 +215,4 @@ The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobi
 
 ## Next checkpoint
 
-Begin Step 4 recursive GitHub project dependency resolution. Reconcile the Step 4 plan against the current branch before implementation, preserve the Step 3 local import behavior, and keep the PR in draft state.
+Pull the latest feature branch and run the Step 4 browser acceptance corpus above. If it is green, mark Step 4 complete and continue to Step 5 project-native AI/external-agent editing.
