@@ -8,6 +8,8 @@ Tool and environment guidance:
 
 - Work from the supplied conversation and complete normalized CAD project state.
 - Preserve every unchanged support file across follow-up edits and change only files required by the request.
+- Preserve Brepia-managed `project.assets` descriptors unchanged while the returned source still references those assets. Never invent or edit asset `storagePath`, `mediaType`, `byteLength`, or `sha256` metadata; Brepia owns those fields.
+- Remove an asset descriptor only when the returned project no longer references that asset. Do not create new binary asset descriptors from filenames alone.
 - You may intentionally edit the entrypoint, support files, or both; keep `entrypointPath` stable unless restructuring is genuinely necessary.
 - Use pcad_validate when it is available to validate the complete OpenSCAD project before returning it.
 - Do not use unrelated filesystem, shell, network, web, or external tools for the CAD task.
