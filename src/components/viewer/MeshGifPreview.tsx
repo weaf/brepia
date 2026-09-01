@@ -28,6 +28,7 @@ const vertexShader = `
 `;
 
 const fragmentShader = quantizeFragmentShader;
+const brepiaWatermarkUrl = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}brepia-watermark.svg`;
 
 export type GifDownloadActionResult = 'prepared' | 'downloaded' | 'unavailable';
 
@@ -55,7 +56,7 @@ export function MeshGifPreview({
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const logoImage = useMemo(() => {
     const img = new Image();
-    img.src = `${import.meta.env.BASE_URL}/brepia-watermark.svg`; // served from public folder root
+    img.src = brepiaWatermarkUrl;
     return img;
   }, []);
   const isGeneratingRef = useRef(false);
@@ -501,11 +502,12 @@ export function MeshGifPreview({
         return;
       }
 
-      // Ensure the watermark image is fully loaded before starting generation
+      // Give the watermark a chance to load, but do not make GIF generation
+      // depend on it. A missing branding asset must never block the export.
       if (!logoImage.complete) {
         await new Promise<void>((resolve) => {
           logoImage.onload = () => resolve();
-          logoImage.onerror = () => resolve(); // proceed even if load fails
+          logoImage.onerror = () => resolve();
         });
       }
 
@@ -536,21 +538,22 @@ export function MeshGifPreview({
 
         context.drawImage(canvas, 0, 0);
 
-        // Draw Brepia watermark in the bottom-right corner
-        const margin = 12;
-        const logoWidth = newCanvas.width * 0.15; // 15% of canvas width
-        const aspectRatio =
-          logoImage.height && logoImage.width
-            ? logoImage.height / logoImage.width
-            : 1;
-        const logoHeight = logoWidth * aspectRatio;
-        context.drawImage(
-          logoImage,
-          newCanvas.width - logoWidth - margin,
-          newCanvas.height - logoHeight - margin,
-          logoWidth,
-          logoHeight,
-        );
+        // Draw the Brepia watermark only when the asset decoded successfully.
+        // Broken image elements throw from drawImage(), which would otherwise
+        // abort the entire GIF generation path.
+        if (logoImage.naturalWidth > 0 && logoImage.naturalHeight > 0) {
+          const margin = 12;
+          const logoWidth = newCanvas.width * 0.15; // 15% of canvas width
+          const aspectRatio = logoImage.naturalHeight / logoImage.naturalWidth;
+          const logoHeight = logoWidth * aspectRatio;
+          context.drawImage(
+            logoImage,
+            newCanvas.width - logoWidth - margin,
+            newCanvas.height - logoHeight - margin,
+            logoWidth,
+            logoHeight,
+          );
+        }
 
         const data = context.getImageData(
           0,
@@ -735,7 +738,7 @@ export function MeshGifPreview({
           ref={canvasRefCallback}
         />
         <img
-          src={`${import.meta.env.BASE_URL}/brepia-watermark.svg`}
+          src={brepiaWatermarkUrl}
           alt="Brepia watermark"
           className="pointer-events-none absolute bottom-3 right-3 w-[15%] select-none"
         />
