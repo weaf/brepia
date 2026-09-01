@@ -39,6 +39,9 @@ replace_all(
     ],
 )
 
+# The generic project-test codemod already converts the simple
+# `code: codes[turn - 1]` CLI fixture. Only the comma-containing string
+# fixtures need explicit conversion here.
 replace_all(
     'tests/cliAgentPersistentSession.test.ts',
     [
@@ -49,10 +52,6 @@ replace_all(
         (
             "              code: 'width = 20;\\ncube([width, 20, 10]);',",
             "              project: project('width = 20;\\ncube([width, 20, 10]);'),",
-        ),
-        (
-            "            code: codes[turn - 1],",
-            "            project: project(codes[turn - 1]),",
         ),
     ],
 )
