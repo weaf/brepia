@@ -148,7 +148,7 @@ Step 3 acceptance is complete.
 
 ## UX follow-up outside Step 3
 
-The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobile still exposes the projection and rotation controls, but not a direct Top/Front/Right orientation control. Add a compact mobile orientation button/gizmo as a later UX follow-up; do not fold it into the completed Step 3 scope.
+The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobile still exposes the projection and rotation controls, but not a direct Top/Front/Right orientation control. Add at least a compact mobile orientation button that opens or exposes the same deterministic orientation actions; a permanently visible full-size cube is optional. This is a later UX follow-up and is not part of the completed Step 3 scope.
 
 ## Not completed yet
 
