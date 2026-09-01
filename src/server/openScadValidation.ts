@@ -10,6 +10,8 @@ import {
   normalizeOpenScadProject,
   type OpenScadProject,
 } from '@shared/openScadProject';
+import { validateOpenScadProjectReferences } from '@shared/openScadProjectReferences';
+import type { ServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
 
 export type OpenScadValidation = {
   valid: boolean;
@@ -56,12 +58,20 @@ function invalid(diagnostics: string): OpenScadValidation {
 export async function validateOpenScadProject(
   project: OpenScadProject,
   signal?: AbortSignal,
+  resolveAsset?: ServerOpenScadProjectAssetResolver,
 ): Promise<OpenScadValidation> {
   let normalized: OpenScadProject;
   try {
     normalized = normalizeOpenScadProject(project);
+    validateOpenScadProjectReferences(normalized);
   } catch (error) {
     return invalid(error instanceof Error ? error.message : String(error));
+  }
+
+  if (normalized.assets?.length && !resolveAsset) {
+    return invalid(
+      'OpenSCAD project assets require a conversation-scoped server asset resolver.',
+    );
   }
 
   const dir = await mkdtemp(join(tmpdir(), 'pcad-openscad-project-'));
@@ -71,6 +81,19 @@ export async function validateOpenScadProject(
       const target = join(dir, ...file.path.split('/'));
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, file.content, 'utf8');
+    }
+
+    if (normalized.assets?.length) {
+      try {
+        for (const asset of normalized.assets) {
+          const bytes = await resolveAsset!(asset);
+          const target = join(dir, ...asset.path.split('/'));
+          await mkdir(dirname(target), { recursive: true });
+          await writeFile(target, bytes);
+        }
+      } catch (error) {
+        return invalid(error instanceof Error ? error.message : String(error));
+      }
     }
 
     const sourcePath = join(dir, ...normalized.entrypointPath.split('/'));
