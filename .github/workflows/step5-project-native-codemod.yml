@@ -23,6 +23,7 @@ jobs:
         run: |
           python3 scripts/apply-step5-project-native.py
           python3 scripts/apply-step5-project-tests.py
+          python3 scripts/apply-step5-test-fixture-fixes.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -52,6 +53,7 @@ jobs:
         run: |
           rm scripts/apply-step5-project-native.py
           rm scripts/apply-step5-project-tests.py
+          rm scripts/apply-step5-test-fixture-fixes.py
           rm .github/workflows/step5-project-native-codemod.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
