@@ -13,6 +13,7 @@ import { useConversation } from '@/contexts/ConversationContext';
 import { submitChatText } from '@/lib/chatSubmitBridge';
 import OpenSCADError from '@/lib/OpenSCADError';
 import { openScadFixPrompt } from '@/lib/openScadFixPrompt';
+import { hydrateOpenScadProjectAssets } from '@/lib/openScadProjectAssetStorage';
 import { cn } from '@/lib/utils';
 import { MeshFilesContext } from '@/contexts/MeshFilesContext';
 import { createDXFProjectionCode } from '@/utils/dxfUtils';
@@ -110,17 +111,31 @@ export function OpenSCADPreview({
   );
   const canFixWithAi = !!fixError || !!conversation.id;
 
-  // Shared by preview compilation and on-demand exports so import() files are
-  // available in the OpenSCAD worker before either operation runs.
+  // Shared by preview compilation and on-demand exports so import()/surface()
+  // assets are available in the OpenSCAD worker before either operation runs.
   const prepareMeshFiles = useCallback(
     async (projectValue: OpenScadProject) => {
-      // Asset transfer remains the existing external mesh cache until the
-      // explicit project-asset phase. Preserve current single-file behavior
-      // by scanning the entrypoint while all .scad sources live in the project.
+      if (projectValue.assets?.length) {
+        await hydrateOpenScadProjectAssets(
+          projectValue,
+          {
+            userId: conversation.user_id,
+            conversationId: conversation.id,
+          },
+          async (path, blob) => {
+            const writtenBlob = writtenFilesRef.current.get(path);
+            if (writtenBlob === blob) return;
+            await writeFile(path, blob);
+            writtenFilesRef.current.set(path, blob);
+          },
+        );
+        return;
+      }
+
+      // Compatibility for artifacts created before explicit asset manifests.
       const entrypoint = getOpenScadEntrypoint(projectValue);
       const importedFiles = extractImportFilenames(entrypoint.content);
 
-      // Write any mesh files that haven't been written yet
       if (!meshFilesCtx) return;
 
       for (const filename of importedFiles) {
@@ -135,7 +150,7 @@ export function OpenSCADPreview({
         }
       }
     },
-    [writeFile, meshFilesCtx],
+    [conversation.id, conversation.user_id, writeFile, meshFilesCtx],
   );
 
   // Recompile the preview whenever the current OpenSCAD project changes.
