@@ -34,6 +34,50 @@ jobs:
           PY
       - name: Apply project-runtime migration
         run: python3 scripts/one-off-step2-project-runtime.py
+      - name: Make ChatTitle share project-aware
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new, expected=1):
+              p = Path(path)
+              text = p.read_text()
+              found = text.count(old)
+              if found != expected:
+                  raise SystemExit(f'{path}: expected {expected}, found {found}: {old[:80]!r}')
+              p.write_text(text.replace(old, new))
+
+          replace_exact(
+              'src/components/chat/ChatTitle.tsx',
+              "} from '@shared/aiInstructionCatalog';\n",
+              "} from '@shared/aiInstructionCatalog';\nimport type { OpenScadProject } from '@shared/openScadProject';\n",
+          )
+          replace_exact(
+              'src/components/chat/ChatTitle.tsx',
+              "  activeOpenscadCode?: string | null;\n}",
+              "  activeOpenscadCode?: string | null;\n  activeOpenscadProject?: OpenScadProject | null;\n}",
+          )
+          replace_exact(
+              'src/components/chat/ChatTitle.tsx',
+              "  activeMeshId,\n  activeOpenscadCode,\n}: ChatTitleProps = {}) {",
+              "  activeMeshId,\n  activeOpenscadCode,\n  activeOpenscadProject,\n}: ChatTitleProps = {}) {",
+          )
+          replace_exact(
+              'src/components/chat/ChatTitle.tsx',
+              "                          openscadCode={activeOpenscadCode ?? undefined}",
+              "                          openscadProject={activeOpenscadProject ?? undefined}",
+          )
+          replace_exact(
+              'src/views/EditorView.tsx',
+              "                  activeOpenscadCode={shareArtifactCode}\n                />",
+              "                  activeOpenscadCode={shareArtifactCode}\n                  activeOpenscadProject={\n                    sharePreview?.type === 'artifact'\n                      ? sharePreview.artifact.project\n                      : undefined\n                  }\n                />",
+          )
+          replace_exact(
+              'src/views/ShareView.tsx',
+              "                activeOpenscadCode={activeArtifactCode}\n              />",
+              "                activeOpenscadCode={activeArtifactCode}\n                activeOpenscadProject={\n                  activePreview?.type === 'artifact'\n                    ? activePreview.artifact.project\n                    : undefined\n                }\n              />",
+          )
+          PY
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -54,6 +98,7 @@ jobs:
           ! grep -R "previewScadColoredViaToolWorker(code)" -n src
           ! grep -R "previewScadColored(preview.code)" -n src
           ! grep -R "data.code" -n src/worker/openSCAD.ts src/worker/worker.ts
+          ! grep -R "openscadCode=" -n src/components/chat/ChatTitle.tsx src/components/ui/ShareContent.tsx
       - name: Remove one-off migration files
         run: |
           rm scripts/one-off-step2-project-runtime.py
