@@ -44,7 +44,7 @@ text = text.replace(
     "    assert.match(reused, /lib\\/support\\.scad/);\n"
     "    assert.match(reused, /module support_part/);\n"
     "    assert.match(reused, /\\\"entrypointPath\\\":\\\"main.scad\\\"/);\n"
-    "    assert.doesNotMatch(reused, /<openscad>/);\n",
+    "    assert.doesNotMatch(reused, /<current_pcad_artifact>\\n<openscad>/);\n",
     1,
 )
 text = text.replace(
@@ -72,7 +72,7 @@ text = text.replace(
     "    assert.match(text, /lib\\/support\\.scad/);\n"
     "    assert.match(text, /module support_part/);\n"
     "    assert.match(text, /\\\"entrypointPath\\\":\\\"main.scad\\\"/);\n"
-    "    assert.doesNotMatch(text, /<openscad>/);\n",
+    "    assert.doesNotMatch(text, /<current_pcad_artifact>\\n<openscad>/);\n",
     1,
 )
 p.write_text(text)
