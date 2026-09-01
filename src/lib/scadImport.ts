@@ -1,13 +1,21 @@
 import { OPENSCAD_MAX_SOURCE_BYTES } from '@/lib/openScadLimits';
 import {
+  OPENSCAD_PROJECT_MAX_ASSETS,
+  OPENSCAD_PROJECT_MAX_ASSET_BYTES,
   OPENSCAD_PROJECT_MAX_FILES,
+  OPENSCAD_PROJECT_MAX_TOTAL_ASSET_BYTES,
   OPENSCAD_PROJECT_MAX_TOTAL_BYTES,
+  isOpenScadProjectAssetPathSupportedForKind,
   normalizeOpenScadProject,
   normalizeOpenScadProjectPath,
+  openScadProjectAssetMediaTypeForPath,
   type OpenScadProject,
   type OpenScadProjectFile,
 } from '@shared/openScadProject';
-import { validateOpenScadProjectSourceReferences } from '@shared/openScadProjectReferences';
+import {
+  collectOpenScadProjectAssetReferences,
+  validateOpenScadProjectSourceReferences,
+} from '@shared/openScadProjectReferences';
 
 export type ScadImportErrorCode =
   | 'invalid_extension'
@@ -17,7 +25,9 @@ export type ScadImportErrorCode =
   | 'source_too_short'
   | 'unsupported_dependency'
   | 'too_many_files'
+  | 'too_many_assets'
   | 'project_too_large'
+  | 'assets_too_large'
   | 'missing_relative_path'
   | 'mixed_folder'
   | 'no_scad_files'
@@ -45,10 +55,16 @@ export type ScadFolderSourceInput = {
   bytes: Uint8Array;
 };
 
+export type ScadFolderAssetInput = {
+  path: string;
+  bytes: Uint8Array;
+};
+
 export type PendingScadFolderImport = {
   title: string;
   filename: string;
   files: OpenScadProjectFile[];
+  assets: ScadFolderAssetInput[];
   entrypointCandidates: string[];
 };
 
@@ -58,6 +74,7 @@ export type ScadFolderImportResult =
       title: string;
       filename: string;
       project: OpenScadProject;
+      assets: ScadFolderAssetInput[];
     }
   | {
       kind: 'entrypoint-required';
@@ -70,6 +87,10 @@ const SCAD_FILENAME = /\.scad(?:\.txt)?$/i;
 
 export function isSupportedScadFilename(filename: string): boolean {
   return SCAD_FILENAME.test(filename.trim());
+}
+
+export function isSupportedScadAssetFilename(filename: string): boolean {
+  return openScadProjectAssetMediaTypeForPath(filename.trim()) !== null;
 }
 
 function assertScadFilename(filename: string): void {
@@ -176,7 +197,7 @@ export function findUnsupportedScadDependencies(
       kind: 'import',
       target: 'external asset',
       message:
-        'import(...) asset dependencies are not supported by single-file SCAD import yet.',
+        'import(...) asset dependencies require a project folder so Brepia can resolve the referenced file explicitly.',
     });
   }
 
@@ -185,7 +206,7 @@ export function findUnsupportedScadDependencies(
       kind: 'surface',
       target: 'external asset',
       message:
-        'surface(...) file dependencies are not supported by single-file SCAD import yet.',
+        'surface(...) file dependencies require a project folder so Brepia can resolve the referenced file explicitly.',
     });
   }
 
@@ -278,10 +299,10 @@ export function scadImportProjectPath(filename: string): string {
   return basename.replace(/\.scad\.txt$/i, '.scad');
 }
 
-function folderSourcePath(relativePath: string): {
-  root: string;
-  projectPath: string;
-} {
+function folderProjectPath(
+  relativePath: string,
+  options: { normalizeScadAlias: boolean },
+): { root: string; projectPath: string } {
   if (!relativePath.trim()) {
     throw new ScadImportError(
       'missing_relative_path',
@@ -298,27 +319,31 @@ function folderSourcePath(relativePath: string): {
     );
   }
 
-  // Validate the picker root separately so a malicious/invalid first segment
-  // cannot disappear merely because Brepia strips the selected root folder.
   const root = normalizeOpenScadProjectPath(segments[0]);
-  const sourcePath = segments.slice(1).join('/').replace(/\.scad\.txt$/i, '.scad');
-  const projectPath = normalizeOpenScadProjectPath(sourcePath);
-  return { root, projectPath };
+  let childPath = segments.slice(1).join('/');
+  if (options.normalizeScadAlias) {
+    childPath = childPath.replace(/\.scad\.txt$/i, '.scad');
+  }
+  return {
+    root,
+    projectPath: normalizeOpenScadProjectPath(childPath),
+  };
 }
 
-function assertFolderProjectDependencies(project: OpenScadProject): void {
-  for (const file of project.files) {
-    const assetIssue = findUnsupportedScadDependencies(file.content).find(
-      (issue) => issue.kind === 'import' || issue.kind === 'surface',
+function assertSingleFolderRoot(expected: string | null, actual: string): string {
+  if (expected !== null && expected !== actual) {
+    throw new ScadImportError(
+      'mixed_folder',
+      'Folder import received files from more than one root folder.',
     );
-    if (assetIssue) {
-      throw new ScadImportError(
-        'unsupported_dependency',
-        `${assetIssue.kind}(...) in ${file.path} requires an external asset. Folder import currently supports .scad source trees only.`,
-      );
-    }
   }
+  return actual;
+}
 
+function assertFolderProjectDependencies(
+  project: OpenScadProject,
+  availableAssets: readonly ScadFolderAssetInput[],
+): ScadFolderAssetInput[] {
   try {
     validateOpenScadProjectSourceReferences(project);
   } catch (error) {
@@ -329,6 +354,80 @@ function assertFolderProjectDependencies(project: OpenScadProject): void {
         : 'The OpenSCAD project contains an invalid source dependency.',
     );
   }
+
+  const availableByPath = new Map(
+    availableAssets.map((asset) => [asset.path, asset]),
+  );
+  const referencedPaths = new Set<string>();
+
+  let references;
+  try {
+    references = collectOpenScadProjectAssetReferences(project);
+  } catch (error) {
+    throw new ScadImportError(
+      'unsupported_dependency',
+      error instanceof Error
+        ? error.message
+        : 'The OpenSCAD project contains an invalid asset dependency.',
+    );
+  }
+
+  for (const reference of references) {
+    if (reference.dynamic || !reference.target || !reference.resolvedPath) {
+      throw new ScadImportError(
+        'unsupported_dependency',
+        `${reference.kind}(...) in ${reference.sourcePath} uses a dynamic file argument. Folder assets must use a literal filename.`,
+      );
+    }
+    if (
+      !isOpenScadProjectAssetPathSupportedForKind(
+        reference.resolvedPath,
+        reference.kind,
+      )
+    ) {
+      throw new ScadImportError(
+        'unsupported_dependency',
+        `${reference.kind}("${reference.target}") in ${reference.sourcePath} uses an unsupported asset format.`,
+      );
+    }
+    if (!availableByPath.has(reference.resolvedPath)) {
+      throw new ScadImportError(
+        'unsupported_dependency',
+        `${reference.kind}("${reference.target}") in ${reference.sourcePath} does not resolve to a supported file in the selected folder.`,
+      );
+    }
+    referencedPaths.add(reference.resolvedPath);
+  }
+
+  const sourcePaths = new Map(
+    project.files.map((file) => [file.path.toLocaleLowerCase('en-US'), file.path]),
+  );
+  const seenAssetPaths = new Map<string, string>();
+  const selectedAssets = availableAssets.filter((asset) =>
+    referencedPaths.has(asset.path),
+  );
+  for (const asset of selectedAssets) {
+    const folded = asset.path.toLocaleLowerCase('en-US');
+    const sourceCollision = sourcePaths.get(folded);
+    if (sourceCollision) {
+      throw new ScadImportError(
+        'unsupported_dependency',
+        `OpenSCAD project asset ${asset.path} collides with source ${sourceCollision}.`,
+      );
+    }
+    const existingAsset = seenAssetPaths.get(folded);
+    if (existingAsset && existingAsset !== asset.path) {
+      throw new ScadImportError(
+        'unsupported_dependency',
+        `OpenSCAD project asset paths differ only by case: ${existingAsset} and ${asset.path}.`,
+      );
+    }
+    seenAssetPaths.set(folded, asset.path);
+  }
+
+  return selectedAssets.sort((left, right) =>
+    left.path.localeCompare(right.path, 'en-US'),
+  );
 }
 
 function buildFolderProject(
@@ -340,7 +439,16 @@ function buildFolderProject(
     entrypointPath,
     files,
   });
-  assertFolderProjectDependencies(project);
+  try {
+    validateOpenScadProjectSourceReferences(project);
+  } catch (error) {
+    throw new ScadImportError(
+      'unsupported_dependency',
+      error instanceof Error
+        ? error.message
+        : 'The OpenSCAD project contains an invalid source dependency.',
+    );
+  }
   return project;
 }
 
@@ -403,14 +511,10 @@ export function decodeScadFolderImportEntries(
       );
     }
 
-    const resolved = folderSourcePath(entry.relativePath);
-    if (root === null) root = resolved.root;
-    if (root !== resolved.root) {
-      throw new ScadImportError(
-        'mixed_folder',
-        'Folder import received files from more than one root folder.',
-      );
-    }
+    const resolved = folderProjectPath(entry.relativePath, {
+      normalizeScadAlias: true,
+    });
+    root = assertSingleFolderRoot(root, resolved.root);
 
     files.push({
       path: resolved.projectPath,
@@ -418,6 +522,45 @@ export function decodeScadFolderImportEntries(
         singleFile: false,
       }),
     });
+  }
+
+  const assetEntries = entries.filter(
+    (entry) =>
+      !isSupportedScadFilename(entry.name) &&
+      isSupportedScadAssetFilename(entry.name),
+  );
+  if (assetEntries.length > OPENSCAD_PROJECT_MAX_ASSETS) {
+    throw new ScadImportError(
+      'too_many_assets',
+      `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_ASSETS} supported asset files.`,
+    );
+  }
+
+  let totalAssetBytes = 0;
+  const availableAssets: ScadFolderAssetInput[] = [];
+  for (const entry of assetEntries) {
+    if (
+      entry.bytes.byteLength <= 0 ||
+      entry.bytes.byteLength > OPENSCAD_PROJECT_MAX_ASSET_BYTES
+    ) {
+      throw new ScadImportError(
+        'too_large',
+        `OpenSCAD asset ${entry.name} must be between 1 and ${OPENSCAD_PROJECT_MAX_ASSET_BYTES} bytes.`,
+      );
+    }
+    totalAssetBytes += entry.bytes.byteLength;
+    if (totalAssetBytes > OPENSCAD_PROJECT_MAX_TOTAL_ASSET_BYTES) {
+      throw new ScadImportError(
+        'assets_too_large',
+        `OpenSCAD project assets exceed ${OPENSCAD_PROJECT_MAX_TOTAL_ASSET_BYTES} bytes.`,
+      );
+    }
+
+    const resolved = folderProjectPath(entry.relativePath, {
+      normalizeScadAlias: false,
+    });
+    root = assertSingleFolderRoot(root, resolved.root);
+    availableAssets.push({ path: resolved.projectPath, bytes: entry.bytes });
   }
 
   const nonEmpty = files.filter((file) => file.content.trim());
@@ -428,10 +571,11 @@ export function decodeScadFolderImportEntries(
     );
   }
 
-  // The reference validator is entrypoint-independent, but project
-  // normalization requires one. Use a temporary non-empty source solely to
-  // validate the complete tree and derive dependency roots.
   const validationProject = buildFolderProject(files, nonEmpty[0].path);
+  const assets = assertFolderProjectDependencies(
+    validationProject,
+    availableAssets,
+  );
   const automaticEntrypoint = chooseAutomaticEntrypoint(validationProject);
   const title = root?.trim() || 'Imported OpenSCAD project';
   const filename = title;
@@ -442,6 +586,7 @@ export function decodeScadFolderImportEntries(
       title,
       filename,
       project: buildFolderProject(files, automaticEntrypoint),
+      assets,
     };
   }
 
@@ -451,6 +596,7 @@ export function decodeScadFolderImportEntries(
       title,
       filename,
       files: validationProject.files,
+      assets,
       entrypointCandidates: nonEmpty
         .map((file) => file.path)
         .sort((left, right) => left.localeCompare(right, 'en-US')),
@@ -461,32 +607,19 @@ export function decodeScadFolderImportEntries(
 export async function readScadImportFolder(
   selectedFiles: readonly File[],
 ): Promise<ScadFolderImportResult> {
-  const sourceFiles = selectedFiles.filter((file) =>
-    isSupportedScadFilename(file.name),
+  const relevantFiles = selectedFiles.filter(
+    (file) =>
+      isSupportedScadFilename(file.name) || isSupportedScadAssetFilename(file.name),
   );
-  if (sourceFiles.length === 0) {
+  if (!relevantFiles.some((file) => isSupportedScadFilename(file.name))) {
     throw new ScadImportError(
       'no_scad_files',
       'The selected folder does not contain any .scad files.',
     );
   }
-  if (sourceFiles.length > OPENSCAD_PROJECT_MAX_FILES) {
-    throw new ScadImportError(
-      'too_many_files',
-      `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_FILES} source files.`,
-    );
-  }
-
-  const declaredBytes = sourceFiles.reduce((sum, file) => sum + file.size, 0);
-  if (declaredBytes > OPENSCAD_PROJECT_MAX_TOTAL_BYTES) {
-    throw new ScadImportError(
-      'project_too_large',
-      `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_TOTAL_BYTES} UTF-8 bytes.`,
-    );
-  }
 
   const entries = await Promise.all(
-    sourceFiles.map(async (file) => ({
+    relevantFiles.map(async (file) => ({
       name: file.name,
       relativePath: file.webkitRelativePath,
       bytes: new Uint8Array(await file.arrayBuffer()),
