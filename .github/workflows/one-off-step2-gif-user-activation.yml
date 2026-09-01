@@ -1,0 +1,66 @@
+name: One-off Step 2 GIF user activation
+
+on:
+  push:
+    branches:
+      - feature/multifile-openscad-workspace
+    paths:
+      - .github/workflows/one-off-step2-gif-user-activation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  closeout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/multifile-openscad-workspace
+          fetch-depth: 0
+
+      - name: Apply two-stage mobile GIF patch
+        run: python3 scripts/one_off_step2_gif_user_activation.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify two-stage GIF contract
+        run: |
+          grep -q "'prepared'" src/components/viewer/MeshGifPreview.tsx
+          grep -q "'downloaded'" src/components/viewer/MeshGifPreview.tsx
+          grep -q "Generate GIF" src/components/ui/ShareContent.tsx
+          grep -q "preparedDownloadRef" src/components/viewer/MeshGifPreview.tsx
+
+      - name: Remove one-off files
+        run: |
+          rm scripts/one_off_step2_gif_user_activation.py
+          rm .github/workflows/one-off-step2-gif-user-activation.yml
+
+      - name: Commit GIF mobile fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Make GIF download preserve mobile user activation"
+          git push origin HEAD:feature/multifile-openscad-workspace
