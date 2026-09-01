@@ -101,7 +101,7 @@ ${VALID_SOURCE}
     );
   });
 
-  it('rejects import() and surface() external assets', () => {
+  it('rejects import() and surface() external assets for single-file import', () => {
     const source = `
 import("mesh.stl");
 surface(file="heightmap.dat");
@@ -110,6 +110,9 @@ ${VALID_SOURCE}
     expect(
       findUnsupportedScadDependencies(source).map((issue) => issue.kind),
     ).toEqual(['import', 'surface']);
+    expect(() => decodeScadImportBytes('assets.scad', bytes(source))).toThrow(
+      /require a project folder/i,
+    );
   });
 
   it('does not treat commented or quoted dependency examples as active', () => {
@@ -180,6 +183,7 @@ describe('local OpenSCAD folder import', () => {
       'parts/body.scad',
       'parts/nested/rib.scad',
     ]);
+    expect(result.assets).toEqual([]);
   });
 
   it('auto-selects the only top-level source when it is not named main.scad', () => {
@@ -236,7 +240,7 @@ describe('local OpenSCAD folder import', () => {
     expect(project.files).toHaveLength(2);
   });
 
-  it('ignores non-SCAD files but normalizes .scad.txt aliases inside the project', () => {
+  it('ignores unrelated files but normalizes .scad.txt aliases inside the project', () => {
     const result = decodeScadFolderImportEntries([
       folderEntry('PhoneExport/README.md', '# notes\n', 'README.md'),
       folderEntry(
@@ -247,6 +251,7 @@ describe('local OpenSCAD folder import', () => {
         'PhoneExport/parts/helper.scad.txt',
         'module helper() { cube([1, 2, 3]); }\n',
       ),
+      folderEntry('PhoneExport/unused.stl', 'unused mesh bytes', 'unused.stl'),
     ]);
 
     expect(result.kind).toBe('project');
@@ -255,6 +260,68 @@ describe('local OpenSCAD folder import', () => {
       'main.scad',
       'parts/helper.scad',
     ]);
+    expect(result.assets).toEqual([]);
+  });
+
+  it('retains only statically referenced assets with exact nested project paths', () => {
+    const result = decodeScadFolderImportEntries([
+      folderEntry(
+        'Assets/main.scad',
+        'include <parts/body.scad>\nbody();\n',
+      ),
+      folderEntry(
+        'Assets/parts/body.scad',
+        [
+          'module body() {',
+          '  import("../meshes/body.stl");',
+          '  surface(file="../heightmaps/top.dat", center=true);',
+          '}',
+        ].join('\n'),
+      ),
+      folderEntry('Assets/meshes/body.stl', 'binary-ish-stl', 'body.stl'),
+      folderEntry('Assets/heightmaps/top.dat', '0 1\n1 0\n', 'top.dat'),
+      folderEntry('Assets/meshes/unused.stl', 'unused', 'unused.stl'),
+    ]);
+
+    expect(result.kind).toBe('project');
+    if (result.kind !== 'project') throw new Error('Expected ready project');
+    expect(result.assets.map((asset) => asset.path)).toEqual([
+      'heightmaps/top.dat',
+      'meshes/body.stl',
+    ]);
+    expect(result.assets.find((asset) => asset.path === 'meshes/body.stl')?.bytes).toEqual(
+      bytes('binary-ish-stl'),
+    );
+  });
+
+  it('rejects dynamic or missing folder asset references clearly', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry(
+          'Assets/main.scad',
+          'name = "mesh.stl"; import(name);\ncube(1);\n',
+        ),
+        folderEntry('Assets/mesh.stl', 'mesh', 'mesh.stl'),
+      ]),
+    ).toThrow(/dynamic file argument.*literal filename/i);
+
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry('Assets/main.scad', 'import("mesh.stl");\ncube(1);\n'),
+      ]),
+    ).toThrow(/does not resolve to a supported file/i);
+  });
+
+  it('rejects kind/extension mismatches for folder assets', () => {
+    expect(() =>
+      decodeScadFolderImportEntries([
+        folderEntry(
+          'Assets/main.scad',
+          'surface(file="mesh.stl");\ncube(1);\n',
+        ),
+        folderEntry('Assets/mesh.stl', 'mesh', 'mesh.stl'),
+      ]),
+    ).toThrow(/unsupported asset format/i);
   });
 
   it('rejects missing project-local include/use dependencies clearly', () => {
@@ -290,22 +357,6 @@ describe('local OpenSCAD folder import', () => {
         folderEntry('Project/../main.scad', 'cube([1, 1, 1]);\n'),
       ]),
     ).toThrow(/invalid OpenSCAD project path/i);
-  });
-
-  it('rejects external import/surface assets during the source-only folder phase', () => {
-    expect(() =>
-      decodeScadFolderImportEntries([
-        folderEntry('Assets/main.scad', 'import("mesh.stl");\ncube(1);\n'),
-      ]),
-    ).toThrow(/external asset/i);
-    expect(() =>
-      decodeScadFolderImportEntries([
-        folderEntry(
-          'Assets/main.scad',
-          'surface(file="heightmap.dat");\ncube(1);\n',
-        ),
-      ]),
-    ).toThrow(/external asset/i);
   });
 
   it('rejects folders without supported OpenSCAD source files', () => {
