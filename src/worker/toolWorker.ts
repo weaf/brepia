@@ -5,6 +5,10 @@
 // in-flight callers; the next request lazily creates a fresh worker.
 
 import { assertOpenScadOutputWithinLimit } from '@/lib/openScadLimits';
+import {
+  hydrateOpenScadProjectAssets,
+  type OpenScadProjectAssetScope,
+} from '@/lib/openScadProjectAssetStorage';
 import { OpenScadWorkerClient } from '@/worker/openScadWorkerClient';
 import type { OpenScadProject } from '@shared/openScadProject';
 import { normalizeOpenScadProject } from '@shared/openScadProject';
@@ -25,10 +29,46 @@ function getToolWorkerClient(): OpenScadWorkerClient {
   return client;
 }
 
+async function writeProjectAssetToToolWorker(
+  path: string,
+  blob: Blob,
+): Promise<void> {
+  const requestId = `tool-asset-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const content = await blob.arrayBuffer();
+  const message: WorkerMessage & { id: string } = {
+    id: requestId,
+    type: WorkerMessageType.FS_WRITE,
+    data: {
+      path,
+      content,
+      type: blob.type || 'application/octet-stream',
+    },
+  };
+
+  const written = await getToolWorkerClient().request<boolean>(message, [content]);
+  if (!written) {
+    throw new Error(`Could not hydrate OpenSCAD project asset ${path}.`);
+  }
+}
+
 export async function previewScadColoredViaToolWorker(
   project: OpenScadProject,
+  assetScope?: OpenScadProjectAssetScope,
 ): Promise<{ stl: Blob; off: Blob | undefined }> {
   const normalizedProject = normalizeOpenScadProject(project);
+
+  if (normalizedProject.assets?.length) {
+    if (!assetScope) {
+      throw new Error(
+        'OpenSCAD project assets require an active conversation storage scope.',
+      );
+    }
+    await hydrateOpenScadProjectAssets(
+      normalizedProject,
+      assetScope,
+      writeProjectAssetToToolWorker,
+    );
+  }
 
   const requestId = `tool-preview-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const message: WorkerMessage & { id: string } = {
