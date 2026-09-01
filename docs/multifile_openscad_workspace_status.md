@@ -12,11 +12,17 @@ Step 1 is complete.
 
 Step 2 is complete. The project-native browser OpenSCAD runtime, full multi-file preview/export propagation, bundled-library detection, existing uploaded-STL compatibility bridge, and targeted mobile closeout fixes all passed automated verification and the real browser/WASM acceptance corpus. The final mobile Share `Generate GIF` → `Download GIF` interaction was manually verified on 2026-09-01.
 
-Step 3 implementation and automated verification are complete. Local folder import now constructs a bounded normalized `OpenScadProject`, preserves nested `.scad` paths, validates project-local `include`/`use` dependencies, chooses an unambiguous entrypoint automatically, and presents an explicit entrypoint chooser when several independent model roots exist. Manual browser acceptance is still required before Step 3 is formally closed.
+Step 3 is complete. Local folder import constructs a bounded normalized `OpenScadProject`, preserves nested `.scad` paths, validates project-local `include`/`use` dependencies, chooses an unambiguous entrypoint automatically, and presents an explicit entrypoint chooser when several independent model roots exist. The real browser acceptance corpus passed on 2026-09-01 using the stable `./start.sh` runtime.
 
-Current Step 3 implementation commit:
+Primary Step 3 implementation commit:
 
 `2a710ac7d35a4f907c0074e1a866ed3d8f30a7df` — `Add local OpenSCAD folder project import`
+
+Step 3 closeout fixes:
+
+- `53e8cbc8c3dc4e43af17d3ff542593c6ce93e9fc` — skip render mirroring for synthetic imported SCAD revisions;
+- `ae4e89fbc201dcc34b5e56da283b78feaa02d98d` — constrain parameterless mobile OpenSCAD preview height;
+- `7b5811c77710a07695962126baf8309611948033` — restore the original `.scad,.scad.txt` picker behavior after identifying HMR as the source of the temporary picker failure.
 
 ## Step 1 — completed
 
@@ -62,17 +68,19 @@ Manual Step 2 acceptance passed:
 7. existing uploaded STL `import()` flow;
 8. multi-file 2D + DXF export.
 
-## Step 3 — implementation complete, manual acceptance pending
+## Step 3 — completed
 
 ### Local folder acquisition
 
-`ScadImportButton` now exposes separate local actions for `Import SCAD` and `Import folder`, alongside the existing GitHub import action.
+`ScadImportButton` exposes separate local actions for `Import SCAD` and `Import folder`, alongside the existing GitHub import action.
 
 Folder selection uses the browser directory picker attributes (`webkitdirectory` plus `directory`) and consumes `File.webkitRelativePath` so source hierarchy is preserved. Non-SCAD files are ignored during this source-only phase. `.scad.txt` aliases are accepted and normalized to `.scad` paths.
 
+The file picker remains the simple original Step 3 implementation with `accept=".scad,.scad.txt"`. Temporary wildcard/re-key troubleshooting workarounds were removed after the earlier picker failure was traced to running with `PCAD_ENABLE_HMR=1`; stable acceptance uses normal `./start.sh`.
+
 ### Project construction and safety
 
-`src/lib/scadImport.ts` now builds a complete normalized project from the selected folder:
+`src/lib/scadImport.ts` builds a complete normalized project from the selected folder:
 
 - strips only the selected root folder while preserving nested source paths;
 - validates the picker root separately before stripping it;
@@ -101,9 +109,9 @@ If more than one plausible independent root remains, Brepia opens an entrypoint 
 
 ### Persistence and baseline compile
 
-`createImportedScadProject` now accepts either the existing single-file `{ filename, code }` input or a complete `{ filename, title, project }` input. This preserves the existing standalone and GitHub one-file callers while letting local folder import persist the complete normalized project through the same conversation/artifact path.
+`createImportedScadProject` accepts either the existing single-file `{ filename, code }` input or a complete `{ filename, title, project }` input. This preserves the existing standalone and GitHub one-file callers while letting local folder import persist the complete normalized project through the same conversation/artifact path.
 
-The complete project is baseline-compiled through the project-aware browser worker before persistence. The existing best-effort conversation-workspace sync remains unchanged.
+The complete project is baseline-compiled through the project-aware browser worker before persistence. Synthetic `tool_import_...` revisions are excluded from Supabase render mirroring because their baseline render is local and no corresponding private Storage object exists.
 
 ### Step 3 automated verification
 
@@ -119,20 +127,31 @@ GitHub Actions Quality Gate run `223` (`33476451763`) for `2a710ac7d35a4f907c007
 
 The added folder-import tests cover nested source preservation, automatic `main.scad` selection, a single non-main top-level source, dependency-graph root detection, ambiguous entrypoint selection, `.scad.txt` normalization, ignored non-SCAD files, missing dependencies, project-root escape attempts, malformed picker paths, unsupported external assets, and folders without SCAD sources.
 
-The ordinary Quality Gate does not run `git diff --check`; this status does not claim that check for the Step 3 commit.
+The final picker-restoration commit `7b5811c77710a07695962126baf8309611948033` also passed Quality Gate run `231` (`33529279483`).
 
-## Step 3 manual acceptance to run
+The ordinary Quality Gate does not run `git diff --check`; this status does not claim that check for the Step 3 commits.
 
-1. **Standalone regression:** import a normal single `.scad` with `Import SCAD`; it should behave as before.
-2. **Nested folder:** import a folder containing `main.scad`, `parts/body.scad` and `parts/nested/rib.scad`; it should import without an entrypoint prompt and render the complete model.
-3. **Persistence:** reload that imported conversation and confirm the model still renders from the complete project snapshot.
-4. **Ambiguous folder:** import a folder containing two independent non-empty sources such as `alpha.scad` and `beta.scad`; Brepia should ask for an entrypoint, and the selected model should render while both files remain in the project artifact.
+### Step 3 manual acceptance — PASS 2026-09-01
 
-If these browser checks pass, Step 3 can be marked complete.
+The stable browser/runtime acceptance passed with normal `./start.sh`:
+
+1. standalone `.scad` import works;
+2. multi-file folder import works and renders the complete project;
+3. imported project persists and renders again after reopening/reload;
+4. ambiguous folders show the explicit entrypoint chooser and the chosen source renders correctly;
+5. Customizer parameters remain functional on an imported multi-file project;
+6. the parameterless mobile Parametric preview no longer expands to an oversized sheet.
+
+The temporary inability to pick `.scad` files was reproduced only while running `PCAD_ENABLE_HMR=1 ./start.sh`; it is not treated as a stable-runtime product regression.
+
+Step 3 acceptance is complete.
+
+## UX follow-up outside Step 3
+
+The orientation `ViewGizmo` is currently desktop-only (`!initialIsMobile`). Mobile still exposes the projection and rotation controls, but not a direct Top/Front/Right orientation control. Add a compact mobile orientation button/gizmo as a later UX follow-up; do not fold it into the completed Step 3 scope.
 
 ## Not completed yet
 
-- Step 3 manual browser acceptance;
 - Step 4 recursive GitHub project dependency resolution;
 - Step 5 full multi-file AI/external-agent editing protocol;
 - Step 6 complete project snapshots in the local conversation-workspace mirror;
@@ -143,4 +162,4 @@ If these browser checks pass, Step 3 can be marked complete.
 
 ## Next checkpoint
 
-Pull the latest feature branch and run the Step 3 manual acceptance corpus above. If it is green, mark Step 3 complete and continue to Step 4 recursive GitHub project dependency resolution.
+Begin Step 4 recursive GitHub project dependency resolution. Reconcile the Step 4 plan against the current branch before implementation, preserve the Step 3 local import behavior, and keep the PR in draft state.
