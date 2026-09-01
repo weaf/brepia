@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 import {
   reconcileOpenScadProjectAssetManifest,
+  resolveOpenScadAttachmentAssets,
 } from '../shared/openScadProjectAssetReconciliation';
 import {
   validateOpenScadProjectAssetReferences,
@@ -44,6 +45,24 @@ describe('OpenSCAD authoritative asset reconciliation', () => {
 
     assert.deepEqual(reconciled.assets, [trustedAsset]);
     assert.doesNotThrow(() => validateOpenScadProjectAssetReferences(reconciled));
+  });
+
+  it('resolves a pre-project attachment filename onto a nested project path', () => {
+    const attachment = { ...trustedAsset, path: 'part.stl' };
+    const nestedProject: OpenScadProject = {
+      schemaVersion: 1,
+      entrypointPath: 'src/main.scad',
+      files: [
+        {
+          path: 'src/main.scad',
+          content: 'import("part.stl");',
+        },
+      ],
+    };
+
+    assert.deepEqual(resolveOpenScadAttachmentAssets(nestedProject, [attachment]), [
+      { ...attachment, path: 'src/part.stl' },
+    ]);
   });
 
   it('replaces AI-provided metadata with the authoritative descriptor', () => {
