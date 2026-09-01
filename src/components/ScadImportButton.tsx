@@ -179,10 +179,12 @@ export function ScadImportButton({
   return (
     <>
       <div className="flex flex-wrap justify-end gap-2">
+        {/* Do not filter these native pickers with accept. Some mobile file
+            pickers hide the unknown .scad extension while showing .scad.txt.
+            Brepia validates the selected files after the picker returns. */}
         <input
           ref={fileInputRef}
           type="file"
-          accept=".scad,.scad.txt"
           className="hidden"
           disabled={isBusy}
           onChange={(event) => {
@@ -194,7 +196,6 @@ export function ScadImportButton({
         <input
           ref={folderInputRef}
           type="file"
-          accept=".scad,.scad.txt"
           multiple
           className="hidden"
           disabled={isBusy}
