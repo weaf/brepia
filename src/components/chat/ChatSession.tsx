@@ -20,6 +20,7 @@ import {
   shouldPollForPendingAssistant,
 } from '@/services/messageService';
 import { supabase } from '@/lib/supabase';
+import { createOpenScadProjectAssetDescriptor } from '@/lib/openScadProjectAssetStorage';
 import {
   generateColoredPreview,
   generateInspectionPreview,
@@ -40,6 +41,11 @@ import {
   getParametricArtifactEntrypointCode,
   isParametricArtifact,
 } from '@shared/parametricParts';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProjectAsset,
+} from '@shared/openScadProject';
+import { collectOpenScadProjectAssetReferences } from '@shared/openScadProjectReferences';
 import type {
   Conversation,
   Message,
@@ -139,6 +145,70 @@ function answerUserInput(input: unknown): { message: string } | null {
   return typeof message === 'string' && message.trim() ? { message } : null;
 }
 
+function latestParametricMeshContext(messages: readonly AppUIMessage[]) {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex];
+    if (message.role !== 'user') continue;
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = message.parts[partIndex];
+      if (
+        part.type === 'data-mesh-context' &&
+        part.data.fileType === 'stl' &&
+        part.data.filename
+      ) {
+        return part.data;
+      }
+    }
+  }
+  return null;
+}
+
+async function enrichParametricAttachmentAsset(input: {
+  artifact: ParametricArtifact;
+  messages: readonly AppUIMessage[];
+  userId: string;
+  conversationId: string;
+}): Promise<ParametricArtifact> {
+  const project = normalizeOpenScadProject(input.artifact.project);
+  if (project.assets?.length) return { ...input.artifact, project };
+
+  const references = collectOpenScadProjectAssetReferences(project);
+  if (references.length === 0) return { ...input.artifact, project };
+
+  const meshContext = latestParametricMeshContext(input.messages);
+  if (!meshContext?.filename) return { ...input.artifact, project };
+
+  const matchingReference = references.find(
+    (reference) =>
+      !reference.dynamic &&
+      reference.resolvedPath &&
+      reference.target === meshContext.filename,
+  );
+  if (!matchingReference?.resolvedPath) {
+    return { ...input.artifact, project };
+  }
+
+  const storagePath = `${input.userId}/${input.conversationId}/${meshContext.meshId}.stl`;
+  const { data, error } = await supabase.storage.from('meshes').download(storagePath);
+  if (error || !data) {
+    throw new Error(
+      `Could not load attached STL for OpenSCAD project asset: ${error?.message ?? 'missing object'}`,
+    );
+  }
+
+  const asset: OpenScadProjectAsset =
+    await createOpenScadProjectAssetDescriptor({
+      path: matchingReference.resolvedPath,
+      storagePath,
+      blob: data,
+    });
+
+  return {
+    ...input.artifact,
+    project: normalizeOpenScadProject({ ...project, assets: [asset] }),
+  };
+}
+
 /**
  * Owns the AI-SDK Chat lifecycle for a conversation. Everything that touches
  * `chat.sendMessage` / `chat.regenerate` / `chat.setMessages` /
@@ -175,11 +245,6 @@ export function ChatSession({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Transport — strips client state out of the wire body. Server reads the
-  // branch from `conversations.current_message_leaf_id` and walks parents
-  // in the DB, so anything the SDK might put in `messages` is ignored.
-  // ───────────────────────────────────────────────────────────────────────
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const token = (await supabase.auth.getSession()).data.session?.access_token;
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -206,25 +271,8 @@ export function ChatSession({
     [authHeaders, conversation.id, conversation.type, executionMode, model],
   );
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Tool-output bridge via `onToolCall` (no useEffect, no dedupe ref).
-  //
-  // The SDK fires this exactly once per tool call as soon as the model's
-  // input completes. We compile the OpenSCAD locally, upload the preview,
-  // persist the assistant's parts to DB (so the server reads the right
-  // thing on auto-continuation), and only then call `chat.addToolOutput`
-  // which lets `sendAutomaticallyWhen` continue the CAD build/review loop.
-  // ───────────────────────────────────────────────────────────────────────
   const chatRef = useRef<ReturnType<typeof useCachedAiChat> | null>(null);
-  // Latest `chat.messages` snapshot for use inside `onToolCall` (callbacks
-  // baked at Chat-init time would otherwise close over the initial array).
   const messagesRef = useRef<AppUIMessage[]>(initialBranch);
-  // Set when persisting a tool's `output-available` to the DB fails. The
-  // server reads the branch from the DB (never from client-sent messages), so
-  // auto-resubmitting after a failed persist would continue against a stale
-  // branch — at best a wasted round-trip the server has to recover from. While
-  // this is set, `sendAutomaticallyWhen` returns false so the loop pauses and
-  // the user can retry. Reset at the top of each `handleToolCall`.
   const persistFailedRef = useRef(false);
 
   const handleToolCall = useCallback(
@@ -399,11 +447,11 @@ export function ChatSession({
         });
       };
 
-      const input = isParametricArtifact(toolCall.input)
+      const rawInput = isParametricArtifact(toolCall.input)
         ? toolCall.input
         : null;
 
-      if (!input) {
+      if (!rawInput) {
         await finishWithError(
           'CAD tool input was not a valid OpenSCAD artifact.',
         );
@@ -411,8 +459,19 @@ export function ChatSession({
       }
 
       try {
+        const input = user?.id
+          ? await enrichParametricAttachmentAsset({
+              artifact: rawInput,
+              messages: messagesRef.current,
+              userId: user.id,
+              conversationId: conversation.id,
+            })
+          : rawInput;
         const { stl, off } = await previewScadColoredViaToolWorker(
           input.project,
+          user?.id
+            ? { userId: user.id, conversationId: conversation.id }
+            : undefined,
         );
         let inspectionUploaded = false;
         try {
