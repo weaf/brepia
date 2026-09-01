@@ -2,6 +2,7 @@ import { Download, ChevronUp } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import type { OpenScadProject } from '@shared/openScadProject';
 import type { Parameter } from '@shared/types';
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ interface ParameterSheetContentProps {
   onParameterChange: (parameters: Parameter[]) => void;
   currentOutput?: Blob;
   dxfExporter?: DxfExporter | null;
+  project?: OpenScadProject;
   code?: string;
 }
 
@@ -39,6 +41,7 @@ export function ParameterSheetContent({
   onParameterChange,
   currentOutput,
   dxfExporter,
+  project,
   code,
 }: ParameterSheetContentProps) {
   const { toast } = useToast();
@@ -108,11 +111,11 @@ export function ParameterSheetContent({
 
   const persistExportBestEffort = useCallback(
     (format: 'stl' | 'dxf', file: Blob) => {
-      if (!conversation.id || !code) return;
+      if (!conversation.id || !project) return;
       void persistConversationExport({
         conversationId: conversation.id,
         format,
-        sourceCode: code,
+        project,
         file,
       }).catch((error) => {
         // Browser download is the primary user action. Workspace mirroring is
@@ -124,7 +127,7 @@ export function ParameterSheetContent({
         );
       });
     },
-    [code, conversation.id],
+    [conversation.id, project],
   );
 
   const handleDownloadSTL = () => {
@@ -135,7 +138,7 @@ export function ParameterSheetContent({
 
   const handleDownloadOpenSCAD = () => {
     if (!code) return;
-    // Source revisions are mirrored under models/, matching desktop behavior;
+    // Project sources are mirrored under models/, matching desktop behavior;
     // a .scad browser download does not create a duplicate exports/ artifact.
     downloadOpenSCADFile(code);
   };
