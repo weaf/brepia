@@ -1,3 +1,4 @@
+import { normalizeOpenScadProject, type OpenScadProject } from '@shared/openScadProject';
 import { isUnauthorizedError, json, requireUser } from './api';
 import {
   initializeConversationWorkspace,
@@ -5,8 +6,8 @@ import {
 } from './conversationWorkspace';
 import { persistConversationExportArtifact } from './conversationWorkspaceExports';
 import {
-  conversationModelCodeSha256,
-  findConversationModelRevisionByCodeSha,
+  conversationModelProjectSha256,
+  findConversationModelRevisionByProjectSha,
   syncConversationModelSources,
 } from './conversationWorkspaceModels';
 import { syncConversationRenderArtifacts } from './conversationWorkspaceRenders';
@@ -17,7 +18,7 @@ export const CONVERSATION_WORKSPACE_ACTION_HEADER =
 export const PERSIST_EXPORT_ACTION = 'persist-export' as const;
 
 const MAX_EXPORT_BYTES = 100 * 1024 * 1024;
-const MAX_SOURCE_CHARS = 5_000_000;
+const MAX_PROJECT_JSON_CHARS = 2_000_000;
 
 function exportFormat(
   value: FormDataEntryValue | null,
@@ -32,6 +33,17 @@ function isBlobLike(value: FormDataEntryValue | null): value is File {
     typeof value.arrayBuffer === 'function' &&
     typeof value.size === 'number'
   );
+}
+
+function parseProject(value: FormDataEntryValue | null): OpenScadProject | null {
+  if (typeof value !== 'string' || !value || value.length > MAX_PROJECT_JSON_CHARS) {
+    return null;
+  }
+  try {
+    return normalizeOpenScadProject(JSON.parse(value) as OpenScadProject);
+  } catch {
+    return null;
+  }
 }
 
 export function isConversationWorkspaceExportRequest(
@@ -72,20 +84,16 @@ export async function handleConversationWorkspaceExportRequest(
 
   const conversationId = form.get('conversationId');
   const format = exportFormat(form.get('format'));
-  const sourceCode = form.get('sourceCode');
+  const project = parseProject(form.get('project'));
   const file = form.get('file');
   if (
     typeof conversationId !== 'string' ||
     !conversationId ||
     !format ||
-    typeof sourceCode !== 'string' ||
-    !sourceCode ||
+    !project ||
     !isBlobLike(file)
   ) {
     return json({ error: 'Missing or invalid export fields' }, 400);
-  }
-  if (sourceCode.length > MAX_SOURCE_CHARS) {
-    return json({ error: 'OpenSCAD source is too large' }, 413);
   }
   if (file.size <= 0 || file.size > MAX_EXPORT_BYTES) {
     return json({ error: 'Export file size is invalid' }, 413);
@@ -125,10 +133,10 @@ export async function handleConversationWorkspaceExportRequest(
   );
   await syncConversationRenderArtifacts(request, conversation.id);
 
-  const codeSha256 = conversationModelCodeSha256(sourceCode);
-  const revision = await findConversationModelRevisionByCodeSha(
+  const projectSha256 = conversationModelProjectSha256(project);
+  const revision = await findConversationModelRevisionByProjectSha(
     conversation.id,
-    codeSha256,
+    projectSha256,
   );
   if (!revision) {
     // Parameter writes are asynchronous on the client. The browser retries
@@ -141,7 +149,7 @@ export async function handleConversationWorkspaceExportRequest(
     conversationId: conversation.id,
     format,
     revision: revision.revision,
-    codeSha256,
+    projectSha256,
     bytes: new Uint8Array(await file.arrayBuffer()),
   });
   return json(result);
