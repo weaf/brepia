@@ -133,6 +133,41 @@ describe(
       });
     });
 
+    it('does not probe storage for synthetic imported SCAD revisions', async () => {
+      await withWorkspaceRoot(async () => {
+        await initializeConversationWorkspace({
+          conversationId: CONVERSATION_ID,
+          type: 'parametric',
+        });
+
+        let downloadCalls = 0;
+        const result = await syncConversationRenderArtifacts(
+          request(),
+          CONVERSATION_ID,
+          {
+            listRevisions: async () => [
+              revision(
+                1,
+                'tool_import_cccccccc-3333-4333-8333-333333333333',
+              ),
+            ],
+            downloadRender: async () => {
+              downloadCalls += 1;
+              throw new Error('synthetic imports have no storage renders');
+            },
+          },
+        );
+
+        assert.deepEqual(result, {
+          discovered: 0,
+          copied: 0,
+          existing: 0,
+          failed: 0,
+        });
+        assert.equal(downloadCalls, 0);
+      });
+    });
+
     it('continues mirroring later render artifacts when one storage object is missing', async () => {
       await withWorkspaceRoot(async () => {
         await initializeConversationWorkspace({
