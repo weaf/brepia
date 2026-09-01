@@ -6,6 +6,40 @@ import {
 import { collectOpenScadProjectAssetReferences } from './openScadProjectReferences.ts';
 
 /**
+ * Resolve pre-project attachment descriptors onto the exact project-relative
+ * paths selected by static import()/surface() calls. The attachment descriptor
+ * initially uses the uploaded filename because no OpenSCAD project exists yet;
+ * Brepia, not the agent, owns the path remapping once a project snapshot exists.
+ */
+export function resolveOpenScadAttachmentAssets(
+  project: OpenScadProject,
+  attachmentAssets: readonly OpenScadProjectAsset[],
+): OpenScadProjectAsset[] {
+  const normalized = normalizeOpenScadProject(project);
+  const references = collectOpenScadProjectAssetReferences(normalized);
+  const resolved = new Map<string, OpenScadProjectAsset>();
+
+  for (const attachment of attachmentAssets) {
+    for (const reference of references) {
+      if (
+        reference.dynamic ||
+        !reference.target ||
+        !reference.resolvedPath ||
+        reference.target !== attachment.path
+      ) {
+        continue;
+      }
+      resolved.set(reference.resolvedPath, {
+        ...attachment,
+        path: reference.resolvedPath,
+      });
+    }
+  }
+
+  return [...resolved.values()];
+}
+
+/**
  * Rebuild an AI-edited project's asset manifest from descriptors Brepia already
  * trusts. Agents may keep or drop references to existing assets, but they must
  * never invent storage paths, hashes, sizes, or media types for binary data.
