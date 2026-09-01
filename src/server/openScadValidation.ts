@@ -1,12 +1,15 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   OPENSCAD_COMPILE_TIMEOUT_MS,
   OPENSCAD_MAX_OUTPUT_BYTES,
-  OPENSCAD_MAX_SOURCE_BYTES,
 } from '@/lib/openScadLimits';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 
 export type OpenScadValidation = {
   valid: boolean;
@@ -46,25 +49,31 @@ function compile(
   });
 }
 
-/** Compile an isolated OpenSCAD candidate. Nothing from the project is read. */
-export async function validateOpenScad(
-  code: string,
+function invalid(diagnostics: string): OpenScadValidation {
+  return { valid: false, exitCode: null, outputBytes: 0, diagnostics };
+}
+
+export async function validateOpenScadProject(
+  project: OpenScadProject,
   signal?: AbortSignal,
 ): Promise<OpenScadValidation> {
-  if (Buffer.byteLength(code, 'utf8') > OPENSCAD_MAX_SOURCE_BYTES) {
-    return {
-      valid: false,
-      exitCode: null,
-      outputBytes: 0,
-      diagnostics: `OpenSCAD source exceeds ${OPENSCAD_MAX_SOURCE_BYTES} bytes.`,
-    };
+  let normalized: OpenScadProject;
+  try {
+    normalized = normalizeOpenScadProject(project);
+  } catch (error) {
+    return invalid(error instanceof Error ? error.message : String(error));
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'pcad-openscad-'));
-  const sourcePath = join(dir, 'candidate.scad');
+  const dir = await mkdtemp(join(tmpdir(), 'pcad-openscad-project-'));
   const outputPath = join(dir, 'candidate.stl');
   try {
-    await writeFile(sourcePath, code, 'utf8');
+    for (const file of normalized.files) {
+      const target = join(dir, ...file.path.split('/'));
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, file.content, 'utf8');
+    }
+
+    const sourcePath = join(dir, ...normalized.entrypointPath.split('/'));
     const result = await compile(sourcePath, outputPath, signal);
     if (result.exitCode !== 0) {
       return {
@@ -94,4 +103,18 @@ export async function validateOpenScad(
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+export async function validateOpenScad(
+  code: string,
+  signal?: AbortSignal,
+): Promise<OpenScadValidation> {
+  return validateOpenScadProject(
+    {
+      schemaVersion: 1,
+      entrypointPath: 'candidate.scad',
+      files: [{ path: 'candidate.scad', content: code }],
+    },
+    signal,
+  );
 }

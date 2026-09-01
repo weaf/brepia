@@ -14,12 +14,16 @@ import {
 } from '@shared/aiInstructionCatalog';
 import { env } from './env';
 import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
+import {
   buildAgentOutputContract,
   finishWithParametricToolCall,
   parseAgentResult,
   resolveAgentResultChannels,
 } from './opencodeAgentResult';
-import { validateOpenScad } from './openScadValidation';
+import { validateOpenScadProject } from './openScadValidation';
 import { logError, logWarning } from './serverLog';
 import { isRequestAbort } from './requestAbort';
 
@@ -344,7 +348,7 @@ export function buildOpenCodePromptBody(text: string) {
 type ParametricArtifactSnapshot = {
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
 };
 
 function parseArtifactInput(
@@ -362,7 +366,10 @@ function parseArtifactInput(
     return undefined;
   }
   const record = candidate as Record<string, unknown>;
-  if (typeof record['code'] !== 'string' || !record['code'].trim()) {
+  let project: OpenScadProject;
+  try {
+    project = normalizeOpenScadProject(record['project'] as OpenScadProject);
+  } catch {
     return undefined;
   }
   return {
@@ -374,7 +381,7 @@ function parseArtifactInput(
       typeof record['version'] === 'string' && record['version'].trim()
         ? record['version'].trim()
         : 'v1',
-    code: record['code'],
+    project,
   };
 }
 
@@ -501,11 +508,11 @@ export function buildPersistentOpenCodePrompt(
     lines.push(
       [
         '<current_pcad_artifact>',
-        `title: ${artifact.title}`,
-        `version: ${artifact.version}`,
-        '<openscad>',
-        artifact.code,
-        '</openscad>',
+        JSON.stringify({
+          title: artifact.title,
+          version: artifact.version,
+          project: artifact.project,
+        }),
         '</current_pcad_artifact>',
       ].join('\n'),
     );
@@ -1126,7 +1133,7 @@ export function finalizeAcceptedAgentResult(
 ): LanguageModelV3StreamPart[] {
   const result = parseAgentResult(text);
 
-  if (result.code) {
+  if (result.project) {
     return finishWithParametricToolCall(text, finishPart);
   }
 
@@ -1328,15 +1335,17 @@ async function* streamParts(
         state.totalReasoning,
       );
       const candidate = parseAgentResult(resultText);
-      if (!candidate.code) break;
+      if (!candidate.project) break;
 
-      const validation = await validateOpenScad(candidate.code, ac.signal);
+      const validation = await validateOpenScadProject(
+        candidate.project,
+        ac.signal,
+      );
       if (validation.valid) break;
 
       validationAttempts += 1;
       if (validationAttempts >= runtime.validationAttempts) {
         state.totalText = JSON.stringify({
-          code: '',
           message: `OpenSCAD validation failed after ${runtime.validationAttempts} attempts: ${validation.diagnostics ?? 'unknown compiler error'}`,
         });
         break;

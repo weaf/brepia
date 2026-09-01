@@ -10,6 +10,17 @@ import {
   parseOpenCodeCliOutput,
 } from '../src/server/cliAgents';
 
+function project(code: string, support = 'module support_part() { cube(1); }') {
+  return {
+    schemaVersion: 1 as const,
+    entrypointPath: 'main.scad',
+    files: [
+      { path: 'main.scad', content: code },
+      { path: 'lib/support.scad', content: support },
+    ],
+  };
+}
+
 describe('persistent CLI agent sessions', () => {
   it('persists and recovers OpenCode and Codex session IDs through tool-call IDs', () => {
     const openCodeId = 'ses_abc123XYZ';
@@ -31,7 +42,7 @@ describe('persistent CLI agent sessions', () => {
             input: JSON.stringify({
               title: 'Box',
               version: 'v1',
-              code: 'cube([10,10,10]);',
+              project: project('cube([10,10,10]);'),
             }),
           },
           {
@@ -41,7 +52,7 @@ describe('persistent CLI agent sessions', () => {
             input: JSON.stringify({
               title: 'Box',
               version: 'v1',
-              code: 'cube([10,10,10]);',
+              project: project('cube([10,10,10]);'),
             }),
           },
         ],
@@ -157,7 +168,7 @@ describe('persistent CLI agent sessions', () => {
             input: JSON.stringify({
               title: 'Box',
               version: 'v1',
-              code: 'width = 20;\ncube([width, 20, 10]);',
+              project: project('width = 20;\ncube([width, 20, 10]);'),
             }),
           },
         ],
@@ -168,6 +179,10 @@ describe('persistent CLI agent sessions', () => {
     const text = buildPersistentCliAgentPrompt(prompt, true);
     assert.match(text, /<current_pcad_artifact>/);
     assert.match(text, /width = 20;/);
+    assert.match(text, /lib\/support\.scad/);
+    assert.match(text, /module support_part/);
+    assert.match(text, /"entrypointPath":"main.scad"/);
+    assert.doesNotMatch(text, /<current_pcad_artifact>\n<openscad>/);
     assert.match(text, /<user_request>\nMake it 30 mm wide\n<\/user_request>/);
     assert.doesNotMatch(text, /Old assistant prose/);
     assert.doesNotMatch(text, /CAD system context/);
@@ -191,7 +206,7 @@ describe('persistent CLI agent sessions', () => {
           input: {
             title: 'Box',
             version: 'v1',
-            code: codes[turn - 1],
+            project: project(codes[turn - 1]),
           },
         },
       ],
