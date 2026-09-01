@@ -132,7 +132,7 @@ Manual Step 4 acceptance passed on 2026-09-01:
 
 Step 4 is formally complete.
 
-### Step 5 — Project-native AI editing and message persistence — NEXT
+### Step 5 — Project-native AI editing and message persistence — COMPLETE
 
 `build_parametric_model` must always emit a complete project snapshot.
 
@@ -151,7 +151,7 @@ Reconcile and replace any remaining entrypoint-only baseline/original-source ass
 
 The existing conversation tree remains authoritative. Project versions follow the same message branches, restore/retry semantics and active-branch behavior.
 
-Before implementation, inspect current `shared/chatAi.ts`, Parametric tool schemas/instructions, AI message persistence, `metadata.originalCode` or equivalent baseline handling, OpenCode/external-agent transport, and current conversation restore/retry behavior.
+Step 5 closeout confirms `shared/chatAi.ts` and persisted `build_parametric_model` parts already use full project artifacts; retry/branch/restore keep the selected message-tree project snapshot; Customizer `metadata.originalCode` remains an entrypoint-only reset baseline while parameter edits replace only the entrypoint inside the full project; and OpenCode/Codex now receive, validate and return complete normalized projects rather than `{code,...}` payloads. New external-agent writes reject the legacy top-level `code` contract.
 
 ### Step 6 — Conversation workspace project snapshots
 
@@ -205,6 +205,6 @@ Final manual acceptance should cover AI one-file generation, local/GitHub multi-
 
 Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–4 are complete. Start Step 5 in a fresh chat after reconciling the current branch implementation against this plan and `docs/multifile_openscad_workspace_status.md`.
+Steps 1–5 are complete. Step 6 is next and must begin from the verified Step 5 checkpoint after reconciling the current branch against this plan and `docs/multifile_openscad_workspace_status.md`.
 
 Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.

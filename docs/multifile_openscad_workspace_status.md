@@ -8,7 +8,7 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–4 are complete and manually accepted.
+Steps 1–4 are complete and manually accepted. Step 5 is implemented and automatically verified.
 
 The Parametric artifact is project-native, browser OpenSCAD execution is project-aware, local file/folder import is complete, and GitHub import resolves bounded repository-local static `include`/`use` dependencies recursively from the selected entrypoint. Step 4 browser acceptance passed on 2026-09-01 using normal `./start.sh`.
 
@@ -133,42 +133,46 @@ The initial `expected string` / `code` error seen during manual testing came fro
 
 Step 4 acceptance is complete.
 
+## Step 5 — complete
+
+AI editing and message persistence are project-native end to end:
+
+- `shared/chatAi.ts` continues to define `build_parametric_model` with `{ title, version, project }`; no top-level artifact `code` was reintroduced;
+- persisted AI tool parts carry the complete normalized `OpenScadProject`, so DB-style JSON reload, history restore, retry branches and active-branch follow-ups retain the selected full project snapshot;
+- Customizer parameters intentionally remain entrypoint-focused; `metadata.originalCode` remains only the entrypoint reset/default baseline, while parameter changes replace the entrypoint content inside the existing complete project and preserve support files;
+- built-in Parametric instructions now require complete normalized project snapshots, preservation of unchanged support files, targeted entrypoint/support-file edits, stable `entrypointPath` when possible and safe relative `.scad` paths;
+- OpenCode streaming and OpenCode/Codex CLI transports now send `<current_pcad_artifact>` as the complete project rather than an `<openscad>` single-file wrapper;
+- external-agent final results use `{ project, message }`, normalize the returned project and emit `build_parametric_model` with `project`; legacy `{ code, message }` results no longer create CAD tool calls;
+- server-side external-agent validation materializes the complete normalized project into an isolated temporary directory and compiles its actual entrypoint, so project-local support-file references are validated together. This is validation-only and does not implement the Step 6 conversation-workspace mirror.
+
+Step 5 regression coverage verifies multi-file follow-up context, unchanged support-file preservation, intentional support-file revision, stable entrypoint handling, project-only external-agent result parsing, DB-style persistence, Customizer entrypoint edits, retry branch isolation and restored-history project continuity.
+
+Primary Step 5 implementation checkpoints:
+
+- `4c7eb483be5b5aad93dc5ddb1ef92d912200c76f` — project-native external-agent result contract;
+- `d15f54b` — project-native OpenCode/Codex transports, complete-project validation and multi-file transport regressions.
+
+Automated Step 5 implementation verification before closeout:
+
+- dependency audit: PASS, 0 vulnerabilities;
+- 52 test files / 420 tests: PASS;
+- typecheck: PASS;
+- lint with zero warnings: PASS;
+- production client/SSR/Nitro build: PASS;
+- `git diff --check`: PASS.
+
 ## UX follow-up outside the current step
 
 The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact orientation control exposing deterministic Top/Front/Right views. This is a separate UX follow-up and must not be mixed into the project-workspace implementation steps.
 
 ## Not completed yet
 
-- Step 5 full multi-file AI/external-agent editing protocol and message persistence;
 - Step 6 complete project snapshots in the local conversation-workspace mirror;
 - Step 7 explicit normalized relative assets;
 - Step 8 project-aware STEP sandbox input;
 - Step 9 project file UX;
 - Step 10 final hardening/closeout.
 
-## Fresh-chat handoff for Step 5
+## Next — Step 6
 
-Start the next chat on the same branch: `feature/multifile-openscad-workspace`.
-
-Read and reconcile before editing:
-
-- `AGENTS.md`;
-- `docs/multifile_openscad_workspace_plan.md`;
-- `docs/multifile_openscad_workspace_status.md`;
-- `shared/chatAi.ts` and the current Parametric tool schemas/instructions;
-- current AI message/artifact persistence and restore/retry/branch behavior;
-- parameter reset/default and any `metadata.originalCode` or equivalent baseline-source handling;
-- OpenCode/external-agent transport and existing persistent-session integration.
-
-Step 5 objective:
-
-- `build_parametric_model` and external-agent results carry complete normalized project snapshots;
-- unchanged support files survive follow-up edits;
-- AI can intentionally edit either entrypoint or support files;
-- `entrypointPath` stays stable unless a restructure is explicitly needed;
-- no traversal/absolute paths or omitted required support files;
-- message persistence/restore/retry works with the whole project;
-- Customizer remains entrypoint-focused;
-- do not reintroduce top-level `artifact.code` compatibility.
-
-Do not begin Step 6 workspace-snapshot migration until Step 5 is implemented and verified.
+Step 6 is now the next bounded implementation step: project-native local conversation-workspace snapshots. Reconcile the existing best-effort local mirror against the complete persisted `OpenScadProject` artifact before changing it. Do not mix Step 7 relative assets or later workspace UX into Step 6.

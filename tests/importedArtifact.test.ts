@@ -25,7 +25,13 @@ function artifactWithCode(source: string): ParametricArtifact {
     project: {
       schemaVersion: 1,
       entrypointPath: 'bracket.scad',
-      files: [{ path: 'bracket.scad', content: source }],
+      files: [
+        { path: 'bracket.scad', content: source },
+        {
+          path: 'lib/support.scad',
+          content: 'module support_part() { sphere(r = 2); }\n',
+        },
+      ],
     },
   };
 }
@@ -231,6 +237,10 @@ describe('imported artifact persistence primitive', () => {
     );
     expect(entrypointCode).toBe(parameterEditedCode);
     expect(entrypointCode).not.toBe(code);
+    expect(parameterEditedArtifact.project.files).toContainEqual({
+      path: 'lib/support.scad',
+      content: 'module support_part() { sphere(r = 2); }\n',
+    });
   });
 
   it('keeps retry branches isolated and uses the selected branch artifact', async () => {
