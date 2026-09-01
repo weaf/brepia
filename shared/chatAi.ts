@@ -2,6 +2,7 @@ import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
 import { loadBundledInstruction } from './aiInstructionCatalog.ts';
 import {
+  OPENSCAD_PROJECT_MAX_ASSETS,
   OPENSCAD_PROJECT_MAX_FILES,
   OPENSCAD_PROJECT_SCHEMA_VERSION,
   normalizeOpenScadProject,
@@ -32,6 +33,19 @@ const openScadProjectFileSchema = z.object({
   content: z.string(),
 });
 
+const openScadProjectAssetSchema = z.object({
+  path: z.string().min(1),
+  storagePath: z.string().min(1),
+  mediaType: z.enum([
+    'model/stl',
+    'text/plain',
+    'application/dxf',
+    'image/svg+xml',
+  ]),
+  byteLength: z.number().int().positive(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
 export const openScadProjectSchema = z
   .object({
     schemaVersion: z.literal(OPENSCAD_PROJECT_SCHEMA_VERSION),
@@ -40,6 +54,7 @@ export const openScadProjectSchema = z
       .array(openScadProjectFileSchema)
       .min(1)
       .max(OPENSCAD_PROJECT_MAX_FILES),
+    assets: z.array(openScadProjectAssetSchema).max(OPENSCAD_PROJECT_MAX_ASSETS).optional(),
   })
   .superRefine((project, context) => {
     try {

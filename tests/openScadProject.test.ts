@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  OPENSCAD_PROJECT_MAX_ASSET_BYTES,
   OPENSCAD_PROJECT_MAX_FILE_BYTES,
   OPENSCAD_PROJECT_MAX_FILES,
   OPENSCAD_PROJECT_MAX_TOTAL_BYTES,
@@ -18,6 +19,8 @@ function project(
   return { schemaVersion: 1, entrypointPath, files };
 }
 
+const SHA = 'a'.repeat(64);
+
 describe('OpenSCAD project normalization', () => {
   it('normalizes separators and sorts files deterministically', () => {
     const normalized = normalizeOpenScadProject(
@@ -34,6 +37,7 @@ describe('OpenSCAD project normalization', () => {
       'main.scad',
       'parts/lid.scad',
     ]);
+    expect(normalized.assets).toBeUndefined();
     expect(getOpenScadEntrypoint(normalized).content).toContain('lid();');
   });
 
@@ -90,7 +94,7 @@ describe('OpenSCAD project normalization', () => {
     ).toThrow(/entrypoint cannot be empty/i);
   });
 
-  it('accepts only SCAD source files in the first project schema', () => {
+  it('accepts only SCAD source files in project.files', () => {
     expect(() =>
       normalizeOpenScadProject(
         project([
@@ -99,6 +103,70 @@ describe('OpenSCAD project normalization', () => {
         ]),
       ),
     ).toThrow(/must use the .scad extension/i);
+  });
+
+  it('normalizes explicit asset manifest references without inlining bytes', () => {
+    const normalized = normalizeOpenScadProject({
+      ...project([{ path: 'main.scad', content: 'import("assets/body.stl");' }]),
+      assets: [
+        {
+          path: 'assets\\body.stl',
+          storagePath: `user/conversation/${SHA}.stl`,
+          mediaType: 'model/stl',
+          byteLength: 1024,
+          sha256: SHA,
+        },
+      ],
+    });
+
+    expect(normalized.assets).toEqual([
+      {
+        path: 'assets/body.stl',
+        storagePath: `user/conversation/${SHA}.stl`,
+        mediaType: 'model/stl',
+        byteLength: 1024,
+        sha256: SHA,
+      },
+    ]);
+  });
+
+  it('rejects asset case collisions and mismatched MIME/extensions', () => {
+    expect(() =>
+      normalizeOpenScadProject({
+        ...project([{ path: 'main.scad', content: 'cube(1);' }]),
+        assets: [
+          {
+            path: 'assets/body.stl',
+            storagePath: `u/c/${SHA}-1.stl`,
+            mediaType: 'model/stl',
+            byteLength: 10,
+            sha256: SHA,
+          },
+          {
+            path: 'assets/BODY.STL',
+            storagePath: `u/c/${SHA}-2.stl`,
+            mediaType: 'model/stl',
+            byteLength: 10,
+            sha256: SHA,
+          },
+        ],
+      }),
+    ).toThrow(/differ only by case/i);
+
+    expect(() =>
+      normalizeOpenScadProject({
+        ...project([{ path: 'main.scad', content: 'cube(1);' }]),
+        assets: [
+          {
+            path: 'shape.stl',
+            storagePath: `u/c/${SHA}.stl`,
+            mediaType: 'image/svg+xml',
+            byteLength: 10,
+            sha256: SHA,
+          },
+        ],
+      }),
+    ).toThrow(/unsupported OpenSCAD project asset type/i);
   });
 
   it('enforces file-count and per-file byte bounds', () => {
@@ -126,7 +194,7 @@ describe('OpenSCAD project normalization', () => {
     ).toThrow(/exceeds 256000 UTF-8 bytes/i);
   });
 
-  it('enforces the aggregate project byte bound', () => {
+  it('enforces aggregate source and asset byte bounds', () => {
     const chunk = 'x'.repeat(OPENSCAD_PROJECT_MAX_FILE_BYTES);
     const files = Array.from({ length: 5 }, (_, index) => ({
       path: index === 0 ? 'main.scad' : `part-${index}.scad`,
@@ -139,15 +207,39 @@ describe('OpenSCAD project normalization', () => {
     expect(() => normalizeOpenScadProject(project(files))).toThrow(
       /project exceeds 1048576 UTF-8 bytes/i,
     );
+
+    expect(() =>
+      normalizeOpenScadProject({
+        ...project([{ path: 'main.scad', content: 'cube(1);' }]),
+        assets: [
+          {
+            path: 'shape.stl',
+            storagePath: `u/c/${SHA}.stl`,
+            mediaType: 'model/stl',
+            byteLength: OPENSCAD_PROJECT_MAX_ASSET_BYTES + 1,
+            sha256: SHA,
+          },
+        ],
+      }),
+    ).toThrow(/must be between 1 and/i);
   });
 
-  it('replaces one file while preserving the normalized project', () => {
-    const original = normalizeOpenScadProject(
-      project([
+  it('replaces one file while preserving the normalized project and assets', () => {
+    const original = normalizeOpenScadProject({
+      ...project([
         { path: 'main.scad', content: 'use <parts/body.scad>\nbody();' },
         { path: 'parts/body.scad', content: 'module body() { cube(1); }' },
       ]),
-    );
+      assets: [
+        {
+          path: 'assets/body.stl',
+          storagePath: `u/c/${SHA}.stl`,
+          mediaType: 'model/stl',
+          byteLength: 100,
+          sha256: SHA,
+        },
+      ],
+    });
 
     const updated = replaceOpenScadProjectFileContent(
       original,
@@ -161,5 +253,6 @@ describe('OpenSCAD project normalization', () => {
     expect(
       updated.files.find((file) => file.path === 'parts/body.scad')?.content,
     ).toContain('cube(2)');
+    expect(updated.assets).toEqual(original.assets);
   });
 });

@@ -1,18 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectOpenScadProjectAssetReferences,
   collectOpenScadProjectSourceReferences,
   openScadProjectUsesBundledLibrary,
   resolveOpenScadProjectReference,
+  validateOpenScadProjectAssetReferences,
   validateOpenScadProjectSourceReferences,
 } from '@shared/openScadProjectReferences';
 import type { OpenScadProject } from '@shared/openScadProject';
 
-function project(files: OpenScadProject['files']): OpenScadProject {
+const SHA = 'b'.repeat(64);
+
+function project(
+  files: OpenScadProject['files'],
+  assets: NonNullable<OpenScadProject['assets']> = [],
+): OpenScadProject {
   return {
     schemaVersion: 1,
     entrypointPath: 'main.scad',
     files,
+    assets,
   };
+}
+
+function asset(
+  path: string,
+  mediaType: 'model/stl' | 'text/plain' | 'application/dxf' | 'image/svg+xml',
+) {
+  return {
+    path,
+    storagePath: `user/conversation/${SHA}-${path.replace(/\//g, '-')}`,
+    mediaType,
+    byteLength: 128,
+    sha256: SHA,
+  } as const;
 }
 
 describe('OpenSCAD project references', () => {
@@ -99,5 +120,92 @@ describe('OpenSCAD project references', () => {
     expect(() => validateOpenScadProjectSourceReferences(value)).not.toThrow();
     expect(openScadProjectUsesBundledLibrary(value, 'BOSL2')).toBe(true);
     expect(openScadProjectUsesBundledLibrary(value, 'BOSL')).toBe(false);
+  });
+
+  it('collects literal import/surface references from entrypoint and support files', () => {
+    const value = project(
+      [
+        {
+          path: 'main.scad',
+          content: 'import(file = "assets/body.stl", convexity=5); include <parts/top.scad>',
+        },
+        {
+          path: 'parts/top.scad',
+          content: 'surface("../heightmaps/top.dat", center=true);',
+        },
+      ],
+      [
+        asset('assets/body.stl', 'model/stl'),
+        asset('heightmaps/top.dat', 'text/plain'),
+      ],
+    );
+
+    expect(collectOpenScadProjectAssetReferences(value)).toEqual([
+      {
+        kind: 'import',
+        sourcePath: 'main.scad',
+        target: 'assets/body.stl',
+        resolvedPath: 'assets/body.stl',
+        dynamic: false,
+      },
+      {
+        kind: 'surface',
+        sourcePath: 'parts/top.scad',
+        target: '../heightmaps/top.dat',
+        resolvedPath: 'heightmaps/top.dat',
+        dynamic: false,
+      },
+    ]);
+    expect(() => validateOpenScadProjectAssetReferences(value)).not.toThrow();
+  });
+
+  it('ignores import/surface examples in comments and strings', () => {
+    const value = project([
+      {
+        path: 'main.scad',
+        content: [
+          '// import("missing.stl");',
+          'echo("surface(\\\"missing.dat\\\")");',
+          'cube(1);',
+        ].join('\n'),
+      },
+    ]);
+    expect(collectOpenScadProjectAssetReferences(value)).toEqual([]);
+  });
+
+  it('rejects dynamic asset filenames clearly', () => {
+    const value = project([
+      {
+        path: 'main.scad',
+        content: 'name = "body.stl"; import(name);',
+      },
+    ]);
+
+    expect(() => validateOpenScadProjectAssetReferences(value)).toThrow(
+      /dynamic file argument.*literal filename/i,
+    );
+  });
+
+  it('rejects missing assets, root escapes and kind/extension mismatches', () => {
+    expect(() =>
+      validateOpenScadProjectAssetReferences(
+        project([{ path: 'main.scad', content: 'import("missing.stl");' }]),
+      ),
+    ).toThrow(/does not resolve to a project asset/i);
+
+    expect(() =>
+      collectOpenScadProjectAssetReferences(
+        project([{ path: 'main.scad', content: 'surface("../outside.dat");' }]),
+      ),
+    ).toThrow(/escapes project root/i);
+
+    expect(() =>
+      validateOpenScadProjectAssetReferences(
+        project(
+          [{ path: 'main.scad', content: 'surface("mesh.stl");' }],
+          [asset('mesh.stl', 'model/stl')],
+        ),
+      ),
+    ).toThrow(/unsupported asset format/i);
   });
 });

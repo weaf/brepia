@@ -5,25 +5,53 @@ export const OPENSCAD_PROJECT_MAX_SEGMENT_CHARS = 128;
 export const OPENSCAD_PROJECT_MAX_DEPTH = 16;
 export const OPENSCAD_PROJECT_MAX_FILE_BYTES = 256_000;
 export const OPENSCAD_PROJECT_MAX_TOTAL_BYTES = 1_048_576;
+export const OPENSCAD_PROJECT_MAX_ASSETS = 32;
+export const OPENSCAD_PROJECT_MAX_ASSET_BYTES = 16_777_216;
+export const OPENSCAD_PROJECT_MAX_TOTAL_ASSET_BYTES = 33_554_432;
+
+export type OpenScadProjectAssetMediaType =
+  | 'model/stl'
+  | 'text/plain'
+  | 'application/dxf'
+  | 'image/svg+xml';
 
 export type OpenScadProjectFile = {
   path: string;
   content: string;
 };
 
+export type OpenScadProjectAsset = {
+  path: string;
+  storagePath: string;
+  mediaType: OpenScadProjectAssetMediaType;
+  byteLength: number;
+  sha256: string;
+};
+
 export type OpenScadProject = {
   schemaVersion: typeof OPENSCAD_PROJECT_SCHEMA_VERSION;
   entrypointPath: string;
   files: OpenScadProjectFile[];
+  /**
+   * Data dependencies referenced by import()/surface(). Assets are
+   * authoritative private-storage references, never inline bytes. The field is
+   * omitted for source-only projects so their existing canonical identity stays
+   * stable; projects with assets include the normalized manifest in their hash.
+   */
+  assets?: OpenScadProjectAsset[];
 };
 
 export type OpenScadProjectErrorCode =
   | 'invalid_schema'
   | 'invalid_path'
   | 'invalid_file_type'
+  | 'invalid_asset'
   | 'too_many_files'
+  | 'too_many_assets'
   | 'file_too_large'
   | 'project_too_large'
+  | 'asset_too_large'
+  | 'assets_too_large'
   | 'duplicate_path'
   | 'case_collision'
   | 'missing_entrypoint'
@@ -41,6 +69,21 @@ export class OpenScadProjectError extends Error {
 
 const WINDOWS_DRIVE_PATTERN = /^[a-zA-Z]:[\\/]/;
 const SCAD_EXTENSION_PATTERN = /\.scad$/i;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+const ASSET_MEDIA_TYPE_BY_EXTENSION: Record<
+  string,
+  OpenScadProjectAssetMediaType
+> = {
+  '.stl': 'model/stl',
+  '.off': 'text/plain',
+  '.dxf': 'application/dxf',
+  '.svg': 'image/svg+xml',
+  '.dat': 'text/plain',
+};
+
+const IMPORT_ASSET_EXTENSIONS = new Set(['.stl', '.off', '.dxf', '.svg']);
+const SURFACE_ASSET_EXTENSIONS = new Set(['.dat']);
 
 function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
@@ -52,6 +95,28 @@ function hasControlCharacter(value: string): boolean {
     if (codePoint <= 31 || codePoint === 127) return true;
   }
   return false;
+}
+
+function pathExtension(path: string): string {
+  const slash = path.lastIndexOf('/');
+  const dot = path.lastIndexOf('.');
+  return dot > slash ? path.slice(dot).toLocaleLowerCase('en-US') : '';
+}
+
+export function openScadProjectAssetMediaTypeForPath(
+  path: string,
+): OpenScadProjectAssetMediaType | null {
+  return ASSET_MEDIA_TYPE_BY_EXTENSION[pathExtension(path)] ?? null;
+}
+
+export function isOpenScadProjectAssetPathSupportedForKind(
+  path: string,
+  kind: 'import' | 'surface',
+): boolean {
+  const extension = pathExtension(path);
+  return kind === 'import'
+    ? IMPORT_ASSET_EXTENSIONS.has(extension)
+    : SURFACE_ASSET_EXTENSIONS.has(extension);
 }
 
 export function normalizeOpenScadProjectPath(input: string): string {
@@ -146,6 +211,79 @@ function normalizeProjectFile(file: OpenScadProjectFile): OpenScadProjectFile {
   return { path, content: file.content };
 }
 
+function normalizeProjectAsset(
+  asset: OpenScadProjectAsset,
+): OpenScadProjectAsset {
+  if (!asset || typeof asset !== 'object' || Array.isArray(asset)) {
+    throw new OpenScadProjectError(
+      'invalid_asset',
+      'OpenSCAD project assets must be manifest references.',
+    );
+  }
+
+  const path = normalizeOpenScadProjectPath(asset.path);
+  const storagePath = normalizeOpenScadProjectPath(asset.storagePath);
+  const expectedMediaType = openScadProjectAssetMediaTypeForPath(path);
+  if (!expectedMediaType || asset.mediaType !== expectedMediaType) {
+    throw new OpenScadProjectError(
+      'invalid_asset',
+      `Unsupported OpenSCAD project asset type for ${path}.`,
+    );
+  }
+  if (
+    !Number.isSafeInteger(asset.byteLength) ||
+    asset.byteLength <= 0 ||
+    asset.byteLength > OPENSCAD_PROJECT_MAX_ASSET_BYTES
+  ) {
+    throw new OpenScadProjectError(
+      'asset_too_large',
+      `OpenSCAD project asset ${path} must be between 1 and ${OPENSCAD_PROJECT_MAX_ASSET_BYTES} bytes.`,
+    );
+  }
+  if (typeof asset.sha256 !== 'string' || !SHA256_PATTERN.test(asset.sha256)) {
+    throw new OpenScadProjectError(
+      'invalid_asset',
+      `OpenSCAD project asset ${path} must have a lowercase SHA-256 digest.`,
+    );
+  }
+
+  return {
+    path,
+    storagePath,
+    mediaType: expectedMediaType,
+    byteLength: asset.byteLength,
+    sha256: asset.sha256,
+  };
+}
+
+function assertUniqueProjectPaths(
+  files: OpenScadProjectFile[],
+  assets: OpenScadProjectAsset[],
+): void {
+  const exactPaths = new Set<string>();
+  const foldedPaths = new Map<string, string>();
+
+  for (const item of [...files, ...assets]) {
+    if (exactPaths.has(item.path)) {
+      throw new OpenScadProjectError(
+        'duplicate_path',
+        `Duplicate OpenSCAD project path: ${item.path}`,
+      );
+    }
+    exactPaths.add(item.path);
+
+    const folded = item.path.toLocaleLowerCase('en-US');
+    const existing = foldedPaths.get(folded);
+    if (existing && existing !== item.path) {
+      throw new OpenScadProjectError(
+        'case_collision',
+        `OpenSCAD project paths differ only by case: ${existing} and ${item.path}`,
+      );
+    }
+    foldedPaths.set(folded, item.path);
+  }
+}
+
 export function normalizeOpenScadProject(
   project: OpenScadProject,
 ): OpenScadProject {
@@ -154,7 +292,8 @@ export function normalizeOpenScadProject(
     typeof project !== 'object' ||
     Array.isArray(project) ||
     project.schemaVersion !== OPENSCAD_PROJECT_SCHEMA_VERSION ||
-    !Array.isArray(project.files)
+    !Array.isArray(project.files) ||
+    (project.assets != null && !Array.isArray(project.assets))
   ) {
     throw new OpenScadProjectError(
       'invalid_schema',
@@ -175,6 +314,14 @@ export function normalizeOpenScadProject(
     );
   }
 
+  const rawAssets = project.assets ?? [];
+  if (rawAssets.length > OPENSCAD_PROJECT_MAX_ASSETS) {
+    throw new OpenScadProjectError(
+      'too_many_assets',
+      `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_ASSETS} assets.`,
+    );
+  }
+
   const entrypointPath = normalizeOpenScadProjectPath(project.entrypointPath);
   if (!SCAD_EXTENSION_PATTERN.test(entrypointPath)) {
     throw new OpenScadProjectError(
@@ -184,34 +331,27 @@ export function normalizeOpenScadProject(
   }
 
   const files = project.files.map(normalizeProjectFile);
-  const exactPaths = new Set<string>();
-  const foldedPaths = new Map<string, string>();
+  const assets = rawAssets.map(normalizeProjectAsset);
+  assertUniqueProjectPaths(files, assets);
+
   let totalBytes = 0;
-
   for (const file of files) {
-    if (exactPaths.has(file.path)) {
-      throw new OpenScadProjectError(
-        'duplicate_path',
-        `Duplicate OpenSCAD project path: ${file.path}`,
-      );
-    }
-    exactPaths.add(file.path);
-
-    const folded = file.path.toLocaleLowerCase('en-US');
-    const existing = foldedPaths.get(folded);
-    if (existing && existing !== file.path) {
-      throw new OpenScadProjectError(
-        'case_collision',
-        `OpenSCAD project paths differ only by case: ${existing} and ${file.path}`,
-      );
-    }
-    foldedPaths.set(folded, file.path);
-
     totalBytes += utf8ByteLength(file.content);
     if (totalBytes > OPENSCAD_PROJECT_MAX_TOTAL_BYTES) {
       throw new OpenScadProjectError(
         'project_too_large',
         `OpenSCAD project exceeds ${OPENSCAD_PROJECT_MAX_TOTAL_BYTES} UTF-8 bytes.`,
+      );
+    }
+  }
+
+  let totalAssetBytes = 0;
+  for (const asset of assets) {
+    totalAssetBytes += asset.byteLength;
+    if (totalAssetBytes > OPENSCAD_PROJECT_MAX_TOTAL_ASSET_BYTES) {
+      throw new OpenScadProjectError(
+        'assets_too_large',
+        `OpenSCAD project assets exceed ${OPENSCAD_PROJECT_MAX_TOTAL_ASSET_BYTES} bytes.`,
       );
     }
   }
@@ -231,10 +371,12 @@ export function normalizeOpenScadProject(
   }
 
   files.sort((left, right) => left.path.localeCompare(right.path, 'en-US'));
+  assets.sort((left, right) => left.path.localeCompare(right.path, 'en-US'));
   return {
     schemaVersion: OPENSCAD_PROJECT_SCHEMA_VERSION,
     entrypointPath,
     files,
+    ...(assets.length > 0 ? { assets } : {}),
   };
 }
 
