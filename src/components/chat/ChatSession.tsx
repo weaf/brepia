@@ -46,6 +46,10 @@ import {
   type OpenScadProjectAsset,
 } from '@shared/openScadProject';
 import { collectOpenScadProjectAssetReferences } from '@shared/openScadProjectReferences';
+import {
+  reconcileOpenScadProjectAssetManifest,
+  resolveOpenScadAttachmentAssets,
+} from '@shared/openScadProjectAssetReconciliation';
 import type {
   Conversation,
   Message,
@@ -145,11 +149,52 @@ function answerUserInput(input: unknown): { message: string } | null {
   return typeof message === 'string' && message.trim() ? { message } : null;
 }
 
+function authoritativeAssetsFromMessages(
+  messages: readonly AppUIMessage[],
+): OpenScadProjectAsset[] {
+  const assets = new Map<string, OpenScadProjectAsset>();
+  const add = (asset: OpenScadProjectAsset) => {
+    assets.set(`${asset.storagePath}\n${asset.path}\n${asset.sha256}`, asset);
+  };
+
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === 'data-mesh-context' && part.data.asset) {
+        add(part.data.asset);
+        continue;
+      }
+
+      if (
+        part.type === 'tool-build_parametric_model' &&
+        'input' in part &&
+        isParametricArtifact(part.input)
+      ) {
+        try {
+          const project = normalizeOpenScadProject(part.input.project);
+          for (const asset of project.assets ?? []) add(asset);
+        } catch {
+          // Invalid historical tool input is never an authoritative asset source.
+        }
+      }
+    }
+  }
+
+  return [...assets.values()];
+}
+
 function latestParametricMeshContext(messages: readonly AppUIMessage[]) {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = messages[messageIndex];
     if (message.role !== 'user') continue;
-    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+    for (
+      let partIndex = message.parts.length - 1;
+      partIndex >= 0;
+      partIndex -= 1
+    ) {
       const part = message.parts[partIndex];
       if (
         part.type === 'data-mesh-context' &&
@@ -163,6 +208,51 @@ function latestParametricMeshContext(messages: readonly AppUIMessage[]) {
   return null;
 }
 
+async function attachParametricAssetDescriptors(input: {
+  parts: AppUIMessage['parts'];
+  userId: string;
+  conversationId: string;
+}): Promise<AppUIMessage['parts']> {
+  const parts = await Promise.all(
+    input.parts.map(async (part) => {
+      if (
+        part.type !== 'data-mesh-context' ||
+        part.data.fileType !== 'stl' ||
+        !part.data.filename ||
+        part.data.asset
+      ) {
+        return part;
+      }
+
+      const storagePath = `${input.userId}/${input.conversationId}/${part.data.meshId}.stl`;
+      const { data, error } = await supabase.storage
+        .from('meshes')
+        .download(storagePath);
+      if (error || !data) {
+        throw new Error(
+          `Could not load attached STL: ${error?.message ?? 'missing object'}`,
+        );
+      }
+
+      const asset = await createOpenScadProjectAssetDescriptor({
+        path: part.data.filename,
+        storagePath,
+        blob: data,
+      });
+
+      return {
+        ...part,
+        data: {
+          ...part.data,
+          asset,
+        },
+      };
+    }),
+  );
+
+  return parts as AppUIMessage['parts'];
+}
+
 async function enrichParametricAttachmentAsset(input: {
   artifact: ParametricArtifact;
   messages: readonly AppUIMessage[];
@@ -170,42 +260,52 @@ async function enrichParametricAttachmentAsset(input: {
   conversationId: string;
 }): Promise<ParametricArtifact> {
   const project = normalizeOpenScadProject(input.artifact.project);
-  if (project.assets?.length) return { ...input.artifact, project };
-
   const references = collectOpenScadProjectAssetReferences(project);
-  if (references.length === 0) return { ...input.artifact, project };
-
+  const authoritativeAssets = authoritativeAssetsFromMessages(input.messages);
   const meshContext = latestParametricMeshContext(input.messages);
-  if (!meshContext?.filename) return { ...input.artifact, project };
 
-  const matchingReference = references.find(
-    (reference) =>
-      !reference.dynamic &&
-      reference.resolvedPath &&
-      reference.target === meshContext.filename,
-  );
-  if (!matchingReference?.resolvedPath) {
-    return { ...input.artifact, project };
-  }
-
-  const storagePath = `${input.userId}/${input.conversationId}/${meshContext.meshId}.stl`;
-  const { data, error } = await supabase.storage.from('meshes').download(storagePath);
-  if (error || !data) {
-    throw new Error(
-      `Could not load attached STL for OpenSCAD project asset: ${error?.message ?? 'missing object'}`,
+  if (references.length > 0 && meshContext?.filename && !meshContext.asset) {
+    const matchingReference = references.find(
+      (reference) =>
+        !reference.dynamic &&
+        reference.resolvedPath &&
+        reference.target === meshContext.filename,
     );
+
+    if (matchingReference?.resolvedPath) {
+      const storagePath = `${input.userId}/${input.conversationId}/${meshContext.meshId}.stl`;
+      const { data, error } = await supabase.storage
+        .from('meshes')
+        .download(storagePath);
+      if (error || !data) {
+        throw new Error(
+          `Could not load attached STL for OpenSCAD project asset: ${
+            error?.message ?? 'missing object'
+          }`,
+        );
+      }
+
+      authoritativeAssets.push(
+        await createOpenScadProjectAssetDescriptor({
+          path: meshContext.filename,
+          storagePath,
+          blob: data,
+        }),
+      );
+    }
   }
 
-  const asset: OpenScadProjectAsset =
-    await createOpenScadProjectAssetDescriptor({
-      path: matchingReference.resolvedPath,
-      storagePath,
-      blob: data,
-    });
+  const resolvedAttachmentAssets = resolveOpenScadAttachmentAssets(
+    project,
+    authoritativeAssets,
+  );
 
   return {
     ...input.artifact,
-    project: normalizeOpenScadProject({ ...project, assets: [asset] }),
+    project: reconcileOpenScadProjectAssetManifest(project, [
+      ...authoritativeAssets,
+      ...resolvedAttachmentAssets,
+    ]),
   };
 }
 
@@ -813,14 +913,35 @@ export function ChatSession({
         return;
       }
 
-      const text = parts
+      let submittedParts = parts;
+      if (conversation.type === 'parametric' && user?.id) {
+        try {
+          submittedParts = await attachParametricAssetDescriptors({
+            parts,
+            userId: user.id,
+            conversationId: conversation.id,
+          });
+        } catch (error) {
+          toast({
+            title: 'Could not prepare STL attachment',
+            description:
+              error instanceof Error
+                ? error.message
+                : 'The STL attachment could not be verified.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
+      const text = submittedParts
         .filter((p) => p.type === 'text')
         .map((p) => p.text)
         .join('');
-      const imageCount = parts.filter(
+      const imageCount = submittedParts.filter(
         (p) => p.type === 'file' && p.mediaType.startsWith('image/'),
       ).length;
-      const meshCount = parts.filter(
+      const meshCount = submittedParts.filter(
         (p) => p.type === 'data-mesh-context',
       ).length;
       posthog.capture('message_sent', {
@@ -832,9 +953,9 @@ export function ChatSession({
         conversation_id: conversation.id,
       });
 
-      const { userMessageId } = await onSendParts(parts);
+      const { userMessageId } = await onSendParts(submittedParts);
       await sendMessage(
-        { id: userMessageId, parts, metadata: { model } },
+        { id: userMessageId, parts: submittedParts, metadata: { model } },
         { body: { model } },
       );
     },
@@ -845,6 +966,7 @@ export function ChatSession({
       onSendParts,
       sendMessage,
       toast,
+      user?.id,
     ],
   );
 

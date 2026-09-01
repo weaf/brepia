@@ -30,7 +30,12 @@ import { env } from './env';
 import {
   normalizeOpenScadProject,
   type OpenScadProject,
+  type OpenScadProjectAsset,
 } from '@shared/openScadProject';
+import {
+  reconcileOpenScadProjectAssetManifest,
+  resolveOpenScadAttachmentAssets,
+} from '@shared/openScadProjectAssetReconciliation';
 import {
   buildAgentOutputContract,
   parseAgentResult,
@@ -655,7 +660,11 @@ async function invokeAgent(
 
 export function cliAgentChatModel(
   appModelId: string,
-  options: { transportInstruction?: string; timeoutMs?: number } = {},
+  options: {
+    transportInstruction?: string;
+    timeoutMs?: number;
+    authoritativeAssets?: readonly OpenScadProjectAsset[];
+  } = {},
 ): LanguageModelV3 {
   const { agent, model } = parseModelId(appModelId);
   const transportInstruction =
@@ -687,7 +696,27 @@ export function cliAgentChatModel(
         existingSessionId,
         optionsForCall.abortSignal,
       );
-      const result = invocation.result;
+      let result = invocation.result;
+      if (result.project) {
+        const currentAssets =
+          currentArtifact(optionsForCall.prompt)?.project.assets ?? [];
+        const authoritativeAssets = [
+          ...currentAssets,
+          ...(options.authoritativeAssets ?? []),
+        ];
+        const attachmentAssets = resolveOpenScadAttachmentAssets(
+          result.project,
+          authoritativeAssets,
+        );
+        result = {
+          ...result,
+          project: reconcileOpenScadProjectAssetManifest(result.project, [
+            ...authoritativeAssets,
+            ...attachmentAssets,
+          ]),
+        };
+      }
+
       const parts: LanguageModelV3StreamPart[] = [
         { type: 'stream-start', warnings: [] },
       ];

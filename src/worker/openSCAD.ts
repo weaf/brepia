@@ -368,9 +368,7 @@ class OpenSCADWrapper {
     const normalizedProject = normalizeOpenScadProject(project);
     const references =
       validateOpenScadProjectSourceReferences(normalizedProject);
-    if (normalizedProject.assets?.length) {
-      validateOpenScadProjectAssetReferences(normalizedProject);
-    }
+    validateOpenScadProjectAssetReferences(normalizedProject);
     const bundledLibraryNames = new Set(
       references
         .filter((reference) => reference.bundledLibrary)
@@ -398,7 +396,9 @@ class OpenSCADWrapper {
       instance.FS.writeFile(projectPath, file.content);
     }
 
-    const projectSourcePaths = new Set(normalizedProject.files.map((file) => file.path));
+    const projectSourcePaths = new Set(
+      normalizedProject.files.map((file) => file.path),
+    );
 
     if (normalizedProject.assets?.length) {
       // Explicit assets are hydrated into the persistent worker cache under
@@ -407,7 +407,9 @@ class OpenSCADWrapper {
       // semantics and unrelated cached files cannot leak into the project.
       const cachedFiles = new Map(
         this.files
-          .filter((file): file is WorkspaceFile & { path: string } => !!file.path)
+          .filter(
+            (file): file is WorkspaceFile & { path: string } => !!file.path,
+          )
           .map((file) => [file.path, file]),
       );
       for (const asset of normalizedProject.assets) {
@@ -431,33 +433,6 @@ class OpenSCADWrapper {
         }
         const content = await cachedAsset.arrayBuffer();
         instance.FS.writeFile(projectPath, new Int8Array(content));
-      }
-    } else {
-      // Compatibility path for pre-Step-7 projects: old uploads live in the
-      // worker cache without an explicit manifest and were historically
-      // mirrored by basename next to the entrypoint. Keep that behavior only
-      // while no explicit asset contract is present.
-      const entrypointSegments = normalizedProject.entrypointPath.split('/');
-      entrypointSegments.pop();
-      const entrypointDir = entrypointSegments.join('/');
-      for (const externalFile of this.files) {
-        if (!externalFile.path) continue;
-        const externalName = externalFile.path
-          .replace(/\\/g, '/')
-          .split('/')
-          .pop();
-        if (!externalName || externalName === '.' || externalName === '..') {
-          continue;
-        }
-        const externalRelativePath = `${entrypointDir ? `${entrypointDir}/` : ''}${externalName}`;
-        if (projectSourcePaths.has(externalRelativePath)) {
-          throw new Error(
-            `External OpenSCAD asset collides with project source: ${externalName}`,
-          );
-        }
-        const externalPath = `${projectRoot}/${externalRelativePath}`;
-        const externalContent = await externalFile.arrayBuffer();
-        instance.FS.writeFile(externalPath, new Int8Array(externalContent));
       }
     }
 

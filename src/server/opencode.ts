@@ -16,7 +16,12 @@ import { env } from './env';
 import {
   normalizeOpenScadProject,
   type OpenScadProject,
+  type OpenScadProjectAsset,
 } from '@shared/openScadProject';
+import {
+  reconcileOpenScadProjectAssetManifest,
+  resolveOpenScadAttachmentAssets,
+} from '@shared/openScadProjectAssetReconciliation';
 import {
   buildAgentOutputContract,
   finishWithParametricToolCall,
@@ -49,6 +54,7 @@ export type OpenCodeRuntimeOptions = {
   transportInstruction?: string;
   timeoutMs?: number;
   validationAttempts?: number;
+  authoritativeAssets?: readonly OpenScadProjectAsset[];
 };
 
 function bundledRuntimeNumber(key: string): number {
@@ -69,6 +75,7 @@ function resolveOpenCodeRuntime(options: OpenCodeRuntimeOptions = {}) {
     validationAttempts:
       options.validationAttempts ??
       bundledRuntimeNumber('transport.openCodeValidationAttempts'),
+    authoritativeAssets: [...(options.authoritativeAssets ?? [])],
   };
 }
 
@@ -1282,6 +1289,12 @@ async function* streamParts(
     const resolveAsset = conversationId
       ? createServerOpenScadProjectAssetResolver(conversationId)
       : undefined;
+    const promptAssets =
+      currentParametricArtifactFromPrompt(prompt)?.project.assets ?? [];
+    const authoritativeAssets = [
+      ...promptAssets,
+      ...runtime.authoritativeAssets,
+    ];
 
     while (!state.isErrored) {
       if (ac.signal.aborted) break;
@@ -1341,12 +1354,42 @@ async function* streamParts(
       const candidate = parseAgentResult(resultText);
       if (!candidate.project) break;
 
-      const validation = await validateOpenScadProject(
-        candidate.project,
-        ac.signal,
-        resolveAsset,
-      );
-      if (validation.valid) break;
+      let candidateProject = candidate.project;
+      let reconciliationDiagnostics: string | null = null;
+      try {
+        const attachmentAssets = resolveOpenScadAttachmentAssets(
+          candidateProject,
+          authoritativeAssets,
+        );
+        candidateProject = reconcileOpenScadProjectAssetManifest(
+          candidateProject,
+          [...authoritativeAssets, ...attachmentAssets],
+        );
+      } catch (error) {
+        reconciliationDiagnostics =
+          error instanceof Error ? error.message : String(error);
+      }
+
+      const validation = reconciliationDiagnostics
+        ? {
+            valid: false,
+            exitCode: null,
+            outputBytes: 0,
+            diagnostics: reconciliationDiagnostics,
+          }
+        : await validateOpenScadProject(
+            candidateProject,
+            ac.signal,
+            resolveAsset,
+          );
+
+      if (validation.valid) {
+        state.totalText = JSON.stringify({
+          project: candidateProject,
+          message: candidate.message,
+        });
+        break;
+      }
 
       validationAttempts += 1;
       if (validationAttempts >= runtime.validationAttempts) {
