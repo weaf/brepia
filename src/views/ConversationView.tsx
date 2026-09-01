@@ -291,7 +291,9 @@ export function ConversationView({
                     'w-full px-4',
                     hasParameters
                       ? 'h-[40dvh] min-h-[40dvh]'
-                      : 'min-h-[52dvh] flex-1',
+                      : mobilePreviewKey?.startsWith('artifact:')
+                        ? 'h-[52dvh] min-h-[52dvh]'
+                        : 'min-h-[52dvh] flex-1',
                   )}
                 >
                   <div className="h-full w-full overflow-hidden rounded-xl">
