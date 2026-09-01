@@ -5,7 +5,6 @@ import {
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -17,8 +16,6 @@ import {
 } from '@shared/openScadProject';
 import {
   conversationCurrentModelDir,
-  conversationCurrentModelFilePath,
-  conversationCurrentModelProjectPath,
   conversationModelDir,
   conversationModelRevisionDir,
   conversationModelRevisionFilePath,
@@ -233,22 +230,6 @@ async function defaultLoadMessages(
     parts: row.parts,
     metadata: row.metadata,
   }));
-}
-
-async function pathIsDirectory(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return false;
-    }
-    throw error;
-  }
 }
 
 function revisionNumberFromEntry(entry: string): number | null {

@@ -25,7 +25,8 @@ function revision(
     title: `Model ${number}`,
     version: 'v1',
     source,
-    codeSha256: `${number}`.padStart(64, '0'),
+    projectSha256: `${number}`.padStart(64, '0'),
+    entrypointPath: 'main.scad',
     savedAt: '2026-08-21T18:00:01.000Z',
   };
 }

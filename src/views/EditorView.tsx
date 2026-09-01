@@ -799,6 +799,11 @@ function ConversationEditor() {
             onParameterChange={changeParameters}
             currentOutput={currentOutput}
             dxfExporter={dxfExporter}
+            project={
+              activePreview?.type === 'artifact'
+                ? activePreview.artifact.project
+                : undefined
+            }
             code={activeArtifactCode}
           />
         </div>
@@ -809,6 +814,11 @@ function ConversationEditor() {
           onParameterChange={changeParameters}
           currentOutput={currentOutput}
           dxfExporter={dxfExporter}
+          project={
+            activePreview?.type === 'artifact'
+              ? activePreview.artifact.project
+              : undefined
+          }
           code={activeArtifactCode}
         />
       }

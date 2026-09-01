@@ -318,6 +318,11 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
             onParameterChange={changeParameters}
             currentOutput={currentOutput}
             dxfExporter={null}
+            project={
+              activePreview?.type === 'artifact'
+                ? activePreview.artifact.project
+                : undefined
+            }
             code={activeArtifactCode}
           />
         </div>
@@ -328,6 +333,11 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
           onParameterChange={changeParameters}
           currentOutput={currentOutput}
           dxfExporter={null}
+          project={
+            activePreview?.type === 'artifact'
+              ? activePreview.artifact.project
+              : undefined
+          }
           code={activeArtifactCode}
         />
       }
