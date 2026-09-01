@@ -10,11 +10,15 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 Step 1 is complete.
 
-Step 2 implementation is complete and has passed the isolated full code quality gate. A real browser/WASM multi-file smoke test is still required before Step 2 is considered product-verified and closed.
+Step 2 implementation and automated verification are complete. A real browser/WASM multi-file smoke test is still required before Step 2 is considered product-verified and closed.
 
 Current project-native browser-runtime implementation commit:
 
 `e26e7e0ee8619c42b3eacb5180e9b6d907ade29a` — `Make OpenSCAD browser runtime project-native`
+
+Current verified branch checkpoint:
+
+`a614006e0491ff1bcf9da7ecdc8e72dabe8c05bf` — `Record project-native browser runtime checkpoint`
 
 ## Step 1 — completed
 
@@ -42,11 +46,11 @@ Step 1 full PR quality gate:
 - lint passed;
 - build passed.
 
-## Step 2 — implementation complete, browser smoke pending
+## Step 2 — implementation and automated gate complete, browser smoke pending
 
 ### Project reference resolution
 
-`shared/openScadProjectReferences.ts` now provides shared OpenSCAD source-reference resolution and validation.
+`shared/openScadProjectReferences.ts` provides shared OpenSCAD source-reference resolution and validation.
 
 Implemented behavior:
 
@@ -63,7 +67,7 @@ Focused reference tests cover nested dependencies, parent/sibling resolution, tr
 
 ### Browser worker/runtime
 
-Browser OpenSCAD preview/export requests now carry the complete normalized `OpenScadProject` snapshot instead of a single source string.
+Browser OpenSCAD preview/export requests carry the complete normalized `OpenScadProject` snapshot instead of a single source string.
 
 For every preview/export:
 
@@ -79,7 +83,7 @@ The project source tree is reconstructed from each request. Project source left 
 
 ### Runtime consumers
 
-The following browser paths now preserve and render the complete project:
+The following browser paths preserve and render the complete project:
 
 - live desktop/mobile Parametric viewer;
 - tool-call compile/inspection preview;
@@ -111,7 +115,13 @@ The isolated migration gate that produced `e26e7e0ee8619c42b3eacb5180e9b6d907ade
 - explicit checks confirmed that the migrated worker/runtime no longer uses the old code-only preview/export call paths;
 - temporary migration scripts/workflow were removed before the production commit was created.
 
-The bot-created commit could not itself satisfy the normal PR Actions policy (`action_required`), so this status update intentionally creates a normal branch commit and triggers the regular PR Quality Gate against the resulting branch HEAD.
+Because the implementation commit was created by GitHub Actions, its immediate PR workflow required manual action. The subsequent normal branch checkpoint `a614006e0491ff1bcf9da7ecdc8e72dabe8c05bf` triggered the ordinary PR Quality Gate (`run 207`), which independently passed:
+
+- dependency audit;
+- all 400 tests;
+- typecheck;
+- lint;
+- build.
 
 The local container available to this ChatGPT session cannot resolve GitHub, so repository-local `npm` commands are not claimed as local verification. GitHub Actions is the executable code gate for this implementation session.
 
@@ -152,6 +162,6 @@ A 2D corpus should also verify DXF after the 3D smoke.
 
 ## Next checkpoint
 
-1. confirm the regular PR Quality Gate is green on the status-update HEAD;
-2. run the manual browser/WASM Step 2 corpus;
-3. if the smoke passes, mark Step 2 complete and continue with Step 3 local file/folder project import.
+1. run the manual browser/WASM Step 2 corpus;
+2. if the smoke passes, mark Step 2 complete;
+3. continue with Step 3 local file/folder project import.
