@@ -632,10 +632,6 @@ function ConversationEditor() {
     activePreview?.type === 'artifact'
       ? getParametricArtifactEntrypointCode(activePreview.artifact)
       : undefined;
-  const shareArtifactCode =
-    sharePreview?.type === 'artifact'
-      ? getParametricArtifactEntrypointCode(sharePreview.artifact)
-      : undefined;
 
   // `useCachedAiChat` captures `initialBranch` once at Chat construction;
   // if the messages query hasn't completed its first fetch yet the
@@ -676,7 +672,11 @@ function ConversationEditor() {
                       ? sharePreview.meshId
                       : undefined
                   }
-                  activeOpenscadCode={shareArtifactCode}
+                  activeOpenscadProject={
+                    sharePreview?.type === 'artifact'
+                      ? sharePreview.artifact.project
+                      : undefined
+                  }
                 />
               </div>
             </div>
@@ -704,7 +704,11 @@ function ConversationEditor() {
                         ? sharePreview.meshId
                         : undefined
                     }
-                    openscadCode={shareArtifactCode}
+                    openscadProject={
+                      sharePreview?.type === 'artifact'
+                        ? sharePreview.artifact.project
+                        : undefined
+                    }
                   />
                 </PopoverContent>
               </Popover>
@@ -752,7 +756,7 @@ function ConversationEditor() {
             <Loader showLoadingText />
           ) : activePreview?.type === 'artifact' ? (
             <OpenSCADPreview
-              scadCode={activeArtifactCode ?? ''}
+              project={activePreview.artifact.project}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               onDxfExportChange={handleDxfExporterChange}
@@ -772,7 +776,7 @@ function ConversationEditor() {
             <Loader showLoadingText />
           ) : activePreview?.type === 'artifact' ? (
             <OpenSCADPreview
-              scadCode={activeArtifactCode ?? ''}
+              project={activePreview.artifact.project}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               onDxfExportChange={handleDxfExporterChange}

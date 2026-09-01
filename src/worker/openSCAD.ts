@@ -10,6 +10,12 @@ import {
 } from './types';
 import OpenSCADError from '@/lib/OpenSCADError';
 import { libraries } from '@/lib/libraries.ts';
+import {
+  getOpenScadEntrypoint,
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
+import { validateOpenScadProjectSourceReferences } from '@shared/openScadProjectReferences';
 
 const fontsConf = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
@@ -184,7 +190,7 @@ class OpenSCADWrapper {
     parameters.push(`--enable=fast-csg`);
     parameters.push(`--enable=lazy-union`);
 
-    return await this.executeOpenscad(data.code, data.fileType, parameters);
+    return await this.executeOpenscad(data.project, data.fileType, parameters);
   }
 
   /**
@@ -239,7 +245,7 @@ class OpenSCADWrapper {
     ];
 
     const render = await this.executeOpenscad(
-      data.code,
+      data.project,
       data.fileType,
       parameters.concat(exportParams),
       [{ path: '/out.off', key: 'off' }],
@@ -254,7 +260,7 @@ class OpenSCADWrapper {
       // Use the same flag set as the 3D path — the 2025.x build dropped
       // --enable=manifold / --enable=fast-csg in favor of --backend=manifold.
       const svgExport = await this.executeOpenscad(
-        data.code,
+        data.project,
         'svg',
         parameters.concat([
           '--export-format=svg',
@@ -345,7 +351,7 @@ class OpenSCADWrapper {
    * @returns
    */
   async executeOpenscad(
-    code: string,
+    project: OpenScadProject,
     fileType: string,
     parameters: string[],
     extraOutputs: { path: string; key: string }[] = [],
@@ -356,13 +362,70 @@ class OpenSCADWrapper {
     this.log.stdErr = [];
     this.log.stdOut = [];
 
-    const inputFile = '/input.scad';
+    const normalizedProject = normalizeOpenScadProject(project);
+    const references =
+      validateOpenScadProjectSourceReferences(normalizedProject);
+    const bundledLibraryNames = new Set(
+      references
+        .filter((reference) => reference.bundledLibrary)
+        .map(
+          (reference) => reference.target.replace(/\\/g, '/').split('/', 1)[0],
+        ),
+    );
+    const entrypoint = getOpenScadEntrypoint(normalizedProject);
+    const projectRoot = '/project';
+    const inputFile = `${projectRoot}/${normalizedProject.entrypointPath}`;
     const outputFile = '/out.' + fileType;
     const instance = await this.getInstance();
     const importLibraries: string[] = [];
 
-    // Write the code to a file
-    instance.FS.writeFile(inputFile, code);
+    // Mount exactly this request's normalized project into the fresh WASM FS.
+    // Persistent external mesh files are loaded by getInstance() separately;
+    // project source never relies on state from an earlier compile.
+    this.createDirectoryRecursive(instance, projectRoot);
+    for (const file of normalizedProject.files) {
+      const projectPath = `${projectRoot}/${file.path}`;
+      const pathParts = projectPath.split('/');
+      pathParts.pop();
+      const dir = pathParts.join('/');
+      if (dir && !this.fileExists(instance, dir)) {
+        this.createDirectoryRecursive(instance, dir);
+      }
+      instance.FS.writeFile(projectPath, file.content);
+    }
+
+    // Existing uploaded mesh files are intentionally still an external cache
+    // until the explicit project-asset phase. OpenSCAD resolves import()
+    // relative to the importing script, so mirror each cached basename beside
+    // the entrypoint to preserve the v1 import("mesh.stl") behavior after
+    // moving the script from /input.scad into /project/<entrypoint>.
+    const entrypointSegments = normalizedProject.entrypointPath.split('/');
+    entrypointSegments.pop();
+    const entrypointDir = entrypointSegments.join('/');
+    const projectSourcePaths = new Set(
+      normalizedProject.files.map((file) => `${projectRoot}/${file.path}`),
+    );
+    for (const externalFile of this.files) {
+      if (!externalFile.path) continue;
+      const externalName = externalFile.path
+        .replace(/\\/g, '/')
+        .split('/')
+        .pop();
+      if (!externalName || externalName === '.' || externalName === '..') {
+        continue;
+      }
+      const externalPath = `${projectRoot}/${
+        entrypointDir ? `${entrypointDir}/` : ''
+      }${externalName}`;
+      if (projectSourcePaths.has(externalPath)) {
+        throw new Error(
+          `External OpenSCAD asset collides with project source: ${externalName}`,
+        );
+      }
+      const externalContent = await externalFile.arrayBuffer();
+      instance.FS.writeFile(externalPath, new Int8Array(externalContent));
+    }
+
     if (!this.fileExists(instance, '/libraries')) {
       instance.FS.mkdir('/libraries');
     }
@@ -370,14 +433,15 @@ class OpenSCADWrapper {
     // Detect against comment- and string-stripped source so only ACTIVE
     // statements count — a commented-out include must not trigger a (now
     // fatal-on-failure) library fetch.
-    const activeCode = stripStringsAndComments(code);
+    // Project reference validation already strips comments/strings and scans
+    // every source file, so bundled libraries used only by support files are
+    // loaded just like libraries referenced by the entrypoint.
     for (const library of libraries) {
       // Match a real `include <BOSL2/...>` / `use <BOSL2/...>` statement, not a
       // bare substring: "BOSL2" contains "BOSL", so substring matching mounted
       // BOSL alongside BOSL2 on every compile.
-      const libraryStatement = new RegExp(`(include|use)\\s*<${library.name}/`);
       if (
-        libraryStatement.test(activeCode) &&
+        bundledLibraryNames.has(library.name) &&
         !importLibraries.includes(library.name)
       ) {
         importLibraries.push(library.name);
@@ -454,7 +518,7 @@ class OpenSCADWrapper {
       throw new OpenSCADError(
         'Adam exited with an error' +
           (error instanceof Error ? ': ' + error.message : ''),
-        code,
+        entrypoint.content,
         this.log.stdErr,
       );
     }
@@ -480,7 +544,7 @@ class OpenSCADWrapper {
     } else {
       throw new OpenSCADError(
         'Adam did not exit correctly',
-        code,
+        entrypoint.content,
         this.log.stdErr,
       );
     }

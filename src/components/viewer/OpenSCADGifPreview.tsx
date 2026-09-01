@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTF, GLTFParser } from 'three-stdlib';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { useOpenSCAD } from '@/hooks/useOpenSCAD';
+import type { OpenScadProject } from '@shared/openScadProject';
 import {
   buildColoredGroupFromOff,
   disposeColoredGroup,
@@ -17,7 +18,7 @@ const FALLBACK_COLOR_RGB = FALLBACK_COLOR_HEX;
 
 interface OpenSCADGifPreviewProps {
   ref: React.RefObject<{ downloadGIF: () => Promise<void> } | null>;
-  code: string;
+  project: OpenScadProject;
   setIsGenerating: (isGenerating: boolean) => void;
   setProgress: (progress: number) => void;
   setReadyToDownload: (readyToDownload: boolean) => void;
@@ -25,7 +26,7 @@ interface OpenSCADGifPreviewProps {
 
 export function OpenSCADGifPreview({
   ref,
-  code,
+  project,
   setIsGenerating,
   setProgress,
   setReadyToDownload,
@@ -34,7 +35,7 @@ export function OpenSCADGifPreview({
   // --backend=manifold + --enable=lazy-union (matching the in-editor live
   // render) and emits an OFF companion with per-face RGBA so we can
   // reproduce OpenSCAD's `color()` calls in the GIF.
-  const { previewScadColored } = useOpenSCAD();
+  const { previewProjectColored } = useOpenSCAD();
   const [gltf, setGltf] = useState<GLTF | null>(null);
   const meshGifRef = useRef<{ downloadGIF: () => Promise<void> } | null>(null);
   const lastColoredGroupRef = useRef<THREE.Group | null>(null);
@@ -46,10 +47,10 @@ export function OpenSCADGifPreview({
   }));
 
   useEffect(() => {
-    if (!code) return;
+    if (!project) return;
     let stale = false;
 
-    previewScadColored(code)
+    previewProjectColored(project)
       .then(async ({ stl, off }) => {
         if (stale) return;
 
@@ -111,7 +112,7 @@ export function OpenSCADGifPreview({
     return () => {
       stale = true;
     };
-  }, [code, previewScadColored]);
+  }, [project, previewProjectColored]);
 
   // Release the last colored group's GPU resources on unmount.
   useEffect(() => {

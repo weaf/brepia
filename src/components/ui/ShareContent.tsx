@@ -16,13 +16,14 @@ import { OpenSCADGifPreview } from '../viewer/OpenSCADGifPreview';
 import { cn } from '@/lib/utils';
 import type React from 'react';
 import { ActivityIndicator } from '@/components/brand';
+import type { OpenScadProject } from '@shared/openScadProject';
 
 type ShareContentProps = {
   conversationId: string;
   privacy: 'public' | 'private';
   onPrivacyChange: (privacy: 'public' | 'private') => void;
   meshId?: string;
-  openscadCode?: string;
+  openscadProject?: OpenScadProject;
 };
 
 export function ShareContent({
@@ -30,7 +31,7 @@ export function ShareContent({
   privacy,
   onPrivacyChange,
   meshId,
-  openscadCode,
+  openscadProject,
 }: ShareContentProps) {
   const [justCopied, setJustCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -93,7 +94,7 @@ export function ShareContent({
               setReadyToDownload={setReadyToDownload}
             />
           </Suspense>
-        ) : openscadCode ? (
+        ) : openscadProject ? (
           <Suspense
             fallback={
               <div className="h-56 overflow-hidden rounded-lg border border-adam-neutral-700 bg-adam-neutral-950" />
@@ -102,7 +103,7 @@ export function ShareContent({
             <div className="h-56 overflow-hidden rounded-lg border border-adam-neutral-700 bg-adam-neutral-950">
               <OpenSCADGifPreview
                 ref={downloadGifRef}
-                code={openscadCode}
+                project={openscadProject}
                 setIsGenerating={setIsGenerating}
                 setProgress={setProgress}
                 setReadyToDownload={setReadyToDownload}
@@ -154,7 +155,7 @@ export function ShareContent({
         </div>
       </div>
 
-      {readyToDownload && (meshId || openscadCode) ? (
+      {readyToDownload && (meshId || openscadProject) ? (
         <Button
           onClick={() => downloadGifRef.current?.downloadGIF()}
           disabled={isGenerating}

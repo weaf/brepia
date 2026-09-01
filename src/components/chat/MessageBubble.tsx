@@ -688,7 +688,7 @@ function AssistantBubble({
                     >
                       <ParametricImagePreview
                         toolCallId={part.toolCallId}
-                        code={artifactCode}
+                        project={artifact.project}
                       />
                     </button>
                   ) : null
@@ -1165,10 +1165,10 @@ function MeshToolBlock({
 
 function ParametricImagePreview({
   toolCallId,
-  code,
+  project,
 }: {
   toolCallId: string;
-  code: string;
+  project: ParametricArtifact['project'];
 }) {
   // Same get-or-generate path VisualCard uses: download cached PNG at
   // `images/{userId}/{convId}/preview-{toolCallId}`, otherwise compile
@@ -1187,7 +1187,7 @@ function ParametricImagePreview({
     conversationId: conversation.id,
     userId: conversation.user_id,
     generateBlob: async () => {
-      const { stl, off } = await previewScadColoredViaToolWorker(code);
+      const { stl, off } = await previewScadColoredViaToolWorker(project);
       if (off) {
         const colored = await generateColoredPreview(off);
         if (colored) return dataUrlToBlob(colored);

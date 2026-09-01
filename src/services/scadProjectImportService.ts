@@ -45,10 +45,7 @@ export async function createImportedScadProject({
 
   let baseline: ImportedArtifactBaseline;
   try {
-    // Step 1 stores the project-native artifact. Browser execution becomes
-    // project-aware in Step 2; until then a one-file import can compile through
-    // the existing code-only worker path without changing its behavior.
-    await previewScadColoredViaToolWorker(code);
+    await previewScadColoredViaToolWorker(project);
     baseline = { status: 'success' };
   } catch (error) {
     if (isBlockingScadCompileError(error)) throw error;

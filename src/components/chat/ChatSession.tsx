@@ -411,8 +411,9 @@ export function ChatSession({
       }
 
       try {
-        const code = getParametricArtifactEntrypointCode(input);
-        const { stl, off } = await previewScadColoredViaToolWorker(code);
+        const { stl, off } = await previewScadColoredViaToolWorker(
+          input.project,
+        );
         let inspectionUploaded = false;
         try {
           if (user?.id) {

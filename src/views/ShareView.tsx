@@ -247,7 +247,11 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
                     ? activePreview.meshId
                     : undefined
                 }
-                activeOpenscadCode={activeArtifactCode}
+                activeOpenscadProject={
+                  activePreview?.type === 'artifact'
+                    ? activePreview.artifact.project
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -275,7 +279,7 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
         <div className="flex h-full w-full items-center justify-center bg-adam-neutral-700">
           {activePreview?.type === 'artifact' && activeArtifactCode ? (
             <OpenSCADPreview
-              scadCode={activeArtifactCode}
+              project={activePreview.artifact.project}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
             />
@@ -292,7 +296,7 @@ function ConversationShare({ conversation, messages }: ConversationShareProps) {
         <div className="flex h-full w-full items-center justify-center bg-adam-bg-secondary-dark">
           {activePreview?.type === 'artifact' && activeArtifactCode ? (
             <OpenSCADPreview
-              scadCode={activeArtifactCode}
+              project={activePreview.artifact.project}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               isMobile={true}
