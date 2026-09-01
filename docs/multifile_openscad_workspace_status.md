@@ -16,9 +16,11 @@ Current project-native browser-runtime implementation commit:
 
 `e26e7e0ee8619c42b3eacb5180e9b6d907ade29a` — `Make OpenSCAD browser runtime project-native`
 
-Current verified branch checkpoint:
+Verified automated checkpoint:
 
 `a614006e0491ff1bcf9da7ecdc8e72dabe8c05bf` — `Record project-native browser runtime checkpoint`
+
+The ordinary PR Quality Gate for that checkpoint passed all tests, typecheck, lint and build.
 
 ## Step 1 — completed
 
@@ -127,7 +129,15 @@ The local container available to this ChatGPT session cannot resolve GitHub, so 
 
 ## Manual Step 2 browser/WASM smoke still required
 
-Automated TypeScript/Vitest/build coverage does not prove that the vendored OpenSCAD WASM build resolves a real multi-file `/project` hierarchy correctly in the browser. Before Step 2 is closed, manually verify a real generated project containing at least:
+Automated TypeScript/Vitest/build coverage does not prove that the vendored OpenSCAD WASM build resolves a real multi-file `/project` hierarchy correctly in the browser.
+
+For the first smoke, use a normal Parametric tool-calling model/transport that emits the `build_parametric_model` tool input directly. Do not use the current external OpenCode/Codex code-result adapter for this specific multi-file smoke: those adapters intentionally remain one-file boundaries until Step 5.
+
+Suggested first prompt:
+
+> Create a simple OpenSCAD model as a three-file project. Use `main.scad` as the entrypoint. Put the main body module in `parts/body.scad` and a rib module in `parts/nested/rib.scad`. `main.scad` must include or use the support files and render a visible 3D object. Put one editable numeric parameter named `width` in `main.scad`, default 30, so changing it visibly changes the model. Keep all source necessary to render the model inside those three project files.
+
+Expected project hierarchy:
 
 ```text
 main.scad
@@ -137,16 +147,18 @@ parts/nested/rib.scad
 
 Required smoke checks:
 
-- visible 3D preview succeeds with nested `include`/`use`;
-- an editable entrypoint parameter recompiles the same project without losing support files;
-- conversation reload still renders the project;
-- history/thumbnail regeneration works;
-- STL export works;
-- share/GIF preview works;
-- one support file using BOSL2 proves whole-project bundled-library detection;
-- existing uploaded mesh + `import("filename.stl")` remains functional.
+1. visible 3D preview succeeds with nested `include`/`use` and no missing-file error;
+2. change `width` in the parameter UI and confirm the preview updates without losing the support files;
+3. reload the conversation and confirm the model still renders;
+4. confirm the message/history thumbnail renders;
+5. export STL;
+6. open Share and confirm the OpenSCAD GIF preview renders;
+7. run a second model where `parts/body.scad` includes `BOSL2/std.scad` and uses a BOSL2 primitive, proving bundled-library detection works when the library is referenced only by a support file;
+8. regression-check an existing uploaded STL model with `import("filename.stl")`.
 
-A 2D corpus should also verify DXF after the 3D smoke.
+After the 3D corpus passes, run a small 2D multi-file model and export DXF.
+
+If a smoke step fails, capture the visible Brepia error plus the browser console error if one exists. That is sufficient to continue debugging.
 
 ## Not completed yet
 
