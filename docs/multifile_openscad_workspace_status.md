@@ -4,13 +4,13 @@ Branch: `feature/multifile-openscad-workspace`
 
 Plan: `docs/multifile_openscad_workspace_plan.md`
 
-Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
+PR: `#16` — Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–9 are complete. Step 10 final hardening is in progress. The final multi-file AI browser smoke passed functionally on 2026-09-02, but exposed one conversation-workspace render-mirroring auth warning. That warning has been fixed and CI-verified; a short local rerun confirming the warning is gone remains before formal Step 10 closeout.
+Steps 1–10 are complete. Step 10 final hardening, CI verification and the final local render-auth rerun all passed on 2026-09-02. The feature is ready for final PR review/merge handling.
 
-Current Step 10 fix checkpoint:
+Final Step 10 implementation/regression checkpoint:
 
 `480350a299e366b7cfd5a02f3c1efb789182f0e2` — `Test verified render owner propagation`
 
@@ -19,7 +19,9 @@ Preceding render-auth implementation checkpoints:
 - `2bd85ece4c8bf5d7455cb6fa1c767d9fd9c8f813` — `Reuse verified owner for render mirroring`;
 - `919e12289854fc663a830064b95e4ed2310d14d4` — `Pass verified owner to render mirroring`.
 
-Quality Gate run `336` (`33678890961`) on `480350a299e366b7cfd5a02f3c1efb789182f0e2` passed dependency audit, full test suite, typecheck, lint, production build and PR diff check.
+Quality Gate run `336` (`33678890961`) passed on the render-auth regression checkpoint. Quality Gate run `338` (`33679183724`) passed the full repository gate after the Step 10 documentation update. Both included dependency audit, full tests, typecheck, lint, production build and PR diff check.
+
+The final local rerun after updating/restarting the branch passed: a normal multi-file Parametric AI follow-up completed correctly and the previous `Render mirroring requires an authenticated user` warning did not recur.
 
 ## Step 1 — complete
 
@@ -66,7 +68,7 @@ GitHub project import remains entrypoint-driven and bounded:
 
 Primary checkpoint:
 
-`e285af99f3d0ba8be0e436b1fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`
+`e285af99f3d0ba8be0e4361fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`
 
 Quality Gate run `237` (`33532720138`) and manual acceptance passed.
 
@@ -210,7 +212,7 @@ Step 9 adds a bounded project-file surface to the existing Parametric editor.
 ### Editing contract
 
 - entrypoint source is intentionally read-only in the project-file dialog; existing Customizer parameter editing and AI project editing remain the authoritative entrypoint-edit surfaces;
-- non-entrypoint `.scad` support files are editable with explicit Save/Discard controls;
+- non-entrypoint `.scad` files are editable with explicit Save/Discard controls;
 - edits are passed through `replaceOpenScadProjectFileContent`, preserving central normalization and file/project bounds plus all untouched sources and assets;
 - the updated complete artifact is persisted back into the same assistant message's `build_parametric_model` part, so existing message-tree persistence/reload/restore semantics remain authoritative;
 - a parts-only save leaves message metadata such as `metadata.originalCode` unchanged;
@@ -253,24 +255,24 @@ The stable-runtime browser acceptance passed for the complete Step 9 checklist:
 
 Step 9 is formally complete.
 
-## Step 10 — hardening in progress
+## Step 10 — complete
 
-Final hardening reconciled the repository rules, current architecture references and actual feature branch. The hardening pass:
+Final hardening reconciled repository rules, current architecture references and actual feature implementation. It:
 
 - added full-history checkout plus PR-based `git diff --check` to the Quality Gate;
 - updated README for project-native local/GitHub import, relative assets and support-file editing;
 - corrected `docs/conversation_workspace.md` to complete-project `models/current/` and revision snapshots with project SHA-256;
 - corrected `docs/INTEGRATION.md` to the complete normalized project contract and Brepia-authoritative asset metadata;
-- confirmed there were no unresolved PR comments/reviews and the feature branch remained 0 commits behind its `master` baseline;
-- required no broad runtime changes.
+- confirmed no unresolved PR comments/reviews and no behind commits against the selected `master` baseline;
+- required no broad runtime change.
 
-The final multi-file AI follow-up browser smoke then passed functionally, including support-file editing, rendered result, reload persistence and history behavior. During that smoke the terminal logged:
+The final multi-file AI/OpenCode browser smoke passed support-file editing, rendered result, reload persistence and history behavior. It initially exposed:
 
 `[conversation-workspace] Failed to mirror preview render ... Render mirroring requires an authenticated user`
 
-The cause was a redundant render-mirroring auth lookup after the lifecycle had already authenticated the request and verified conversation ownership. The render mirror now reuses the already verified owner id for the private storage path while retaining authenticated-request fallback for standalone callers. No service-role bypass was introduced and the existing user/conversation storage scope remains authoritative.
+The root cause was a redundant render-mirroring auth lookup after the lifecycle had already authenticated the request and verified conversation ownership. The render mirror now reuses the already verified owner id for the private storage path while retaining authenticated-request fallback for standalone callers. No service-role bypass was introduced; existing user/conversation storage scope remains authoritative.
 
-Regression coverage verifies that the lifecycle propagates the already verified owner into render mirroring.
+Regression coverage verifies owner propagation from lifecycle to render mirroring.
 
 Quality Gate #336 / run `33678890961` PASS on `480350a299e366b7cfd5a02f3c1efb789182f0e2`:
 
@@ -281,19 +283,19 @@ Quality Gate #336 / run `33678890961` PASS on `480350a299e366b7cfd5a02f3c1efb789
 - production build: PASS;
 - PR diff check: PASS.
 
-### Remaining Step 10 acceptance
+Quality Gate #338 / run `33679183724` also passed the complete gate after the Step 10 documentation update.
 
-Repeat one normal multi-file Parametric AI follow-up after updating/restarting the local branch and confirm that the previous `Render mirroring requires an authenticated user` warning no longer appears. No other Step 1–9 acceptance needs to be repeated.
+### Final manual acceptance — PASS 2026-09-02
+
+After updating and restarting the local branch, one normal multi-file Parametric AI follow-up was repeated. The model path worked and the previous `Render mirroring requires an authenticated user` warning did not recur.
+
+Step 10 is formally complete.
 
 ## UX follow-ups outside the completed project steps
 
 - The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact deterministic Top/Front/Right orientation control.
-- The project source dialog currently uses a plain text editor. OpenSCAD syntax highlighting and editor autocomplete/completion are useful future polish, but were explicitly accepted as non-blocking and are not part of Step 9 closeout.
+- The project source dialog currently uses a plain text editor. OpenSCAD syntax highlighting and editor autocomplete/completion are useful future polish, but were explicitly accepted as non-blocking and are not part of this feature closeout.
 
-## Not completed yet
+## Feature closeout
 
-- Step 10 final closeout, pending only the short render-auth warning rerun above.
-
-## Next — Step 10 closeout
-
-After the render-auth warning rerun is clean, record final manual acceptance, mark Step 10 complete, update PR #16 and close out the feature branch. PR #16 remains draft and must not be merged before that confirmation.
+All Steps 1–10 are complete and accepted. The branch is ready for PR review/merge handling. Rhino/Grasshopper and the deferred editor/mobile polish remain separate future work and must not be folded into this completed feature.
