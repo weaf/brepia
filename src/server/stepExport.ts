@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -10,10 +11,19 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import {
+  OPENSCAD_PROJECT_MAX_FILE_BYTES,
+  normalizeOpenScadProject,
+  type OpenScadProject,
+  type OpenScadProjectAsset,
+} from '@shared/openScadProject';
+import { validateOpenScadProjectReferences } from '@shared/openScadProjectReferences';
+import type { ServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
 
 const execFileAsync = promisify(execFile);
 
-export const STEP_EXPORT_SOURCE_LIMIT_BYTES = 256_000;
+/** Legacy one-file wrapper limit. Project-native STEP uses the shared project limits. */
+export const STEP_EXPORT_SOURCE_LIMIT_BYTES = OPENSCAD_PROJECT_MAX_FILE_BYTES;
 export const STEP_EXPORT_OUTPUT_LIMIT_BYTES = 32 * 1024 * 1024;
 export const STEP_EXPORT_TIMEOUT_MS = 45_000;
 export const STEP_EXPORT_PROVIDER = 'scad123d';
@@ -33,6 +43,8 @@ export class StepExportError extends Error {
   constructor(
     public readonly code:
       | 'source_too_large'
+      | 'invalid_project'
+      | 'asset_unavailable'
       | 'provider_unavailable'
       | 'capacity_exceeded'
       | 'conversion_failed'
@@ -49,6 +61,10 @@ export class StepExportError extends Error {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 function parseWarnings(stderr: string): string[] {
@@ -112,25 +128,77 @@ function providerUnavailableMessage(detail: string): string {
   return normalized || 'STEP export sandbox is unavailable on this server.';
 }
 
-async function convertScadToStep(
-  sourceCode: string,
+async function resolveAndVerifyAsset(
+  asset: OpenScadProjectAsset,
+  resolveAsset: ServerOpenScadProjectAssetResolver,
+): Promise<Uint8Array> {
+  let bytes: Uint8Array;
+  try {
+    bytes = await resolveAsset(asset);
+  } catch (error) {
+    throw new StepExportError(
+      'asset_unavailable',
+      error instanceof Error
+        ? error.message
+        : `Could not load OpenSCAD project asset ${asset.path}.`,
+    );
+  }
+
+  if (bytes.byteLength !== asset.byteLength || sha256(bytes) !== asset.sha256) {
+    throw new StepExportError(
+      'asset_unavailable',
+      `OpenSCAD project asset integrity check failed for ${asset.path}.`,
+    );
+  }
+  return bytes;
+}
+
+async function convertProjectToStep(
+  project: OpenScadProject,
+  resolveAsset?: ServerOpenScadProjectAssetResolver,
 ): Promise<StepExportResult> {
   const workspace = await mkdtemp(path.join(tmpdir(), 'pcad-step-'));
   const inputDir = path.join(workspace, 'input');
   const outputDir = path.join(workspace, 'output');
-  const inputPath = path.join(inputDir, 'model.scad');
   const outputPath = path.join(outputDir, 'model.step');
 
   try {
     await mkdir(inputDir, { recursive: true });
     await mkdir(outputDir, { recursive: true });
-    await writeFile(inputPath, sourceCode, 'utf8');
+
+    for (const file of project.files) {
+      const target = path.join(inputDir, ...file.path.split('/'));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, file.content, 'utf8');
+    }
+
+    if (project.assets?.length) {
+      if (!resolveAsset) {
+        throw new StepExportError(
+          'asset_unavailable',
+          'STEP export requires a conversation-scoped resolver for project assets.',
+        );
+      }
+      for (const asset of project.assets) {
+        const bytes = await resolveAndVerifyAsset(asset, resolveAsset);
+        const target = path.join(inputDir, ...asset.path.split('/'));
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, bytes);
+      }
+    }
 
     let stderr = '';
     try {
       const result = await execFileAsync(
         sandboxRunner(),
-        [inputPath, '-o', outputPath],
+        [
+          '--project',
+          inputDir,
+          '--entrypoint',
+          project.entrypointPath,
+          '-o',
+          outputPath,
+        ],
         {
           timeout: STEP_EXPORT_TIMEOUT_MS,
           maxBuffer: 4 * 1024 * 1024,
@@ -226,14 +294,45 @@ async function convertScadToStep(
 }
 
 /**
- * Convert complete OpenSCAD source to STEP using an explicitly configured,
- * sandboxed scad2step runner.
- *
- * IMPORTANT: scad123d invokes native OpenSCAD and upstream explicitly warns
- * against running untrusted SCAD directly on a host. pCAD accepts imported
- * user SCAD, so this module intentionally has no direct `uvx scad2step`
- * fallback. PCAD_STEP_EXPORT_RUNNER must point at an operator-controlled
- * sandbox wrapper (container/VM) that accepts `<input.scad> -o <output.step>`.
+ * Convert a complete normalized OpenSCAD project to STEP using an explicitly
+ * configured sandboxed scad2step runner. Project sources and verified assets
+ * are materialized into one server-owned temporary directory that is mounted
+ * read-only into the converter container.
+ */
+export async function exportOpenScadProjectToStep(
+  project: OpenScadProject,
+  resolveAsset?: ServerOpenScadProjectAssetResolver,
+): Promise<StepExportResult> {
+  let normalized: OpenScadProject;
+  try {
+    normalized = normalizeOpenScadProject(project);
+    validateOpenScadProjectReferences(normalized);
+  } catch (error) {
+    throw new StepExportError(
+      'invalid_project',
+      error instanceof Error ? error.message : 'Invalid OpenSCAD project.',
+    );
+  }
+
+  if (normalized.assets?.length && !resolveAsset) {
+    throw new StepExportError(
+      'asset_unavailable',
+      'STEP export requires access to the project assets.',
+    );
+  }
+
+  const releaseSlot = acquireStepExportSlot();
+  try {
+    return await convertProjectToStep(normalized, resolveAsset);
+  } finally {
+    releaseSlot();
+  }
+}
+
+/**
+ * Compatibility wrapper for source-only callers. The source is still executed
+ * through the project-directory sandbox path; no native converter runs in the
+ * Brepia host process.
  */
 export async function exportScadToStep(
   sourceCode: string,
@@ -246,10 +345,9 @@ export async function exportScadToStep(
     );
   }
 
-  const releaseSlot = acquireStepExportSlot();
-  try {
-    return await convertScadToStep(sourceCode);
-  } finally {
-    releaseSlot();
-  }
+  return exportOpenScadProjectToStep({
+    schemaVersion: 1,
+    entrypointPath: 'model.scad',
+    files: [{ path: 'model.scad', content: sourceCode }],
+  });
 }
