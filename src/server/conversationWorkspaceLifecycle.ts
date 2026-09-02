@@ -14,6 +14,7 @@ type ConversationWorkspaceRow = {
   created_at: string | null;
   updated_at: string | null;
   current_message_leaf_id: string | null;
+  verified_owner_user_id?: string;
 };
 
 type WorkspaceInitializer = typeof initializeConversationWorkspace;
@@ -87,6 +88,7 @@ async function loadOwnedConversation(
     created_at: data.created_at,
     updated_at: data.updated_at,
     current_message_leaf_id: data.current_message_leaf_id,
+    verified_owner_user_id: user.id,
   };
 }
 
@@ -148,7 +150,12 @@ export async function syncConversationWorkspaceForChatRequest(
       conversation.id,
       conversation.current_message_leaf_id,
     );
-    await syncRenders(request, conversation.id);
+    await syncRenders(
+      request,
+      conversation.id,
+      undefined,
+      conversation.verified_owner_user_id,
+    );
   }
   await syncAgents(
     request,
