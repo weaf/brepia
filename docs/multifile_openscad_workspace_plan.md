@@ -1,6 +1,6 @@
 # Multi-file OpenSCAD / project workspace plan
 
-Status: selected post-1.0 feature; Steps 1–9 complete. Step 10 final hardening/closeout is next.
+Status: selected post-1.0 feature; Steps 1–9 complete. Step 10 final hardening is CI-verified and awaits one short render-mirroring warning rerun before formal closeout.
 
 Branch: `feature/multifile-openscad-workspace`
 
@@ -153,38 +153,13 @@ Quality Gate run `314` (`33611457984`) passed. Manual acceptance passed on 2026-
 
 ### Step 8 — STEP project sandbox — COMPLETE
 
-STEP now consumes the complete normalized `OpenScadProject` instead of reducing export to one source string.
-
-Implemented contract:
-
-- authenticated `/api/export/step` accepts the complete project and an optional owning conversation id for asset-backed projects;
-- the server normalizes and validates project references before execution;
-- all source files are materialized under one server-owned temporary project root;
-- explicit Step 7 assets are resolved through the existing conversation/user-scoped private storage contract, verified by byte length and SHA-256, and materialized at exact project paths;
-- validated static asset literals are rewritten only to their exact `/input/project/<asset-path>` sandbox paths so scad123d temporary CSG directories cannot break project-relative asset resolution;
-- the sandbox executes the configured project entrypoint from the complete project tree;
-- rootless Podman, `network=none`, read-only rootfs/project mount, dropped capabilities, `no-new-privileges`, bounded tmpfs and existing PID/RAM/CPU/time limits are preserved;
-- source-only projects keep normal scad123d `mesh_scope=minimal` behavior;
-- non-planar `polyhedron()` faces use a narrowly scoped scad123d subtree mesh fallback only for the specific OCCT `wires not planar` failure;
-- explicit asset-backed projects use `mesh_scope=hoist` and are rendered by pinned OpenSCAD from the **original project entrypoint inside `/input/project`** before mesh-derived STEP continuation, preserving relative asset authority;
-- hoisted asset-backed conversion emits a mesh fallback warning, treats unresolved OpenSCAD file diagnostics as failure and requires real geometry.
+STEP consumes the complete normalized `OpenScadProject`. Source-only, multi-file/BOSL2, bounded non-planar `polyhedron()` fallback and explicit asset-backed projects are accepted while retaining the rootless/networkless/read-only sandbox boundary.
 
 Implementation checkpoint:
 
 `46a5e140aefc86fcf626490b8e40a0a36fa230cc` — `Complete project-aware STEP sandbox`
 
-Quality Gate run `323` (`33640506570`) on that checkpoint passed dependency audit, full tests, typecheck, lint and production build.
-
-Manual/provider acceptance on 2026-09-02 passed:
-
-1. source-only STEP;
-2. STEP compatibility corpus 16/16 PASS;
-3. multi-file/BOSL2 `key_ring.scad`;
-4. non-planar `polyhedron()` bounded fallback;
-5. explicit asset-backed project with `marker.stl`;
-6. asset-backed STEP rendered from the original project entrypoint inside the same rootless Podman sandbox.
-
-Step 8 is formally complete. See `docs/step_export.md` for the live converter architecture, fallback strategy, security invariants and validation contract.
+Quality Gate run `323` (`33640506570`) passed. Manual/provider acceptance passed on 2026-09-02, including the STEP compatibility corpus at 16/16 PASS.
 
 ### Step 9 — Project file UX — COMPLETE
 
@@ -192,17 +167,13 @@ Step 9 is a bounded extension of the existing Parametric editor rather than a se
 
 Current behavior:
 
-- the existing desktop parameters panel and mobile preview sheet include a compact `Project files` section for every active Parametric artifact, including parameterless projects;
-- the section shows normalized source-file count, explicit asset count when present, the bounded project source list and nested paths;
-- the configured `entrypointPath` is clearly marked with an `Entrypoint` badge;
-- clicking a source opens a focused source dialog rather than introducing tabs, a second editor shell or a new version tree;
-- the entrypoint is intentionally read-only in this file editor because entrypoint parameter/default semantics remain owned by the existing Customizer and AI edit flows;
-- non-entrypoint support `.scad` files are directly editable with explicit Save/Discard controls;
-- support-file saves use `replaceOpenScadProjectFileContent`, so central normalized path/file/project byte limits remain authoritative and the complete asset manifest plus all untouched sources are preserved;
-- saves replace the existing message's complete `build_parametric_model` artifact snapshot, so reload/branch history continues to use the established conversation persistence model;
-- direct support-file editing is disabled while an AI turn is streaming so it cannot race the stream's tool-output persistence;
-- before a support-file save, queued/in-flight parameter writes are drained and the latest cached assistant message parts are used, preventing stale whole-project writes from clobbering either edit;
-- parts-only support-file persistence leaves existing message metadata such as `metadata.originalCode` untouched.
+- the desktop parameters panel and mobile preview sheet include a compact `Project files` section for every active Parametric artifact, including parameterless projects;
+- normalized nested source files and the exact `entrypointPath` are visible;
+- the entrypoint is read-only in this direct file editor;
+- non-entrypoint support `.scad` files are directly editable with Save/Discard;
+- complete project snapshots, assets and metadata are preserved across support-file saves;
+- support-file editing is disabled during AI streaming;
+- parameter writes are drained before support-file persistence so the two edit surfaces cannot clobber one another.
 
 Implementation checkpoints:
 
@@ -210,35 +181,34 @@ Implementation checkpoints:
 - `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`;
 - `0afb813c57ed6446c03bd823f8eef4d7475efe7b` — `Record Step 9 implementation checkpoint`.
 
-Automated verification passed:
+Quality Gate runs `326` (`33657189062`) and `327` (`33657581514`) passed. Manual browser acceptance passed on 2026-09-02.
 
-- Quality Gate run `326` (`33657189062`) on the implementation checkpoint: PASS;
-- Quality Gate run `327` (`33657581514`) on the documentation checkpoint: PASS.
+Syntax highlighting and editor autocomplete/completion are deliberately deferred as non-blocking editor-polish follow-ups.
 
-Manual browser acceptance passed on 2026-09-02. The accepted paths covered one-file and multi-file inspection, nested path/entrypoint display, support-file editing and reload persistence, asset preservation, the parameter-edit/support-file-save race, branch/artifact switching, parameterless projects, stream-time editing lockout, mobile file UX and read-only entrypoint behavior.
+### Step 10 — Hardening and closeout — CI-VERIFIED, FINAL WARNING RERUN PENDING
 
-Syntax highlighting and editor autocomplete/completion are deliberately deferred as non-blocking editor-polish follow-ups; they are not part of Step 9's bounded acceptance contract.
+Hardening reconciled `AGENTS.md`, current architecture references and actual implementation. It also made the repository Quality Gate match the documented gate by checking the actual PR diff with `git diff --check`.
 
-### Step 10 — Hardening and closeout
+The final multi-file AI follow-up browser smoke passed functionally on 2026-09-02, including support-file editing, render correctness, reload persistence and history behavior. It exposed one best-effort conversation-workspace warning:
 
-Run full gates:
+`Render mirroring requires an authenticated user`
 
-```bash
-npm test
-npm run typecheck
-npm run lint
-npm run build
-git diff --check
-```
+The lifecycle had already authenticated the request and verified conversation ownership, but render mirroring performed another user lookup. Step 10 now reuses the already verified owner id for render storage mirroring while keeping the private user/conversation storage scope and authenticated-request fallback for standalone callers. No service-role bypass was added.
 
-When STEP is touched, also run the provider smoke/corpus documented in `docs/step_export.md`.
+Fix checkpoints:
 
-Final manual acceptance should cover AI one-file generation, local/GitHub multi-file import, bundled libraries, parameter edits, AI entrypoint/support-file edits, restore/retry/branching, STL/DXF/STEP, malformed/oversize rejection and relative assets.
+- `2bd85ece4c8bf5d7455cb6fa1c767d9fd9c8f813` — `Reuse verified owner for render mirroring`;
+- `919e12289854fc663a830064b95e4ed2310d14d4` — `Pass verified owner to render mirroring`;
+- `480350a299e366b7cfd5a02f3c1efb789182f0e2` — `Test verified render owner propagation`.
+
+Quality Gate #336 / run `33678890961` passed dependency audit, full tests, typecheck, lint, production build and PR diff check on the regression-test checkpoint.
+
+One final local rerun is required after updating/restarting the branch: perform a normal multi-file Parametric AI follow-up and confirm the previous render-auth warning no longer appears. No other completed acceptance path needs to be repeated.
 
 ## Current decision
 
 Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–9 are complete. Step 10 final hardening/closeout is now the next active step. PR #16 remains draft and must not be merged until Step 10 is complete.
+Steps 1–9 are complete. Step 10 is functionally accepted and CI-verified, pending only the short render-auth warning rerun above before formal closeout and PR finalization.
 
 Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.
