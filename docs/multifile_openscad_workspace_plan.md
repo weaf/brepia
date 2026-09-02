@@ -1,6 +1,6 @@
 # Multi-file OpenSCAD / project workspace plan
 
-Status: selected post-1.0 feature; Steps 1–8 complete. Step 9 implementation is CI-verified and awaits manual browser acceptance before closeout.
+Status: selected post-1.0 feature; Steps 1–9 complete. Step 10 final hardening/closeout is next.
 
 Branch: `feature/multifile-openscad-workspace`
 
@@ -186,9 +186,9 @@ Manual/provider acceptance on 2026-09-02 passed:
 
 Step 8 is formally complete. See `docs/step_export.md` for the live converter architecture, fallback strategy, security invariants and validation contract.
 
-### Step 9 — Project file UX — IMPLEMENTED, MANUAL ACCEPTANCE PENDING
+### Step 9 — Project file UX — COMPLETE
 
-Step 9 is implemented as a bounded extension of the existing Parametric editor rather than a second IDE/versioning system.
+Step 9 is a bounded extension of the existing Parametric editor rather than a second IDE/versioning system.
 
 Current behavior:
 
@@ -207,11 +207,17 @@ Current behavior:
 Implementation checkpoints:
 
 - `9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`;
-- `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`.
+- `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`;
+- `0afb813c57ed6446c03bd823f8eef4d7475efe7b` — `Record Step 9 implementation checkpoint`.
 
-Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f9d9` passed dependency audit, full tests, typecheck, lint and production build.
+Automated verification passed:
 
-Step 9 is **not formally complete yet**. Manual browser acceptance must verify one-file and multi-file inspection, support-file save/reload, parameter/edit race preservation, branch/artifact switching, assets, parameterless projects and mobile behavior before closeout.
+- Quality Gate run `326` (`33657189062`) on the implementation checkpoint: PASS;
+- Quality Gate run `327` (`33657581514`) on the documentation checkpoint: PASS.
+
+Manual browser acceptance passed on 2026-09-02. The accepted paths covered one-file and multi-file inspection, nested path/entrypoint display, support-file editing and reload persistence, asset preservation, the parameter-edit/support-file-save race, branch/artifact switching, parameterless projects, stream-time editing lockout, mobile file UX and read-only entrypoint behavior.
+
+Syntax highlighting and editor autocomplete/completion are deliberately deferred as non-blocking editor-polish follow-ups; they are not part of Step 9's bounded acceptance contract.
 
 ### Step 10 — Hardening and closeout
 
@@ -233,6 +239,6 @@ Final manual acceptance should cover AI one-file generation, local/GitHub multi-
 
 Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–8 are complete. Step 9 is implemented and CI-verified but awaits manual browser acceptance. Do not start Step 10 and do not merge PR #16 until Step 9 acceptance/closeout is complete.
+Steps 1–9 are complete. Step 10 final hardening/closeout is now the next active step. PR #16 remains draft and must not be merged until Step 10 is complete.
 
 Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.
