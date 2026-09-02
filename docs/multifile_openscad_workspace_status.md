@@ -8,19 +8,23 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–8 are complete. Step 9 project-file UX is implemented and CI-verified; manual browser acceptance remains before Step 9 can be marked complete.
+Steps 1–9 are complete. Step 9 project-file UX is implemented, CI-verified and manually accepted. Step 10 final hardening/closeout is next and has not started.
 
-Current Step 9 implementation checkpoint:
+Primary Step 9 implementation checkpoint:
 
 `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`
 
-The preceding UI checkpoint is:
+Preceding UI checkpoint:
 
 `9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`
 
-Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f9d9` passed dependency audit, full test suite, typecheck, lint and production client/SSR/Nitro build.
+Documentation checkpoint:
 
-Step 9 remains open only for manual browser acceptance and closeout documentation. Step 10 has not started.
+`0afb813c57ed6446c03bd823f8eef4d7475efe7b` — `Record Step 9 implementation checkpoint`
+
+Quality Gate run `326` (`33657189062`) on the implementation checkpoint and Quality Gate run `327` (`33657581514`) on the documentation checkpoint both passed dependency audit, full test suite, typecheck, lint and production client/SSR/Nitro build.
+
+Manual browser acceptance passed on 2026-09-02. Step 10 has not started.
 
 ## Step 1 — complete
 
@@ -195,14 +199,14 @@ Focused STEP regression coverage verifies complete nested project materializatio
 
 Step 8 is formally complete. `docs/step_export.md` is the canonical live STEP architecture and operations reference.
 
-## Step 9 — implemented, manual acceptance pending
+## Step 9 — complete
 
 Step 9 adds a bounded project-file surface to the existing Parametric editor.
 
 ### Project file inspection
 
 - every active Parametric artifact exposes a compact `Project files` section in the existing desktop right panel and mobile preview sheet;
-- parameterless Parametric projects now keep that panel available so the file surface is not hidden merely because no Customizer parameters exist;
+- parameterless Parametric projects keep that panel available so the file surface is not hidden merely because no Customizer parameters exist;
 - source-file count and explicit asset count are shown;
 - normalized nested source paths are listed without creating a separate workspace/IDE shell;
 - the exact `entrypointPath` is marked with an `Entrypoint` badge;
@@ -222,11 +226,12 @@ Step 9 adds a bounded project-file surface to the existing Parametric editor.
 Implementation checkpoints:
 
 - `9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`;
-- `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`.
+- `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`;
+- `0afb813c57ed6446c03bd823f8eef4d7475efe7b` — `Record Step 9 implementation checkpoint`.
 
 ### Automated verification — PASS
 
-Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f9d9` passed:
+Quality Gate run `326` (`33657189062`) on the implementation checkpoint passed:
 
 - dependency audit: PASS;
 - full test suite: PASS;
@@ -234,32 +239,36 @@ Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f
 - lint: PASS;
 - production client/SSR/Nitro build: PASS.
 
-### Manual acceptance — PENDING
+Quality Gate run `327` (`33657581514`) on the documentation checkpoint also passed the full gate.
 
-Before Step 9 is marked complete, browser acceptance should verify:
+### Manual acceptance — PASS 2026-09-02
 
-1. one-file project shows one source and a clearly marked read-only entrypoint;
-2. multi-file project shows the complete nested source list and correct entrypoint;
-3. support-file edit changes the live rendered model and survives full reload;
-4. an asset-backed project's manifest/asset remains preserved after support-file save and reload;
-5. a parameter edit followed immediately by support-file save preserves both changes;
-6. switching artifact/history branch shows the selected snapshot's correct file set and contents;
-7. parameterless Parametric projects still expose Project files and normal exports;
-8. support-file save is unavailable during an active AI stream;
-9. mobile file list/dialog remains usable and does not break preview/parameter interaction;
-10. entrypoint cannot be directly saved from the project-file editor.
+The stable-runtime browser acceptance passed for the complete Step 9 checklist:
 
-## UX follow-up outside the current step
+1. one-file project showed one source with a clearly marked read-only entrypoint;
+2. multi-file project showed the complete nested source list and correct entrypoint;
+3. support-file edits changed the live model and survived full reload;
+4. asset-backed support-file editing preserved the asset through save/reload;
+5. a parameter edit followed immediately by support-file save preserved both changes;
+6. artifact/history branch switching showed the correct project snapshot and file contents;
+7. parameterless Parametric projects exposed Project files and retained normal export behavior;
+8. support-file save was unavailable while an AI turn was streaming;
+9. mobile Project files and the source dialog remained usable without breaking preview/parameters;
+10. the entrypoint could not be directly saved from the project-file editor.
 
-The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact orientation control exposing deterministic Top/Front/Right views. This remains a separate UX follow-up and is not part of Step 9.
+Step 9 is formally complete.
+
+## UX follow-ups outside the completed project steps
+
+- The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact deterministic Top/Front/Right orientation control.
+- The project source dialog currently uses a plain text editor. OpenSCAD syntax highlighting and editor autocomplete/completion are useful future polish, but were explicitly accepted as non-blocking and are not part of Step 9 closeout.
 
 ## Not completed yet
 
-- Step 9 manual browser acceptance and closeout;
 - Step 10 final hardening/closeout.
 
-## Next — Step 9 manual acceptance
+## Next — Step 10
 
-Run the Step 9 browser checklist above against the stable runtime. If it passes, record the acceptance, mark Step 9 complete and only then move to Step 10.
+Run the final repository/feature hardening and complete the end-to-end acceptance defined in the plan. Do not merge PR #16 until Step 10 is complete and its final gate is green.
 
 PR #16 remains draft and must not be merged yet.
