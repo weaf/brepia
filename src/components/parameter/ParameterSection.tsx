@@ -2,6 +2,7 @@ import { RefreshCcw, Download, ChevronUp, ChevronDown } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import type { OpenScadProject } from '@shared/openScadProject';
 import type { Parameter } from '@shared/types';
 import {
   Tooltip,
@@ -43,6 +44,7 @@ interface ParameterSectionProps {
   onParameterChange: (parameters: Parameter[]) => void;
   currentOutput?: Blob;
   dxfExporter?: DxfExporter | null;
+  project?: OpenScadProject;
   code?: string;
 }
 
@@ -53,6 +55,7 @@ export function ParameterSection({
   onParameterChange,
   currentOutput,
   dxfExporter,
+  project,
   code,
 }: ParameterSectionProps) {
   const { toast } = useToast();
@@ -136,11 +139,11 @@ export function ParameterSection({
 
   const persistExportBestEffort = useCallback(
     (format: 'stl' | 'dxf', file: Blob) => {
-      if (!conversation.id || !code) return;
+      if (!conversation.id || !project) return;
       void persistConversationExport({
         conversationId: conversation.id,
         format,
-        sourceCode: code,
+        project,
         file,
       }).catch((error) => {
         // Workspace persistence must never turn a successful browser download
@@ -151,7 +154,7 @@ export function ParameterSection({
         );
       });
     },
-    [code, conversation.id],
+    [conversation.id, project],
   );
 
   const handleDownloadSTL = () => {
@@ -162,7 +165,7 @@ export function ParameterSection({
 
   const handleDownloadOpenSCAD = () => {
     if (!code) return;
-    // The source itself is already persisted as models/current.scad plus an
+    // The project source is already mirrored under models/current/ plus an
     // immutable revision, so a .scad browser download needs no second copy in
     // exports/.
     downloadOpenSCADFile(code);
@@ -193,11 +196,11 @@ export function ParameterSection({
   };
 
   const handleDownloadSTEP = async () => {
-    if (!code) return;
+    if (!project || !conversation.id) return;
 
     try {
       setIsExporting(true);
-      const result = await exportStep(code);
+      const result = await exportStep(project, conversation.id);
       downloadSTEPFile(result.file);
       if (result.warningCount > 0) {
         toast({
@@ -232,7 +235,7 @@ export function ParameterSection({
     stl: !!currentOutput,
     scad: !!code,
     dxf: !!dxfExporter && !isExporting,
-    step: !!code && !isExporting,
+    step: !!project && !!conversation.id && !isExporting,
   };
 
   const handleDownload = async () => {

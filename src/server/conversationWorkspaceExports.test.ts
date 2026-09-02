@@ -38,7 +38,7 @@ describe('conversation workspace exports', { concurrency: false }, () => {
         conversationId: CONVERSATION_ID,
         format: 'stl',
         revision: 3,
-        codeSha256: 'a'.repeat(64),
+        projectSha256: 'a'.repeat(64),
         bytes,
       });
       assert.equal(first.revision, 3);
@@ -60,19 +60,19 @@ describe('conversation workspace exports', { concurrency: false }, () => {
       ) as {
         revision: number;
         format: string;
-        codeSha256: string;
+        projectSha256: string;
         byteLength: number;
       };
       assert.equal(metadata.revision, 3);
       assert.equal(metadata.format, 'stl');
-      assert.equal(metadata.codeSha256, 'a'.repeat(64));
+      assert.equal(metadata.projectSha256, 'a'.repeat(64));
       assert.equal(metadata.byteLength, bytes.byteLength);
 
       const second = await persistConversationExportArtifact({
         conversationId: CONVERSATION_ID,
         format: 'stl',
         revision: 3,
-        codeSha256: 'a'.repeat(64),
+        projectSha256: 'a'.repeat(64),
         bytes,
       });
       assert.equal(second.written, false);
@@ -91,14 +91,14 @@ describe('conversation workspace exports', { concurrency: false }, () => {
         conversationId: CONVERSATION_ID,
         format: 'dxf',
         revision: 2,
-        codeSha256: 'b'.repeat(64),
+        projectSha256: 'b'.repeat(64),
         bytes: new TextEncoder().encode('DXF-A'),
       });
       const replaced = await persistConversationExportArtifact({
         conversationId: CONVERSATION_ID,
         format: 'dxf',
         revision: 2,
-        codeSha256: 'b'.repeat(64),
+        projectSha256: 'b'.repeat(64),
         bytes: new TextEncoder().encode('DXF-B'),
       });
 

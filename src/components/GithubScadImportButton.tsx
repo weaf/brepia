@@ -17,15 +17,53 @@ import { Input } from '@/components/ui/input';
 import { ActivityIndicator } from '@/components/brand';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  scadImportTitle,
+  type ScadFolderAssetInput,
+} from '@/lib/scadImport';
 import { apiJson } from '@/services/api';
 import { createImportedScadProject } from '@/services/scadProjectImportService';
 import type { Model } from '@shared/types';
 
 const githubScadResponseSchema = z.object({
   filename: z.string().min(1),
-  code: z.string().min(20),
+  project: z.object({
+    schemaVersion: z.literal(1),
+    entrypointPath: z.string().min(1),
+    files: z
+      .array(
+        z.object({
+          path: z.string().min(1),
+          content: z.string(),
+        }),
+      )
+      .min(1),
+  }),
+  assets: z.array(
+    z.object({
+      path: z.string().min(1),
+      contentBase64: z.string().min(1),
+    }),
+  ),
   canonicalUrl: z.string().url(),
 });
+
+function decodeBase64Asset(input: {
+  path: string;
+  contentBase64: string;
+}): ScadFolderAssetInput {
+  let binary: string;
+  try {
+    binary = atob(input.contentBase64);
+  } catch {
+    throw new Error(`GitHub returned invalid asset data for ${input.path}.`);
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return { path: input.path, bytes };
+}
 
 export function GithubScadImportButton({
   model,
@@ -55,12 +93,15 @@ export function GithubScadImportButton({
         },
         githubScadResponseSchema,
       );
+      const assets = resolved.assets.map(decodeBase64Asset);
       const result = await createImportedScadProject({
         userId: user.id,
         model,
         executionMode,
         filename: resolved.filename,
-        code: resolved.code,
+        title: scadImportTitle(resolved.filename),
+        project: resolved.project,
+        assets,
         origin: {
           source: 'github',
           canonicalUrl: resolved.canonicalUrl,
@@ -72,6 +113,9 @@ export function GithubScadImportButton({
         filename: resolved.filename,
         source: 'github',
         canonical_url: resolved.canonicalUrl,
+        import_kind: resolved.project.files.length > 1 ? 'project' : 'file',
+        file_count: resolved.project.files.length,
+        asset_count: assets.length,
         compile_status: result.baseline.status,
       });
 
@@ -115,8 +159,10 @@ export function GithubScadImportButton({
         </AlertDialogHeader>
         <div className="space-y-4">
           <p className="text-sm text-adam-text-secondary">
-            Paste a GitHub blob URL, raw GitHub URL, or a Gist containing
-            exactly one .scad file.
+            Paste a GitHub blob/raw URL to the OpenSCAD entrypoint. Brepia will
+            resolve bounded repository-local include/use dependencies and
+            statically referenced relative assets at the same Git ref. Gists
+            still require exactly one .scad file.
           </p>
           <Input
             value={url}

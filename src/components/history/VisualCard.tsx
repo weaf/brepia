@@ -40,7 +40,7 @@ import {
   asParametricParts,
   getBuildParametricModelOutput,
 } from '@shared/parametricParts';
-import type { MeshFileType } from '@shared/types';
+import type { MeshFileType, ParametricArtifact } from '@shared/types';
 import { cn } from '@/lib/utils';
 
 interface VisualCardProps {
@@ -57,7 +57,7 @@ interface VisualCardProps {
 }
 
 type VisualPreview =
-  | { type: 'artifact'; key: string; code: string }
+  | { type: 'artifact'; key: string; project: ParametricArtifact['project'] }
   | { type: 'mesh'; key: string; meshId: string; fileType: MeshFileType }
   | null;
 
@@ -72,7 +72,7 @@ export function VisualCard({
 }: VisualCardProps) {
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
-  const { previewScadColored } = useOpenSCAD();
+  const { previewProjectColored } = useOpenSCAD();
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -124,7 +124,7 @@ export function VisualCard({
       // with per-face color() data alongside the STL — matches what the live
       // editor renders. Fall back to the gray-ish STL render only when OFF
       // is unavailable or empty.
-      const { stl, off } = await previewScadColored(preview.code);
+      const { stl, off } = await previewProjectColored(preview.project);
       if (off) {
         const colored = await generateColoredPreview(off);
         if (colored) return dataUrlToBlob(colored);
@@ -321,12 +321,12 @@ function findLatestVisualPreview(
     }
     if (part.type === 'tool-build_parametric_model') {
       const artifact = getBuildParametricModelOutput([part]);
-      if (artifact?.code) {
+      if (artifact) {
         const key =
           'toolCallId' in part && typeof part.toolCallId === 'string'
             ? part.toolCallId
             : messageId;
-        return { type: 'artifact', key, code: artifact.code };
+        return { type: 'artifact', key, project: artifact.project };
       }
     }
   }

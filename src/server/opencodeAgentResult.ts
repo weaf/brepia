@@ -2,49 +2,52 @@
  * Shared final-result parser for OpenCode/Codex agent responses.
  *
  * This is the ONLY place that interprets a completed agent response into
- * pCAD's structured artifact (OpenSCAD code) and message. Both transports
- * call `parseAgentResult`, so CLI and Streaming emit identical
+ * Brepia's structured Parametric artifact and user-facing message. Both
+ * transports call `parseAgentResult`, so CLI and Streaming emit identical
  * `build_parametric_model` tool-calls from the same output.
  */
 import crypto from 'node:crypto';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 
 /**
- * Canonical machine-readable contract between external agents and pCAD.
+ * Canonical machine-readable contract between external agents and Brepia.
  * Behavioral and environment instructions live in editable transport profiles;
- * this contract only defines the response protocol pCAD must be able to parse.
+ * this contract only defines the response protocol Brepia must be able to parse.
  */
 export function buildAgentOutputContract(): string {
   return [
-    'Final result format — return ONLY a JSON object with these keys:',
-    '',
-    '  {"code":"complete runnable OpenSCAD source or empty string",',
-    '   "message":"short user-facing status"}',
-    '',
-    'The object must be valid JSON. Escape line breaks and other control',
-    'characters inside JSON strings (for example, use \\n inside `code`).',
-    '',
-    'pCAD parametric turn protocol:',
-    '  - If <user_request> is present and <pcad_build_result> is absent, code',
-    '    MUST be non-empty and contain the complete runnable OpenSCAD program.',
-    '  - code = "" is allowed after <pcad_build_result> when no revised CAD',
-    '    artifact is being returned, or for an explicit non-CAD response.',
+    'Final result format — return ONLY one valid JSON object.',
     '',
     'When returning a new or revised CAD artifact:',
-    '  - code = complete, runnable OpenSCAD program',
-    '  - message = short user-facing status',
+    '  {"project":{"schemaVersion":1,"entrypointPath":"main.scad","files":[{"path":"main.scad","content":"..."}]},"message":"short user-facing status"}',
     '',
     'When no CAD artifact is returned:',
-    '  - code = ""',
-    '  - message = the user-facing response',
+    '  {"message":"user-facing response"}',
     '',
-    'You MUST emit this JSON final result. pCAD converts a non-empty code value',
-    'into build_parametric_model itself; do not emit or wait for a native pCAD',
-    'tool call inside the external agent transport.',
+    'The object must be valid JSON. Escape line breaks and other control',
+    'characters inside JSON strings rather than returning raw control characters.',
+    '',
+    'Brepia Parametric project protocol:',
+    '  - project is the COMPLETE normalized OpenSCAD project snapshot, not a patch.',
+    '  - Preserve every unchanged support file from <current_pcad_artifact>.',
+    '  - Change only files needed for the requested modification.',
+    '  - Keep entrypointPath stable unless restructuring is genuinely required.',
+    '  - Every path must be a relative .scad path; never return absolute or traversal paths.',
+    '  - Never omit a support file that the returned source requires.',
+    '  - If <user_request> asks for CAD and <pcad_build_result> is absent, project MUST be present.',
+    '  - After <pcad_build_result>, omit project only when no revised CAD artifact is needed.',
+    '',
+    'Do not return a legacy top-level code field or an <openscad> wrapper.',
+    'Brepia converts project into build_parametric_model itself; do not wait for',
+    'a native Brepia tool call inside the external transport.',
   ].join('\n');
 }
 
-export type AgentResult = { code?: string; message: string };
+export type AgentResult = { project?: OpenScadProject; message: string };
 
 type StructuredAgentResultMatch = {
   end: number;
@@ -131,12 +134,23 @@ function parseStructuredEnvelope(
   }
 }
 
+function normalizeAgentProject(value: unknown): OpenScadProject | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  try {
+    return normalizeOpenScadProject(value as OpenScadProject);
+  } catch {
+    return undefined;
+  }
+}
+
 function structuredAgentResultMatches(
   text: string,
 ): StructuredAgentResultMatch[] {
   const matches: StructuredAgentResultMatch[] = [];
   const candidateStarts = [
-    ...text.matchAll(/\{\s*"(?:code|message)"\s*:/g),
+    ...text.matchAll(/\{\s*"(?:project|message)"\s*:/g),
   ].flatMap((match) => (match.index === undefined ? [] : [match.index]));
   for (const start of candidateStarts) {
     let depth = 0;
@@ -169,21 +183,17 @@ function structuredAgentResultMatches(
       const parsed = parseStructuredEnvelope(text.slice(start, end + 1));
       if (!parsed) break;
       if (
-        !Object.prototype.hasOwnProperty.call(parsed, 'code') &&
+        !Object.prototype.hasOwnProperty.call(parsed, 'project') &&
         !Object.prototype.hasOwnProperty.call(parsed, 'message')
       ) {
         break;
       }
 
-      const code =
-        typeof parsed.code === 'string' && parsed.code.trim()
-          ? parsed.code.trim()
-          : undefined;
       matches.push({
         start,
         end: end + 1,
         result: {
-          code,
+          project: normalizeAgentProject(parsed.project),
           message: typeof parsed.message === 'string' ? parsed.message : '',
         },
       });
@@ -223,15 +233,13 @@ export function resolveAgentResultChannels(
 export function parseAgentResult(text: string): AgentResult {
   const structured = parseStructuredAgentResult(text);
   if (structured) return structured;
-
-  const code = /```(?:scad|openscad)?\s*([\s\S]*?)```/i.exec(text)?.[1]?.trim();
-  return { code, message: code ? 'Model generated.' : text.trim() };
+  return { message: text.trim() };
 }
 
 export type ParametricBuildInput = {
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
   message: string;
 };
 
@@ -239,11 +247,11 @@ export function parametricBuildInput(
   text: string,
 ): ParametricBuildInput | undefined {
   const result = parseAgentResult(text);
-  if (!result.code) return undefined;
+  if (!result.project) return undefined;
   return {
     title: 'Generated model',
     version: 'v1',
-    code: result.code,
+    project: result.project,
     message: result.message || 'Model generated.',
   };
 }

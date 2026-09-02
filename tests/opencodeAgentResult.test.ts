@@ -6,141 +6,166 @@ import {
   parseStructuredAgentResult,
   resolveAgentResultChannels,
 } from '../src/server/opencodeAgentResult';
+import type { OpenScadProject } from '@shared/openScadProject';
 
-describe('OpenCode agent result parsing', () => {
-  it('extracts a terminal JSON artifact embedded after reasoning prose', () => {
+function project(
+  entrypoint = 'include <lib/support.scad>;\nsupport_part();',
+  support = 'module support_part() { cube([10, 10, 10]); }',
+): OpenScadProject {
+  return {
+    schemaVersion: 1,
+    entrypointPath: 'main.scad',
+    files: [
+      { path: 'lib/support.scad', content: support },
+      { path: 'main.scad', content: entrypoint },
+    ],
+  };
+}
+
+const FINISH = {
+  type: 'finish' as const,
+  finishReason: { unified: 'stop' as const, raw: 'stop' },
+  usage: {
+    inputTokens: {
+      total: 0,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: { total: 0, text: undefined, reasoning: undefined },
+  },
+};
+
+describe('OpenCode agent project result parsing', () => {
+  it('extracts a complete multi-file project after reasoning prose', () => {
+    const expected = project();
     const response = [
-      'I will create a parametric box.',
-      JSON.stringify({
-        code: 'difference() { cube([20, 20, 10]); cube([16, 16, 10]); }',
-        message: 'Box created',
-      }),
+      'I will revise the support module.',
+      JSON.stringify({ project: expected, message: 'Box created' }),
     ].join('\n');
 
     assert.deepEqual(parseAgentResult(response), {
-      code: 'difference() { cube([20, 20, 10]); cube([16, 16, 10]); }',
+      project: expected,
       message: 'Box created',
     });
   });
 
-  it('repairs raw newlines inside a provider JSON code string', () => {
+  it('repairs raw newlines inside project file content and emits project tool input', () => {
     const response =
-      '{"code":"// Cube parameters\n' +
-      "// Size of the cube's sides\n" +
-      'cube_size = 30;\n\n' +
-      'color(\\"SteelBlue\\")\n' +
-      'cube(size = cube_size);\n' +
-      '","message":"Klart — jag skapade kuben."}';
+      '{"project":{"schemaVersion":1,"entrypointPath":"main.scad","files":[' +
+      '{"path":"main.scad","content":"include <lib/support.scad>;\nsupport_part();"},' +
+      '{"path":"lib/support.scad","content":"module support_part() {\n  cube([30,30,30]);\n}"}' +
+      ']},"message":"Klart"}';
 
     const parsed = parseAgentResult(response);
-    assert.deepEqual(parsed, {
-      code: [
-        '// Cube parameters',
-        "// Size of the cube's sides",
-        'cube_size = 30;',
-        '',
-        'color("SteelBlue")',
-        'cube(size = cube_size);',
-      ].join('\n'),
-      message: 'Klart — jag skapade kuben.',
-    });
-
-    const parts = finishWithParametricToolCall(response, {
-      type: 'finish',
-      finishReason: { unified: 'stop', raw: 'stop' },
-      usage: {
-        inputTokens: {
-          total: 0,
-          noCache: undefined,
-          cacheRead: undefined,
-          cacheWrite: undefined,
-        },
-        outputTokens: { total: 0, text: undefined, reasoning: undefined },
-      },
-    });
-    assert.equal(parts[0]?.type, 'tool-call');
-    if (parts[0]?.type === 'tool-call') {
-      assert.equal(parts[0].toolName, 'build_parametric_model');
-      const input = JSON.parse(parts[0].input) as { code?: string };
-      assert.equal(input.code, parsed.code);
-    }
-  });
-
-  it('uses a structured reasoning result when the text channel is empty', () => {
-    const envelope = JSON.stringify({
-      code: 'cube([10, 10, 10]);',
-      message: 'Cube created',
-    });
-    const resolved = resolveAgentResultChannels(
-      '',
-      `I need a simple cube.\n${envelope}`,
+    assert.equal(parsed.project?.entrypointPath, 'main.scad');
+    assert.deepEqual(
+      parsed.project?.files.map((file) => file.path),
+      ['lib/support.scad', 'main.scad'],
+    );
+    assert.match(
+      parsed.project?.files[0]?.content ?? '',
+      /cube\(\[30,30,30\]\)/,
     );
 
-    assert.equal(resolved.resultText, `I need a simple cube.\n${envelope}`);
-    assert.equal(resolved.reasoningText, 'I need a simple cube.');
-    assert.deepEqual(parseAgentResult(resolved.resultText), {
-      code: 'cube([10, 10, 10]);',
-      message: 'Cube created',
-    });
-
-    const parts = finishWithParametricToolCall(resolved.resultText, {
-      type: 'finish',
-      finishReason: { unified: 'stop', raw: 'stop' },
-      usage: {
-        inputTokens: {
-          total: 0,
-          noCache: undefined,
-          cacheRead: undefined,
-          cacheWrite: undefined,
-        },
-        outputTokens: { total: 0, text: undefined, reasoning: undefined },
-      },
-    });
+    const parts = finishWithParametricToolCall(response, FINISH);
     assert.equal(parts[0]?.type, 'tool-call');
     if (parts[0]?.type === 'tool-call') {
-      assert.equal(parts[0].toolName, 'build_parametric_model');
+      const input = JSON.parse(parts[0].input) as {
+        project: OpenScadProject;
+        code?: unknown;
+      };
+      assert.equal(input.code, undefined);
+      assert.deepEqual(input.project, parsed.project);
+      assert.equal(input.project.files.length, 2);
     }
   });
 
-  it('prefers the final structured result in the text channel', () => {
-    const reasoningDraft = JSON.stringify({
-      code: 'cube(5);',
-      message: 'Draft',
+  it('uses a structured project result from reasoning when text is empty', () => {
+    const expected = project();
+    const envelope = JSON.stringify({ project: expected, message: 'Done' });
+    const reasoning = `I need to keep both files.\n${envelope}`;
+    const resolved = resolveAgentResultChannels('', reasoning);
+
+    assert.equal(resolved.resultText, reasoning);
+    assert.equal(resolved.reasoningText, 'I need to keep both files.');
+    assert.deepEqual(parseAgentResult(resolved.resultText), {
+      project: expected,
+      message: 'Done',
     });
-    const finalText = JSON.stringify({
-      code: 'cube(10);',
-      message: 'Final',
-    });
+  });
+
+  it('prefers the final project result in the text channel', () => {
+    const draft = project(
+      'support_part();',
+      'module support_part() { cube(5); }',
+    );
+    const final = project(
+      'support_part();',
+      'module support_part() { cube(10); }',
+    );
+    const reasoningDraft = JSON.stringify({ project: draft, message: 'Draft' });
+    const finalText = JSON.stringify({ project: final, message: 'Final' });
     const resolved = resolveAgentResultChannels(finalText, reasoningDraft);
 
     assert.equal(resolved.resultText, finalText);
     assert.equal(resolved.reasoningText, '');
     assert.deepEqual(parseAgentResult(resolved.resultText), {
-      code: 'cube(10);',
+      project: final,
       message: 'Final',
     });
   });
 
-  it('selects the last valid envelope when an agent corrects itself', () => {
+  it('selects the last complete snapshot when the agent corrects a support file', () => {
+    const draft = project(undefined, 'module support_part() { cube(5); }');
+    const final = project(undefined, 'module support_part() { sphere(10); }');
     const response = [
-      JSON.stringify({ code: 'cube(5);', message: 'Draft' }),
+      JSON.stringify({ project: draft, message: 'Draft' }),
       'Correction:',
-      JSON.stringify({ code: 'cube(10);', message: 'Final' }),
+      JSON.stringify({ project: final, message: 'Final' }),
     ].join('\n');
 
     assert.deepEqual(parseStructuredAgentResult(response), {
-      code: 'cube(10);',
+      project: final,
       message: 'Final',
     });
   });
 
-  it('does not reinterpret ordinary prose as a structured result', () => {
-    const response = 'Use difference() with cube() to make a hollow box.';
+  it('normalizes file ordering while keeping the requested entrypoint stable', () => {
+    const unsorted: OpenScadProject = {
+      schemaVersion: 1,
+      entrypointPath: 'src/main.scad',
+      files: [
+        { path: 'src/main.scad', content: 'include <../lib/a.scad>;\na();' },
+        { path: 'lib/a.scad', content: 'module a() { sphere(2); }' },
+      ],
+    };
+    const parsed = parseAgentResult(
+      JSON.stringify({ project: unsorted, message: 'Updated support file' }),
+    );
+    assert.equal(parsed.project?.entrypointPath, 'src/main.scad');
+    assert.deepEqual(
+      parsed.project?.files.map((file) => file.path),
+      ['lib/a.scad', 'src/main.scad'],
+    );
+  });
 
+  it('does not accept the legacy top-level code artifact contract', () => {
+    const response = JSON.stringify({ code: 'cube(10);', message: 'legacy' });
+    const parsed = parseAgentResult(response);
+    assert.equal(parsed.project, undefined);
+    assert.equal(parsed.message, response);
+    assert.equal(
+      finishWithParametricToolCall(response, FINISH).some(
+        (part) => part.type === 'tool-call',
+      ),
+      false,
+    );
+  });
+
+  it('does not reinterpret ordinary prose as a structured project result', () => {
+    const response = 'Use difference() with cube() to make a hollow box.';
     assert.equal(parseStructuredAgentResult(response), undefined);
-    assert.deepEqual(parseAgentResult(response), {
-      code: undefined,
-      message: response,
-    });
+    assert.deepEqual(parseAgentResult(response), { message: response });
   });
 });

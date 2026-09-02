@@ -1,3 +1,4 @@
+import type { OpenScadProject } from '@shared/openScadProject';
 import { Parameter } from '@shared/types';
 import WorkspaceFile from '../lib/WorkspaceFile.ts';
 
@@ -35,7 +36,7 @@ export type WorkerResponseMessage = {
 };
 
 export type OpenSCADWorkerMessageData = {
-  code: string;
+  project: OpenScadProject;
   fileType: string;
   params: Parameter[];
 };

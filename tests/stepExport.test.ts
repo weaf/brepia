@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { OpenScadProject } from '@shared/openScadProject';
 import {
   STEP_EXPORT_PROVIDER_VERSION,
   STEP_EXPORT_SOURCE_LIMIT_BYTES,
   StepExportError,
+  exportOpenScadProjectToStep,
   exportScadToStep,
 } from '@/server/stepExport';
 
@@ -22,6 +25,10 @@ async function fakeRunner(body: string): Promise<string> {
     mode: 0o700,
   });
   return runner;
+}
+
+function assetDigest(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 async function waitForFile(file: string, timeoutMs = 1_000): Promise<void> {
@@ -84,15 +91,131 @@ describe('server STEP export boundary', () => {
     await expectStepError(exportScadToStep('cube(1);'), 'provider_unavailable');
   });
 
-  it('rejects oversized source before invoking a runner', async () => {
+  it('rejects oversized legacy source before invoking a runner', async () => {
     process.env.PCAD_STEP_EXPORT_RUNNER = '/definitely/not/a/runner';
     const source = 'x'.repeat(STEP_EXPORT_SOURCE_LIMIT_BYTES + 1);
     await expectStepError(exportScadToStep(source), 'source_too_large');
   });
 
+  it('materializes a complete nested project and passes its real entrypoint', async () => {
+    process.env.PCAD_STEP_EXPORT_RUNNER = await fakeRunner(`
+[ "$1" = "--project" ]
+project="$2"
+[ "$3" = "--entrypoint" ]
+[ "$4" = "src/main.scad" ]
+[ "$5" = "-o" ]
+output="$6"
+grep -q 'include <../lib/helper.scad>' "$project/src/main.scad"
+grep -q 'module helper' "$project/lib/helper.scad"
+printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$output"
+`);
+
+    const project: OpenScadProject = {
+      schemaVersion: 1,
+      entrypointPath: 'src/main.scad',
+      files: [
+        {
+          path: 'src/main.scad',
+          content: 'include <../lib/helper.scad>\nhelper();',
+        },
+        {
+          path: 'lib/helper.scad',
+          content: 'module helper() { cube(1); }',
+        },
+      ],
+    };
+
+    await expect(exportOpenScadProjectToStep(project)).resolves.toMatchObject({
+      provider: `scad123d@${STEP_EXPORT_PROVIDER_VERSION}`,
+    });
+  });
+
+  it('materializes verified project assets at their exact relative paths', async () => {
+    const assetBytes = new TextEncoder().encode(
+      'solid marker\nendsolid marker\n',
+    );
+    process.env.PCAD_STEP_EXPORT_RUNNER = await fakeRunner(`
+project="$2"
+[ "$4" = "src/main.scad" ]
+[ "$7" = "--mesh-scope" ]
+[ "$8" = "hoist" ]
+grep -q 'import("/input/project/assets/marker.stl")' "$project/src/main.scad"
+grep -q 'solid marker' "$project/assets/marker.stl"
+printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$6"
+`);
+
+    const project: OpenScadProject = {
+      schemaVersion: 1,
+      entrypointPath: 'src/main.scad',
+      files: [
+        {
+          path: 'src/main.scad',
+          content: 'import("../assets/marker.stl");',
+        },
+      ],
+      assets: [
+        {
+          path: 'assets/marker.stl',
+          storagePath: 'user/conversation/marker.stl',
+          mediaType: 'model/stl',
+          byteLength: assetBytes.byteLength,
+          sha256: assetDigest(assetBytes),
+        },
+      ],
+    };
+
+    await expect(
+      exportOpenScadProjectToStep(project, async () => assetBytes),
+    ).resolves.toMatchObject({
+      provider: `scad123d@${STEP_EXPORT_PROVIDER_VERSION}`,
+    });
+  });
+
+  it('fails closed when an asset-backed project has no asset resolver', async () => {
+    const assetBytes = new TextEncoder().encode('solid marker\n');
+    const project: OpenScadProject = {
+      schemaVersion: 1,
+      entrypointPath: 'main.scad',
+      files: [{ path: 'main.scad', content: 'import("marker.stl");' }],
+      assets: [
+        {
+          path: 'marker.stl',
+          storagePath: 'user/conversation/marker.stl',
+          mediaType: 'model/stl',
+          byteLength: assetBytes.byteLength,
+          sha256: assetDigest(assetBytes),
+        },
+      ],
+    };
+
+    await expectStepError(
+      exportOpenScadProjectToStep(project),
+      'asset_unavailable',
+    );
+  });
+
+  it('rejects unsafe project references before invoking the runner', async () => {
+    process.env.PCAD_STEP_EXPORT_RUNNER = '/definitely/not/a/runner';
+    const project: OpenScadProject = {
+      schemaVersion: 1,
+      entrypointPath: 'main.scad',
+      files: [
+        {
+          path: 'main.scad',
+          content: 'asset = "marker.stl"; import(asset);',
+        },
+      ],
+    };
+
+    await expectStepError(
+      exportOpenScadProjectToStep(project),
+      'invalid_project',
+    );
+  });
+
   it('returns a Part 21 STEP file and records mesh fallback warnings', async () => {
     process.env.PCAD_STEP_EXPORT_RUNNER = await fakeRunner(`
-output="$3"
+output="$6"
 printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$output"
 echo 'WARNING: mesh fallback used for hull()' >&2
 `);
@@ -119,7 +242,7 @@ exit 69
 
   it('rejects a symlink produced as STEP output', async () => {
     process.env.PCAD_STEP_EXPORT_RUNNER = await fakeRunner(`
-ln -s /etc/hosts "$3"
+ln -s /etc/hosts "$6"
 `);
 
     await expectStepError(exportScadToStep('cube(1);'), 'output_invalid');
@@ -127,7 +250,7 @@ ln -s /etc/hosts "$3"
 
   it('rejects regular output that is not STEP Part 21', async () => {
     process.env.PCAD_STEP_EXPORT_RUNNER = await fakeRunner(`
-printf 'not a STEP file\\n' > "$3"
+printf 'not a STEP file\\n' > "$6"
 `);
 
     await expectStepError(exportScadToStep('cube(1);'), 'output_invalid');
@@ -137,7 +260,7 @@ printf 'not a STEP file\\n' > "$3"
     const runner = await fakeRunner(`
 touch "$PCAD_STEP_TEST_MARKER"
 sleep 0.2
-printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$3"
+printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$6"
 `);
     const marker = path.join(path.dirname(runner), 'started');
     process.env.PCAD_STEP_EXPORT_RUNNER = runner;

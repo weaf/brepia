@@ -32,6 +32,7 @@ import {
 import { createAndCacheAiChat } from '@/hooks/useCachedAiChat';
 import type { AppUIMessage } from '@shared/chatAi';
 import { ensureInputRecords } from '@/lib/aiMessages';
+import { createOpenScadProjectAssetDescriptor } from '@/lib/openScadProjectAssetStorage';
 import { persistUserMessage } from '@/services/messageService';
 import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
 import { pickHomePromptMessage } from '@/lib/homePromptCopy';
@@ -215,14 +216,56 @@ export function PromptView() {
         throw new Error('No compatible Creative AI model is available');
       }
 
-      const text = parts
+      const submittedParts =
+        type === 'parametric'
+          ? ((await Promise.all(
+              parts.map(async (part) => {
+                if (
+                  part.type !== 'data-mesh-context' ||
+                  part.data.fileType !== 'stl' ||
+                  !part.data.filename ||
+                  part.data.asset
+                ) {
+                  return part;
+                }
+
+                const storagePath = `${user.id}/${conversationId}/${part.data.meshId}.stl`;
+                const { data, error } = await supabase.storage
+                  .from('meshes')
+                  .download(storagePath);
+                if (error || !data) {
+                  throw new Error(
+                    `Could not load attached STL: ${
+                      error?.message ?? 'missing object'
+                    }`,
+                  );
+                }
+
+                const asset = await createOpenScadProjectAssetDescriptor({
+                  path: part.data.filename,
+                  storagePath,
+                  blob: data,
+                });
+
+                return {
+                  ...part,
+                  data: {
+                    ...part.data,
+                    asset,
+                  },
+                };
+              }),
+            )) as AppUIMessage['parts'])
+          : parts;
+
+      const text = submittedParts
         .filter((p) => p.type === 'text')
         .map((p) => p.text)
         .join('');
-      const imageCount = parts.filter(
+      const imageCount = submittedParts.filter(
         (p) => p.type === 'file' && p.mediaType.startsWith('image/'),
       ).length;
-      const meshCount = parts.filter(
+      const meshCount = submittedParts.filter(
         (p) => p.type === 'data-mesh-context',
       ).length;
       const initialTitle = conversationTitleFromText(text, {
@@ -291,11 +334,13 @@ export function PromptView() {
       if (!conversation) throw new Error('Failed to create conversation');
 
       await ensureInputRecords({
-        parts,
+        parts: submittedParts,
         conversationId: conversation.id,
         userId: user.id,
       });
-      if (parts.length === 0) throw new Error('No message parts to send');
+      if (submittedParts.length === 0) {
+        throw new Error('No message parts to send');
+      }
 
       const messageMetadata: AppUIMessage['metadata'] = {
         model,
@@ -304,7 +349,7 @@ export function PromptView() {
 
       const userMessageId = await persistUserMessage({
         conversationId: conversation.id,
-        parts,
+        parts: submittedParts,
         metadata: messageMetadata,
         parentMessageId: null,
       });
@@ -337,7 +382,11 @@ export function PromptView() {
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       });
       void chat
-        .sendMessage({ id: userMessageId, parts, metadata: messageMetadata })
+        .sendMessage({
+          id: userMessageId,
+          parts: submittedParts,
+          metadata: messageMetadata,
+        })
         .catch((error) => {
           Sentry.captureException(error, {
             extra: {

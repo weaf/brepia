@@ -5,7 +5,9 @@ import { chatTools, type AppUIMessage } from '@shared/chatAi';
 import { buildImportedArtifactMessages } from '@shared/importedArtifact';
 import {
   getBuildParametricModelArtifact,
+  getParametricArtifactEntrypointCode,
   replaceBuildParametricModelOutput,
+  replaceParametricArtifactEntrypointCode,
 } from '@shared/parametricParts';
 import type { ParametricArtifact } from '@shared/types';
 import { collectSuccessfulParametricBuilds } from '@/server/conversationWorkspaceModels';
@@ -15,7 +17,26 @@ const userMessageId = 'aaaaaaaa-1111-4111-8111-111111111111';
 const assistantMessageId = 'bbbbbbbb-2222-4222-8222-222222222222';
 const toolCallId = 'tool_import_cccccccc-3333-4333-8333-333333333333';
 const code = 'width = 20;\nheight = 10;\ncube([width, width, height]);\n';
-const artifact = { title: 'Imported bracket', version: 'v1', code };
+
+function artifactWithCode(source: string): ParametricArtifact {
+  return {
+    title: 'Imported bracket',
+    version: 'v1',
+    project: {
+      schemaVersion: 1,
+      entrypointPath: 'bracket.scad',
+      files: [
+        { path: 'bracket.scad', content: source },
+        {
+          path: 'lib/support.scad',
+          content: 'module support_part() { sphere(r = 2); }\n',
+        },
+      ],
+    },
+  };
+}
+
+const artifact = artifactWithCode(code);
 const origin = {
   type: 'import' as const,
   source: 'upload' as const,
@@ -159,7 +180,9 @@ describe('imported artifact persistence primitive', () => {
 
     expect(inputs).toHaveLength(1);
     expect(inputs[0]).toEqual(artifact);
-    expect((inputs[0] as { code: string }).code).toBe(code);
+    expect(
+      getParametricArtifactEntrypointCode(inputs[0] as ParametricArtifact),
+    ).toBe(code);
   });
 
   it('preserves the imported artifact after a DB-style JSON reload before the first edit', async () => {
@@ -176,17 +199,19 @@ describe('imported artifact persistence primitive', () => {
 
     expect(inputs).toHaveLength(1);
     expect(inputs[0]).toEqual(artifact);
-    expect((inputs[0] as { code: string }).code).toBe(code);
+    expect(
+      getParametricArtifactEntrypointCode(inputs[0] as ParametricArtifact),
+    ).toBe(code);
   });
 
   it('sends a persisted parameter-edited artifact to AI instead of the original import', async () => {
     const [user, assistant] = build({ status: 'success' });
     const parameterEditedCode =
       'width = 35;\nheight = 10;\ncube([width, width, height]);\n';
-    const parameterEditedArtifact = {
-      ...artifact,
-      code: parameterEditedCode,
-    };
+    const parameterEditedArtifact = replaceParametricArtifactEntrypointCode(
+      artifact,
+      parameterEditedCode,
+    );
     const editedAssistant: AppUIMessage = {
       ...asUiMessage(assistant),
       parts: replaceBuildParametricModelOutput(
@@ -207,8 +232,15 @@ describe('imported artifact persistence primitive', () => {
 
     expect(inputs).toHaveLength(1);
     expect(inputs[0]).toEqual(parameterEditedArtifact);
-    expect((inputs[0] as { code: string }).code).toBe(parameterEditedCode);
-    expect((inputs[0] as { code: string }).code).not.toBe(code);
+    const entrypointCode = getParametricArtifactEntrypointCode(
+      inputs[0] as ParametricArtifact,
+    );
+    expect(entrypointCode).toBe(parameterEditedCode);
+    expect(entrypointCode).not.toBe(code);
+    expect(parameterEditedArtifact.project.files).toContainEqual({
+      path: 'lib/support.scad',
+      content: 'module support_part() { sphere(r = 2); }\n',
+    });
   });
 
   it('keeps retry branches isolated and uses the selected branch artifact', async () => {
@@ -221,14 +253,14 @@ describe('imported artifact persistence primitive', () => {
       metadata: {},
       parent_message_id: importAssistant.id,
     };
-    const branchAArtifact: ParametricArtifact = {
-      ...artifact,
-      code: 'width = 30;\nheight = 10;\ncube([width, width, height]);\n',
-    };
-    const branchBArtifact: ParametricArtifact = {
-      ...artifact,
-      code: 'width = 45;\nheight = 10;\ncube([width, width, height]);\n',
-    };
+    const branchAArtifact = replaceParametricArtifactEntrypointCode(
+      artifact,
+      'width = 30;\nheight = 10;\ncube([width, width, height]);\n',
+    );
+    const branchBArtifact = replaceParametricArtifactEntrypointCode(
+      artifact,
+      'width = 45;\nheight = 10;\ncube([width, width, height]);\n',
+    );
     const branchA = buildAssistantRow({
       id: 'eeeeeeee-5555-4555-8555-555555555555',
       parentMessageId: editUser.id,
@@ -274,10 +306,10 @@ describe('imported artifact persistence primitive', () => {
       metadata: {},
       parent_message_id: importAssistant.id,
     };
-    const editedArtifact: ParametricArtifact = {
-      ...artifact,
-      code: 'width = 28;\nheight = 12;\ncube([width, width, height]);\n',
-    };
+    const editedArtifact = replaceParametricArtifactEntrypointCode(
+      artifact,
+      'width = 28;\nheight = 12;\ncube([width, width, height]);\n',
+    );
     const originalAssistant = buildAssistantRow({
       id: '13131313-8888-4888-8888-888888888888',
       parentMessageId: editUser.id,
@@ -347,7 +379,7 @@ describe('imported artifact persistence primitive', () => {
       messageId: assistant.id,
       title: artifact.title,
       version: 'v1',
-      code,
+      project: artifact.project,
       source: 'build',
     });
   });

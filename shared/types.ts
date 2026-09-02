@@ -1,6 +1,7 @@
 import { Database } from './database.ts';
 import type { AppUIMessage } from './chatAi.ts';
 import type { CreativeMeshModelId } from './creativeMeshModels.ts';
+import type { OpenScadProject } from './openScadProject.ts';
 export type Model = string;
 export type CreativeModel = CreativeMeshModelId;
 
@@ -39,7 +40,7 @@ export type MeshData = Omit<
 export type ParametricArtifact = {
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
 };
 
 // label is optional: an OpenSCAD customizer comment can list bare values

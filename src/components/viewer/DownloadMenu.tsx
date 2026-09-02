@@ -6,7 +6,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import posthog from 'posthog-js';
 import {
   processUserModelForDownload,
@@ -20,7 +27,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import * as Sentry from '@sentry/react';
 import * as THREE from 'three';
 import { applyMaterialAdjustments } from '@/utils/meshUtils';
-import { MeshGifPreview } from './MeshGifPreview';
+import { MeshGifPreview, type GifDownloadHandle } from './MeshGifPreview';
 import { extractAndDownloadTextures } from '@/utils/textureExtraction';
 import { ActivityIndicator } from '@/components/brand';
 
@@ -59,7 +66,8 @@ export function DownloadMenu({
   const [_isGifGenerating, setIsGifGenerating] = useState(false);
   const [_gifProgress, setGifProgress] = useState(0);
   const [isGifReady, setIsGifReady] = useState(false);
-  const gifRef = useRef<{ downloadGIF: () => Promise<void> } | null>(null);
+  const [isGifPrepared, setIsGifPrepared] = useState(false);
+  const gifRef = useRef<GifDownloadHandle | null>(null);
 
   const [isDownloadingSTL, setIsDownloadingSTL] = useState(false);
   const [isDownloadingOBJ, setIsDownloadingOBJ] = useState(false);
@@ -68,6 +76,10 @@ export function DownloadMenu({
     useState(false);
   const [isDownloadingGLB, setIsDownloadingGLB] = useState(false);
   const [isDownloadingFBX, setIsDownloadingFBX] = useState(false);
+
+  useEffect(() => {
+    setIsGifPrepared(false);
+  }, [meshData.id]);
 
   // Check if this model supports both GLB and FBX (quad topology models)
   const isQuadModel = useMemo(() => {
@@ -300,7 +312,7 @@ export function DownloadMenu({
     }, 0);
   }, [gltf, brightness, roughness, filename, meshData, conversation.id, toast]);
 
-  const downloadGIF = useCallback(() => {
+  const downloadGIF = useCallback(async () => {
     posthog.capture('3d_model_download', {
       meshId: meshData.id,
       model_name: meshData?.prompt.model || 'Unknown Model',
@@ -310,29 +322,32 @@ export function DownloadMenu({
 
     setIsDownloadingGIF(true);
 
-    setTimeout(async () => {
-      try {
-        if (gifRef.current && isGifReady) {
-          await gifRef.current.downloadGIF();
-        }
-      } catch (error) {
-        Sentry.captureException(error, {
-          extra: {
-            meshId: meshData.id,
-            format: 'GIF',
-          },
-        });
-
-        toast({
-          title: 'Error',
-          description: 'Failed to generate GIF. Please try again.',
-          variant: 'destructive',
-        });
-      } finally {
-        setIsDownloadingGIF(false);
-        setIsDropdownOpen(false);
+    try {
+      if (gifRef.current && isGifReady) {
+        // Do not defer this call through setTimeout. When the GIF has already
+        // been prepared, MeshGifPreview performs its anchor click before its
+        // first await, preserving the fresh user activation from this menu
+        // selection on mobile browsers.
+        const result = await gifRef.current.downloadGIF();
+        setIsGifPrepared(result === 'prepared');
       }
-    }, 0);
+    } catch (error) {
+      Sentry.captureException(error, {
+        extra: {
+          meshId: meshData.id,
+          format: 'GIF',
+        },
+      });
+
+      toast({
+        title: 'Error',
+        description: 'Failed to generate GIF. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDownloadingGIF(false);
+      setIsDropdownOpen(false);
+    }
   }, [isGifReady, meshData, conversation.id, toast]);
 
   const downloadWithTextures = useCallback(() => {
@@ -740,13 +755,17 @@ export function DownloadMenu({
             {isDownloadingGIF ? (
               <ActivityIndicator
                 className="mr-2"
-                label="Downloading GIF"
+                label="Preparing GIF"
                 size="sm"
               />
             ) : null}
             <span className="text-sm">.GIF</span>
             <span className="ml-3 text-xs text-adam-text-primary/60">
-              {isDownloadingGIF ? 'Downloading...' : 'Animation'}
+              {isDownloadingGIF
+                ? 'Preparing...'
+                : isGifPrepared
+                  ? 'Download'
+                  : 'Generate animation'}
             </span>
           </DropdownMenuItem>
           {Object.values(hasPBRMaps).some(Boolean) && (

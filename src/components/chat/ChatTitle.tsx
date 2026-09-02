@@ -24,10 +24,11 @@ import {
   DEFAULT_AI_INSTRUCTION_PROFILE_ID,
   getAiInstructionProfileDefinition,
 } from '@shared/aiInstructionCatalog';
+import type { OpenScadProject } from '@shared/openScadProject';
 
 interface ChatTitleProps {
   activeMeshId?: string | null;
-  activeOpenscadCode?: string | null;
+  activeOpenscadProject?: OpenScadProject | null;
 }
 
 function InstructionProfileBadge({ label }: { label: string }) {
@@ -43,7 +44,7 @@ function InstructionProfileBadge({ label }: { label: string }) {
 
 export function ChatTitle({
   activeMeshId,
-  activeOpenscadCode,
+  activeOpenscadProject,
 }: ChatTitleProps = {}) {
   const { conversation, updateConversation } = useConversation();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -217,7 +218,7 @@ export function ChatTitle({
                           privacy={conversation.privacy}
                           onPrivacyChange={handlePrivacyChange}
                           meshId={activeMeshId ?? undefined}
-                          openscadCode={activeOpenscadCode ?? undefined}
+                          openscadProject={activeOpenscadProject ?? undefined}
                         />
                       </DialogContent>
                     </Dialog>

@@ -9,6 +9,7 @@ import React, {
 import {
   ArrowUp,
   ImagePlus,
+  FileUp,
   Images,
   Square,
   CircleX,
@@ -1585,11 +1586,7 @@ function TextAreaChat({
                     e.stopPropagation();
                     const input = document.createElement('input');
                     input.type = 'file';
-                    input.accept = `${VALID_IMAGE_FORMATS.join(', ')}, ${
-                      type === 'creative'
-                        ? SUPPORTED_MESH_EXTENSIONS.join(', ')
-                        : '.stl'
-                    }`;
+                    input.accept = VALID_IMAGE_FORMATS.join(', ');
                     input.onchange = () => handleItemsChange(input.files);
                     input.click();
                   }}
@@ -1599,6 +1596,35 @@ function TextAreaChat({
                 </Button>
               </div>
             )}
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="flex h-8 w-8 items-center gap-2 rounded-lg border border-[#2a2a2a] bg-adam-background-2 p-0 text-sm text-adam-text-secondary hover:bg-adam-bg-secondary-dark"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept =
+                      type === 'creative'
+                        ? `${SUPPORTED_MESH_EXTENSIONS.join(', ')}, application/octet-stream`
+                        : '.stl, model/stl, application/sla, application/vnd.ms-pki.stl, application/octet-stream';
+                    input.onchange = () => handleItemsChange(input.files);
+                    input.click();
+                  }}
+                  disabled={disabled}
+                  aria-label={
+                    type === 'creative' ? 'Upload 3D model' : 'Upload STL model'
+                  }
+                >
+                  <FileUp className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {type === 'creative' ? 'Upload 3D model' : 'Upload STL model'}
+              </TooltipContent>
+            </Tooltip>
 
             {onTypeChange && (
               <Tooltip>

@@ -14,12 +14,22 @@ import {
 } from '@shared/aiInstructionCatalog';
 import { env } from './env';
 import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+  type OpenScadProjectAsset,
+} from '@shared/openScadProject';
+import {
+  reconcileOpenScadProjectAssetManifest,
+  resolveOpenScadAttachmentAssets,
+} from '@shared/openScadProjectAssetReconciliation';
+import {
   buildAgentOutputContract,
   finishWithParametricToolCall,
   parseAgentResult,
   resolveAgentResultChannels,
 } from './opencodeAgentResult';
-import { validateOpenScad } from './openScadValidation';
+import { validateOpenScadProject } from './openScadValidation';
+import { createServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
 import { logError, logWarning } from './serverLog';
 import { isRequestAbort } from './requestAbort';
 
@@ -44,6 +54,7 @@ export type OpenCodeRuntimeOptions = {
   transportInstruction?: string;
   timeoutMs?: number;
   validationAttempts?: number;
+  authoritativeAssets?: readonly OpenScadProjectAsset[];
 };
 
 function bundledRuntimeNumber(key: string): number {
@@ -64,6 +75,7 @@ function resolveOpenCodeRuntime(options: OpenCodeRuntimeOptions = {}) {
     validationAttempts:
       options.validationAttempts ??
       bundledRuntimeNumber('transport.openCodeValidationAttempts'),
+    authoritativeAssets: [...(options.authoritativeAssets ?? [])],
   };
 }
 
@@ -344,7 +356,7 @@ export function buildOpenCodePromptBody(text: string) {
 type ParametricArtifactSnapshot = {
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
 };
 
 function parseArtifactInput(
@@ -362,7 +374,10 @@ function parseArtifactInput(
     return undefined;
   }
   const record = candidate as Record<string, unknown>;
-  if (typeof record['code'] !== 'string' || !record['code'].trim()) {
+  let project: OpenScadProject;
+  try {
+    project = normalizeOpenScadProject(record['project'] as OpenScadProject);
+  } catch {
     return undefined;
   }
   return {
@@ -374,7 +389,7 @@ function parseArtifactInput(
       typeof record['version'] === 'string' && record['version'].trim()
         ? record['version'].trim()
         : 'v1',
-    code: record['code'],
+    project,
   };
 }
 
@@ -501,11 +516,11 @@ export function buildPersistentOpenCodePrompt(
     lines.push(
       [
         '<current_pcad_artifact>',
-        `title: ${artifact.title}`,
-        `version: ${artifact.version}`,
-        '<openscad>',
-        artifact.code,
-        '</openscad>',
+        JSON.stringify({
+          title: artifact.title,
+          version: artifact.version,
+          project: artifact.project,
+        }),
         '</current_pcad_artifact>',
       ].join('\n'),
     );
@@ -1126,7 +1141,7 @@ export function finalizeAcceptedAgentResult(
 ): LanguageModelV3StreamPart[] {
   const result = parseAgentResult(text);
 
-  if (result.code) {
+  if (result.project) {
     return finishWithParametricToolCall(text, finishPart);
   }
 
@@ -1271,6 +1286,15 @@ async function* streamParts(
     });
     let state = makeState(admittedSeq ?? 0);
     let validationAttempts = 0;
+    const resolveAsset = conversationId
+      ? createServerOpenScadProjectAssetResolver(conversationId)
+      : undefined;
+    const promptAssets =
+      currentParametricArtifactFromPrompt(prompt)?.project.assets ?? [];
+    const authoritativeAssets = [
+      ...promptAssets,
+      ...runtime.authoritativeAssets,
+    ];
 
     while (!state.isErrored) {
       if (ac.signal.aborted) break;
@@ -1328,15 +1352,48 @@ async function* streamParts(
         state.totalReasoning,
       );
       const candidate = parseAgentResult(resultText);
-      if (!candidate.code) break;
+      if (!candidate.project) break;
 
-      const validation = await validateOpenScad(candidate.code, ac.signal);
-      if (validation.valid) break;
+      let candidateProject = candidate.project;
+      let reconciliationDiagnostics: string | null = null;
+      try {
+        const attachmentAssets = resolveOpenScadAttachmentAssets(
+          candidateProject,
+          authoritativeAssets,
+        );
+        candidateProject = reconcileOpenScadProjectAssetManifest(
+          candidateProject,
+          [...authoritativeAssets, ...attachmentAssets],
+        );
+      } catch (error) {
+        reconciliationDiagnostics =
+          error instanceof Error ? error.message : String(error);
+      }
+
+      const validation = reconciliationDiagnostics
+        ? {
+            valid: false,
+            exitCode: null,
+            outputBytes: 0,
+            diagnostics: reconciliationDiagnostics,
+          }
+        : await validateOpenScadProject(
+            candidateProject,
+            ac.signal,
+            resolveAsset,
+          );
+
+      if (validation.valid) {
+        state.totalText = JSON.stringify({
+          project: candidateProject,
+          message: candidate.message,
+        });
+        break;
+      }
 
       validationAttempts += 1;
       if (validationAttempts >= runtime.validationAttempts) {
         state.totalText = JSON.stringify({
-          code: '',
           message: `OpenSCAD validation failed after ${runtime.validationAttempts} attempts: ${validation.diagnostics ?? 'unknown compiler error'}`,
         });
         break;

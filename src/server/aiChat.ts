@@ -8,7 +8,15 @@ import {
   loadBundledInstruction,
   renderInstructionTemplate,
 } from '@shared/aiInstructionCatalog';
-import { cleanAssistantText, getParametricText } from '@shared/parametricParts';
+import {
+  cleanAssistantText,
+  getParametricText,
+  isParametricArtifact,
+} from '@shared/parametricParts';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProjectAsset,
+} from '@shared/openScadProject';
 import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
 import { normalizeConversationSuggestions } from '@shared/suggestions';
 import { normalizeModelId } from '@shared/models';
@@ -118,6 +126,39 @@ function jsonResponse(body: unknown, status: number) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function collectAuthoritativeOpenScadAssets(
+  messages: readonly AppUIMessage[],
+): OpenScadProjectAsset[] {
+  const assets = new Map<string, OpenScadProjectAsset>();
+  const add = (asset: OpenScadProjectAsset) => {
+    assets.set(`${asset.storagePath}\n${asset.path}\n${asset.sha256}`, asset);
+  };
+
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === 'data-mesh-context' && part.data.asset) {
+        add(part.data.asset);
+        continue;
+      }
+
+      if (
+        part.type === 'tool-build_parametric_model' &&
+        'input' in part &&
+        isParametricArtifact(part.input)
+      ) {
+        try {
+          const project = normalizeOpenScadProject(part.input.project);
+          for (const asset of project.assets ?? []) add(asset);
+        } catch {
+          // Invalid historical artifacts cannot grant storage authority.
+        }
+      }
+    }
+  }
+
+  return [...assets.values()];
 }
 
 type ChatProvider =
@@ -961,6 +1002,8 @@ export async function handleAiChatRequest(req: Request) {
   }
 
   const leafMessageId = conversation.current_message_leaf_id;
+  const authoritativeOpenScadAssets =
+    collectAuthoritativeOpenScadAssets(branchMessages);
 
   let providers: ChatProviders;
   let builtinProviderOverrides: BuiltinProviderRuntimeOverrides = {};
@@ -1159,6 +1202,7 @@ export async function handleAiChatRequest(req: Request) {
     validationAttempts: aiRuntime.number(
       'transport.openCodeValidationAttempts',
     ),
+    authoritativeAssets: authoritativeOpenScadAssets,
   };
   const cliTimeoutMs = aiRuntime.number('transport.cliTimeoutMs');
 
@@ -1199,6 +1243,7 @@ export async function handleAiChatRequest(req: Request) {
           ? codexTransportInstruction
           : openCodeTransportInstruction,
         timeoutMs: cliTimeoutMs,
+        authoritativeAssets: authoritativeOpenScadAssets,
       });
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
@@ -1294,6 +1339,7 @@ export async function handleAiChatRequest(req: Request) {
   const usingAutoToolChoiceFallback =
     conversation.type === 'parametric' &&
     leafRole === 'user' &&
+    !streamingOpenCode &&
     !forceBuildToolChoice;
 
   const activeGeneration = beginActiveGeneration(user.id, conversation.id);

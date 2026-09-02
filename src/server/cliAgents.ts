@@ -28,6 +28,15 @@ import {
 } from '@shared/aiInstructionCatalog';
 import { env } from './env';
 import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+  type OpenScadProjectAsset,
+} from '@shared/openScadProject';
+import {
+  reconcileOpenScadProjectAssetManifest,
+  resolveOpenScadAttachmentAssets,
+} from '@shared/openScadProjectAssetReconciliation';
+import {
   buildAgentOutputContract,
   parseAgentResult,
   type AgentResult,
@@ -283,7 +292,7 @@ function promptTextParts(message: LanguageModelV3Prompt[number]): string[] {
 type ParametricArtifactSnapshot = {
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
 };
 
 function parseArtifactInput(
@@ -301,7 +310,10 @@ function parseArtifactInput(
     return undefined;
   }
   const record = candidate as Record<string, unknown>;
-  if (typeof record['code'] !== 'string' || !record['code'].trim()) {
+  let project: OpenScadProject;
+  try {
+    project = normalizeOpenScadProject(record['project'] as OpenScadProject);
+  } catch {
     return undefined;
   }
   return {
@@ -313,7 +325,7 @@ function parseArtifactInput(
       typeof record['version'] === 'string' && record['version'].trim()
         ? record['version'].trim()
         : 'v1',
-    code: record['code'],
+    project,
   };
 }
 
@@ -439,11 +451,11 @@ export function buildPersistentCliAgentPrompt(
     lines.push(
       [
         '<current_pcad_artifact>',
-        `title: ${artifact.title}`,
-        `version: ${artifact.version}`,
-        '<openscad>',
-        artifact.code,
-        '</openscad>',
+        JSON.stringify({
+          title: artifact.title,
+          version: artifact.version,
+          project: artifact.project,
+        }),
         '</current_pcad_artifact>',
       ].join('\n'),
     );
@@ -648,7 +660,11 @@ async function invokeAgent(
 
 export function cliAgentChatModel(
   appModelId: string,
-  options: { transportInstruction?: string; timeoutMs?: number } = {},
+  options: {
+    transportInstruction?: string;
+    timeoutMs?: number;
+    authoritativeAssets?: readonly OpenScadProjectAsset[];
+  } = {},
 ): LanguageModelV3 {
   const { agent, model } = parseModelId(appModelId);
   const transportInstruction =
@@ -680,11 +696,31 @@ export function cliAgentChatModel(
         existingSessionId,
         optionsForCall.abortSignal,
       );
-      const result = invocation.result;
+      let result = invocation.result;
+      if (result.project) {
+        const currentAssets =
+          currentArtifact(optionsForCall.prompt)?.project.assets ?? [];
+        const authoritativeAssets = [
+          ...currentAssets,
+          ...(options.authoritativeAssets ?? []),
+        ];
+        const attachmentAssets = resolveOpenScadAttachmentAssets(
+          result.project,
+          authoritativeAssets,
+        );
+        result = {
+          ...result,
+          project: reconcileOpenScadProjectAssetManifest(result.project, [
+            ...authoritativeAssets,
+            ...attachmentAssets,
+          ]),
+        };
+      }
+
       const parts: LanguageModelV3StreamPart[] = [
         { type: 'stream-start', warnings: [] },
       ];
-      if (result.code) {
+      if (result.project) {
         parts.push({
           type: 'tool-call',
           toolCallId: encodeCliAgentSessionToolCallId(
@@ -695,7 +731,7 @@ export function cliAgentChatModel(
           input: JSON.stringify({
             title: 'Generated model',
             version: 'v1',
-            code: result.code,
+            project: result.project,
             message: result.message || 'Model generated.',
           }),
         });
@@ -713,7 +749,7 @@ export function cliAgentChatModel(
       }
       parts.push({
         type: 'finish',
-        finishReason: finishReason(result.code ? 'tool-calls' : 'stop'),
+        finishReason: finishReason(result.project ? 'tool-calls' : 'stop'),
         usage: USAGE(),
       });
       const stream = new ReadableStream<LanguageModelV3StreamPart>({

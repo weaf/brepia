@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { normalizeOpenScadProjectPath } from '@shared/openScadProject';
 import { env } from './env';
 
 const UUID_PATTERN =
@@ -125,44 +126,52 @@ export function conversationModelDir(conversationId: string): string {
   return join(conversationRoot(conversationId), 'models');
 }
 
-export function conversationCurrentModelPath(conversationId: string): string {
-  return join(conversationModelDir(conversationId), 'current.scad');
+export function conversationCurrentModelDir(conversationId: string): string {
+  return join(conversationModelDir(conversationId), 'current');
 }
 
-export function conversationCurrentModelMetadataPath(
+export function conversationCurrentModelProjectPath(
   conversationId: string,
 ): string {
-  return join(conversationModelDir(conversationId), 'current.json');
+  return join(conversationCurrentModelDir(conversationId), 'project.json');
+}
+
+export function conversationCurrentModelFilePath(
+  conversationId: string,
+  projectPath: string,
+): string {
+  return join(
+    conversationCurrentModelDir(conversationId),
+    normalizeOpenScadProjectPath(projectPath),
+  );
 }
 
 export function conversationModelRevisionsDir(conversationId: string): string {
   return join(conversationModelDir(conversationId), 'revisions');
 }
 
-function revisionFilename(
-  revision: number,
-  extension: 'scad' | 'json',
-): string {
-  return `${revisionStem(revision)}.${extension}`;
-}
-
-export function conversationModelRevisionPath(
+export function conversationModelRevisionDir(
   conversationId: string,
   revision: number,
 ): string {
-  return join(
-    conversationModelRevisionsDir(conversationId),
-    revisionFilename(revision, 'scad'),
-  );
+  return join(conversationModelRevisionsDir(conversationId), revisionStem(revision));
 }
 
-export function conversationModelRevisionMetadataPath(
+export function conversationModelRevisionProjectPath(
   conversationId: string,
   revision: number,
 ): string {
+  return join(conversationModelRevisionDir(conversationId, revision), 'project.json');
+}
+
+export function conversationModelRevisionFilePath(
+  conversationId: string,
+  revision: number,
+  projectPath: string,
+): string {
   return join(
-    conversationModelRevisionsDir(conversationId),
-    revisionFilename(revision, 'json'),
+    conversationModelRevisionDir(conversationId, revision),
+    normalizeOpenScadProjectPath(projectPath),
   );
 }
 

@@ -1,6 +1,14 @@
 import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
 import { loadBundledInstruction } from './aiInstructionCatalog.ts';
+import {
+  OPENSCAD_PROJECT_MAX_ASSETS,
+  OPENSCAD_PROJECT_MAX_FILES,
+  OPENSCAD_PROJECT_SCHEMA_VERSION,
+  normalizeOpenScadProject,
+  type OpenScadProject,
+  type OpenScadProjectAsset,
+} from './openScadProject.ts';
 import type { MeshFileType, Model } from './types.ts';
 
 export const createMeshInputSchema = z.object({
@@ -21,10 +29,55 @@ export const createMeshOutputSchema = z.object({
   fileType: z.enum(['glb', 'stl', 'obj', 'fbx']),
 });
 
+const openScadProjectFileSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
+const openScadProjectAssetSchema = z.object({
+  path: z.string().min(1),
+  storagePath: z.string().min(1),
+  mediaType: z.enum([
+    'model/stl',
+    'text/plain',
+    'application/dxf',
+    'image/svg+xml',
+  ]),
+  byteLength: z.number().int().positive(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
+export const openScadProjectSchema = z
+  .object({
+    schemaVersion: z.literal(OPENSCAD_PROJECT_SCHEMA_VERSION),
+    entrypointPath: z.string().min(1),
+    files: z
+      .array(openScadProjectFileSchema)
+      .min(1)
+      .max(OPENSCAD_PROJECT_MAX_FILES),
+    assets: z
+      .array(openScadProjectAssetSchema)
+      .max(OPENSCAD_PROJECT_MAX_ASSETS)
+      .optional(),
+  })
+  .superRefine((project, context) => {
+    try {
+      normalizeOpenScadProject(project as OpenScadProject);
+    } catch (error) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Invalid OpenSCAD project snapshot.',
+      });
+    }
+  });
+
 export const parametricArtifactSchema = z.object({
   title: z.string().min(1),
   version: z.string().default('v1'),
-  code: z.string().min(20),
+  project: openScadProjectSchema,
 });
 
 export const parametricCompileOutputSchema = z.object({
@@ -69,6 +122,8 @@ export type MeshContextData = {
   fileType: MeshFileType;
   filename?: string;
   boundingBox?: { x: number; y: number; z: number };
+  /** Authoritative descriptor for a Parametric import()/surface() asset. */
+  asset?: OpenScadProjectAsset;
 };
 
 export type MeshPreferencesData = {
@@ -119,6 +174,7 @@ export const meshContextDataSchema = z.object({
   boundingBox: z
     .object({ x: z.number(), y: z.number(), z: z.number() })
     .optional(),
+  asset: openScadProjectAssetSchema.optional(),
 });
 
 export const meshPreferencesDataSchema = z.object({
@@ -132,20 +188,14 @@ export type AppUIMessage = UIMessage<
     /** Actual LLM/agent used by a Creative turn. `model` remains the mesh
      * backend ID in Creative mode so retry/UI behavior stays compatible. */
     agentModel?: Model;
-    /** Provenance for a SCAD artifact that entered pCAD through import.
-     * UI-only metadata: the complete source remains solely in the normal
+    /** Provenance for an OpenSCAD artifact that entered Brepia through import.
+     * UI-only metadata: the complete project snapshot remains in the normal
      * build_parametric_model tool input and is not duplicated here. */
     artifactOrigin?: ImportedArtifactOrigin;
-    // The model's original OpenSCAD for this message's artifact, captured
-    // lazily on the FIRST parameter edit (see `persistParameterEdit`).
-    // Parameter edits rewrite the live `tool-build_parametric_model` input
-    // code in place, which would otherwise move the derived `defaultValue`
-    // to the edited value on every reload. Stashing the original here —
-    // message metadata is UI-only and NOT sent to the model by
-    // `convertToModelMessages` — lets the client re-derive stable defaults
-    // (Reset / slider home / auto range) with no second code copy in the
-    // model's context, no migration, and no storage cost on the (common)
-    // never-edited artifacts.
+    // The model's original OpenSCAD entrypoint for this message's artifact,
+    // captured lazily on the FIRST parameter edit. Parameter edits rewrite the
+    // entrypoint file in the project snapshot; this value anchors Reset / slider
+    // home / auto-range without duplicating every never-edited project.
     originalCode?: string;
   },
   AppDataTypes,

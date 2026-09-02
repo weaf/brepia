@@ -28,6 +28,13 @@ const vertexShader = `
 `;
 
 const fragmentShader = quantizeFragmentShader;
+const brepiaWatermarkUrl = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}brepia-watermark.svg`;
+
+export type GifDownloadActionResult = 'prepared' | 'downloaded' | 'unavailable';
+
+export type GifDownloadHandle = {
+  downloadGIF: () => Promise<GifDownloadActionResult>;
+};
 
 export function MeshGifPreview({
   ref,
@@ -37,7 +44,7 @@ export function MeshGifPreview({
   setProgress,
   setReadyToDownload,
 }: {
-  ref: React.RefObject<{ downloadGIF: () => Promise<void> } | null>;
+  ref: React.RefObject<GifDownloadHandle | null>;
   meshId?: string;
   externalGltf?: GLTF | null;
   setIsGenerating: (isGenerating: boolean) => void;
@@ -49,7 +56,7 @@ export function MeshGifPreview({
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const logoImage = useMemo(() => {
     const img = new Image();
-    img.src = `${import.meta.env.BASE_URL}/brepia-watermark.svg`; // served from public folder root
+    img.src = brepiaWatermarkUrl;
     return img;
   }, []);
   const isGeneratingRef = useRef(false);
@@ -58,6 +65,16 @@ export function MeshGifPreview({
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const pmremGeneratorRef = useRef<THREE.PMREMGenerator | null>(null);
+  const preparedDownloadRef = useRef<{
+    objectUrl: string;
+    filename: string;
+  } | null>(null);
+
+  const revokePreparedDownload = useCallback(() => {
+    if (!preparedDownloadRef.current) return;
+    URL.revokeObjectURL(preparedDownloadRef.current.objectUrl);
+    preparedDownloadRef.current = null;
+  }, []);
 
   // Cleanup function for Three.js objects
   const cleanupThreeJS = useCallback(() => {
@@ -111,16 +128,18 @@ export function MeshGifPreview({
   useEffect(() => {
     return () => {
       cleanupThreeJS();
+      revokePreparedDownload();
     };
-  }, [cleanupThreeJS]);
+  }, [cleanupThreeJS, revokePreparedDownload]);
 
   useEffect(() => {
+    revokePreparedDownload();
     if (externalGltf !== undefined) {
       setGltf(externalGltf);
       return;
     }
     setGltf(null);
-  }, [meshId, externalGltf]);
+  }, [meshId, externalGltf, revokePreparedDownload]);
 
   const {
     data: { data: meshData, isLoading: isMeshDataLoading },
@@ -483,11 +502,12 @@ export function MeshGifPreview({
         return;
       }
 
-      // Ensure the watermark image is fully loaded before starting generation
+      // Give the watermark a chance to load, but do not make GIF generation
+      // depend on it. A missing branding asset must never block the export.
       if (!logoImage.complete) {
         await new Promise<void>((resolve) => {
           logoImage.onload = () => resolve();
-          logoImage.onerror = () => resolve(); // proceed even if load fails
+          logoImage.onerror = () => resolve();
         });
       }
 
@@ -518,21 +538,22 @@ export function MeshGifPreview({
 
         context.drawImage(canvas, 0, 0);
 
-        // Draw Brepia watermark in the bottom-right corner
-        const margin = 12;
-        const logoWidth = newCanvas.width * 0.15; // 15% of canvas width
-        const aspectRatio =
-          logoImage.height && logoImage.width
-            ? logoImage.height / logoImage.width
-            : 1;
-        const logoHeight = logoWidth * aspectRatio;
-        context.drawImage(
-          logoImage,
-          newCanvas.width - logoWidth - margin,
-          newCanvas.height - logoHeight - margin,
-          logoWidth,
-          logoHeight,
-        );
+        // Draw the Brepia watermark only when the asset decoded successfully.
+        // Broken image elements throw from drawImage(), which would otherwise
+        // abort the entire GIF generation path.
+        if (logoImage.naturalWidth > 0 && logoImage.naturalHeight > 0) {
+          const margin = 12;
+          const logoWidth = newCanvas.width * 0.15; // 15% of canvas width
+          const aspectRatio = logoImage.naturalHeight / logoImage.naturalWidth;
+          const logoHeight = logoWidth * aspectRatio;
+          context.drawImage(
+            logoImage,
+            newCanvas.width - logoWidth - margin,
+            newCanvas.height - logoHeight - margin,
+            logoWidth,
+            logoHeight,
+          );
+        }
 
         const data = context.getImageData(
           0,
@@ -593,42 +614,69 @@ export function MeshGifPreview({
     [canvas, render, setProgress, logoImage],
   );
 
-  const downloadGIF = useCallback(async () => {
-    if (!canvas) {
-      return;
-    }
+  const downloadGIF =
+    useCallback(async (): Promise<GifDownloadActionResult> => {
+      // Mobile browsers can drop transient user activation while the GIF is
+      // generated. If a GIF is already prepared, perform the anchor click
+      // synchronously before the first await so the download remains tied to
+      // this fresh user gesture.
+      const preparedDownload = preparedDownloadRef.current;
+      if (preparedDownload) {
+        const link = document.createElement('a');
+        link.href = preparedDownload.objectUrl;
+        link.download = preparedDownload.filename;
+        link.rel = 'noopener';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
 
-    setIsGenerating(true);
-    isGeneratingRef.current = true;
+        preparedDownloadRef.current = null;
+        window.setTimeout(
+          () => URL.revokeObjectURL(preparedDownload.objectUrl),
+          1000,
+        );
+        return 'downloaded';
+      }
 
-    let buffer: BlobPart | undefined;
+      if (!canvas) {
+        return 'unavailable';
+      }
 
-    try {
-      buffer = await generateGIF(4, 30);
-    } catch (error) {
-      console.error('Error generating GIF:', error);
-    } finally {
-      setIsGenerating(false);
-      isGeneratingRef.current = false;
-    }
+      setIsGenerating(true);
+      isGeneratingRef.current = true;
 
-    // Download
-    if (!buffer) {
-      return;
-    }
+      let buffer: BlobPart | undefined;
 
-    const blob = new Blob([buffer], { type: 'image/gif' });
+      try {
+        buffer = await generateGIF(4, 30);
+      } catch (error) {
+        console.error('Error generating GIF:', error);
+      } finally {
+        setIsGenerating(false);
+        isGeneratingRef.current = false;
+      }
 
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = getSafeFilename(
-      conversation.title || 'animation',
-      'animation',
-    );
-    link.click();
+      if (!buffer) {
+        return 'unavailable';
+      }
 
-    URL.revokeObjectURL(link.href);
-  }, [canvas, generateGIF, conversation.title, setIsGenerating]);
+      const blob = new Blob([buffer], { type: 'image/gif' });
+      const objectUrl = URL.createObjectURL(blob);
+      const safeBaseName = getSafeFilename(
+        conversation.title || 'animation',
+        'animation',
+      );
+      const filename = safeBaseName.toLowerCase().endsWith('.gif')
+        ? safeBaseName
+        : `${safeBaseName}.gif`;
+
+      // Keep the prepared URL alive until the user explicitly taps Download
+      // (or until the model changes/unmounts). The second tap is then a pure
+      // synchronous download gesture, which is reliable on Android browsers.
+      preparedDownloadRef.current = { objectUrl, filename };
+      return 'prepared';
+    }, [canvas, generateGIF, conversation.title, setIsGenerating]);
 
   useImperativeHandle(ref, () => ({
     downloadGIF,
@@ -690,7 +738,7 @@ export function MeshGifPreview({
           ref={canvasRefCallback}
         />
         <img
-          src={`${import.meta.env.BASE_URL}/brepia-watermark.svg`}
+          src={brepiaWatermarkUrl}
           alt="Brepia watermark"
           className="pointer-events-none absolute bottom-3 right-3 w-[15%] select-none"
         />

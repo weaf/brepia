@@ -5,15 +5,21 @@ import {
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
-  conversationCurrentModelMetadataPath,
-  conversationCurrentModelPath,
-  conversationModelRevisionMetadataPath,
-  conversationModelRevisionPath,
+  getOpenScadEntrypoint,
+  normalizeOpenScadProject,
+  replaceOpenScadProjectFileContent,
+  type OpenScadProject,
+} from '@shared/openScadProject';
+import {
+  conversationCurrentModelDir,
+  conversationModelDir,
+  conversationModelRevisionDir,
+  conversationModelRevisionFilePath,
+  conversationModelRevisionProjectPath,
   conversationModelRevisionsDir,
 } from './conversationWorkspace';
 import { getAnonSupabaseClient } from './supabaseClient';
@@ -35,7 +41,7 @@ export type SuccessfulParametricBuild = {
   messageCreatedAt: string | null;
   title: string;
   version: string;
-  code: string;
+  project: OpenScadProject;
   source: ConversationModelRevisionSource;
 };
 
@@ -53,7 +59,8 @@ export type ConversationModelRevisionMetadata = {
   title: string;
   version: string;
   source: ConversationModelRevisionSource;
-  codeSha256: string;
+  projectSha256: string;
+  entrypointPath: string;
   savedAt: string;
 };
 
@@ -75,8 +82,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function conversationModelCodeSha256(code: string): string {
-  return createHash('sha256').update(code, 'utf8').digest('hex');
+export function conversationModelProjectSha256(project: OpenScadProject): string {
+  const normalized = normalizeOpenScadProject(project);
+  return createHash('sha256')
+    .update(JSON.stringify(normalized), 'utf8')
+    .digest('hex');
 }
 
 function originalCodeFromMessage(
@@ -87,6 +97,15 @@ function originalCodeFromMessage(
   return typeof originalCode === 'string' && originalCode.trim()
     ? originalCode
     : null;
+}
+
+function normalizeProject(value: unknown): OpenScadProject | null {
+  if (!isRecord(value)) return null;
+  try {
+    return normalizeOpenScadProject(value as OpenScadProject);
+  } catch {
+    return null;
+  }
 }
 
 function parseSuccessfulBuildPart(
@@ -102,14 +121,13 @@ function parseSuccessfulBuildPart(
 
   const title = part.input.title;
   const version = part.input.version;
-  const code = part.input.code;
+  const project = normalizeProject(part.input.project);
   if (
     typeof title !== 'string' ||
     !title.trim() ||
     typeof version !== 'string' ||
     !version.trim() ||
-    typeof code !== 'string' ||
-    !code.trim()
+    !project
   ) {
     return [];
   }
@@ -122,24 +140,30 @@ function parseSuccessfulBuildPart(
     version,
   };
   const originalCode = originalCodeFromMessage(message);
-  if (originalCode && originalCode !== code) {
+  const entrypointCode = getOpenScadEntrypoint(project).content;
+  if (originalCode && originalCode !== entrypointCode) {
+    const originalProject = replaceOpenScadProjectFileContent(
+      project,
+      project.entrypointPath,
+      originalCode,
+    );
     return [
-      { ...shared, code: originalCode, source: 'build' },
-      { ...shared, code, source: 'parameter-edit' },
+      { ...shared, project: originalProject, source: 'build' },
+      { ...shared, project, source: 'parameter-edit' },
     ];
   }
 
-  return [{ ...shared, code, source: 'build' }];
+  return [{ ...shared, project, source: 'build' }];
 }
 
 /**
  * Walk only the active parent chain. Successful builds that exist solely on an
- * abandoned sibling branch never become `current.scad` for the active branch.
+ * abandoned sibling branch never become the current project snapshot.
  *
  * Parameter edits are persisted in-place on the original tool part. When the
- * UI has captured `metadata.originalCode`, emit both the original build and the
- * currently edited source. This keeps immutable history without pretending a
- * changed source is the same revision merely because its toolCallId is stable.
+ * UI has captured `metadata.originalCode`, emit both the original project
+ * snapshot and the currently edited project. Only the entrypoint differs; all
+ * support files remain part of both complete snapshots.
  */
 export function collectSuccessfulParametricBuilds(
   rows: ConversationMessageRow[],
@@ -192,8 +216,6 @@ async function defaultLoadMessages(
   } = await supabase.auth.getUser();
   if (!user?.id) return [];
 
-  // Ownership is checked by the lifecycle conversation query. RLS on messages
-  // provides the second boundary here.
   const { data, error } = await supabase
     .from('messages')
     .select('id, parent_message_id, created_at, role, parts, metadata')
@@ -210,35 +232,8 @@ async function defaultLoadMessages(
   }));
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return false;
-    }
-    throw error;
-  }
-}
-
-async function atomicWriteText(path: string, content: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(tempPath, content, 'utf8');
-    await rename(tempPath, path);
-  } finally {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-  }
-}
-
-function revisionNumberFromFilename(filename: string): number | null {
-  const match = /^(\d{3,})\.(?:scad|json)$/.exec(filename);
+function revisionNumberFromEntry(entry: string): number | null {
+  const match = /^(\d{3,})$/.exec(entry);
   if (!match) return null;
   const revision = Number(match[1]);
   return Number.isSafeInteger(revision) && revision >= 1 ? revision : null;
@@ -252,19 +247,16 @@ function parseRevisionMetadata(
     typeof raw.revision !== 'number' ||
     typeof raw.toolCallId !== 'string' ||
     typeof raw.messageId !== 'string' ||
-    !(
-      raw.messageCreatedAt === null || typeof raw.messageCreatedAt === 'string'
-    ) ||
+    !(raw.messageCreatedAt === null || typeof raw.messageCreatedAt === 'string') ||
     typeof raw.title !== 'string' ||
     typeof raw.version !== 'string' ||
-    typeof raw.codeSha256 !== 'string' ||
+    typeof raw.projectSha256 !== 'string' ||
+    typeof raw.entrypointPath !== 'string' ||
     typeof raw.savedAt !== 'string'
   ) {
     return null;
   }
 
-  // Sidecars created by the first Step 3C implementation predate `source`.
-  // They represent normal model builds, so read them compatibly as `build`.
   const source: ConversationModelRevisionSource =
     raw.source === 'parameter-edit' ? 'parameter-edit' : 'build';
   return {
@@ -275,7 +267,8 @@ function parseRevisionMetadata(
     title: raw.title,
     version: raw.version,
     source,
-    codeSha256: raw.codeSha256,
+    projectSha256: raw.projectSha256,
+    entrypointPath: raw.entrypointPath,
     savedAt: raw.savedAt,
   };
 }
@@ -299,13 +292,28 @@ async function readRevisionState(
   let maxRevision = 0;
   const metadata: ConversationModelRevisionMetadata[] = [];
   for (const entry of entries) {
-    const entryRevision = revisionNumberFromFilename(entry);
-    if (entryRevision) maxRevision = Math.max(maxRevision, entryRevision);
-    if (!/^\d{3,}\.json$/.test(entry)) continue;
-
-    const parsed = parseRevisionMetadata(
-      JSON.parse(await readFile(join(directory, entry), 'utf8')),
+    const revision = revisionNumberFromEntry(entry);
+    if (!revision) continue;
+    maxRevision = Math.max(maxRevision, revision);
+    const projectPath = conversationModelRevisionProjectPath(
+      conversationId,
+      revision,
     );
+    let parsed: ConversationModelRevisionMetadata | null = null;
+    try {
+      const manifest: unknown = JSON.parse(await readFile(projectPath, 'utf8'));
+      if (isRecord(manifest)) parsed = parseRevisionMetadata(manifest.metadata);
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        continue;
+      }
+      throw error;
+    }
     if (parsed) metadata.push(parsed);
   }
   metadata.sort((a, b) => a.revision - b.revision);
@@ -318,16 +326,49 @@ export async function listConversationModelRevisions(
   return (await readRevisionState(conversationId)).metadata;
 }
 
-export async function findConversationModelRevisionByCodeSha(
+export async function findConversationModelRevisionByProjectSha(
   conversationId: string,
-  codeSha256: string,
+  projectSha256: string,
 ): Promise<ConversationModelRevisionMetadata | null> {
   const revisions = await listConversationModelRevisions(conversationId);
   return (
     revisions
-      .filter((metadata) => metadata.codeSha256 === codeSha256)
+      .filter((metadata) => metadata.projectSha256 === projectSha256)
       .sort((a, b) => b.revision - a.revision)[0] ?? null
   );
+}
+
+function snapshotDocument(
+  project: OpenScadProject,
+  metadata: ConversationModelRevisionMetadata,
+): string {
+  return `${JSON.stringify({ project, metadata }, null, 2)}\n`;
+}
+
+async function materializeSnapshot(
+  root: string,
+  project: OpenScadProject,
+  metadata: ConversationModelRevisionMetadata,
+): Promise<void> {
+  await mkdir(root, { recursive: true });
+  for (const file of project.files) {
+    const destination = join(root, file.path);
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, file.content, 'utf8');
+  }
+  await writeFile(
+    join(root, 'project.json'),
+    snapshotDocument(project, metadata),
+    'utf8',
+  );
+}
+
+async function readSnapshotProject(path: string): Promise<OpenScadProject> {
+  const raw: unknown = JSON.parse(await readFile(path, 'utf8'));
+  if (!isRecord(raw) || !isRecord(raw.project)) {
+    throw new Error(`Invalid OpenSCAD project snapshot: ${path}`);
+  }
+  return normalizeOpenScadProject(raw.project as OpenScadProject);
 }
 
 async function ensureExistingRevisionMatches(
@@ -335,24 +376,38 @@ async function ensureExistingRevisionMatches(
   metadata: ConversationModelRevisionMetadata,
   build: SuccessfulParametricBuild,
 ): Promise<void> {
-  const path = conversationModelRevisionPath(conversationId, metadata.revision);
-  const expectedHash = conversationModelCodeSha256(build.code);
-  if (expectedHash !== metadata.codeSha256) {
+  const expectedHash = conversationModelProjectSha256(build.project);
+  if (expectedHash !== metadata.projectSha256) {
     throw new Error(
       `Immutable model revision ${metadata.revision} identity mismatch`,
     );
   }
 
-  if (!(await pathExists(path))) {
-    await writeFile(path, build.code, { encoding: 'utf8', flag: 'wx' });
-    return;
-  }
-
-  const existingCode = await readFile(path, 'utf8');
-  if (conversationModelCodeSha256(existingCode) !== metadata.codeSha256) {
+  const snapshotPath = conversationModelRevisionProjectPath(
+    conversationId,
+    metadata.revision,
+  );
+  const project = await readSnapshotProject(snapshotPath);
+  if (conversationModelProjectSha256(project) !== metadata.projectSha256) {
     throw new Error(
       `Immutable model revision ${metadata.revision} checksum mismatch`,
     );
+  }
+
+  for (const file of project.files) {
+    const materialized = await readFile(
+      conversationModelRevisionFilePath(
+        conversationId,
+        metadata.revision,
+        file.path,
+      ),
+      'utf8',
+    );
+    if (materialized !== file.content) {
+      throw new Error(
+        `Immutable model revision ${metadata.revision} materialized file mismatch: ${file.path}`,
+      );
+    }
   }
 }
 
@@ -361,6 +416,7 @@ async function createRevision(
   revision: number,
   build: SuccessfulParametricBuild,
 ): Promise<ConversationModelRevisionMetadata> {
+  const project = normalizeOpenScadProject(build.project);
   const metadata: ConversationModelRevisionMetadata = {
     revision,
     toolCallId: build.toolCallId,
@@ -369,40 +425,68 @@ async function createRevision(
     title: build.title,
     version: build.version,
     source: build.source,
-    codeSha256: conversationModelCodeSha256(build.code),
+    projectSha256: conversationModelProjectSha256(project),
+    entrypointPath: project.entrypointPath,
     savedAt: new Date().toISOString(),
   };
 
-  const metadataPath = conversationModelRevisionMetadataPath(
-    conversationId,
-    revision,
-  );
-  const sourcePath = conversationModelRevisionPath(conversationId, revision);
-  await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, {
-    encoding: 'utf8',
-    flag: 'wx',
-  });
+  const finalDir = conversationModelRevisionDir(conversationId, revision);
+  const tempDir = `${finalDir}.${process.pid}.${randomUUID()}.tmp`;
+  await mkdir(dirname(finalDir), { recursive: true });
   try {
-    await writeFile(sourcePath, build.code, { encoding: 'utf8', flag: 'wx' });
-  } catch (error) {
-    await rm(metadataPath, { force: true }).catch(() => undefined);
-    throw error;
+    await materializeSnapshot(tempDir, project, metadata);
+    await rename(tempDir, finalDir);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }
   return metadata;
 }
 
-function revisionIdentity(toolCallId: string, codeSha256: string): string {
-  return `${toolCallId}:${codeSha256}`;
+function revisionIdentity(toolCallId: string, projectSha256: string): string {
+  return `${toolCallId}:${projectSha256}`;
+}
+
+async function replaceCurrentSnapshot(
+  conversationId: string,
+  build: SuccessfulParametricBuild,
+  metadata: ConversationModelRevisionMetadata,
+): Promise<void> {
+  const finalDir = conversationCurrentModelDir(conversationId);
+  const tempDir = `${finalDir}.${process.pid}.${randomUUID()}.tmp`;
+  const project = normalizeOpenScadProject(build.project);
+  try {
+    await materializeSnapshot(tempDir, project, metadata);
+    await rm(finalDir, { recursive: true, force: true });
+    await rename(tempDir, finalDir);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function removeLegacyModelMirror(conversationId: string): Promise<void> {
+  const modelDir = conversationModelDir(conversationId);
+  const revisionsDir = conversationModelRevisionsDir(conversationId);
+  await Promise.all([
+    rm(join(modelDir, 'current.scad'), { force: true }),
+    rm(join(modelDir, 'current.json'), { force: true }),
+  ]);
+  const entries = await readdir(revisionsDir).catch(() => [] as string[]);
+  await Promise.all(
+    entries
+      .filter((entry) => /^\d{3,}\.(?:scad|json)$/.test(entry))
+      .map((entry) => rm(join(revisionsDir, entry), { force: true })),
+  );
 }
 
 async function persistBuildsLocked(
   conversationId: string,
   builds: SuccessfulParametricBuild[],
 ): Promise<ConversationModelSyncResult> {
+  await removeLegacyModelMirror(conversationId);
   const state = await readRevisionState(conversationId);
   const byIdentity = new Map(
     state.metadata.map((metadata) => [
-      revisionIdentity(metadata.toolCallId, metadata.codeSha256),
+      revisionIdentity(metadata.toolCallId, metadata.projectSha256),
       metadata,
     ]),
   );
@@ -411,8 +495,8 @@ async function persistBuildsLocked(
   let currentMetadata: ConversationModelRevisionMetadata | null = null;
 
   for (const build of builds) {
-    const codeHash = conversationModelCodeSha256(build.code);
-    const identity = revisionIdentity(build.toolCallId, codeHash);
+    const projectHash = conversationModelProjectSha256(build.project);
+    const identity = revisionIdentity(build.toolCallId, projectHash);
     let metadata = byIdentity.get(identity);
     if (metadata) {
       await ensureExistingRevisionMatches(conversationId, metadata, build);
@@ -427,14 +511,7 @@ async function persistBuildsLocked(
 
   const latestBuild = builds.at(-1);
   if (latestBuild && currentMetadata) {
-    await atomicWriteText(
-      conversationCurrentModelPath(conversationId),
-      latestBuild.code,
-    );
-    await atomicWriteText(
-      conversationCurrentModelMetadataPath(conversationId),
-      `${JSON.stringify(currentMetadata, null, 2)}\n`,
-    );
+    await replaceCurrentSnapshot(conversationId, latestBuild, currentMetadata);
   }
 
   return {
@@ -468,10 +545,10 @@ async function withConversationLock<T>(
 }
 
 /**
- * Persist successful OpenSCAD sources from the active conversation branch.
- * Revisions are immutable and idempotent by toolCallId + source hash.
- * `current.scad` always follows the newest active source, including persisted
- * parameter edits.
+ * Mirror complete normalized OpenSCAD project snapshots from the active
+ * authoritative conversation branch. Revisions are immutable and idempotent
+ * by toolCallId + whole-project hash. The local filesystem remains a
+ * best-effort operational mirror; Supabase/message state is authoritative.
  */
 export async function syncConversationModelSources(
   request: Request,

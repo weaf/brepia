@@ -3,6 +3,7 @@ import { ChatSession } from '@/components/chat/ChatSession';
 import { CreateIcon } from '@/components/icons/ui/CreateIcon';
 import { ParameterSection } from '@/components/parameter/ParameterSection';
 import { ParameterSheetContent } from '@/components/parameter/ParameterSheetContent';
+import { ProjectFilesEditor } from '@/components/parameter/ProjectFilesEditor';
 import { ActivityIndicator } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +26,7 @@ import {
 } from '@/lib/aiMessages';
 import parseParameters from '@shared/parseParameters';
 import { normalizeModelId } from '@shared/models';
+import { replaceOpenScadProjectFileContent } from '@shared/openScadProject';
 import { supabase } from '@/lib/supabase';
 import { updateParameter } from '@/lib/utils';
 import {
@@ -36,8 +38,10 @@ import {
 import type { DxfExporter } from '@/utils/downloadUtils';
 import type { AppUIMessage } from '@shared/chatAi';
 import {
+  getParametricArtifactEntrypointCode,
   isParametricArtifact,
   replaceBuildParametricModelOutput,
+  replaceParametricArtifactEntrypointCode,
 } from '@shared/parametricParts';
 import Tree from '@shared/Tree';
 import type {
@@ -452,7 +456,8 @@ function ConversationEditor() {
   // mesh lands, or by the user clicking the Eye icon on a bubble). ──────
   const handleViewArtifact = useCallback(
     (artifact: ParametricArtifact, messageId: string) => {
-      baseCodeRef.current = artifact.code;
+      const code = getParametricArtifactEntrypointCode(artifact);
+      baseCodeRef.current = code;
       // Parameters are derived from the OpenSCAD source — same code always
       // yields the same `<ParameterSection>`, no matter which model wrote
       // it. The current values come from the (possibly edited) artifact
@@ -463,7 +468,7 @@ function ConversationEditor() {
       const originalCode = queryClient
         .getQueryData<Message[]>(['messages', conversation.id])
         ?.find((row) => row.id === messageId)?.metadata?.originalCode;
-      setParameters(mergeParameterDefaults(artifact.code, originalCode));
+      setParameters(mergeParameterDefaults(code, originalCode));
       setCurrentOutput(undefined);
       setDxfExporter(() => null);
       setActivePreview({ type: 'artifact', messageId, artifact });
@@ -580,10 +585,10 @@ function ConversationEditor() {
         nextCode = updateParameter(nextCode, parameter);
       }
       setParameters(nextParameters);
-      const updatedArtifact: ParametricArtifact = {
-        ...activePreview.artifact,
-        code: nextCode,
-      };
+      const updatedArtifact = replaceParametricArtifactEntrypointCode(
+        activePreview.artifact,
+        nextCode,
+      );
       setActivePreview({
         ...activePreview,
         artifact: updatedArtifact,
@@ -606,6 +611,73 @@ function ConversationEditor() {
     [activePreview, isChatStreaming, drainParameterWrites],
   );
 
+  const waitForParameterWrites = useCallback(async () => {
+    while (writeInFlightRef.current || pendingWritesRef.current.size > 0) {
+      await drainParameterWrites();
+      if (writeInFlightRef.current) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 10);
+        });
+      }
+    }
+  }, [drainParameterWrites]);
+
+  const handleProjectFileSave = useCallback(
+    async (path: string, content: string) => {
+      if (activePreview?.type !== 'artifact') {
+        throw new Error('No OpenSCAD project is active.');
+      }
+      if (path === activePreview.artifact.project.entrypointPath) {
+        throw new Error('The project entrypoint is read-only in the file editor.');
+      }
+
+      await waitForParameterWrites();
+
+      const updatedArtifact: ParametricArtifact = {
+        ...activePreview.artifact,
+        project: replaceOpenScadProjectFileContent(
+          activePreview.artifact.project,
+          path,
+          content,
+        ),
+      };
+      const row = queryClient
+        .getQueryData<Message[]>(['messages', conversation.id])
+        ?.find((message) => message.id === activePreview.messageId);
+      if (!row) {
+        throw new Error('The project message is no longer available.');
+      }
+
+      const nextParts = replaceBuildParametricModelOutput(
+        row.parts,
+        updatedArtifact,
+      );
+      await persistAssistantParts({
+        conversationId: conversation.id,
+        messageId: activePreview.messageId,
+        parts: nextParts,
+      });
+      queryClient.setQueryData(
+        ['messages', conversation.id],
+        (old: Message[] | undefined): Message[] =>
+          (old ?? []).map((message) =>
+            message.id === activePreview.messageId
+              ? { ...message, parts: nextParts }
+              : message,
+          ),
+      );
+      setActivePreview((current) =>
+        current?.type === 'artifact' &&
+        current.messageId === activePreview.messageId
+          ? { ...current, artifact: updatedArtifact }
+          : current,
+      );
+      setCurrentOutput(undefined);
+      setDxfExporter(() => null);
+    },
+    [activePreview, conversation.id, queryClient, waitForParameterWrites],
+  );
+
   const updatePrivacy = useCallback(
     (privacy: 'public' | 'private') => {
       updateConversation?.({ ...conversation, privacy });
@@ -623,8 +695,11 @@ function ConversationEditor() {
   );
   const sharePreview = activePreview ?? persistedLatestPreview;
 
-  const hasArtifact =
-    activePreview?.type === 'artifact' && parameters.length > 0;
+  const hasArtifact = activePreview?.type === 'artifact';
+  const activeArtifactCode =
+    activePreview?.type === 'artifact'
+      ? getParametricArtifactEntrypointCode(activePreview.artifact)
+      : undefined;
 
   // `useCachedAiChat` captures `initialBranch` once at Chat construction;
   // if the messages query hasn't completed its first fetch yet the
@@ -665,9 +740,9 @@ function ConversationEditor() {
                       ? sharePreview.meshId
                       : undefined
                   }
-                  activeOpenscadCode={
+                  activeOpenscadProject={
                     sharePreview?.type === 'artifact'
-                      ? sharePreview.artifact.code
+                      ? sharePreview.artifact.project
                       : undefined
                   }
                 />
@@ -697,9 +772,9 @@ function ConversationEditor() {
                         ? sharePreview.meshId
                         : undefined
                     }
-                    openscadCode={
+                    openscadProject={
                       sharePreview?.type === 'artifact'
-                        ? sharePreview.artifact.code
+                        ? sharePreview.artifact.project
                         : undefined
                     }
                   />
@@ -749,7 +824,7 @@ function ConversationEditor() {
             <Loader showLoadingText />
           ) : activePreview?.type === 'artifact' ? (
             <OpenSCADPreview
-              scadCode={activePreview.artifact.code}
+              project={activePreview.artifact.project}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               onDxfExportChange={handleDxfExporterChange}
@@ -769,7 +844,7 @@ function ConversationEditor() {
             <Loader showLoadingText />
           ) : activePreview?.type === 'artifact' ? (
             <OpenSCADPreview
-              scadCode={activePreview.artifact.code}
+              project={activePreview.artifact.project}
               color="#00A6FF"
               onOutputChange={setCurrentOutput}
               onDxfExportChange={handleDxfExporterChange}
@@ -786,32 +861,68 @@ function ConversationEditor() {
         </div>
       }
       parametersSlot={
-        <div className="relative h-full">
-          <ParameterSection
-            parameters={parameters}
-            onParameterChange={changeParameters}
-            currentOutput={currentOutput}
-            dxfExporter={dxfExporter}
-            code={
+        <div className="flex h-full min-h-0 flex-col">
+          <ProjectFilesEditor
+            key={
               activePreview?.type === 'artifact'
-                ? activePreview.artifact.code
+                ? `desktop:${activePreview.messageId}`
+                : 'desktop:none'
+            }
+            project={
+              activePreview?.type === 'artifact'
+                ? activePreview.artifact.project
                 : undefined
             }
+            onSaveFile={handleProjectFileSave}
+            disabled={isChatStreaming}
           />
+          <div className="min-h-0 flex-1">
+            <ParameterSection
+              parameters={parameters}
+              onParameterChange={changeParameters}
+              currentOutput={currentOutput}
+              dxfExporter={dxfExporter}
+              project={
+                activePreview?.type === 'artifact'
+                  ? activePreview.artifact.project
+                  : undefined
+              }
+              code={activeArtifactCode}
+            />
+          </div>
         </div>
       }
       mobileParametersSlot={
-        <ParameterSheetContent
-          parameters={parameters}
-          onParameterChange={changeParameters}
-          currentOutput={currentOutput}
-          dxfExporter={dxfExporter}
-          code={
-            activePreview?.type === 'artifact'
-              ? activePreview.artifact.code
-              : undefined
-          }
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          <ProjectFilesEditor
+            key={
+              activePreview?.type === 'artifact'
+                ? `mobile:${activePreview.messageId}`
+                : 'mobile:none'
+            }
+            project={
+              activePreview?.type === 'artifact'
+                ? activePreview.artifact.project
+                : undefined
+            }
+            onSaveFile={handleProjectFileSave}
+            disabled={isChatStreaming}
+          />
+          <div className="min-h-0 flex-1">
+            <ParameterSheetContent
+              parameters={parameters}
+              onParameterChange={changeParameters}
+              currentOutput={currentOutput}
+              dxfExporter={dxfExporter}
+              project={
+                activePreview?.type === 'artifact'
+                  ? activePreview.artifact.project
+                  : undefined
+              }
+              code={activeArtifactCode}
+            />
+          </div>
+        </div>
       }
     />
   );

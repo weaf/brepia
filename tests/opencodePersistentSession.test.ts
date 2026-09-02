@@ -8,6 +8,17 @@ import {
   ensureOpenCodeSession,
 } from '../src/server/opencode';
 
+function project(code: string, support = 'module support_part() { cube(1); }') {
+  return {
+    schemaVersion: 1 as const,
+    entrypointPath: 'main.scad',
+    files: [
+      { path: 'main.scad', content: code },
+      { path: 'lib/support.scad', content: support },
+    ],
+  };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -37,7 +48,9 @@ describe('persistent OpenCode sessions', () => {
             input: JSON.stringify({
               title: 'Box',
               version: 'v1',
-              code: 'width = 40;\nheight = 20;\ncube([width, width, height]);',
+              project: project(
+                'width = 40;\nheight = 20;\ncube([width, width, height]);',
+              ),
             }),
           },
         ],
@@ -58,6 +71,10 @@ describe('persistent OpenCode sessions', () => {
     const reused = buildPersistentOpenCodePrompt(prompt, false);
     assert.match(reused, /<current_pcad_artifact>/);
     assert.match(reused, /width = 40;/);
+    assert.match(reused, /lib\/support\.scad/);
+    assert.match(reused, /module support_part/);
+    assert.match(reused, /"entrypointPath":"main.scad"/);
+    assert.doesNotMatch(reused, /<current_pcad_artifact>\n<openscad>/);
     assert.match(reused, /Compiled successfully/);
     assert.equal(reused.includes('<user_request>\n'), false);
 
@@ -82,7 +99,7 @@ describe('persistent OpenCode sessions', () => {
             input: {
               title: 'Imported box',
               version: 'v1',
-              code: originalCode,
+              project: project(originalCode),
             },
           },
         ],
@@ -101,7 +118,10 @@ describe('persistent OpenCode sessions', () => {
             input: {
               title: 'Imported box',
               version: 'v1',
-              code: latestCode,
+              project: project(
+                latestCode,
+                'module support_part() { sphere(r = 7); }',
+              ),
             },
           },
         ],
@@ -116,6 +136,8 @@ describe('persistent OpenCode sessions', () => {
     assert.match(turnPrompt, /<current_pcad_artifact>/);
     assert.match(turnPrompt, /width = 36;/);
     assert.match(turnPrompt, /height = 14;/);
+    assert.match(turnPrompt, /sphere\(r = 7\)/);
+    assert.match(turnPrompt, /lib\/support\.scad/);
     assert.equal(turnPrompt.includes('width = 20;'), false);
   });
 
@@ -136,7 +158,7 @@ describe('persistent OpenCode sessions', () => {
             type: 'tool-call',
             toolCallId: 'call-1',
             toolName: 'build_parametric_model',
-            input: { title: 'Box', version: 'v1', code: codes[0] },
+            input: { title: 'Box', version: 'v1', project: project(codes[0]) },
           },
         ],
       },
@@ -162,7 +184,7 @@ describe('persistent OpenCode sessions', () => {
             type: 'tool-call',
             toolCallId: 'call-2',
             toolName: 'build_parametric_model',
-            input: { title: 'Box', version: 'v1', code: codes[1] },
+            input: { title: 'Box', version: 'v1', project: project(codes[1]) },
           },
         ],
       },
@@ -188,7 +210,7 @@ describe('persistent OpenCode sessions', () => {
             type: 'tool-call',
             toolCallId: 'call-3',
             toolName: 'build_parametric_model',
-            input: { title: 'Box', version: 'v1', code: codes[2] },
+            input: { title: 'Box', version: 'v1', project: project(codes[2]) },
           },
         ],
       },
@@ -224,7 +246,7 @@ describe('persistent OpenCode sessions', () => {
             type: 'tool-call',
             toolCallId: 'call-4',
             toolName: 'build_parametric_model',
-            input: { title: 'Box', version: 'v1', code: codes[3] },
+            input: { title: 'Box', version: 'v1', project: project(codes[3]) },
           },
         ],
       },

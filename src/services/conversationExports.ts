@@ -1,10 +1,11 @@
 import { supabase } from '@/lib/supabase';
+import type { OpenScadProject } from '@shared/openScadProject';
 import { apiUrl } from './api';
 
 export type PersistConversationExportOptions = {
   conversationId: string;
   format: 'stl' | 'dxf' | '3mf';
-  sourceCode: string;
+  project: OpenScadProject;
   file: Blob;
 };
 
@@ -22,7 +23,7 @@ async function postExport(
   const form = new FormData();
   form.set('conversationId', options.conversationId);
   form.set('format', options.format);
-  form.set('sourceCode', options.sourceCode);
+  form.set('project', JSON.stringify(options.project));
   form.set('file', options.file, `model.${options.format}`);
 
   return fetch(apiUrl('parametric-chat'), {
@@ -37,9 +38,10 @@ async function postExport(
 
 /**
  * Best-effort companion to the browser download. The server resolves the exact
- * model revision from the source hash and stores the exported bytes in the
- * conversation workspace. A parameter edit can be a few milliseconds behind
- * in Supabase, so retry the explicit revision-not-found race once.
+ * model revision from the complete normalized project identity and stores the
+ * exported bytes in the conversation workspace. A parameter edit can be a few
+ * milliseconds behind in Supabase, so retry the explicit revision-not-found
+ * race once.
  */
 export async function persistConversationExport(
   options: PersistConversationExportOptions,

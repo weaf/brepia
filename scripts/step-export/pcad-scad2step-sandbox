@@ -2,21 +2,95 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <input.scad> -o <output.step>" >&2
+  echo "usage: $0 --project <input-dir> --entrypoint <relative.scad> -o <output.step>" >&2
+  echo "       $0 <input.scad> -o <output.step>" >&2
   exit 64
 }
 
-[ "$#" -eq 3 ] || usage
-INPUT="$1"
-[ "$2" = "-o" ] || usage
-OUTPUT="$3"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DRIVER="${SCRIPT_DIR}/pcad-scad2step-driver.py"
 
-if [ ! -f "$INPUT" ] || [ -L "$INPUT" ]; then
-  echo "STEP sandbox input must be a regular SCAD file" >&2
-  exit 65
+INPUT_VOLUME=""
+CONTAINER_INPUT=""
+MESH_SCOPE="minimal"
+
+if { [ "$#" -eq 6 ] || [ "$#" -eq 8 ]; } && [ "$1" = "--project" ] && [ "$3" = "--entrypoint" ] && [ "$5" = "-o" ]; then
+  PROJECT_DIR="$2"
+  ENTRYPOINT="$4"
+  OUTPUT="$6"
+
+  if [ "$#" -eq 8 ]; then
+    [ "$7" = "--mesh-scope" ] || usage
+    MESH_SCOPE="$8"
+    case "$MESH_SCOPE" in
+      minimal|hoist) ;;
+      *) usage ;;
+    esac
+  fi
+
+  if [ ! -d "$PROJECT_DIR" ] || [ -L "$PROJECT_DIR" ]; then
+    echo "STEP sandbox project input must be a regular directory" >&2
+    exit 65
+  fi
+
+  case "$ENTRYPOINT" in
+    ""|/*|*\\*)
+      echo "STEP sandbox entrypoint must be a normalized relative path" >&2
+      exit 65
+      ;;
+  esac
+
+  IFS='/' read -r -a ENTRYPOINT_SEGMENTS <<< "$ENTRYPOINT"
+  for SEGMENT in "${ENTRYPOINT_SEGMENTS[@]}"; do
+    if [ -z "$SEGMENT" ] || [ "$SEGMENT" = "." ] || [ "$SEGMENT" = ".." ]; then
+      echo "STEP sandbox entrypoint must be a normalized relative path" >&2
+      exit 65
+    fi
+  done
+
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  ENTRYPOINT_HOST="${PROJECT_DIR}/${ENTRYPOINT}"
+  if [ ! -f "$ENTRYPOINT_HOST" ] || [ -L "$ENTRYPOINT_HOST" ]; then
+    echo "STEP sandbox entrypoint must be a regular SCAD file" >&2
+    exit 65
+  fi
+
+  RESOLVED_ENTRYPOINT="$(realpath "$ENTRYPOINT_HOST")"
+  case "$RESOLVED_ENTRYPOINT" in
+    "${PROJECT_DIR}"/*) ;;
+    *)
+      echo "STEP sandbox entrypoint escapes the project directory" >&2
+      exit 65
+      ;;
+  esac
+
+  if [ -n "$(find "$PROJECT_DIR" -type l -print -quit)" ]; then
+    echo "STEP sandbox project cannot contain symbolic links" >&2
+    exit 65
+  fi
+  if [ -n "$(find "$PROJECT_DIR" ! -type f ! -type d -print -quit)" ]; then
+    echo "STEP sandbox project contains an unsupported filesystem object" >&2
+    exit 65
+  fi
+
+  INPUT_VOLUME="${PROJECT_DIR}:/input/project:ro"
+  CONTAINER_INPUT="/input/project/${ENTRYPOINT}"
+elif [ "$#" -eq 3 ] && [ "$2" = "-o" ]; then
+  INPUT="$1"
+  OUTPUT="$3"
+
+  if [ ! -f "$INPUT" ] || [ -L "$INPUT" ]; then
+    echo "STEP sandbox input must be a regular SCAD file" >&2
+    exit 65
+  fi
+
+  INPUT="$(realpath "$INPUT")"
+  INPUT_VOLUME="${INPUT}:/input/model.scad:ro"
+  CONTAINER_INPUT="/input/model.scad"
+else
+  usage
 fi
 
-INPUT="$(realpath "$INPUT")"
 OUTPUT_DIR="$(dirname "$OUTPUT")"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd -P)"
@@ -33,6 +107,11 @@ CPUS="${PCAD_STEP_EXPORT_CPUS:-2}"
 PIDS_LIMIT="${PCAD_STEP_EXPORT_PIDS_LIMIT:-256}"
 RUNTIME_TIMEOUT="${PCAD_STEP_EXPORT_CONTAINER_TIMEOUT_SECONDS:-40}"
 TMPFS_SIZE="${PCAD_STEP_EXPORT_TMPFS_SIZE:-512m}"
+
+if [ ! -f "$DRIVER" ] || [ -L "$DRIVER" ]; then
+  echo "STEP_SANDBOX_UNAVAILABLE: compatibility driver is missing" >&2
+  exit 69
+fi
 
 if ! command -v "$PODMAN_BIN" >/dev/null 2>&1; then
   echo "STEP_SANDBOX_UNAVAILABLE: Podman executable not found: $PODMAN_BIN" >&2
@@ -76,12 +155,17 @@ timeout --signal=TERM --kill-after=5 "${RUNTIME_TIMEOUT}s" \
     --userns=keep-id \
     --user "$(id -u):$(id -g)" \
     --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=${TMPFS_SIZE},mode=1777" \
-    --volume "${INPUT}:/input/model.scad:ro" \
+    --volume "$INPUT_VOLUME" \
+    --volume "${DRIVER}:/pcad/step-driver.py:ro" \
     --volume "${OUTPUT_DIR}:/output:rw" \
     --env HOME=/tmp \
     --env OPENSCADPATH=/opt/openscad-libraries \
+    --entrypoint=/opt/pcad-step-venv/bin/python \
     "$IMAGE" \
-    /input/model.scad -o "/output/${OUTPUT_NAME}"
+    /pcad/step-driver.py \
+    "$CONTAINER_INPUT" \
+    -o "/output/${OUTPUT_NAME}" \
+    --mesh-scope "$MESH_SCOPE"
 STATUS=$?
 set -e
 

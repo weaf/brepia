@@ -10,6 +10,15 @@ import {
 } from './types';
 import OpenSCADError from '@/lib/OpenSCADError';
 import { libraries } from '@/lib/libraries.ts';
+import {
+  getOpenScadEntrypoint,
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
+import {
+  validateOpenScadProjectAssetReferences,
+  validateOpenScadProjectSourceReferences,
+} from '@shared/openScadProjectReferences';
 
 const fontsConf = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
@@ -184,7 +193,7 @@ class OpenSCADWrapper {
     parameters.push(`--enable=fast-csg`);
     parameters.push(`--enable=lazy-union`);
 
-    return await this.executeOpenscad(data.code, data.fileType, parameters);
+    return await this.executeOpenscad(data.project, data.fileType, parameters);
   }
 
   /**
@@ -239,7 +248,7 @@ class OpenSCADWrapper {
     ];
 
     const render = await this.executeOpenscad(
-      data.code,
+      data.project,
       data.fileType,
       parameters.concat(exportParams),
       [{ path: '/out.off', key: 'off' }],
@@ -254,7 +263,7 @@ class OpenSCADWrapper {
       // Use the same flag set as the 3D path — the 2025.x build dropped
       // --enable=manifold / --enable=fast-csg in favor of --backend=manifold.
       const svgExport = await this.executeOpenscad(
-        data.code,
+        data.project,
         'svg',
         parameters.concat([
           '--export-format=svg',
@@ -345,7 +354,7 @@ class OpenSCADWrapper {
    * @returns
    */
   async executeOpenscad(
-    code: string,
+    project: OpenScadProject,
     fileType: string,
     parameters: string[],
     extraOutputs: { path: string; key: string }[] = [],
@@ -356,13 +365,77 @@ class OpenSCADWrapper {
     this.log.stdErr = [];
     this.log.stdOut = [];
 
-    const inputFile = '/input.scad';
+    const normalizedProject = normalizeOpenScadProject(project);
+    const references =
+      validateOpenScadProjectSourceReferences(normalizedProject);
+    validateOpenScadProjectAssetReferences(normalizedProject);
+    const bundledLibraryNames = new Set(
+      references
+        .filter((reference) => reference.bundledLibrary)
+        .map(
+          (reference) => reference.target.replace(/\\/g, '/').split('/', 1)[0],
+        ),
+    );
+    const entrypoint = getOpenScadEntrypoint(normalizedProject);
+    const projectRoot = '/project';
+    const inputFile = `${projectRoot}/${normalizedProject.entrypointPath}`;
     const outputFile = '/out.' + fileType;
     const instance = await this.getInstance();
     const importLibraries: string[] = [];
 
-    // Write the code to a file
-    instance.FS.writeFile(inputFile, code);
+    // Mount exactly this request's normalized source project into the fresh WASM FS.
+    this.createDirectoryRecursive(instance, projectRoot);
+    for (const file of normalizedProject.files) {
+      const projectPath = `${projectRoot}/${file.path}`;
+      const pathParts = projectPath.split('/');
+      pathParts.pop();
+      const dir = pathParts.join('/');
+      if (dir && !this.fileExists(instance, dir)) {
+        this.createDirectoryRecursive(instance, dir);
+      }
+      instance.FS.writeFile(projectPath, file.content);
+    }
+
+    const projectSourcePaths = new Set(
+      normalizedProject.files.map((file) => file.path),
+    );
+
+    if (normalizedProject.assets?.length) {
+      // Explicit assets are hydrated into the persistent worker cache under
+      // their exact project-relative manifest path. Mount only declared assets
+      // into /project so imports from support files keep their normal relative
+      // semantics and unrelated cached files cannot leak into the project.
+      const cachedFiles = new Map(
+        this.files
+          .filter(
+            (file): file is WorkspaceFile & { path: string } => !!file.path,
+          )
+          .map((file) => [file.path, file]),
+      );
+      for (const asset of normalizedProject.assets) {
+        if (projectSourcePaths.has(asset.path)) {
+          throw new Error(
+            `OpenSCAD project asset collides with project source: ${asset.path}`,
+          );
+        }
+        const cachedAsset = cachedFiles.get(asset.path);
+        if (!cachedAsset) {
+          throw new Error(
+            `OpenSCAD project asset is not hydrated: ${asset.path}`,
+          );
+        }
+        const projectPath = `${projectRoot}/${asset.path}`;
+        const pathParts = projectPath.split('/');
+        pathParts.pop();
+        const dir = pathParts.join('/');
+        if (dir && !this.fileExists(instance, dir)) {
+          this.createDirectoryRecursive(instance, dir);
+        }
+        const content = await cachedAsset.arrayBuffer();
+        instance.FS.writeFile(projectPath, new Int8Array(content));
+      }
+    }
+
     if (!this.fileExists(instance, '/libraries')) {
       instance.FS.mkdir('/libraries');
     }
@@ -370,14 +443,12 @@ class OpenSCADWrapper {
     // Detect against comment- and string-stripped source so only ACTIVE
     // statements count — a commented-out include must not trigger a (now
     // fatal-on-failure) library fetch.
-    const activeCode = stripStringsAndComments(code);
+    // Project reference validation already strips comments/strings and scans
+    // every source file, so bundled libraries used only by support files are
+    // loaded just like libraries referenced by the entrypoint.
     for (const library of libraries) {
-      // Match a real `include <BOSL2/...>` / `use <BOSL2/...>` statement, not a
-      // bare substring: "BOSL2" contains "BOSL", so substring matching mounted
-      // BOSL alongside BOSL2 on every compile.
-      const libraryStatement = new RegExp(`(include|use)\\s*<${library.name}/`);
       if (
-        libraryStatement.test(activeCode) &&
+        bundledLibraryNames.has(library.name) &&
         !importLibraries.includes(library.name)
       ) {
         importLibraries.push(library.name);
@@ -388,17 +459,12 @@ class OpenSCADWrapper {
             throw new Error(`HTTP ${response.status} fetching ${library.url}`);
           }
 
-          // Unzip the file
           const zip = await response.blob();
           const files = await new ZipReader(new BlobReader(zip)).getEntries();
 
-          // Libraries should go into the library folder
           await Promise.all(
             files
-              // We don't want any directories, they are included in the filename anyway
               .filter((f) => f.directory === false)
-
-              // Collect all files into an WorkspaceFile array
               .map(async (f) => {
                 const writer = new Uint8ArrayWriter();
                 const fileName = f.filename;
@@ -420,10 +486,6 @@ class OpenSCADWrapper {
               }),
           );
         } catch (error) {
-          // Fail the compile rather than continuing without the library:
-          // OpenSCAD would only report "Ignoring unknown module ..." per call
-          // site, which hides the real cause from both the user and the AI
-          // build loop.
           throw new Error(
             `Failed to load OpenSCAD library ${library.name}: ` +
               (error instanceof Error ? error.message : String(error)),
@@ -447,14 +509,10 @@ class OpenSCADWrapper {
     try {
       exitCode = instance.callMain(args);
     } catch (error) {
-      // Throw OpenSCADError (not plain Error) so the stderr OpenSCAD printed
-      // before dying survives the worker boundary — it usually names the real
-      // problem (syntax error, unknown module) while the thrown value is often
-      // just an opaque number from the wasm runtime.
       throw new OpenSCADError(
         'Adam exited with an error' +
           (error instanceof Error ? ': ' + error.message : ''),
-        code,
+        entrypoint.content,
         this.log.stdErr,
       );
     }
@@ -480,7 +538,7 @@ class OpenSCADWrapper {
     } else {
       throw new OpenSCADError(
         'Adam did not exit correctly',
-        code,
+        entrypoint.content,
         this.log.stdErr,
       );
     }

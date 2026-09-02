@@ -44,11 +44,7 @@ function renderStorageFilename(
     : `preview-${toolCallId}`;
 }
 
-async function defaultDownloadRender(
-  request: Request,
-  conversationId: string,
-  artifact: RenderArtifact,
-): Promise<Uint8Array> {
+async function authenticatedUserId(request: Request): Promise<string> {
   const supabase = getAnonSupabaseClient({
     global: {
       headers: { Authorization: request.headers.get('Authorization') ?? '' },
@@ -60,8 +56,27 @@ async function defaultDownloadRender(
   if (!user?.id) {
     throw new Error('Render mirroring requires an authenticated user');
   }
+  return user.id;
+}
 
-  const storagePath = `${user.id}/${conversationId}/${renderStorageFilename(
+async function defaultDownloadRender(
+  request: Request,
+  conversationId: string,
+  artifact: RenderArtifact,
+  verifiedOwnerUserId?: string,
+): Promise<Uint8Array> {
+  // The chat workspace lifecycle already authenticates the request and verifies
+  // conversation ownership before render sync. Reuse that verified identity so
+  // a second auth lookup cannot fail after ownership has already been proven.
+  // Standalone callers retain the authenticated-request fallback.
+  const userId = verifiedOwnerUserId ?? (await authenticatedUserId(request));
+  const supabase = getAnonSupabaseClient({
+    global: {
+      headers: { Authorization: request.headers.get('Authorization') ?? '' },
+    },
+  });
+
+  const storagePath = `${userId}/${conversationId}/${renderStorageFilename(
     artifact.kind,
     artifact.toolCallId,
   )}`;
@@ -111,6 +126,13 @@ function renderOwningRevisions(
     (a, b) => a.revision - b.revision,
   )) {
     if (metadata.source !== 'build') continue;
+
+    // Imported OpenSCAD artifacts use a synthetic build-shaped message so the
+    // normal editor/history path can consume them, but their baseline preview
+    // is rendered locally and no preview/inspection objects are uploaded to
+    // Supabase Storage. Do not probe storage for objects that cannot exist.
+    if (metadata.toolCallId.startsWith('tool_import_')) continue;
+
     if (!firstBuildByToolCall.has(metadata.toolCallId)) {
       firstBuildByToolCall.set(metadata.toolCallId, metadata);
     }
@@ -129,15 +151,30 @@ function renderOwningRevisions(
  * A render storage object is keyed by toolCallId, so exactly the first `build`
  * revision for each tool call owns it. Parameter edits and legacy repeated
  * source variants must never receive a stale copy of that build-time render.
+ * Synthetic `tool_import_...` builds are intentionally renderless in storage
+ * and are excluded from mirroring.
+ *
+ * `verifiedOwnerUserId` is supplied by the authenticated chat-workspace
+ * lifecycle after it has already verified conversation ownership. Direct
+ * callers may omit it and fall back to authenticating the request here.
  */
 export async function syncConversationRenderArtifacts(
   request: Request,
   conversationId: string,
   dependencies: RenderSyncDependencies = {},
+  verifiedOwnerUserId?: string,
 ): Promise<ConversationRenderSyncResult> {
   const listRevisions =
     dependencies.listRevisions ?? listConversationModelRevisions;
-  const downloadRender = dependencies.downloadRender ?? defaultDownloadRender;
+  const downloadRender =
+    dependencies.downloadRender ??
+    ((downloadRequest, downloadConversationId, artifact) =>
+      defaultDownloadRender(
+        downloadRequest,
+        downloadConversationId,
+        artifact,
+        verifiedOwnerUserId,
+      ));
   const revisions = renderOwningRevisions(await listRevisions(conversationId));
   const artifacts: RenderArtifact[] = revisions.flatMap((metadata) => [
     {

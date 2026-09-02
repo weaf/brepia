@@ -13,12 +13,18 @@ import { useConversation } from '@/contexts/ConversationContext';
 import { submitChatText } from '@/lib/chatSubmitBridge';
 import OpenSCADError from '@/lib/OpenSCADError';
 import { openScadFixPrompt } from '@/lib/openScadFixPrompt';
+import { hydrateOpenScadProjectAssets } from '@/lib/openScadProjectAssetStorage';
 import { cn } from '@/lib/utils';
 import { MeshFilesContext } from '@/contexts/MeshFilesContext';
 import { createDXFProjectionCode } from '@/utils/dxfUtils';
 import { DxfExporter } from '@/utils/downloadUtils';
 import { OpenSCADFixModelPicker } from '@/components/viewer/OpenSCADFixModelPicker';
 import { ActivityIndicator } from '@/components/brand';
+import {
+  getOpenScadEntrypoint,
+  replaceOpenScadProjectFileContent,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 
 // Extract import() filenames from OpenSCAD code
 function extractImportFilenames(code: string): string[] {
@@ -41,7 +47,7 @@ function parseHexColor(hex: string): number {
 }
 
 interface OpenSCADPreviewProps {
-  scadCode: string | null;
+  project: OpenScadProject | null;
   color: string;
   onOutputChange?: (output: Blob | undefined) => void;
   onDxfExportChange?: (exporter: DxfExporter | null) => void;
@@ -51,7 +57,7 @@ interface OpenSCADPreviewProps {
 }
 
 export function OpenSCADPreview({
-  scadCode,
+  project,
   color,
   onOutputChange,
   onDxfExportChange,
@@ -60,8 +66,8 @@ export function OpenSCADPreview({
   backgroundColor,
 }: OpenSCADPreviewProps) {
   const {
-    compileScad,
-    exportScad,
+    compileProject,
+    exportProject,
     writeFile,
     isCompiling,
     output,
@@ -105,14 +111,31 @@ export function OpenSCADPreview({
   );
   const canFixWithAi = !!fixError || !!conversation.id;
 
-  // Shared by preview compilation and on-demand exports so import() files are
-  // available in the OpenSCAD worker before either operation runs.
+  // Shared by preview compilation and on-demand exports so import()/surface()
+  // assets are available in the OpenSCAD worker before either operation runs.
   const prepareMeshFiles = useCallback(
-    async (code: string) => {
-      // Extract any import() filenames from the code
-      const importedFiles = extractImportFilenames(code);
+    async (projectValue: OpenScadProject) => {
+      if (projectValue.assets?.length) {
+        await hydrateOpenScadProjectAssets(
+          projectValue,
+          {
+            userId: conversation.user_id,
+            conversationId: conversation.id,
+          },
+          async (path, blob) => {
+            const writtenBlob = writtenFilesRef.current.get(path);
+            if (writtenBlob === blob) return;
+            await writeFile(path, blob);
+            writtenFilesRef.current.set(path, blob);
+          },
+        );
+        return;
+      }
 
-      // Write any mesh files that haven't been written yet
+      // Compatibility for artifacts created before explicit asset manifests.
+      const entrypoint = getOpenScadEntrypoint(projectValue);
+      const importedFiles = extractImportFilenames(entrypoint.content);
+
       if (!meshFilesCtx) return;
 
       for (const filename of importedFiles) {
@@ -127,37 +150,43 @@ export function OpenSCADPreview({
         }
       }
     },
-    [writeFile, meshFilesCtx],
+    [conversation.id, conversation.user_id, writeFile, meshFilesCtx],
   );
 
-  // Recompile the preview whenever the current SCAD code changes.
+  // Recompile the preview whenever the current OpenSCAD project changes.
   useEffect(() => {
-    if (!scadCode) return;
+    if (!project) return;
 
     const compileWithMeshFiles = async () => {
       try {
-        await prepareMeshFiles(scadCode);
-        compileScad(scadCode);
+        await prepareMeshFiles(project);
+        await compileProject(project);
       } catch (err) {
         console.error('[OpenSCAD] Error preparing files for compilation:', err);
       }
     };
 
     compileWithMeshFiles();
-  }, [scadCode, compileScad, prepareMeshFiles]);
+  }, [project, compileProject, prepareMeshFiles]);
 
-  // Register a parent-owned DXF exporter for the current SCAD code. The export
-  // runs only when the user chooses DXF from the download menu.
+  // Register a parent-owned DXF exporter for the current project. Only the
+  // entrypoint is wrapped in the projection module; support files remain intact.
   useEffect(() => {
-    if (!scadCode || !onDxfExportChange) return;
+    if (!project || !onDxfExportChange) return;
 
     onDxfExportChange(async () => {
-      await prepareMeshFiles(scadCode);
-      return exportScad(createDXFProjectionCode(scadCode), 'dxf');
+      await prepareMeshFiles(project);
+      const entrypoint = getOpenScadEntrypoint(project);
+      const projectionProject = replaceOpenScadProjectFileContent(
+        project,
+        project.entrypointPath,
+        createDXFProjectionCode(entrypoint.content),
+      );
+      return exportProject(projectionProject, 'dxf');
     });
 
     return () => onDxfExportChange(null);
-  }, [scadCode, exportScad, onDxfExportChange, prepareMeshFiles]);
+  }, [project, exportProject, onDxfExportChange, prepareMeshFiles]);
 
   useEffect(() => {
     onOutputChange?.(output);
