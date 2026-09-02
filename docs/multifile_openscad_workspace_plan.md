@@ -1,6 +1,6 @@
 # Multi-file OpenSCAD / project workspace plan
 
-Status: selected post-1.0 feature; Steps 1–8 complete. Step 9 is next but is not started by this closeout.
+Status: selected post-1.0 feature; Steps 1–8 complete. Step 9 implementation is CI-verified and awaits manual browser acceptance before closeout.
 
 Branch: `feature/multifile-openscad-workspace`
 
@@ -186,11 +186,32 @@ Manual/provider acceptance on 2026-09-02 passed:
 
 Step 8 is formally complete. See `docs/step_export.md` for the live converter architecture, fallback strategy, security invariants and validation contract.
 
-### Step 9 — Project file UX
+### Step 9 — Project file UX — IMPLEMENTED, MANUAL ACCEPTANCE PENDING
 
-Add bounded project-file inspection/editing integrated with the existing Parametric editor: file count, entrypoint, file tree/list, support-file editing and clear entrypoint marking. Do not build a second IDE/versioning system.
+Step 9 is implemented as a bounded extension of the existing Parametric editor rather than a second IDE/versioning system.
 
-**Not started by the Step 8 closeout.**
+Current behavior:
+
+- the existing desktop parameters panel and mobile preview sheet include a compact `Project files` section for every active Parametric artifact, including parameterless projects;
+- the section shows normalized source-file count, explicit asset count when present, the bounded project source list and nested paths;
+- the configured `entrypointPath` is clearly marked with an `Entrypoint` badge;
+- clicking a source opens a focused source dialog rather than introducing tabs, a second editor shell or a new version tree;
+- the entrypoint is intentionally read-only in this file editor because entrypoint parameter/default semantics remain owned by the existing Customizer and AI edit flows;
+- non-entrypoint support `.scad` files are directly editable with explicit Save/Discard controls;
+- support-file saves use `replaceOpenScadProjectFileContent`, so central normalized path/file/project byte limits remain authoritative and the complete asset manifest plus all untouched sources are preserved;
+- saves replace the existing message's complete `build_parametric_model` artifact snapshot, so reload/branch history continues to use the established conversation persistence model;
+- direct support-file editing is disabled while an AI turn is streaming so it cannot race the stream's tool-output persistence;
+- before a support-file save, queued/in-flight parameter writes are drained and the latest cached assistant message parts are used, preventing stale whole-project writes from clobbering either edit;
+- parts-only support-file persistence leaves existing message metadata such as `metadata.originalCode` untouched.
+
+Implementation checkpoints:
+
+- `9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`;
+- `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`.
+
+Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f9d9` passed dependency audit, full tests, typecheck, lint and production build.
+
+Step 9 is **not formally complete yet**. Manual browser acceptance must verify one-file and multi-file inspection, support-file save/reload, parameter/edit race preservation, branch/artifact switching, assets, parameterless projects and mobile behavior before closeout.
 
 ### Step 10 — Hardening and closeout
 
@@ -212,6 +233,6 @@ Final manual acceptance should cover AI one-file generation, local/GitHub multi-
 
 Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–8 are complete. Step 9 project-file UX is the next planned bounded step, but must be started separately after this closeout. Do not merge PR #16 as part of Step 8 documentation closeout.
+Steps 1–8 are complete. Step 9 is implemented and CI-verified but awaits manual browser acceptance. Do not start Step 10 and do not merge PR #16 until Step 9 acceptance/closeout is complete.
 
 Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.

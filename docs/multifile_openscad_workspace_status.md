@@ -8,15 +8,19 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–8 are complete. Step 8 project-aware STEP sandbox input is implemented, manually accepted and CI-verified. Step 9 has not started.
+Steps 1–8 are complete. Step 9 project-file UX is implemented and CI-verified; manual browser acceptance remains before Step 9 can be marked complete.
 
-Current Step 8 implementation checkpoint:
+Current Step 9 implementation checkpoint:
 
-`46a5e140aefc86fcf626490b8e40a0a36fa230cc` — `Complete project-aware STEP sandbox`
+`f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`
 
-Quality Gate run `323` (`33640506570`) on that exact checkpoint passed dependency audit, full test suite, typecheck, lint and production client/SSR/Nitro build.
+The preceding UI checkpoint is:
 
-Step 8 manual/provider acceptance passed on 2026-09-02, including source-only STEP, the 16-case STEP corpus, multi-file/BOSL2, bounded non-planar `polyhedron()` fallback and explicit asset-backed STEP from the original project entrypoint inside the existing rootless Podman sandbox.
+`9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`
+
+Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f9d9` passed dependency audit, full test suite, typecheck, lint and production client/SSR/Nitro build.
+
+Step 9 remains open only for manual browser acceptance and closeout documentation. Step 10 has not started.
 
 ## Step 1 — complete
 
@@ -114,7 +118,7 @@ Quality Gate run `314` (`33611457984`) passed. Manual acceptance passed on 2026-
 
 ## Step 8 — complete
 
-STEP export is now project-aware and keeps the existing sandbox security boundary.
+STEP export is project-aware and keeps the existing sandbox security boundary.
 
 ### Request and server materialization
 
@@ -155,7 +159,7 @@ The established security controls remain intact:
 
 ### Fallback strategy
 
-`scripts/step-export/pcad-scad2step-driver.py` keeps the pinned scad123d provider and adds two bounded compatibility paths.
+`scripts/step-export/pcad-scad2step-driver.py` keeps the pinned scad123d provider and adds bounded compatibility paths.
 
 1. **Source-only / ordinary project conversion** keeps scad123d `mesh_scope=minimal`, preserving analytic B-Rep where supported and limiting ordinary provider mesh fallback to unsupported subtrees.
 2. **Non-planar `polyhedron()`**: when OCCT/scad123d specifically fails a `polyhedron` node with `wires not planar`, only that node is delegated to scad123d's existing mesh fallback. Other `ValueError` failures are rethrown.
@@ -191,17 +195,71 @@ Focused STEP regression coverage verifies complete nested project materializatio
 
 Step 8 is formally complete. `docs/step_export.md` is the canonical live STEP architecture and operations reference.
 
+## Step 9 — implemented, manual acceptance pending
+
+Step 9 adds a bounded project-file surface to the existing Parametric editor.
+
+### Project file inspection
+
+- every active Parametric artifact exposes a compact `Project files` section in the existing desktop right panel and mobile preview sheet;
+- parameterless Parametric projects now keep that panel available so the file surface is not hidden merely because no Customizer parameters exist;
+- source-file count and explicit asset count are shown;
+- normalized nested source paths are listed without creating a separate workspace/IDE shell;
+- the exact `entrypointPath` is marked with an `Entrypoint` badge;
+- selecting any source opens a focused source dialog.
+
+### Editing contract
+
+- entrypoint source is intentionally read-only in the project-file dialog; existing Customizer parameter editing and AI project editing remain the authoritative entrypoint-edit surfaces;
+- non-entrypoint `.scad` support files are editable with explicit Save/Discard controls;
+- edits are passed through `replaceOpenScadProjectFileContent`, preserving central normalization and file/project bounds plus all untouched sources and assets;
+- the updated complete artifact is persisted back into the same assistant message's `build_parametric_model` part, so existing message-tree persistence/reload/restore semantics remain authoritative;
+- a parts-only save leaves message metadata such as `metadata.originalCode` unchanged;
+- editing is disabled while the current AI turn is streaming;
+- support-file save first drains queued/in-flight parameter writes and then uses the latest cached message parts, preventing stale whole-project persistence from overwriting either edit;
+- the live preview receives the updated complete project and export handles are reset so subsequent render/export derives from the edited project.
+
+Implementation checkpoints:
+
+- `9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`;
+- `f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`.
+
+### Automated verification — PASS
+
+Quality Gate run `326` (`33657189062`) on `f1089d97e1639923e63638ea406b272d8c95f9d9` passed:
+
+- dependency audit: PASS;
+- full test suite: PASS;
+- typecheck: PASS;
+- lint: PASS;
+- production client/SSR/Nitro build: PASS.
+
+### Manual acceptance — PENDING
+
+Before Step 9 is marked complete, browser acceptance should verify:
+
+1. one-file project shows one source and a clearly marked read-only entrypoint;
+2. multi-file project shows the complete nested source list and correct entrypoint;
+3. support-file edit changes the live rendered model and survives full reload;
+4. an asset-backed project's manifest/asset remains preserved after support-file save and reload;
+5. a parameter edit followed immediately by support-file save preserves both changes;
+6. switching artifact/history branch shows the selected snapshot's correct file set and contents;
+7. parameterless Parametric projects still expose Project files and normal exports;
+8. support-file save is unavailable during an active AI stream;
+9. mobile file list/dialog remains usable and does not break preview/parameter interaction;
+10. entrypoint cannot be directly saved from the project-file editor.
+
 ## UX follow-up outside the current step
 
-The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact orientation control exposing deterministic Top/Front/Right views. This remains a separate UX follow-up and is not part of Step 8 closeout.
+The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact orientation control exposing deterministic Top/Front/Right views. This remains a separate UX follow-up and is not part of Step 9.
 
 ## Not completed yet
 
-- Step 9 project file UX;
+- Step 9 manual browser acceptance and closeout;
 - Step 10 final hardening/closeout.
 
-## Next — Step 9, not started
+## Next — Step 9 manual acceptance
 
-Step 9 is the next planned bounded implementation step: add project-file inspection/editing integrated with the existing Parametric editor without building a second IDE/versioning system.
+Run the Step 9 browser checklist above against the stable runtime. If it passes, record the acceptance, mark Step 9 complete and only then move to Step 10.
 
-Do not start Step 9 as part of this Step 8 documentation closeout. PR #16 remains draft and must not be merged yet.
+PR #16 remains draft and must not be merged yet.
