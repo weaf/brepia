@@ -34,7 +34,9 @@ The transport selection implementation is in `src/server/cliAgents.ts`; request 
 
 `src/routes/api/parametric-chat.ts` is the TanStack server route for Parametric chat requests. It delegates chat processing to `src/server/aiChat.ts` and wraps normal requests with the conversation-workspace lifecycle.
 
-The OpenCode adapters implement the AI SDK language-model contract expected by the chat pipeline. Their final Parametric result is converted into the existing `build_parametric_model` tool-call contract rather than bypassing Brepia's normal model persistence/validation flow.
+The OpenCode adapters implement the AI SDK language-model contract expected by the chat pipeline. Their final Parametric result is converted into the existing `build_parametric_model` tool-call path rather than bypassing Brepia's normal model persistence/validation flow.
+
+`build_parametric_model` is project-native: its artifact carries a complete normalized `OpenScadProject` snapshot with `schemaVersion`, `entrypointPath`, every required `.scad` source file and any Brepia-authoritative explicit asset descriptors. New external-agent results do not use the legacy top-level `code` artifact shape.
 
 ## CLI mode
 
@@ -71,7 +73,7 @@ On a request, Brepia:
 4. ensures the session uses the `pcad-builder` agent and requested model;
 5. posts the current turn with resume semantics;
 6. reads session events over the OpenCode event endpoint using the event cursor;
-7. converts the terminal agent result into Brepia's Parametric tool-call contract;
+7. validates and converts the terminal complete-project agent result into Brepia's Parametric tool-call contract;
 8. interrupts the OpenCode session when the Brepia request is aborted.
 
 Switching the selected OpenCode model does not require a second Brepia conversation or a second deterministic session; the existing session can switch model in place.
@@ -82,9 +84,13 @@ Brepia still persists authoritative conversation/message/model state in its own 
 
 Both OpenCode execution paths preserve continuity without blindly resending an unbounded transcript.
 
-For continuation turns, the adapters can provide the latest complete Parametric artifact, the latest user request and relevant build feedback. This keeps the agent grounded in the current OpenSCAD revision while Brepia retains authoritative conversation history and model revisions.
+For continuation turns, the adapters provide the latest complete Parametric project artifact, the latest user request and relevant build feedback. The project snapshot is authoritative for the current model: agents must preserve unchanged support files, may edit the entrypoint and/or support files as required, and should keep `entrypointPath` stable unless restructuring is genuinely necessary.
 
-Do not replace this with a "fresh session per request" assumption. Persistent-session behavior is covered by regression tests.
+Explicit asset descriptors are Brepia-managed authority. External agents may preserve or remove them according to the returned source references, but must not invent or mutate `storagePath`, `mediaType`, `byteLength` or `sha256` metadata.
+
+This keeps the agent grounded in the current OpenSCAD revision while Brepia retains authoritative conversation history, private asset storage and model revisions.
+
+Do not replace this with a "fresh session per request" assumption or a single-entrypoint-source contract. Persistent-session and project-result behavior are covered by regression tests.
 
 ## OpenCode server lifecycle
 
@@ -131,7 +137,7 @@ Provider/model availability is therefore runtime-derived. Do not copy an old Ope
 
 `.opencode/agents/pcad-builder.md` is the dedicated Parametric OpenCode agent used by Brepia. Its retained `pcad-*` name is a technical identifier.
 
-The agent is intentionally narrow and exposes `pcad_validate` for OpenSCAD validation. Runtime behavior/output-contract instructions are supplied by Brepia for each request.
+The agent is intentionally narrow and exposes `pcad_validate` for OpenSCAD validation. Runtime behavior/output-contract instructions are supplied by Brepia for each request. The validation/result contract is project-native: the complete normalized OpenSCAD project is validated and returned, rather than a standalone source string.
 
 Project-local OpenCode skills under `.opencode/skills/` support validation/settings/provider maintenance. Their instructions must be reconciled with `AGENTS.md` and current code; historical implementation plans are not runtime authority.
 
@@ -165,13 +171,15 @@ npm test
 npm run typecheck
 npm run lint
 npm run build
+git diff --check
 ```
 
 When Basic Auth is configured, manual health/API requests must use the configured credentials as well.
 
-For session-continuity regressions, the current test suite includes coverage for persistent OpenCode sessions and transport-selection precedence, including:
+For session-continuity and project-result regressions, the current test suite includes coverage for persistent OpenCode sessions, transport-selection precedence and complete multi-file external-agent results, including:
 
 - `tests/opencodePersistentSession.test.ts`
+- `tests/opencodeAgentResult.test.ts`
 - `src/server/transportSelection.test.ts`
 
 ## Maintenance rules
@@ -180,8 +188,9 @@ When changing this integration:
 
 - preserve conversation-scoped session continuity unless the task explicitly redesigns it;
 - preserve request cancellation/interrupt behavior;
-- keep the `build_parametric_model` result contract consistent across CLI and streaming paths;
+- keep the project-native `build_parametric_model` result contract consistent across CLI and streaming paths;
+- preserve unchanged support files across follow-up edits and keep Brepia-managed asset metadata authoritative;
 - keep auth secrets server-only;
 - preserve compatibility-sensitive `pcad-*` identifiers unless an explicit migration is planned;
-- update this document when transport/session lifecycle behavior changes;
+- update this document when transport/session or Parametric project-contract behavior changes;
 - run the full relevant repository gate before merge.
