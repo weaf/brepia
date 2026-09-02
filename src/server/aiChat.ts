@@ -1339,6 +1339,7 @@ export async function handleAiChatRequest(req: Request) {
   const usingAutoToolChoiceFallback =
     conversation.type === 'parametric' &&
     leafRole === 'user' &&
+    !streamingOpenCode &&
     !forceBuildToolChoice;
 
   const activeGeneration = beginActiveGeneration(user.id, conversation.id);
