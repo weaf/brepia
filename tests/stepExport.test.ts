@@ -137,7 +137,9 @@ printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\
     process.env.PCAD_STEP_EXPORT_RUNNER = await fakeRunner(`
 project="$2"
 [ "$4" = "src/main.scad" ]
-grep -q 'import("../assets/marker.stl")' "$project/src/main.scad"
+[ "$7" = "--mesh-scope" ]
+[ "$8" = "hoist" ]
+grep -q 'import("/input/project/assets/marker.stl")' "$project/src/main.scad"
 grep -q 'solid marker' "$project/assets/marker.stl"
 printf 'ISO-10303-21;\\nHEADER;\\nENDSEC;\\nDATA;\\nENDSEC;\\nEND-ISO-10303-21;\\n' > "$6"
 `);

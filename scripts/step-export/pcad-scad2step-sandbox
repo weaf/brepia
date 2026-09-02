@@ -7,13 +7,26 @@ usage() {
   exit 64
 }
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DRIVER="${SCRIPT_DIR}/pcad-scad2step-driver.py"
+
 INPUT_VOLUME=""
 CONTAINER_INPUT=""
+MESH_SCOPE="minimal"
 
-if [ "$#" -eq 6 ] && [ "$1" = "--project" ] && [ "$3" = "--entrypoint" ] && [ "$5" = "-o" ]; then
+if { [ "$#" -eq 6 ] || [ "$#" -eq 8 ]; } && [ "$1" = "--project" ] && [ "$3" = "--entrypoint" ] && [ "$5" = "-o" ]; then
   PROJECT_DIR="$2"
   ENTRYPOINT="$4"
   OUTPUT="$6"
+
+  if [ "$#" -eq 8 ]; then
+    [ "$7" = "--mesh-scope" ] || usage
+    MESH_SCOPE="$8"
+    case "$MESH_SCOPE" in
+      minimal|hoist) ;;
+      *) usage ;;
+    esac
+  fi
 
   if [ ! -d "$PROJECT_DIR" ] || [ -L "$PROJECT_DIR" ]; then
     echo "STEP sandbox project input must be a regular directory" >&2
@@ -95,6 +108,11 @@ PIDS_LIMIT="${PCAD_STEP_EXPORT_PIDS_LIMIT:-256}"
 RUNTIME_TIMEOUT="${PCAD_STEP_EXPORT_CONTAINER_TIMEOUT_SECONDS:-40}"
 TMPFS_SIZE="${PCAD_STEP_EXPORT_TMPFS_SIZE:-512m}"
 
+if [ ! -f "$DRIVER" ] || [ -L "$DRIVER" ]; then
+  echo "STEP_SANDBOX_UNAVAILABLE: compatibility driver is missing" >&2
+  exit 69
+fi
+
 if ! command -v "$PODMAN_BIN" >/dev/null 2>&1; then
   echo "STEP_SANDBOX_UNAVAILABLE: Podman executable not found: $PODMAN_BIN" >&2
   exit 69
@@ -138,11 +156,16 @@ timeout --signal=TERM --kill-after=5 "${RUNTIME_TIMEOUT}s" \
     --user "$(id -u):$(id -g)" \
     --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=${TMPFS_SIZE},mode=1777" \
     --volume "$INPUT_VOLUME" \
+    --volume "${DRIVER}:/pcad/step-driver.py:ro" \
     --volume "${OUTPUT_DIR}:/output:rw" \
     --env HOME=/tmp \
     --env OPENSCADPATH=/opt/openscad-libraries \
+    --entrypoint=/opt/pcad-step-venv/bin/python \
     "$IMAGE" \
-    "$CONTAINER_INPUT" -o "/output/${OUTPUT_NAME}"
+    /pcad/step-driver.py \
+    "$CONTAINER_INPUT" \
+    -o "/output/${OUTPUT_NAME}" \
+    --mesh-scope "$MESH_SCOPE"
 STATUS=$?
 set -e
 

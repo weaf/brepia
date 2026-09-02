@@ -167,11 +167,11 @@ export function ParameterSheetContent({
   };
 
   const handleDownloadSTEP = async () => {
-    if (!code) return;
+    if (!project || !conversation.id) return;
 
     try {
       setIsExporting(true);
-      const result = await exportStep(code);
+      const result = await exportStep(project, conversation.id);
       downloadSTEPFile(result.file);
       if (result.warningCount > 0) {
         toast({
@@ -205,7 +205,7 @@ export function ParameterSheetContent({
     stl: !!currentOutput,
     scad: !!code,
     dxf: !!dxfExporter && !isExporting,
-    step: !!code && !isExporting,
+    step: !!project && !!conversation.id && !isExporting,
   };
 
   const handleDownload = async () => {

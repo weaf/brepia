@@ -19,6 +19,7 @@ import {
 } from '@shared/openScadProject';
 import { validateOpenScadProjectReferences } from '@shared/openScadProjectReferences';
 import type { ServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
+import { rewriteOpenScadProjectAssetReferencesForStepSandbox } from './stepExportAssetPaths';
 
 const execFileAsync = promisify(execFile);
 
@@ -198,6 +199,7 @@ async function convertProjectToStep(
           project.entrypointPath,
           '-o',
           outputPath,
+          ...(project.assets?.length ? ['--mesh-scope', 'hoist'] : []),
         ],
         {
           timeout: STEP_EXPORT_TIMEOUT_MS,
@@ -307,6 +309,8 @@ export async function exportOpenScadProjectToStep(
   try {
     normalized = normalizeOpenScadProject(project);
     validateOpenScadProjectReferences(normalized);
+    normalized =
+      rewriteOpenScadProjectAssetReferencesForStepSandbox(normalized);
   } catch (error) {
     throw new StepExportError(
       'invalid_project',
