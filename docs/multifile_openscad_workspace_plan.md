@@ -1,6 +1,6 @@
 # Multi-file OpenSCAD / project workspace plan
 
-Status: selected post-1.0 feature; Steps 1–9 complete. Step 10 final hardening is CI-verified and awaits one short render-mirroring warning rerun before formal closeout.
+Status: selected post-1.0 feature; Steps 1–10 complete and accepted.
 
 Branch: `feature/multifile-openscad-workspace`
 
@@ -185,11 +185,11 @@ Quality Gate runs `326` (`33657189062`) and `327` (`33657581514`) passed. Manual
 
 Syntax highlighting and editor autocomplete/completion are deliberately deferred as non-blocking editor-polish follow-ups.
 
-### Step 10 — Hardening and closeout — CI-VERIFIED, FINAL WARNING RERUN PENDING
+### Step 10 — Hardening and closeout — COMPLETE
 
 Hardening reconciled `AGENTS.md`, current architecture references and actual implementation. It also made the repository Quality Gate match the documented gate by checking the actual PR diff with `git diff --check`.
 
-The final multi-file AI follow-up browser smoke passed functionally on 2026-09-02, including support-file editing, render correctness, reload persistence and history behavior. It exposed one best-effort conversation-workspace warning:
+The final multi-file AI/OpenCode follow-up browser smoke passed on 2026-09-02, including support-file editing, render correctness, reload persistence and history behavior. That smoke initially exposed a best-effort conversation-workspace warning:
 
 `Render mirroring requires an authenticated user`
 
@@ -201,14 +201,16 @@ Fix checkpoints:
 - `919e12289854fc663a830064b95e4ed2310d14d4` — `Pass verified owner to render mirroring`;
 - `480350a299e366b7cfd5a02f3c1efb789182f0e2` — `Test verified render owner propagation`.
 
-Quality Gate #336 / run `33678890961` passed dependency audit, full tests, typecheck, lint, production build and PR diff check on the regression-test checkpoint.
+Quality Gate #336 / run `33678890961` passed dependency audit, full tests, typecheck, lint, production build and PR diff check on the regression-test checkpoint. Quality Gate #338 / run `33679183724` passed the same full gate after the Step 10 documentation update.
 
-One final local rerun is required after updating/restarting the branch: perform a normal multi-file Parametric AI follow-up and confirm the previous render-auth warning no longer appears. No other completed acceptance path needs to be repeated.
+The required local rerun after updating/restarting the branch passed on 2026-09-02. A normal multi-file Parametric AI follow-up completed correctly and the previous `Render mirroring requires an authenticated user` warning did not recur.
+
+Step 10 is formally complete.
 
 ## Current decision
 
-Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
+The selected multi-file OpenSCAD/project-workspace feature is complete and accepted with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–9 are complete. Step 10 is functionally accepted and CI-verified, pending only the short render-auth warning rerun above before formal closeout and PR finalization.
+Steps 1–10 are complete. PR #16 can move out of draft for final review/merge handling; merge remains a separate explicit action.
 
-Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.
+Rhino/Grasshopper remains intentionally deferred until the completed project-workspace work is evaluated.
