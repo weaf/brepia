@@ -9,17 +9,20 @@ import {
   requireUser,
 } from '@/server/api';
 import {
-  STEP_EXPORT_SOURCE_LIMIT_BYTES,
+  OPENSCAD_PROJECT_MAX_TOTAL_BYTES,
+  type OpenScadProject,
+} from '@shared/openScadProject';
+import {
   StepExportError,
-  exportScadToStep,
+  exportOpenScadProjectToStep,
 } from '@/server/stepExport';
+import { createServerOpenScadProjectAssetResolver } from '@/server/openScadProjectAssetStorage';
 
-// JSON.stringify can expand one source byte to six ASCII bytes for control
-// characters (for example `\u0001`). Keep the transport limit bounded while
-// guaranteeing that every source accepted by the 256 kB source limit still
-// fits even under worst-case JSON escaping, plus a little envelope overhead.
+// Project source text can expand one UTF-8 byte to six ASCII bytes when JSON
+// escapes control characters. Add a bounded envelope for source paths, asset
+// descriptors and request metadata. Asset bytes themselves are never inline.
 const STEP_EXPORT_REQUEST_LIMIT_BYTES =
-  STEP_EXPORT_SOURCE_LIMIT_BYTES * 6 + 4_096;
+  OPENSCAD_PROJECT_MAX_TOTAL_BYTES * 6 + 1024 * 1024;
 
 class StepExportRequestError extends Error {
   constructor(
@@ -110,6 +113,26 @@ async function readBoundedJson(request: Request): Promise<unknown> {
   }
 }
 
+function projectFromRequestBody(
+  body: Record<string, unknown>,
+): OpenScadProject | null {
+  if (isRecord(body.project)) {
+    return body.project as unknown as OpenScadProject;
+  }
+
+  // Compatibility for an already-open pre-Step-8 browser bundle. The server
+  // still converts this through the project-directory sandbox path.
+  if (typeof body.sourceCode === 'string' && body.sourceCode.trim()) {
+    return {
+      schemaVersion: 1,
+      entrypointPath: 'model.scad',
+      files: [{ path: 'model.scad', content: body.sourceCode }],
+    };
+  }
+
+  return null;
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof StepExportRequestError) {
     return json({ error: error.message, code: error.code }, error.status);
@@ -145,17 +168,39 @@ export const Route = createFileRoute('/api/export/step')({
       OPTIONS: preflight,
       POST: async ({ request }) => {
         try {
-          await requireUser(request);
+          const user = await requireUser(request);
           const body = await readBoundedJson(request);
-          if (
-            !isRecord(body) ||
-            typeof body.sourceCode !== 'string' ||
-            !body.sourceCode.trim()
-          ) {
-            return json({ error: 'invalid_scad_source' }, 400);
+          if (!isRecord(body)) {
+            return json({ error: 'invalid_scad_project' }, 400);
           }
 
-          const result = await exportScadToStep(body.sourceCode);
+          const project = projectFromRequestBody(body);
+          if (!project) {
+            return json({ error: 'invalid_scad_project' }, 400);
+          }
+
+          let resolveAsset;
+          if (body.conversationId != null) {
+            if (
+              typeof body.conversationId !== 'string' ||
+              !body.conversationId.trim()
+            ) {
+              return json({ error: 'invalid_conversation_id' }, 400);
+            }
+            try {
+              resolveAsset = createServerOpenScadProjectAssetResolver(
+                body.conversationId.trim(),
+                user.id,
+              );
+            } catch {
+              return json({ error: 'invalid_conversation_id' }, 400);
+            }
+          }
+
+          const result = await exportOpenScadProjectToStep(
+            project,
+            resolveAsset,
+          );
           const responseBytes = new Uint8Array(result.bytes.byteLength);
           responseBytes.set(result.bytes);
           return new Response(responseBytes.buffer, {
