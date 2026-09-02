@@ -1,6 +1,6 @@
 # Multi-file OpenSCAD / project workspace plan
 
-Status: selected post-1.0 feature; Steps 1–6 complete. Step 7 is next.
+Status: selected post-1.0 feature; Steps 1–7 complete. Step 8 is next.
 
 Branch: `feature/multifile-openscad-workspace`
 
@@ -8,7 +8,7 @@ Baseline: `master` at `9048df8131d9cd1ce24330727c39ee8da29f18fe`.
 
 ## Goal
 
-Replace Brepia's current single-source Parametric artifact model with a normalized OpenSCAD project workspace that safely preserves and executes one or many OpenSCAD source files and, in a later step of this feature, explicitly supported relative assets.
+Replace Brepia's current single-source Parametric artifact model with a normalized OpenSCAD project workspace that safely preserves and executes one or many OpenSCAD source files plus explicitly supported relative assets.
 
 Backward compatibility with existing pre-project Parametric artifacts is **not a product requirement** for this post-1.0 change. Existing models are primarily test data and can be re-imported from their `.scad` source files when needed.
 
@@ -37,10 +37,23 @@ type ParametricProjectTextFile = {
   content: string;
 };
 
+type OpenScadProjectAsset = {
+  path: string;
+  storagePath: string;
+  mediaType:
+    | 'model/stl'
+    | 'text/plain'
+    | 'application/dxf'
+    | 'image/svg+xml';
+  byteLength: number;
+  sha256: string;
+};
+
 type OpenScadProject = {
   schemaVersion: 1;
   entrypointPath: string;
   files: ParametricProjectTextFile[];
+  assets?: OpenScadProjectAsset[];
 };
 
 type ParametricArtifact = {
@@ -56,7 +69,9 @@ Core invariants:
 - exactly one file path equals `entrypointPath`;
 - there is no duplicated top-level `code` field;
 - a normal one-file model uses the same project runtime as multi-file models;
-- project identity/checksum is defined over the complete normalized project.
+- project identity/checksum is defined over the complete normalized project;
+- `assets` is omitted when empty so source-only normalized project identity remains stable;
+- asset descriptors are Brepia-authoritative metadata and AI/external agents must not invent or mutate `storagePath`, `mediaType`, `byteLength` or `sha256`.
 
 ## Normalized project path model
 
@@ -71,6 +86,7 @@ Required invariants:
 - reject NUL/control characters;
 - enforce bounded segment/path lengths and bounded nesting depth;
 - enforce unique normalized paths, case-collision checks, file-count limits, per-file limits and total-project byte limits;
+- source and asset paths share the same normalized project namespace and may not collide;
 - generated temporary workspaces contain only regular files created by Brepia from validated bytes;
 - bundled BOSL/BOSL2/MCAD libraries remain outside the user project namespace.
 
@@ -84,7 +100,7 @@ Preserve the user's directory hierarchy when mounting the project. Browser runti
 /project/<entrypointPath>
 ```
 
-and mounts every normalized project source under `/project/<path>`.
+and mounts every normalized project source and every explicitly declared Step 7 asset under its exact `/project/<path>` location.
 
 ## Implementation steps
 
@@ -114,7 +130,7 @@ The selected `.scad` remains the project entrypoint and Brepia recursively resol
 - normalized project file/count/byte limits apply;
 - symlink/submodule/non-regular responses are rejected;
 - bundled BOSL/BOSL2/MCAD references remain bundled and are not fetched from GitHub;
-- `import()`/`surface()` remain Step 7;
+- `import()`/`surface()` asset resolution was intentionally deferred to Step 7;
 - Gists remain exactly-one-`.scad` for now.
 
 Automated Step 4 checkpoint:
@@ -175,15 +191,63 @@ Customizer `metadata.originalCode` remains entrypoint-only by design: when recon
 
 The local workspace remains a best-effort operational mirror; Supabase/message/storage state remains authoritative.
 
-### Step 7 — Explicit relative asset support
+### Step 7 — Explicit relative asset support — COMPLETE
 
-After multi-SCAD projects are stable, add controlled relative assets for supported `import()`/`surface()` formats with explicit allowlists, MIME/extension checks, byte limits, authoritative private storage, project-manifest references, worker mounting and STEP-sandbox mounting.
+Step 7 adds an explicit, normalized and integrity-checked asset contract without broad filesystem/repository access.
 
-Dynamic filenames that cannot be resolved safely must fail clearly rather than triggering broad repository access.
+Supported static references are:
+
+- `import()` -> `.stl`, `.off`, `.dxf`, `.svg`;
+- `surface()` -> `.dat`.
+
+Asset media types are canonical by extension, references must be static string literals, resolution is relative to the calling `.scad` source and must normalize inside the project root. Dynamic filenames, traversal, absolute paths, missing assets and kind/extension mismatches fail clearly.
+
+The project contract bounds assets to 32 files, 16 MiB per asset and 32 MiB total. Each descriptor carries exact project path, private storage path, canonical media type, byte length and SHA-256. Hydration verifies storage scope, byte length and SHA-256 before materializing bytes.
+
+Runtime/import behavior:
+
+- browser worker mounts only explicit manifest assets at exact nested project paths; the old implicit basename cache-mirroring fallback is removed;
+- viewer/tool-worker preview and export hydrate declared assets from private storage before OpenSCAD execution;
+- local folder import accepts only statically referenced supported assets, preserves exact nested paths and ignores unrelated files;
+- GitHub blob import fetches only exact statically referenced assets from the same owner/repository/ref; it does not crawl directories; Gists remain source-only;
+- server-side OpenSCAD validation resolves private assets under the owning conversation, verifies integrity and materializes exact nested paths before native compilation.
+
+AI/external-agent behavior:
+
+- previous artifact assets and current attachment assets are the only authoritative descriptors;
+- model-authored/invented storage metadata is discarded rather than trusted;
+- attachment descriptors are remapped by Brepia from the uploaded filename to the exact resolved project path when the candidate project uses a nested entrypoint;
+- direct/browser, streaming OpenCode and CLI-agent paths reconcile the candidate manifest against authoritative descriptors before execution;
+- first-turn Parametric STL attachments are verified and persisted with their descriptor before AI execution in both `PromptView` and later `ChatSession` turns, so streaming server validation can resolve `import("<filename>.stl")` on the first turn.
+
+Important Step 7 checkpoints include:
+
+- `a3e1968b63ae7386054396964b236c124845f707` — explicit asset manifest contract;
+- `89ccee33f4837abd9f7c95fcd9ee47a247de4d12` — exact same-ref GitHub asset resolution;
+- `2b91f81eb913e1850064c2234932ebd5ff60bf4f` — server validation asset materialization;
+- `89d475201bb4953247a4a342208f761d070ca910` — authoritative asset flow across browser/OpenCode/CLI runtime;
+- `cc6fd347d2cda3a7f01c547ec223cddf61f37aed` — preserve first-turn OpenSCAD attachment assets.
+
+Quality Gate run `314` (`33611457984`) on `cc6fd347d2cda3a7f01c547ec223cddf61f37aed` passed dependency audit, full test suite, typecheck, lint and production client/SSR/Nitro build.
+
+Manual Step 7 acceptance passed on 2026-09-02:
+
+1. local folder with nested support `.scad` and nested STL;
+2. reload/persistence and AI follow-up preserving the imported STL;
+3. AI edit of a support file while preserving asset and stable entrypoint;
+4. `surface()` with nested `.dat`;
+5. dynamic and missing asset rejection;
+6. normal/direct Parametric attached STL flow;
+7. GitHub/static relative asset behavior from the Step 7 import path;
+8. first-turn attached STL through `streaming-opencode`, followed by AI edit and full reload.
+
+The manual streaming test exposed one first-turn gap: `PromptView` originally persisted the STL mesh context before attaching its authoritative descriptor. `cc6fd347...` closes that gap; the retest rendered `import("marker.stl")` successfully, preserved it through follow-up and restored it after reload.
+
+STEP export remains intentionally unchanged in Step 7. Project-aware STEP sandbox input and asset mounting belong to Step 8 so the sandbox contract changes in one bounded step.
 
 ### Step 8 — STEP project sandbox
 
-Upgrade STEP from one-file input to a normalized read-only project directory built by the server from validated project bytes/storage objects. Preserve rootless Podman, `network=none`, read-only rootfs, dropped capabilities, no-new-privileges and bounded CPU/RAM/PID/time.
+Upgrade STEP from one-file input to a normalized read-only project directory built by the server from validated project bytes/storage objects, including the explicit Step 7 asset manifest needed by the OpenSCAD entrypoint. Preserve rootless Podman, `network=none`, read-only rootfs, dropped capabilities, no-new-privileges and bounded CPU/RAM/PID/time.
 
 ### Step 9 — Project file UX
 
@@ -194,21 +258,21 @@ Add bounded project-file inspection/editing integrated with the existing Paramet
 Run full gates:
 
 ```bash
-npm test
-npm run typecheck
-npm run lint
-npm run build
+bun run test
+bun run typecheck
+bun run lint
+bun run build
 git diff --check
 ```
 
 When STEP is touched, also run the provider smoke/corpus documented in `docs/step_export.md`.
 
-Final manual acceptance should cover AI one-file generation, local/GitHub multi-file import, bundled libraries, parameter edits, AI entrypoint/support-file edits, restore/retry/branching, STL/DXF/STEP, malformed/oversize rejection and relative assets after Step 7.
+Final manual acceptance should cover AI one-file generation, local/GitHub multi-file import, bundled libraries, parameter edits, AI entrypoint/support-file edits, restore/retry/branching, STL/DXF/STEP, malformed/oversize rejection and relative assets.
 
 ## Current decision
 
 Continue the selected multi-file OpenSCAD feature with the project-native artifact contract and no legacy Parametric artifact compatibility requirement.
 
-Steps 1–6 are complete. Step 7 is next and must add only explicit normalized relative asset support; do not mix STEP sandbox migration or project-file UX into that step.
+Steps 1–7 are complete. Step 8 is next and must make STEP export consume the normalized project plus explicit assets while preserving the existing rootless sandbox security model. Do not mix Step 9 project-file UX into Step 8.
 
 Rhino/Grasshopper remains intentionally deferred until the project-workspace work is complete and evaluated.
