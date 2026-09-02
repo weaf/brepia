@@ -32,8 +32,12 @@ function sha256(bytes: Uint8Array): string {
 
 export function createServerOpenScadProjectAssetResolver(
   conversationId: string,
+  expectedUserId?: string,
 ): ServerOpenScadProjectAssetResolver {
   const normalizedConversationId = normalizeOpenScadProjectPath(conversationId);
+  const normalizedExpectedUserId = expectedUserId
+    ? normalizeOpenScadProjectPath(expectedUserId)
+    : undefined;
   const supabase = getServiceRoleSupabaseClient();
   let ownerPromise: Promise<string> | undefined;
 
@@ -47,6 +51,14 @@ export function createServerOpenScadProjectAssetResolver(
           .single();
         if (error || !data?.user_id) {
           throw new Error('Could not resolve OpenSCAD asset conversation owner.');
+        }
+        if (
+          normalizedExpectedUserId &&
+          data.user_id !== normalizedExpectedUserId
+        ) {
+          throw new Error(
+            'OpenSCAD project asset conversation is not owned by the active user.',
+          );
         }
         return data.user_id;
       })();
