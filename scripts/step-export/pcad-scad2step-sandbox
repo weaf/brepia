@@ -2,21 +2,82 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <input.scad> -o <output.step>" >&2
+  echo "usage: $0 --project <input-dir> --entrypoint <relative.scad> -o <output.step>" >&2
+  echo "       $0 <input.scad> -o <output.step>" >&2
   exit 64
 }
 
-[ "$#" -eq 3 ] || usage
-INPUT="$1"
-[ "$2" = "-o" ] || usage
-OUTPUT="$3"
+INPUT_VOLUME=""
+CONTAINER_INPUT=""
 
-if [ ! -f "$INPUT" ] || [ -L "$INPUT" ]; then
-  echo "STEP sandbox input must be a regular SCAD file" >&2
-  exit 65
+if [ "$#" -eq 6 ] && [ "$1" = "--project" ] && [ "$3" = "--entrypoint" ] && [ "$5" = "-o" ]; then
+  PROJECT_DIR="$2"
+  ENTRYPOINT="$4"
+  OUTPUT="$6"
+
+  if [ ! -d "$PROJECT_DIR" ] || [ -L "$PROJECT_DIR" ]; then
+    echo "STEP sandbox project input must be a regular directory" >&2
+    exit 65
+  fi
+
+  case "$ENTRYPOINT" in
+    ""|/*|*\\*)
+      echo "STEP sandbox entrypoint must be a normalized relative path" >&2
+      exit 65
+      ;;
+  esac
+
+  IFS='/' read -r -a ENTRYPOINT_SEGMENTS <<< "$ENTRYPOINT"
+  for SEGMENT in "${ENTRYPOINT_SEGMENTS[@]}"; do
+    if [ -z "$SEGMENT" ] || [ "$SEGMENT" = "." ] || [ "$SEGMENT" = ".." ]; then
+      echo "STEP sandbox entrypoint must be a normalized relative path" >&2
+      exit 65
+    fi
+  done
+
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  ENTRYPOINT_HOST="${PROJECT_DIR}/${ENTRYPOINT}"
+  if [ ! -f "$ENTRYPOINT_HOST" ] || [ -L "$ENTRYPOINT_HOST" ]; then
+    echo "STEP sandbox entrypoint must be a regular SCAD file" >&2
+    exit 65
+  fi
+
+  RESOLVED_ENTRYPOINT="$(realpath "$ENTRYPOINT_HOST")"
+  case "$RESOLVED_ENTRYPOINT" in
+    "${PROJECT_DIR}"/*) ;;
+    *)
+      echo "STEP sandbox entrypoint escapes the project directory" >&2
+      exit 65
+      ;;
+  esac
+
+  if [ -n "$(find "$PROJECT_DIR" -type l -print -quit)" ]; then
+    echo "STEP sandbox project cannot contain symbolic links" >&2
+    exit 65
+  fi
+  if [ -n "$(find "$PROJECT_DIR" ! -type f ! -type d -print -quit)" ]; then
+    echo "STEP sandbox project contains an unsupported filesystem object" >&2
+    exit 65
+  fi
+
+  INPUT_VOLUME="${PROJECT_DIR}:/input/project:ro"
+  CONTAINER_INPUT="/input/project/${ENTRYPOINT}"
+elif [ "$#" -eq 3 ] && [ "$2" = "-o" ]; then
+  INPUT="$1"
+  OUTPUT="$3"
+
+  if [ ! -f "$INPUT" ] || [ -L "$INPUT" ]; then
+    echo "STEP sandbox input must be a regular SCAD file" >&2
+    exit 65
+  fi
+
+  INPUT="$(realpath "$INPUT")"
+  INPUT_VOLUME="${INPUT}:/input/model.scad:ro"
+  CONTAINER_INPUT="/input/model.scad"
+else
+  usage
 fi
 
-INPUT="$(realpath "$INPUT")"
 OUTPUT_DIR="$(dirname "$OUTPUT")"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd -P)"
@@ -76,12 +137,12 @@ timeout --signal=TERM --kill-after=5 "${RUNTIME_TIMEOUT}s" \
     --userns=keep-id \
     --user "$(id -u):$(id -g)" \
     --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=${TMPFS_SIZE},mode=1777" \
-    --volume "${INPUT}:/input/model.scad:ro" \
+    --volume "$INPUT_VOLUME" \
     --volume "${OUTPUT_DIR}:/output:rw" \
     --env HOME=/tmp \
     --env OPENSCADPATH=/opt/openscad-libraries \
     "$IMAGE" \
-    /input/model.scad -o "/output/${OUTPUT_NAME}"
+    "$CONTAINER_INPUT" -o "/output/${OUTPUT_NAME}"
 STATUS=$?
 set -e
 
