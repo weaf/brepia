@@ -1,4 +1,8 @@
 import { supabase } from '@/lib/supabase';
+import {
+  normalizeOpenScadProject,
+  type OpenScadProject,
+} from '@shared/openScadProject';
 import { apiUrl } from './api';
 
 export type StepExportResponse = {
@@ -8,16 +12,25 @@ export type StepExportResponse = {
 };
 
 export async function exportStep(
-  sourceCode: string,
+  projectOrSource: OpenScadProject | string,
+  conversationId?: string,
 ): Promise<StepExportResponse> {
   const token = (await supabase.auth.getSession()).data.session?.access_token;
+  const requestBody =
+    typeof projectOrSource === 'string'
+      ? { sourceCode: projectOrSource }
+      : {
+          project: normalizeOpenScadProject(projectOrSource),
+          ...(conversationId ? { conversationId } : {}),
+        };
+
   const response = await fetch(apiUrl('export/step'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ sourceCode }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
