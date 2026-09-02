@@ -8,23 +8,18 @@ Draft PR: `#16` — WIP: Native multi-file OpenSCAD workspace.
 
 ## Current checkpoint
 
-Steps 1–9 are complete. Step 9 project-file UX is implemented, CI-verified and manually accepted. Step 10 final hardening/closeout is next and has not started.
+Steps 1–9 are complete. Step 10 final hardening is in progress. The final multi-file AI browser smoke passed functionally on 2026-09-02, but exposed one conversation-workspace render-mirroring auth warning. That warning has been fixed and CI-verified; a short local rerun confirming the warning is gone remains before formal Step 10 closeout.
 
-Primary Step 9 implementation checkpoint:
+Current Step 10 fix checkpoint:
 
-`f1089d97e1639923e63638ea406b272d8c95f9d9` — `Wire project file editing into Parametric editor`
+`480350a299e366b7cfd5a02f3c1efb789182f0e2` — `Test verified render owner propagation`
 
-Preceding UI checkpoint:
+Preceding render-auth implementation checkpoints:
 
-`9f01a481b963260a2d9fc54a1b53cc1a0e0338b8` — `Add bounded OpenSCAD project file inspector`
+- `2bd85ece4c8bf5d7455cb6fa1c767d9fd9c8f813` — `Reuse verified owner for render mirroring`;
+- `919e12289854fc663a830064b95e4ed2310d14d4` — `Pass verified owner to render mirroring`.
 
-Documentation checkpoint:
-
-`0afb813c57ed6446c03bd823f8eef4d7475efe7b` — `Record Step 9 implementation checkpoint`
-
-Quality Gate run `326` (`33657189062`) on the implementation checkpoint and Quality Gate run `327` (`33657581514`) on the documentation checkpoint both passed dependency audit, full test suite, typecheck, lint and production client/SSR/Nitro build.
-
-Manual browser acceptance passed on 2026-09-02. Step 10 has not started.
+Quality Gate run `336` (`33678890961`) on `480350a299e366b7cfd5a02f3c1efb789182f0e2` passed dependency audit, full test suite, typecheck, lint, production build and PR diff check.
 
 ## Step 1 — complete
 
@@ -71,7 +66,7 @@ GitHub project import remains entrypoint-driven and bounded:
 
 Primary checkpoint:
 
-`e285af99f3d0ba8be0e4361fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`
+`e285af99f3d0ba8be0e436b1fc8a471dc559c9556` — `Test recursive GitHub OpenSCAD project import`
 
 Quality Gate run `237` (`33532720138`) and manual acceptance passed.
 
@@ -258,6 +253,38 @@ The stable-runtime browser acceptance passed for the complete Step 9 checklist:
 
 Step 9 is formally complete.
 
+## Step 10 — hardening in progress
+
+Final hardening reconciled the repository rules, current architecture references and actual feature branch. The hardening pass:
+
+- added full-history checkout plus PR-based `git diff --check` to the Quality Gate;
+- updated README for project-native local/GitHub import, relative assets and support-file editing;
+- corrected `docs/conversation_workspace.md` to complete-project `models/current/` and revision snapshots with project SHA-256;
+- corrected `docs/INTEGRATION.md` to the complete normalized project contract and Brepia-authoritative asset metadata;
+- confirmed there were no unresolved PR comments/reviews and the feature branch remained 0 commits behind its `master` baseline;
+- required no broad runtime changes.
+
+The final multi-file AI follow-up browser smoke then passed functionally, including support-file editing, rendered result, reload persistence and history behavior. During that smoke the terminal logged:
+
+`[conversation-workspace] Failed to mirror preview render ... Render mirroring requires an authenticated user`
+
+The cause was a redundant render-mirroring auth lookup after the lifecycle had already authenticated the request and verified conversation ownership. The render mirror now reuses the already verified owner id for the private storage path while retaining authenticated-request fallback for standalone callers. No service-role bypass was introduced and the existing user/conversation storage scope remains authoritative.
+
+Regression coverage verifies that the lifecycle propagates the already verified owner into render mirroring.
+
+Quality Gate #336 / run `33678890961` PASS on `480350a299e366b7cfd5a02f3c1efb789182f0e2`:
+
+- dependency audit: PASS;
+- full tests: PASS;
+- typecheck: PASS;
+- lint: PASS;
+- production build: PASS;
+- PR diff check: PASS.
+
+### Remaining Step 10 acceptance
+
+Repeat one normal multi-file Parametric AI follow-up after updating/restarting the local branch and confirm that the previous `Render mirroring requires an authenticated user` warning no longer appears. No other Step 1–9 acceptance needs to be repeated.
+
 ## UX follow-ups outside the completed project steps
 
 - The orientation `ViewGizmo` remains desktop-only. Mobile should later receive at least a compact deterministic Top/Front/Right orientation control.
@@ -265,10 +292,8 @@ Step 9 is formally complete.
 
 ## Not completed yet
 
-- Step 10 final hardening/closeout.
+- Step 10 final closeout, pending only the short render-auth warning rerun above.
 
-## Next — Step 10
+## Next — Step 10 closeout
 
-Run the final repository/feature hardening and complete the end-to-end acceptance defined in the plan. Do not merge PR #16 until Step 10 is complete and its final gate is green.
-
-PR #16 remains draft and must not be merged yet.
+After the render-auth warning rerun is clean, record final manual acceptance, mark Step 10 complete, update PR #16 and close out the feature branch. PR #16 remains draft and must not be merged before that confirmation.
