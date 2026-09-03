@@ -44,6 +44,8 @@ describe('repository-driven AI instruction catalog', () => {
       'context.brep_project',
       'transport.opencode',
       'transport.codex',
+      'transport.opencode_brep',
+      'transport.codex_brep',
     ]) {
       expect(keys.has(key)).toBe(true);
     }

@@ -18,6 +18,7 @@ import {
   type OpenScadProject,
   type OpenScadProjectAsset,
 } from '@shared/openScadProject';
+import type { BrepProject } from '@shared/brepProject';
 import {
   reconcileOpenScadProjectAssetManifest,
   resolveOpenScadAttachmentAssets,
@@ -27,6 +28,7 @@ import {
   finishWithParametricToolCall,
   parseAgentResult,
   resolveAgentResultChannels,
+  type AgentParametricSourceKind,
 } from './opencodeAgentResult';
 import { validateOpenScadProject } from './openScadValidation';
 import { createServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
@@ -55,6 +57,8 @@ export type OpenCodeRuntimeOptions = {
   timeoutMs?: number;
   validationAttempts?: number;
   authoritativeAssets?: readonly OpenScadProjectAsset[];
+  sourceKind?: AgentParametricSourceKind;
+  currentBrepProject?: BrepProject;
 };
 
 function bundledRuntimeNumber(key: string): number {
@@ -76,6 +80,8 @@ function resolveOpenCodeRuntime(options: OpenCodeRuntimeOptions = {}) {
       options.validationAttempts ??
       bundledRuntimeNumber('transport.openCodeValidationAttempts'),
     authoritativeAssets: [...(options.authoritativeAssets ?? [])],
+    sourceKind: options.sourceKind ?? 'openscad',
+    currentBrepProject: options.currentBrepProject,
   };
 }
 
@@ -277,6 +283,7 @@ function promptTextParts(
 export function formatPrompt(
   prompt: LanguageModelV3Prompt,
   transportInstruction = loadBundledInstruction('transport.opencode'),
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): string {
   const lines: string[] = [];
   if (transportInstruction.trim()) {
@@ -295,7 +302,7 @@ export function formatPrompt(
           : 'System';
     lines.push(`${label}: ${textParts.join('\n')}`);
   }
-  lines.push(buildAgentOutputContract());
+  lines.push(buildAgentOutputContract(sourceKind));
   return lines.join('\n\n');
 }
 
@@ -450,7 +457,10 @@ function toolOutputText(value: unknown): string {
   return '';
 }
 
-function latestBuildResultFromPrompt(prompt: LanguageModelV3Prompt): string {
+function latestBuildResultFromPrompt(
+  prompt: LanguageModelV3Prompt,
+  sourceKind: AgentParametricSourceKind,
+): string {
   for (
     let messageIndex = prompt.length - 1;
     messageIndex >= 0;
@@ -466,7 +476,10 @@ function latestBuildResultFromPrompt(prompt: LanguageModelV3Prompt): string {
       const record = part as unknown as Record<string, unknown>;
       if (
         record['type'] !== 'tool-result' ||
-        record['toolName'] !== 'build_parametric_model'
+        record['toolName'] !==
+          (sourceKind === 'brep'
+            ? 'build_brep_project'
+            : 'build_parametric_model')
       ) {
         continue;
       }
@@ -497,8 +510,13 @@ export function buildPersistentOpenCodePrompt(
   prompt: LanguageModelV3Prompt,
   sessionCreated: boolean,
   transportInstruction = loadBundledInstruction('transport.opencode'),
+  context: {
+    sourceKind?: AgentParametricSourceKind;
+    currentBrepProject?: BrepProject;
+  } = {},
 ): string {
   const lines: string[] = [];
+  const sourceKind = context.sourceKind ?? 'openscad';
 
   if (transportInstruction.trim()) {
     lines.push(
@@ -511,7 +529,10 @@ export function buildPersistentOpenCodePrompt(
     lines.push(`<pcad_system_context>\n${system}\n</pcad_system_context>`);
   }
 
-  const artifact = currentParametricArtifactFromPrompt(prompt);
+  const artifact =
+    sourceKind === 'openscad'
+      ? currentParametricArtifactFromPrompt(prompt)
+      : undefined;
   if (artifact) {
     lines.push(
       [
@@ -525,9 +546,14 @@ export function buildPersistentOpenCodePrompt(
       ].join('\n'),
     );
   }
+  if (sourceKind === 'brep' && context.currentBrepProject) {
+    lines.push(
+      `<current_brep_project>\n${JSON.stringify(context.currentBrepProject)}\n</current_brep_project>`,
+    );
+  }
 
   const latestUser = latestUserPromptText(prompt);
-  const buildResult = latestBuildResultFromPrompt(prompt);
+  const buildResult = latestBuildResultFromPrompt(prompt, sourceKind);
   const lastRole = prompt[prompt.length - 1]?.role;
   const isBuildContinuation = lastRole === 'tool' && Boolean(buildResult);
 
@@ -541,7 +567,7 @@ export function buildPersistentOpenCodePrompt(
     lines.push('<pcad_continuation />');
   }
 
-  lines.push(buildAgentOutputContract());
+  lines.push(buildAgentOutputContract(sourceKind));
   return lines.join('\n\n');
 }
 
@@ -1138,11 +1164,12 @@ export function processBatch(
 export function finalizeAcceptedAgentResult(
   text: string,
   finishPart: Extract<LanguageModelV3StreamPart, { type: 'finish' }>,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): LanguageModelV3StreamPart[] {
-  const result = parseAgentResult(text);
+  const result = parseAgentResult(text, sourceKind);
 
   if (result.project) {
-    return finishWithParametricToolCall(text, finishPart);
+    return finishWithParametricToolCall(text, finishPart, sourceKind);
   }
 
   const message = result.message.trim();
@@ -1179,7 +1206,11 @@ async function* streamParts(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const apiUrl = opencodeApiUrl();
-    const formattedPrompt = formatPrompt(prompt, runtime.transportInstruction);
+    const formattedPrompt = formatPrompt(
+      prompt,
+      runtime.transportInstruction,
+      runtime.sourceKind,
+    );
     const identity = buildOpenCodeSessionIdentity(modelId, formattedPrompt);
     const { providerID, id: bareId } = identity.model;
 
@@ -1248,6 +1279,10 @@ async function* streamParts(
           prompt,
           sessionCreated,
           runtime.transportInstruction,
+          {
+            sourceKind: runtime.sourceKind,
+            currentBrepProject: runtime.currentBrepProject,
+          },
         )
       : formattedPrompt;
     const admittedSeq = await submitOpenCodePrompt(
@@ -1286,11 +1321,14 @@ async function* streamParts(
     });
     let state = makeState(admittedSeq ?? 0);
     let validationAttempts = 0;
-    const resolveAsset = conversationId
-      ? createServerOpenScadProjectAssetResolver(conversationId)
-      : undefined;
+    const resolveAsset =
+      runtime.sourceKind === 'openscad' && conversationId
+        ? createServerOpenScadProjectAssetResolver(conversationId)
+        : undefined;
     const promptAssets =
-      currentParametricArtifactFromPrompt(prompt)?.project.assets ?? [];
+      runtime.sourceKind === 'openscad'
+        ? (currentParametricArtifactFromPrompt(prompt)?.project.assets ?? [])
+        : [];
     const authoritativeAssets = [
       ...promptAssets,
       ...runtime.authoritativeAssets,
@@ -1350,11 +1388,14 @@ async function* streamParts(
       const { resultText } = resolveAgentResultChannels(
         state.totalText,
         state.totalReasoning,
+        runtime.sourceKind,
       );
-      const candidate = parseAgentResult(resultText);
+      const candidate = parseAgentResult(resultText, runtime.sourceKind);
       if (!candidate.project) break;
 
-      let candidateProject = candidate.project;
+      if (runtime.sourceKind === 'brep') break;
+
+      let candidateProject = candidate.project as OpenScadProject;
       let reconciliationDiagnostics: string | null = null;
       try {
         const attachmentAssets = resolveOpenScadAttachmentAssets(
@@ -1420,6 +1461,7 @@ async function* streamParts(
     const accepted = resolveAgentResultChannels(
       state.totalText,
       state.totalReasoning,
+      runtime.sourceKind,
     );
 
     if (accepted.reasoningText) {
@@ -1442,6 +1484,7 @@ async function* streamParts(
     for (const part of finalizeAcceptedAgentResult(
       accepted.resultText,
       finishPart,
+      runtime.sourceKind,
     )) {
       yield part;
     }

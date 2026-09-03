@@ -9,6 +9,7 @@ import {
   parseCodexCliOutput,
   parseOpenCodeCliOutput,
 } from '../src/server/cliAgents';
+import { phaseOneCabinetProject } from '../shared/brepSamples';
 
 function project(code: string, support = 'module support_part() { cube(1); }') {
   return {
@@ -186,6 +187,37 @@ describe('persistent CLI agent sessions', () => {
     assert.match(text, /<user_request>\nMake it 30 mm wide\n<\/user_request>/);
     assert.doesNotMatch(text, /Old assistant prose/);
     assert.doesNotMatch(text, /CAD system context/);
+  });
+
+  it('sends the exact current BRep project on every BRep continuation without OpenSCAD artifacts', () => {
+    const prompt = [
+      { role: 'system', content: 'BRep system context' },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Increase the cable hole' }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'brep-call',
+            toolName: 'build_brep_project',
+            output: { type: 'text', value: 'Native BRep revision accepted.' },
+          },
+        ],
+      },
+    ] as unknown as LanguageModelV3Prompt;
+
+    const text = buildPersistentCliAgentPrompt(prompt, true, '', {
+      sourceKind: 'brep',
+      currentBrepProject: phaseOneCabinetProject,
+    });
+
+    assert.match(text, /<current_brep_project>/);
+    assert.match(text, new RegExp(`"id":"${phaseOneCabinetProject.id}"`));
+    assert.match(text, /Native BRep revision accepted/);
+    assert.doesNotMatch(text, /current_pcad_artifact/);
   });
 
   it('keeps the same OpenCode CLI session and latest artifact through a fourth edit', () => {

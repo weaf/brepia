@@ -274,7 +274,10 @@ export function stripStructuredAgentResults(
   sourceKind: AgentParametricSourceKind = 'openscad',
 ): string {
   let stripped = text;
-  for (const match of structuredAgentResultMatches(text, sourceKind).reverse()) {
+  for (const match of structuredAgentResultMatches(
+    text,
+    sourceKind,
+  ).reverse()) {
     stripped = stripped.slice(0, match.start) + stripped.slice(match.end);
   }
   return stripped.replace(/```(?:json)?\s*```/gi, '').trim();
@@ -314,6 +317,10 @@ export function parseAgentResult(
 ): AgentResult<BrepProject>;
 export function parseAgentResult(
   text: string,
+  sourceKind: AgentParametricSourceKind,
+): AgentResult<OpenScadProject | BrepProject>;
+export function parseAgentResult(
+  text: string,
   sourceKind: AgentParametricSourceKind = 'openscad',
 ): AgentResult<AgentProject> {
   const structured = parseStructuredAgentResultForKind(text, sourceKind);
@@ -321,7 +328,9 @@ export function parseAgentResult(
   return { message: text.trim() };
 }
 
-export type ParametricBuildInput<TProject extends AgentProject = OpenScadProject> = {
+export type ParametricBuildInput<
+  TProject extends AgentProject = OpenScadProject,
+> = {
   title: string;
   version: string;
   project: TProject;

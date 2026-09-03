@@ -146,6 +146,22 @@
       "supportsOverlay": true
     },
     {
+      "key": "transport.opencode_brep",
+      "label": "OpenCode native BRep transport",
+      "description": "Behavioral instructions added when native BRep requests run through OpenCode.",
+      "category": "transport",
+      "template": "transport-opencode-brep.md",
+      "supportsOverlay": true
+    },
+    {
+      "key": "transport.codex_brep",
+      "label": "Codex native BRep transport",
+      "description": "Behavioral instructions added when native BRep requests run through Codex CLI.",
+      "category": "transport",
+      "template": "transport-codex-brep.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "provider.fal.image_conditioning",
       "label": "fal.ai image conditioning",
       "description": "Instructions used to prepare image-generation prompts for the optional fal.ai Creative provider.",

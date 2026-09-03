@@ -7,6 +7,7 @@ import {
   buildPersistentOpenCodePrompt,
   ensureOpenCodeSession,
 } from '../src/server/opencode';
+import { phaseOneCabinetProject } from '../shared/brepSamples';
 
 function project(code: string, support = 'module support_part() { cube(1); }') {
   return {
@@ -80,6 +81,38 @@ describe('persistent OpenCode sessions', () => {
 
     const recreated = buildPersistentOpenCodePrompt(prompt, true);
     assert.match(recreated, /<user_request>\s*Make the lid thicker/);
+  });
+
+  it('sends the exact current BRep project on every streaming continuation without OpenSCAD artifacts', () => {
+    const prompt = [
+      { role: 'system', content: 'BRep context' },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Increase the cable hole' }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'brep-call',
+            toolName: 'build_brep_project',
+            output: { type: 'text', value: 'Native BRep revision accepted.' },
+          },
+        ],
+      },
+    ] as unknown as LanguageModelV3Prompt;
+
+    const text = buildPersistentOpenCodePrompt(prompt, false, '', {
+      sourceKind: 'brep',
+      currentBrepProject: phaseOneCabinetProject,
+    });
+
+    assert.match(text, /<current_brep_project>/);
+    assert.match(text, new RegExp(`"id":"${phaseOneCabinetProject.id}"`));
+    assert.match(text, /Native BRep revision accepted/);
+    assert.match(text, /build_brep_project/);
+    assert.doesNotMatch(text, /current_pcad_artifact/);
   });
 
   it('uses the latest complete artifact instead of the original import on a later edit', () => {
