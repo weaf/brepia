@@ -2,9 +2,9 @@
 
 ## Status
 
-Planning only. No implementation has started.
+Approved direction. Phase 1 is active.
 
-This document records the currently preferred direction for Brepia's next CAD/parametric modeling phase after Brepia 1.0, multi-file OpenSCAD workspace, viewer orientation controls, and OpenSCAD editor intelligence.
+This document is the current plan for Brepia's next CAD/parametric modeling phase after Brepia 1.0, multi-file OpenSCAD workspace, viewer orientation controls, and OpenSCAD editor intelligence.
 
 Base checkpoint:
 
@@ -18,13 +18,90 @@ Working branch:
 feature/brep-kernel-foundation
 ```
 
-Do not treat this document as permission to implement the complete roadmap. The current task remains architecture and product evaluation until the discussion and scope are explicitly closed.
+Implementation must proceed phase-by-phase. Do not interpret approval of this plan as permission to collapse later Grasshopper, Rhino, graph-editor or interoperability phases into the Phase 1 kernel spike.
+
+## Final product goal for this plan
+
+The explicit end goal of this roadmap is:
+
+```text
+Brepia Parametric Model
+        |
+        v
+smart parametric Grasshopper object / .gh workflow
+        |
+        v
+Rhino / Grasshopper project model
+```
+
+A completed roadmap must therefore allow a Brepia-authored parametric component to be consumed in Grasshopper as a smart parametric object rather than merely as frozen STEP/3DM/BRep geometry.
+
+The intended Grasshopper-side contract is that a Brepia component can expose meaningful inputs such as dimensions, options and placement plane, solve to Rhino geometry, and expose useful project metadata/auxiliary geometry where relevant.
+
+For infrastructure/railway use this enables the product split:
+
+```text
+PROJECT / ALIGNMENT LEVEL
+Rhino + Grasshopper
+- track alignment and profile
+- chainage / stationing
+- placement planes and offsets
+- corridor / clearance logic
+- repeated placement and project composition
+              |
+              | consumes
+              v
+COMPONENT LEVEL
+Brepia
+- cabinets
+- equipment rooms
+- foundations
+- cable pits
+- posts / brackets / guards
+- other reusable parametric project objects
+```
+
+Example target:
+
+```text
+Track alignment
+      |
+Station / chainage
+      |
+Placement plane
+      |
+[Brepia: Cabinet A42]
+  Inputs:
+    Width
+    Height
+    Depth
+    Plinth height
+    Door count
+    Plane
+  Outputs:
+    Brep geometry
+    Footprint
+    Clearance envelope
+    Maintenance envelope
+    Connection / cable points
+    Object metadata
+      |
+      v
+Rhino project model
+```
+
+The first Grasshopper export does not have to expand every Brepia feature into a visible native Grasshopper node. The preferred first-class target is a smart Brepia Grasshopper component plus a generated `.gh` wrapper/workflow with exposed parameters. Native translation of selected Brepia operations to editable Grasshopper nodes can be added where it provides real value and has a well-defined mapping.
+
+This distinction is important:
+
+- STEP/3DM export transfers geometry;
+- the final deliverable of this plan transfers a reusable parametric component contract.
 
 ## Strategic recommendation
 
-Brepia should add an open B-Rep CAD foundation based on OpenCascade/OCCT, preferably exposed initially through a constrained server-side build123d-based execution layer, while preserving OpenSCAD as a first-class modeling mode.
+Brepia should add an open B-Rep CAD foundation based on OpenCascade/OCCT, initially exposed through a constrained server-side build123d-based execution layer, while preserving OpenSCAD as a first-class modeling mode.
 
-Rhino/Grasshopper should be treated as optional interoperability and compute providers rather than as Brepia's mandatory core runtime.
+Rhino/Grasshopper are an interoperability and project-composition target, not Brepia's mandatory core geometry runtime.
 
 Target architecture:
 
@@ -35,14 +112,17 @@ Brepia UI / AI
 Brepia Parametric Model
 feature graph / DAG / stable model schema
        |
-       +--> OpenSCAD backend
+       +--> OCCT/build123d backend      primary exact B-Rep path
        |
-       +--> OCCT/build123d backend      primary new B-Rep path
+       +--> OpenSCAD                    existing first-class mode
        |
-       +--> Rhino.Compute provider      optional later integration
-              |
-              +--> RhinoCommon
-              +--> Grasshopper definitions
+       +--> Grasshopper exporter        roadmap destination
+       |       |
+       |       +--> smart Brepia GH component
+       |       +--> generated .gh workflow
+       |       +--> optional native-node mappings
+       |
+       +--> Rhino.Compute provider      optional solve/validation/provider path
        |
        v
 common geometry/result contract
@@ -50,28 +130,28 @@ common geometry/result contract
        +--> browser Three.js viewer
        +--> STEP
        +--> STL / mesh outputs
-       +--> future 3DM interoperability
+       +--> 3DM interoperability
 ```
 
 ## Why this direction fits Brepia
 
-Brepia is already browser/server oriented and already separates untrusted/native geometry work from the application process.
+Brepia is already browser/server oriented and separates user-controlled native geometry work from the application process.
 
-Relevant current architectural properties:
+Relevant current architecture:
 
-- React/TanStack Router/React Start browser and server application.
-- Three.js/React Three Fiber browser viewer.
-- Persistent conversations, revisions, parameters and project state.
-- Complete normalized multi-file `OpenScadProject` snapshots.
-- Existing server-side STEP conversion through a rootless, networkless, read-only Podman sandbox.
-- Existing STEP stack already uses scad123d, build123d and OpenCascade/OCCT.
-- OpenSCAD remains useful for code-centric constructive solid geometry and should not be removed merely because a B-Rep path is added.
+- React/TanStack Router/React Start browser and server application;
+- Three.js/React Three Fiber browser viewer;
+- persistent conversations, revisions, parameters and project state;
+- normalized multi-file OpenSCAD projects;
+- server-side STEP conversion in a rootless, networkless, read-only Podman sandbox;
+- STEP conversion already uses scad123d, build123d and OpenCascade/OCCT;
+- OpenSCAD remains useful for code-centric CSG and must remain supported.
 
-This means Brepia can evolve toward a true feature/B-Rep CAD model without replacing the current product architecture.
+The BRep path is therefore an evolution of Brepia rather than a replacement of its current product architecture.
 
 ## Product model
 
-The preferred long-term product model is multiple first-class modeling modes that share the same workspace, viewer, persistence and AI concepts:
+Long-term modeling modes share workspace, viewer, persistence and AI infrastructure:
 
 ```text
 OpenSCAD Project
@@ -79,446 +159,306 @@ BRep Project
 Creative Project
 ```
 
-A BRep project should not initially be arbitrary Python source. It should use a constrained, versioned Brepia-owned parametric representation.
+A BRep project uses a constrained, versioned Brepia-owned parametric representation rather than arbitrary Python source.
 
-Conceptually:
-
-```json
-{
-  "nodes": [
-    {
-      "id": "base",
-      "type": "box",
-      "parameters": {
-        "length": 100,
-        "width": 60,
-        "height": 12
-      }
-    },
-    {
-      "id": "hole",
-      "type": "cylinder",
-      "parameters": {
-        "radius": 5,
-        "height": 12
-      }
-    },
-    {
-      "id": "result",
-      "type": "subtract",
-      "inputs": ["base", "hole"]
-    },
-    {
-      "id": "fillet",
-      "type": "fillet",
-      "input": "result",
-      "selector": {
-        "edges": "vertical"
-      },
-      "radius": 3
-    }
-  ]
-}
-```
-
-The same underlying model should eventually support several interaction surfaces:
+The canonical model must support multiple interaction surfaces without creating separate runtimes:
 
 ```text
 parameter controls
       ^
       |
 node graph <--> Brepia Parametric Model <--> AI editing
+      |
+      v
+Grasshopper export contract
 ```
-
-The node graph must therefore be a view/editor for the canonical model rather than an independent runtime.
 
 ## Core architectural principles
 
-### 1. Kernel-neutral application contract
+### 1. Brepia owns the persisted parametric contract
 
-The application should not expose OCCT/build123d-specific implementation details as the persisted project contract unless necessary.
+Do not persist build123d, OCCT or Rhino-specific implementation details as the source of truth unless unavoidable.
 
-Define a Brepia-owned schema and provider interface so future kernels/providers can be added without rewriting persistence, UI or AI contracts.
+The persisted graph must remain kernel/provider neutral enough that Brepia can evaluate it with OCCT and later map it into Grasshopper semantics.
 
-### 2. Stable feature identity
+### 2. Published parameters are first-class
 
-Nodes/features need stable identifiers so parameters, AI edits, revisions and future topology references can survive ordinary edits.
+A BRep project must explicitly distinguish reusable public parameters from internal feature values.
 
-### 3. Explicit dependency graph
+Published parameter identity must be stable because these parameters will later become:
 
-The model should be a validated DAG with bounded input references and deterministic evaluation order.
+- Brepia controls;
+- AI-editable values;
+- Grasshopper component inputs;
+- revision/diff anchors.
 
-### 4. No arbitrary Python in the first architecture
+### 3. Stable feature identity
 
-Direct build123d Python execution would greatly expand the security boundary. Initial BRep projects should compile from the constrained Brepia model into build123d/OCCT operations inside a hardened execution environment.
+Nodes/features require stable IDs so AI edits, revisions, selections and future Grasshopper mappings can survive ordinary edits.
 
-A future expert/code mode can be evaluated separately.
+### 4. Explicit validated DAG
 
-### 5. Preserve the current native-execution security posture
+Dependencies must be explicit, bounded and acyclic with deterministic evaluation.
 
-Geometry engines must not run directly inside the Brepia/Nitro application host when processing user-controlled model input.
+### 5. No arbitrary Python in the initial architecture
 
-The existing STEP sandbox establishes useful precedent:
+Initial projects compile from the constrained Brepia model into build123d/OCCT operations inside a hardened runtime. An expert code mode, if ever added, is a separate security/product decision.
+
+### 6. Preserve native-execution isolation
+
+User-controlled geometry engines must not execute directly inside the Brepia/Nitro host process.
+
+Carry forward the accepted STEP security posture:
 
 - rootless containerization;
 - network disabled;
-- read-only container root;
+- read-only root;
 - no-new-privileges;
 - dropped capabilities;
 - bounded CPU/RAM/PIDs/time;
 - narrowly mounted inputs/outputs;
-- validated server-side result contract.
+- validated result contracts.
 
-The BRep runtime should preserve or improve this boundary.
+### 7. Browser viewer is presentation, not authoritative geometry
 
-### 6. Browser viewer remains presentation, not authoritative geometry
+Exact BRep evaluation remains server-side initially. Browser-side OCCT/WASM can be evaluated later for low-latency previews.
 
-Initially, exact B-Rep evaluation should remain server-side. The browser should receive a renderable/tessellated representation plus metadata needed for interaction.
+### 8. Grasshopper integration is an export contract, not a second source of truth
 
-Browser-side OCCT/WASM can be considered later for low-latency previews or selected operations once memory, startup, mobile and cancellation behavior are understood.
+The Brepia model remains canonical. Grasshopper artifacts are generated/packaged interoperability products.
 
-## Rhino and Grasshopper position
+A smart GH component may internally call a Brepia-compatible evaluator or embed/export an evaluated contract, but the original Brepia project remains the authoritative editable model in Brepia.
+
+## Grasshopper / Rhino target
+
+### Smart Grasshopper object
+
+The preferred first Grasshopper product is a reusable component representing one Brepia project object.
+
+A component should eventually support:
+
+- deterministic project/model identity;
+- exposed Brepia parameters as typed GH inputs;
+- placement `Plane` input;
+- Rhino BRep output;
+- optional footprint and project envelopes;
+- optional connection/mounting/cable points;
+- object classification and custom metadata;
+- clear version/provider diagnostics.
+
+### Generated `.gh`
+
+Brepia should be able to export a Grasshopper workflow that instantiates the smart component with the correct exposed inputs and metadata.
+
+The `.gh` artifact is intended to let a project team consume the Brepia object directly in normal Rhino/Grasshopper composition workflows.
+
+### Native editable GH translation
+
+Selected Brepia operations may later translate to native Grasshopper/Rhino nodes when mappings are stable and useful.
+
+Do not promise generic lossless conversion of arbitrary Brepia graphs to arbitrary native GH graphs. The smart-component path is the compatibility baseline.
 
 ### Rhino.Compute
 
-Rhino.Compute is the Rhino integration that best matches Brepia's browser/server architecture because it provides HTTP-accessible RhinoCommon operations and Grasshopper definition solving.
+Rhino.Compute remains useful as an optional provider for:
 
-Recommended role:
+- Grasshopper solve/compatibility validation;
+- RhinoCommon-only operations;
+- selected `.gh` execution in Brepia;
+- integration tests of generated Grasshopper artifacts.
 
-- optional provider;
-- solve uploaded/known Grasshopper definitions;
-- expose definition inputs as Brepia parameters;
-- return geometry/results into the common Brepia result contract;
-- potentially support advanced Rhino-specific operations not implemented by the native OCCT path.
-
-Do not make Rhino.Compute mandatory for normal Brepia BRep projects.
-
-Reasons:
-
-- production Rhino runtime licensing/billing introduces an external commercial dependency;
-- Linux Compute support must be evaluated against McNeel's current production guidance before adopting it as a deployment baseline;
-- Compute solves Grasshopper definitions but does not provide the Grasshopper desktop canvas as a browser editor.
+It must not be required for normal native BRep authoring/evaluation.
 
 ### Rhino.Inside
 
-Do not use Rhino.Inside directly as the primary Brepia integration.
-
-Rhino.Inside embeds Rhino into another native host process and is better suited to desktop/native host applications. Rhino.Compute already provides the server abstraction Brepia would need.
-
-### Grasshopper
-
-Treat Grasshopper compatibility and a Grasshopper-like Brepia graph as separate goals.
-
-Potential future capabilities:
-
-1. native Brepia node graph over the Brepia Parametric Model;
-2. optional `.gh` execution through Rhino.Compute;
-3. possible import/translation research for selected Grasshopper graphs, explicitly not assumed to be generally lossless.
+Do not use Rhino.Inside directly as Brepia's primary server integration. Rhino.Compute is the appropriate service boundary if Rhino execution is required.
 
 ### rhino3dm / openNURBS
 
-Evaluate rhino3dm as a strong interoperability layer rather than as the modeling kernel.
+Use rhino3dm primarily for 3DM/NURBS/BRep interoperability and document metadata. Do not treat it as the full modeling kernel.
 
-Potential uses:
-
-- `.3dm` read/write;
-- object/layer/attribute inspection;
-- NURBS/BRep transport;
-- browser or Node-side 3DM tooling where Rhino is not installed.
-
-Do not assume rhino3dm provides the full set of robust modeling, boolean, intersection and tessellation operations available in Rhino proper.
-
-## Open alternatives
+## Native BRep backend
 
 ### build123d + OCCT
 
-Current preferred first backend.
+Current preferred first backend because it provides true BRep modeling, runs headlessly on Linux, fits the existing sandbox architecture and is already represented in the STEP toolchain.
 
-Advantages:
+Initial concerns to prove explicitly:
 
-- true B-Rep modeling;
-- already indirectly present in Brepia's STEP stack;
-- strong primitives, booleans, sketches, extrusions, sweeps, lofts, fillets/chamfers and selectors;
-- suitable for headless Linux execution;
-- compatible with Brepia's existing sandbox strategy;
-- open-source licensing suitable for Brepia's open architecture.
+- pinned runtime packaging;
+- topology naming/selection stability;
+- deterministic evaluation;
+- tessellation/result contract;
+- performance/caching;
+- direct STEP export.
 
-Risks/questions:
+### Browser OCCT alternatives
 
-- Python runtime inside the geometry container;
-- topology naming/stability across edits;
-- deterministic selector semantics;
-- tessellation and metadata contract for the browser;
-- performance and caching strategy;
-- library/version pinning.
+RepliCAD, cascade-core and other OCCT-WASM wrappers remain later candidates for preview/local recompute. They are not the authoritative Phase 1 kernel.
 
-### CadQuery
+## Source and interchange formats
 
-Keep as a reference/alternative but do not start with two Python CAD abstractions simultaneously.
+### Canonical source
 
-Evaluate only if build123d exposes a material limitation for the Brepia feature model.
+Use a versioned Brepia-owned JSON-compatible `BrepProject` schema.
 
-### RepliCAD / browser OCCT
-
-Potential later browser-preview layer.
-
-Advantages:
-
-- TypeScript/JavaScript integration;
-- OCCT in the browser;
-- possible low-latency local recompute.
-
-Do not make this the first authoritative kernel because of WASM startup/memory, mobile constraints, worker lifecycle and the need for deterministic server-side export.
-
-### Cascade Studio / cascade-core / other OCCT-WASM wrappers
-
-Useful architecture references and possible future frontend kernels.
-
-Treat them as later evaluation targets rather than dependencies for Phase 1.
-
-## File formats
-
-### Existing formats to preserve
-
-- `.scad` and multi-file OpenSCAD projects;
-- STL;
-- DXF;
-- STEP;
-- Creative GLB where supported.
-
-### BRep project source format
-
-Prefer a versioned Brepia-owned JSON-compatible schema rather than STEP or 3DM as the editable source of truth.
-
-STEP and 3DM are interchange/result formats, not ideal persisted parametric feature graphs.
+STEP, 3DM and GH are outputs/interoperability artifacts, not the canonical Brepia feature graph.
 
 ### STEP
 
-STEP should remain the primary neutral exact-CAD interchange format for the native BRep path.
-
-For native OCCT-backed BRep projects, STEP export should ideally avoid the OpenSCAD/scad123d conversion layer and export directly from the evaluated BRep backend while preserving the same application-level sandbox/security guarantees.
+Native BRep projects should eventually export STEP directly from the evaluated OCCT model without routing through OpenSCAD/scad123d.
 
 ### 3DM
 
-Add only after the BRep model/result contract is established.
+Add selected 3DM import/export after the native BRep result contract is established.
 
-Likely routes:
+### Grasshopper
 
-- rhino3dm/openNURBS for supported 3DM serialization/interchange;
-- Rhino.Compute for Rhino-specific fidelity/features where required.
-
-### Mesh outputs
-
-Continue generating tessellated viewer/printing outputs independently of the exact BRep source representation.
+The final roadmap output is a smart parametric GH object plus `.gh` workflow packaging, not only 3DM geometry.
 
 ## Phase roadmap
 
-### Phase 0 — Architecture closure
+### Phase 0 — Architecture closure — complete
 
-Current phase.
+Decisions accepted:
 
-Before implementation, decide and document:
+- Brepia-owned versioned parametric DAG;
+- published parameters and stable feature IDs are first-class;
+- server-side OCCT/build123d is the first authoritative BRep backend;
+- no arbitrary Python in the normal project format;
+- native execution remains sandboxed;
+- OpenSCAD remains first-class;
+- final roadmap target is Brepia parametric model -> smart Grasshopper parametric object / `.gh` workflow.
 
-- canonical BRep project/model schema;
-- provider/kernel abstraction;
-- initial operation set;
-- selection/topology strategy;
-- geometry result/viewer contract;
-- persistence/versioning approach;
-- sandbox boundary;
-- deployment/runtime packaging;
-- licensing inventory;
-- performance goals;
-- explicit non-goals.
+Open design details that do not block Phase 1 should be resolved incrementally and documented before their dependent phase starts.
 
-No implementation should start until this scope is accepted.
+### Phase 1 — Minimal vertical BRep foundation — active
 
-### Phase 1 — Minimal vertical BRep slice
+Goal: prove the kernel-neutral model contract before introducing a geometry runtime.
 
-Goal: prove the complete architecture, not broad CAD functionality.
+Step 1A — canonical project schema:
 
-Suggested operation corpus:
+- schema versioning;
+- bounded project/node/parameter counts;
+- stable project, parameter and node IDs;
+- explicit published numeric parameters;
+- literal or parameter-referenced scalar values;
+- minimal nodes: box, cylinder, transform, subtract, fillet;
+- semantic edge selector sufficient for the first fillet corpus;
+- explicit result node;
+- reference validation and DAG/cycle validation;
+- deterministic normalized representation;
+- focused unit tests.
 
-```text
-box
-cylinder
-transform
-boolean subtract
-fillet
-```
+Step 1B — provider/result interfaces:
 
-Required vertical slice:
+- kernel-neutral evaluation request;
+- provider identity/version;
+- exact BRep/result availability;
+- tessellated viewer payload contract;
+- warnings/errors/diagnostics;
+- stable body/object identity.
+
+Step 1C — isolated OCCT/build123d runtime:
 
 ```text
 BrepProject JSON
-    -> schema validation
-    -> server evaluation request
-    -> isolated build123d/OCCT runner
-    -> exact BRep result
-    -> tessellated browser payload
-    -> existing Three.js viewer
-    -> direct STEP export
+    -> server validation
+    -> rootless Podman sandbox
+    -> constrained evaluator
+    -> build123d / OCCT
+    -> exact BRep
+    -> tessellated viewer result
+    -> direct STEP
 ```
 
-Acceptance should include at least one model with an analytic cylindrical hole and a filleted edge.
+Acceptance model must include at least an analytic cylindrical hole and a filleted edge.
 
 ### Phase 2 — Native BRep project lifecycle
 
-Integrate BRep projects with:
-
-- conversations;
-- revision persistence;
-- restore/retry/branch behavior;
-- parameter extraction/editing;
-- import/export lifecycle;
-- project type selection.
-
-OpenSCAD behavior must remain unchanged.
+Integrate with conversations, revisions, restore/retry/branch behavior, parameter editing, import/export and project-type selection without regressing OpenSCAD.
 
 ### Phase 3 — AI-native BRep editing
 
-Teach Brepia's AI contract to create and modify complete BRep project snapshots using structured operations rather than arbitrary geometry code.
+AI creates/modifies complete structured BRep snapshots, preserving stable IDs where reasonable and producing meaningful topology/parameter diffs.
 
-Requirements:
+### Phase 4 — Brepia graph/editor UX
 
-- preserve stable node IDs where reasonable;
-- validate graph structure before execution;
-- distinguish parameter changes from topology-changing edits;
-- retain revision history and meaningful diffs.
+Expose direct feature/node editing over the same canonical model. The graph is an editor/view, not another runtime.
 
-### Phase 4 — Grasshopper-like graph editor
+### Phase 5 — Project-object contract and Rhino interoperability
 
-Build a browser node editor over the same canonical Brepia Parametric Model.
+Define the smart project-object outputs needed by infrastructure workflows:
 
-Do not create a second graph runtime.
+- primary BRep;
+- insertion/local coordinate system;
+- footprint;
+- clearance envelope;
+- maintenance/access envelope;
+- connection/mounting/cable points;
+- typed metadata/classification.
 
-### Phase 5 — 3DM/rhino3dm interoperability
+Add the minimum 3DM/rhino3dm support needed by the Grasshopper path.
 
-Add selected `.3dm` import/export and metadata support.
+### Phase 6 — Grasshopper export contract
 
-Scope should be based on explicit interoperability use cases rather than a promise of complete Rhino document parity.
+Map published Brepia parameters and project-object outputs to a stable Grasshopper-facing schema.
 
-### Phase 6 — Optional Rhino.Compute / Grasshopper provider
+Required concepts:
 
-Add an operator-configured Rhino provider.
+- numeric/string/boolean/enumeration inputs as supported by Brepia;
+- mandatory/standard placement `Plane` semantics;
+- parameter IDs separate from display labels;
+- units and defaults;
+- project/model version identity;
+- output typing and metadata;
+- errors/warnings visible to the GH user.
 
-Potential first product feature:
+### Phase 7 — Smart Brepia Grasshopper component
 
-- upload/select a `.gh` definition;
-- discover supported exposed inputs;
-- render them through Brepia parameter controls;
-- execute through Rhino.Compute;
-- display returned geometry in the Brepia viewer;
-- preserve provider metadata with the project/revision.
+Provide the reusable Grasshopper-side component/runtime needed to consume a Brepia model as a smart parametric object.
 
-Keep this isolated from the native BRep backend so Brepia remains fully usable without Rhino.
+Acceptance requires a representative component such as a cabinet to be parameterized from Grasshopper, placed on arbitrary planes along an alignment-derived workflow and returned as Rhino BRep geometry plus at least one auxiliary project output.
 
-### Phase 7 — Browser-side OCCT evaluation
+### Phase 8 — `.gh` export/package and end-to-end railway workflow — roadmap completion
 
-Only after server architecture is stable, evaluate RepliCAD/cascade-core/other OCCT-WASM options for:
+Brepia exports a consumable Grasshopper artifact/workflow for a Brepia project object.
 
-- local previews;
-- low-latency parameter changes;
-- offline/local operation subsets;
-- worker-based compute.
-
-Authoritative server evaluation/export should remain available even if a browser kernel is introduced.
-
-## Phase 1 preliminary technical shape
-
-A likely structure, subject to further discussion:
+End-to-end acceptance scenario:
 
 ```text
-shared/brepProject.ts
-  schema/types/versioning
-
-src/server/brep/
-  validation
-  provider contract
-  job/result mapping
-
-scripts/brep-kernel/
-  Containerfile
-  sandbox runner
-  constrained evaluator
-  smoke/corpus tests
-
-src/routes/api/brep/
-  authenticated bounded evaluation endpoint
-
-browser
-  existing viewer receives standardized tessellated result
+1. Author a parametric cabinet/equipment-room object in Brepia.
+2. Publish dimensions/options as Brepia parameters.
+3. Export it for Grasshopper.
+4. Open/use the generated .gh workflow in Grasshopper.
+5. Feed placement planes derived from railway alignment/profile/chainage logic.
+6. Vary Brepia parameters from Grasshopper.
+7. Receive correctly placed Rhino BRep geometry.
+8. Receive useful project metadata/auxiliary geometry.
+9. Re-export a revised Brepia object without redesigning the project-level GH placement logic.
 ```
 
-Names are intentionally provisional.
+This acceptance scenario is the definition of done for this roadmap.
 
-## Initial operation set candidates
+Native editable GH-node translation can continue after this baseline where useful, but it is not required to declare the smart-object interoperability goal achieved.
 
-Do not attempt full Rhino/Grasshopper parity in the first feature set.
+## Topology and selection
 
-Candidate primitive/features:
+Topology persistence remains a major technical risk. Raw OCCT indices must not become public stable identities.
 
-- box;
-- cylinder;
-- sphere;
-- cone;
-- sketch plane and basic profile primitives;
-- extrude;
-- revolve;
-- transform;
-- union/fuse;
-- subtract/cut;
-- intersect;
-- fillet;
-- chamfer;
-- loft;
-- sweep;
-- shell/thickness.
+Research and implementation should prefer combinations of:
 
-Phase 1 should use only the minimal subset needed to prove architecture.
-
-## Topology and selection problem
-
-This is one of the most important unresolved technical areas.
-
-Operations such as fillet/chamfer require a stable way to identify edges/faces. Raw OCCT topology indexes may change after upstream edits.
-
-Research before implementation should compare:
-
-- semantic selectors, e.g. orientation/type/location rules;
-- query expressions;
+- semantic selectors;
 - geometric signatures;
 - feature provenance;
-- persistent naming approaches;
-- explicit handling when a selector becomes ambiguous or invalid.
+- persistent naming strategies;
+- deterministic ambiguity/failure reporting.
 
-Brepia should prefer deterministic failure/warnings over silently applying a feature to a different face/edge.
-
-## Geometry result contract
-
-The browser should not need to understand native OCCT objects.
-
-Candidate result contract:
-
-```text
-model revision id
-provider/kernel version
-status + warnings
-one or more bodies
-body/object stable IDs
-triangle mesh buffers or GLB-like render payload
-material/color metadata
-bounding boxes
-optional face/edge picking metadata
-exact-export availability
-provider-specific diagnostics
-```
-
-The exact format remains undecided.
+Never silently move a fillet/chamfer to a different feature when a selector becomes ambiguous.
 
 ## Deployment
 
-Preferred first deployment:
+Preferred initial runtime:
 
 ```text
 Brepia host
@@ -530,57 +470,46 @@ bounded API request
 rootless Podman BRep sandbox
    - network=none
    - read-only root
+   - no-new-privileges
    - dropped capabilities
    - bounded resources/time
-   - pinned Python/build123d/OCCT versions
+   - pinned Python/build123d/OCCT
    |
    v
-validated result files / metadata
+validated exact/render/export result
 ```
 
-Reuse security patterns from STEP export but do not automatically reuse the same image/process if separation improves maintainability and least privilege.
+Reuse accepted STEP sandbox patterns while keeping the BRep runtime separately maintainable when least privilege benefits from separation.
 
-## Licensing inventory to maintain
+## Licensing
 
-Before implementation, record exact versions and licenses for every introduced geometry dependency.
+Verify exact licenses and deployment terms at dependency pin time.
 
-Expected categories:
+Inventory must cover at minimum:
 
-- Brepia: GPLv3;
-- build123d: verify exact selected release/license at pin time;
-- OCCT: verify exact selected release and Open CASCADE exception terms at pin time;
-- rhino3dm/openNURBS: verify current McNeel licensing before introduction;
-- Rhino.Compute/Rhino runtime: commercial runtime deployment terms and billing are operational dependencies even where surrounding SDK/source is permissively licensed.
+- Brepia GPLv3;
+- exact build123d release;
+- exact OCCT release and Open CASCADE exception terms;
+- rhino3dm/openNURBS if introduced;
+- Grasshopper/Rhino SDK artifacts used to build the exporter/component;
+- Rhino.Compute/Rhino runtime commercial deployment terms if used in CI, validation or production.
 
-Do not rely on remembered license summaries at implementation time; verify against current upstream sources when pinning dependencies.
-
-## Explicit non-goals for the first implementation
+## Explicit non-goals for early phases
 
 - replacing OpenSCAD;
 - full Rhino parity;
 - full Grasshopper parity;
 - embedding Rhino desktop;
-- Rhino.Inside host integration;
+- Rhino.Inside as the normal host architecture;
 - arbitrary Python execution;
-- complete sketch constraint solver;
-- assembly workbench;
-- browser-authoritative OCCT runtime;
-- generic conversion of arbitrary Grasshopper graphs to native Brepia graphs;
-- weakening the existing sandbox/security model for convenience.
+- complete sketch constraint solver in Phase 1;
+- assemblies in Phase 1;
+- browser-authoritative OCCT in Phase 1;
+- generic import/conversion of arbitrary Grasshopper graphs into Brepia;
+- weakening sandbox/security boundaries.
 
-## Open decisions for continued discussion
+## Current next action
 
-1. Should `BrepProject` be explicitly node/feature based from day one, or should Phase 1 use an even smaller operation-list intermediate representation that later becomes the node model?
-2. How much sketching/2D constraint functionality belongs in the first useful product release?
-3. Should the first BRep UX remain AI + parameter driven, or expose direct feature editing before a full graph editor exists?
-4. What topology-selection semantics should become part of the persisted public project format?
-5. How should a BRep revision store rendered/tessellated caches versus canonical source only?
-6. Should Rhino.Compute support be designed into the provider interface during Phase 0 even if implementation waits until Phase 6?
-7. Which 3DM use case matters first: import existing Rhino geometry, export Brepia geometry to Rhino, or Grasshopper execution?
-8. Do we want a future expert mode exposing build123d code, and if so should it be a distinct project type/security boundary rather than part of normal BRep projects?
+Implement Phase 1A only: the canonical `BrepProject` model, normalization/validation and focused tests.
 
-## Next action
-
-Continue architecture/product discussion on this branch.
-
-Do not implement Phase 1 until the user explicitly closes the discussion phase and approves the initial BRep scope.
+Do not introduce build123d/OCCT runtime dependencies until the Phase 1A contract has been reviewed against the final Grasshopper-export goal.
