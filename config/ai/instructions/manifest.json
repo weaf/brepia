@@ -98,6 +98,14 @@
       "supportsOverlay": true
     },
     {
+      "key": "context.brep_project",
+      "label": "Native BRep project context",
+      "description": "Model-facing context containing the exact active canonical BRep source snapshot.",
+      "category": "context",
+      "template": "context-brep-project.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "context.creative_reference_mesh",
       "label": "Creative reference mesh context",
       "description": "Model-facing context injected for reference meshes in Creative conversations.",
