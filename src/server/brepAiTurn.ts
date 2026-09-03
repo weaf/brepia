@@ -11,9 +11,7 @@ import {
 } from '@shared/brepAiProject';
 import type { BrepAiSourceRevision } from '@shared/brepAiContext';
 import { createBrepProjectArtifact } from '@shared/brepProjectArtifact';
-import {
-  renderInstructionTemplate,
-} from '@shared/aiInstructionCatalog';
+import { renderInstructionTemplate } from '@shared/aiInstructionCatalog';
 import { serializeBrepAiProjectContext } from '@shared/brepAiContext';
 
 export type ParametricBuildToolName =
@@ -51,19 +49,26 @@ export function withBrepProjectSystemContext({
 export function executeBrepAiBuild({
   activeBrepSource,
   input,
+  onAcceptedInput,
 }: {
   activeBrepSource: BrepAiSourceRevision;
   input: unknown;
+  onAcceptedInput?: (input: BrepAiBuildInput) => void;
 }): BrepAiBuildOutput {
   const parsed = brepAiBuildInputSchema.parse(input) as BrepAiBuildInput;
   const { diff } = validateBrepAiFollowUp(
     activeBrepSource.project,
     parsed.project,
   );
-  return brepAiBuildOutputSchema.parse({
+  const output = brepAiBuildOutputSchema.parse({
     status: 'success',
     message: diff.summary,
   });
+  // Keep the last successfully validated candidate in request-local server
+  // state. Persistence must not depend on how the AI SDK later reconstructs
+  // the UI-message tool part in onFinish.
+  onAcceptedInput?.(parsed);
+  return output;
 }
 
 function finalSuccessfulBuildInput(
@@ -84,21 +89,25 @@ function finalSuccessfulBuildInput(
 }
 
 /**
- * Revalidate the final successful BRep tool candidate against the exact source
+ * Revalidate the final successful BRep candidate against the exact source
  * snapshot used for generation, then attach one canonical data-brep-project
- * part to the same immutable assistant response. Earlier build calls remain
- * diagnostics only and never become competing source revisions.
+ * part to the same immutable assistant response. The request-local accepted
+ * candidate is authoritative when available; scanning the UI message remains a
+ * compatibility fallback only. Earlier build calls remain diagnostics and
+ * never become competing source revisions.
  */
 export function finalizeBrepAiAssistantParts({
   parts,
   activeBrepSource,
+  acceptedBuildInput,
 }: {
   parts: AppUIMessage['parts'];
   activeBrepSource: BrepAiSourceRevision | undefined;
+  acceptedBuildInput?: BrepAiBuildInput;
 }): FinalizedBrepAiAssistant {
   if (!activeBrepSource) return { parts };
 
-  const finalInput = finalSuccessfulBuildInput(parts);
+  const finalInput = acceptedBuildInput ?? finalSuccessfulBuildInput(parts);
   if (!finalInput) return { parts };
 
   const validation = validateBrepAiFollowUp(
