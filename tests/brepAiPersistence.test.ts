@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  BrepAiPersistenceError,
   persistBrepAiRevisionAtomically,
   type BrepAiRpcClient,
 } from '../src/server/brepAiPersistence';
@@ -49,7 +48,7 @@ describe('BRep AI atomic persistence client', () => {
         parts: [{ type: 'text', text: 'stale' }],
         metadata: {},
       }),
-    ).rejects.toMatchObject<BrepAiPersistenceError>({ code: 'stale' });
+    ).rejects.toMatchObject({ code: 'stale' });
   });
 
   it('surfaces RPC failures without treating them as accepted persistence', async () => {
@@ -64,7 +63,7 @@ describe('BRep AI atomic persistence client', () => {
         parts: [{ type: 'text', text: 'x' }],
         metadata: {},
       }),
-    ).rejects.toMatchObject<BrepAiPersistenceError>({ code: 'rpc_failed' });
+    ).rejects.toMatchObject({ code: 'rpc_failed' });
   });
 
   it('rejects malformed or mismatched RPC success results', async () => {
@@ -78,7 +77,7 @@ describe('BRep AI atomic persistence client', () => {
         parts: [{ type: 'text', text: 'x' }],
         metadata: {},
       }),
-    ).rejects.toMatchObject<BrepAiPersistenceError>({
+    ).rejects.toMatchObject({
       code: 'invalid_rpc_result',
     });
   });
