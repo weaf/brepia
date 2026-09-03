@@ -115,3 +115,46 @@ export async function persistBrepProjectParameterRevision({
   }
   return { messageId, artifact: nextArtifact };
 }
+
+export async function selectBrepProjectRevision({
+  conversationId,
+  messageId,
+}: {
+  conversationId: string;
+  messageId: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ current_message_leaf_id: messageId })
+    .eq('id', conversationId);
+  if (error) throw error;
+}
+
+export async function restoreBrepProjectRevision({
+  conversationId,
+  parentMessageId,
+  artifact,
+}: {
+  conversationId: string;
+  parentMessageId: string | null;
+  artifact: BrepProjectArtifactData;
+}): Promise<string> {
+  const restoredArtifact = createBrepProjectArtifact(artifact);
+  const restoredMessageId = crypto.randomUUID();
+  const { error: messageError } = await supabase.from('messages').insert({
+    id: restoredMessageId,
+    conversation_id: conversationId,
+    role: 'assistant',
+    parent_message_id: parentMessageId,
+    parts: JSON.parse(
+      JSON.stringify([{ type: 'data-brep-project', data: restoredArtifact }]),
+    ),
+    metadata: {},
+  });
+  if (messageError) throw messageError;
+  await selectBrepProjectRevision({
+    conversationId,
+    messageId: restoredMessageId,
+  });
+  return restoredMessageId;
+}

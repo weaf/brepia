@@ -7,7 +7,11 @@ import { supabase } from '@/lib/supabase';
 import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import type { BrepParameterValues } from '@shared/brepProvider';
 import type { Conversation } from '@shared/types';
-import { persistBrepProjectParameterRevision } from '@/services/brepProjectService';
+import {
+  persistBrepProjectParameterRevision,
+  restoreBrepProjectRevision,
+  selectBrepProjectRevision,
+} from '@/services/brepProjectService';
 
 export default function BrepProjectView() {
   const { id } = useParams({ from: '/_layout/_auth/brep/$id' });
@@ -29,19 +33,38 @@ export default function BrepProjectView() {
       ) {
         throw new Error('This is not a persisted BRep project.');
       }
-      const { data: message, error: messageError } = await supabase
+      const { data: messages, error: messageError } = await supabase
         .from('messages')
-        .select('parts')
-        .eq('id', typedConversation.current_message_leaf_id)
+        .select('id, parent_message_id, parts')
         .eq('conversation_id', id)
-        .single();
+        .eq('role', 'assistant')
+        .order('created_at', { ascending: true });
       if (messageError) throw messageError;
-      const artifact = getBrepProjectArtifact(message.parts);
+      const revisions = (messages ?? []).flatMap((message) => {
+        const artifact = getBrepProjectArtifact(message.parts);
+        return artifact
+          ? [
+              {
+                id: message.id,
+                parentMessageId: message.parent_message_id,
+                artifact,
+              },
+            ]
+          : [];
+      });
+      const active = revisions.find(
+        (revision) => revision.id === typedConversation.current_message_leaf_id,
+      );
+      const artifact = active?.artifact;
       if (!artifact)
         throw new Error(
           'The active project source is not a valid BRep snapshot.',
         );
-      return { artifact, leafId: typedConversation.current_message_leaf_id };
+      return {
+        artifact,
+        leafId: typedConversation.current_message_leaf_id,
+        revisions,
+      };
     },
   });
   if (isLoading)
@@ -66,6 +89,25 @@ export default function BrepProjectView() {
           parentMessageId: data.leafId,
           artifact: data.artifact,
           parameterValues,
+        });
+        await refetch();
+      }}
+      activeRevisionId={data.leafId}
+      revisions={data.revisions.map((revision, index) => ({
+        id: revision.id,
+        label: `Revision ${index + 1}`,
+      }))}
+      onSelectRevision={async (messageId) => {
+        await selectBrepProjectRevision({ conversationId: id, messageId });
+        await refetch();
+      }}
+      onRestoreRevision={async (messageId) => {
+        const revision = data.revisions.find((item) => item.id === messageId);
+        if (!revision) throw new Error('BRep source revision not found.');
+        await restoreBrepProjectRevision({
+          conversationId: id,
+          parentMessageId: revision.parentMessageId,
+          artifact: revision.artifact,
         });
         await refetch();
       }}

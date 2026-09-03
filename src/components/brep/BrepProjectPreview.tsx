@@ -35,10 +35,18 @@ export function BrepProjectPreview({
   project = phaseOneCabinetProject,
   createProject = false,
   onParameterValuesCommit,
+  revisions = [],
+  activeRevisionId,
+  onSelectRevision,
+  onRestoreRevision,
 }: {
   project?: BrepProject;
   createProject?: boolean;
   onParameterValuesCommit?: (values: BrepParameterValues) => Promise<void>;
+  revisions?: Array<{ id: string; label: string }>;
+  activeRevisionId?: string;
+  onSelectRevision?: (id: string) => Promise<void>;
+  onRestoreRevision?: (id: string) => Promise<void>;
 }) {
   const { user } = useAuth();
   const [values, setValues] = useState<BrepParameterValues>(() =>
@@ -212,6 +220,34 @@ export function BrepProjectPreview({
           >
             {creating ? 'Creating project…' : 'Create BRep project'}
           </Button>
+        ) : null}
+        {revisions.length > 1 ? (
+          <div className="mt-6 border-t border-adam-neutral-700 pt-4">
+            <p className="text-sm font-medium">Source revisions</p>
+            <div className="mt-2 space-y-2">
+              {revisions.map((revision) => (
+                <div className="flex gap-2" key={revision.id}>
+                  <Button
+                    className="flex-1 justify-start"
+                    disabled={revision.id === activeRevisionId}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void onSelectRevision?.(revision.id)}
+                  >
+                    {revision.label}
+                  </Button>
+                  <Button
+                    disabled={!onRestoreRevision}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void onRestoreRevision?.(revision.id)}
+                  >
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
         {loading && <p className="mt-4 text-sm">Evaluating native BRep…</p>}
         {error && (

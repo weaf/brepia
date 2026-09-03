@@ -257,6 +257,29 @@ Focused evidence:
 - `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (7 tests);
 - `npm run typecheck` — PASS.
 
+## 2E — Conversation restore/retry/branch behavior
+
+Status: **complete**.
+
+The BRep project view reads source revisions from the same assistant-message
+tree and exposes active-revision selection plus restore. Restore copies the
+validated source payload to a fresh assistant sibling under the historical
+parent, then moves `current_message_leaf_id`; it does not mutate the historical
+snapshot. Selecting a prior snapshot and committing a parameter value therefore
+creates an independent child branch with the unchanged BRep IDs preserved.
+
+No BRep AI retry is introduced: Phase 2 must not ask an AI provider to rewrite
+the source. The applicable retry behavior is the existing message-tree retry
+semantics; a BRep source selection/restore never falls back to the Phase 1
+sample. Parameter persistence retains its compare-and-set leaf guard, so stale
+commit/evaluation work cannot reactivate an older branch after restore or
+selection.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (7 tests);
+- `npm run typecheck` — PASS.
+
 ## Current constraints
 
 - Preserve OpenSCAD and Creative behavior.
@@ -296,5 +319,5 @@ Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and mus
 
 ## Next checkpoint
 
-Implement and verify 2E — conversation restore/retry/branch behavior — for
-the BRep source snapshots in the existing message tree.
+Implement and verify 2F — canonical project import/export — by extending the
+existing source export boundary without treating STEP as editable source.
