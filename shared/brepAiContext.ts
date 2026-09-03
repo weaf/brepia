@@ -9,6 +9,10 @@ export type BrepAiBranchMessage = {
   parts: unknown;
 };
 
+export type BrepAiTreeMessage = BrepAiBranchMessage & {
+  parent_message_id: string | null;
+};
+
 export type BrepAiSourceRevision = {
   messageId: string;
   artifact: BrepProjectArtifactData;
@@ -17,7 +21,7 @@ export type BrepAiSourceRevision = {
 
 export class BrepAiContextError extends Error {
   constructor(
-    public readonly code: 'invalid_source_revision',
+    public readonly code: 'invalid_source_revision' | 'invalid_branch',
     message: string,
   ) {
     super(message);
@@ -73,6 +77,61 @@ export function resolveActiveBrepAiSource(
   }
 
   return undefined;
+}
+
+/**
+ * Build the exact root-to-leaf branch from persisted message-tree rows and
+ * resolve the same authoritative BRep source used by the AI server.
+ *
+ * Product views must not assume that current_message_leaf_id is itself a source
+ * revision: user prompts and failed/limitation assistant turns can legitimately
+ * be leaves while the nearest preceding data-brep-project remains authoritative.
+ */
+export function resolveActiveBrepAiSourceForLeaf(
+  messages: readonly BrepAiTreeMessage[],
+  leafMessageId: string,
+): BrepAiSourceRevision | undefined {
+  const byId = new Map<string, BrepAiTreeMessage>();
+  for (const message of messages) {
+    if (byId.has(message.id)) {
+      throw new BrepAiContextError(
+        'invalid_branch',
+        `Duplicate message ${message.id} in native BRep branch data.`,
+      );
+    }
+    byId.set(message.id, message);
+  }
+
+  const reversedBranch: BrepAiBranchMessage[] = [];
+  const visited = new Set<string>();
+  let currentId: string | null = leafMessageId;
+
+  while (currentId) {
+    if (visited.has(currentId)) {
+      throw new BrepAiContextError(
+        'invalid_branch',
+        `Cycle detected in native BRep message branch at ${currentId}.`,
+      );
+    }
+    visited.add(currentId);
+
+    const message = byId.get(currentId);
+    if (!message) {
+      throw new BrepAiContextError(
+        'invalid_branch',
+        `Native BRep message branch is missing ${currentId}.`,
+      );
+    }
+
+    reversedBranch.push({
+      id: message.id,
+      role: message.role,
+      parts: message.parts,
+    });
+    currentId = message.parent_message_id;
+  }
+
+  return resolveActiveBrepAiSource(reversedBranch.reverse());
 }
 
 /** Serialize only canonical editable source semantics for model context. */
