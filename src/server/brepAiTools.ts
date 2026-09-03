@@ -1,8 +1,6 @@
-import {
-  chatTools,
-  type AppTools,
-} from '@shared/chatAi';
+import { chatTools, type AppTools } from '@shared/chatAi';
 import type { BrepAiSourceRevision } from '@shared/brepAiContext';
+import type { BrepAiBuildInput } from '@shared/brepAiTool';
 import { executeBrepAiBuild } from './brepAiTurn';
 
 /**
@@ -15,17 +13,23 @@ export function brepParametricTools({
   activeBrepSource,
   buildDescription,
   answerDescription,
+  onAcceptedBuild,
 }: {
   activeBrepSource: BrepAiSourceRevision;
   buildDescription: string;
   answerDescription: string;
+  onAcceptedBuild?: (input: BrepAiBuildInput) => void;
 }) {
   return {
     build_brep_project: {
       ...chatTools.build_brep_project,
       description: buildDescription,
       execute: async (input: AppTools['build_brep_project']['input']) =>
-        executeBrepAiBuild({ activeBrepSource, input }),
+        executeBrepAiBuild({
+          activeBrepSource,
+          input,
+          onAcceptedInput: onAcceptedBuild,
+        }),
     },
     answer_user: {
       ...chatTools.answer_user,
