@@ -28,6 +28,7 @@ import { Route as ApiMeshRouteImport } from './routes/api/mesh';
 import { Route as ApiParametricChatRouteImport } from './routes/api/parametric-chat';
 import { Route as ApiTitleGeneratorRouteImport } from './routes/api/title-generator';
 import { Route as AssetsSplatRouteImport } from './routes/assets.$';
+import { Route as LayoutAuthBrepRouteImport } from './routes/_layout/_auth/brep';
 import { Route as LayoutAuthHistoryRouteImport } from './routes/_layout/_auth/history';
 import { Route as LayoutAuthSettingsRouteImport } from './routes/_layout/_auth/settings';
 import { Route as LayoutShareIdRouteImport } from './routes/_layout/share/$id';
@@ -147,6 +148,11 @@ const AssetsSplatRoute = AssetsSplatRouteImport.update({
   id: '/assets/$',
   path: '/assets/$',
   getParentRoute: () => rootRouteImport,
+} as any);
+const LayoutAuthBrepRoute = LayoutAuthBrepRouteImport.update({
+  id: '/brep',
+  path: '/brep',
+  getParentRoute: () => LayoutAuthRoute,
 } as any);
 const LayoutAuthHistoryRoute = LayoutAuthHistoryRouteImport.update({
   id: '/history',
@@ -308,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/api/parametric-chat': typeof ApiParametricChatRoute;
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
+  '/brep': typeof LayoutAuthBrepRoute;
   '/history': typeof LayoutAuthHistoryRoute;
   '/settings': typeof LayoutAuthSettingsRoute;
   '/share/$id': typeof LayoutShareIdRoute;
@@ -353,6 +360,7 @@ export interface FileRoutesByTo {
   '/api/parametric-chat': typeof ApiParametricChatRoute;
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
+  '/brep': typeof LayoutAuthBrepRoute;
   '/history': typeof LayoutAuthHistoryRoute;
   '/settings': typeof LayoutAuthSettingsRoute;
   '/share/$id': typeof LayoutShareIdRoute;
@@ -401,6 +409,7 @@ export interface FileRoutesById {
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
   '/_layout/': typeof LayoutIndexRoute;
+  '/_layout/_auth/brep': typeof LayoutAuthBrepRoute;
   '/_layout/_auth/history': typeof LayoutAuthHistoryRoute;
   '/_layout/_auth/settings': typeof LayoutAuthSettingsRoute;
   '/_layout/share/$id': typeof LayoutShareIdRoute;
@@ -448,6 +457,7 @@ export interface FileRouteTypes {
     | '/api/parametric-chat'
     | '/api/title-generator'
     | '/assets/$'
+    | '/brep'
     | '/history'
     | '/settings'
     | '/share/$id'
@@ -493,6 +503,7 @@ export interface FileRouteTypes {
     | '/api/parametric-chat'
     | '/api/title-generator'
     | '/assets/$'
+    | '/brep'
     | '/history'
     | '/settings'
     | '/share/$id'
@@ -540,6 +551,7 @@ export interface FileRouteTypes {
     | '/api/title-generator'
     | '/assets/$'
     | '/_layout/'
+    | '/_layout/_auth/brep'
     | '/_layout/_auth/history'
     | '/_layout/_auth/settings'
     | '/_layout/share/$id'
@@ -737,6 +749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssetsSplatRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    '/_layout/_auth/brep': {
+      id: '/_layout/_auth/brep';
+      path: '/brep';
+      fullPath: '/brep';
+      preLoaderRoute: typeof LayoutAuthBrepRouteImport;
+      parentRoute: typeof LayoutAuthRoute;
+    };
     '/_layout/_auth/history': {
       id: '/_layout/_auth/history';
       path: '/history';
@@ -923,12 +942,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface LayoutAuthRouteChildren {
+  LayoutAuthBrepRoute: typeof LayoutAuthBrepRoute;
   LayoutAuthHistoryRoute: typeof LayoutAuthHistoryRoute;
   LayoutAuthSettingsRoute: typeof LayoutAuthSettingsRoute;
   LayoutAuthEditorIdRoute: typeof LayoutAuthEditorIdRoute;
 }
 
 const LayoutAuthRouteChildren: LayoutAuthRouteChildren = {
+  LayoutAuthBrepRoute: LayoutAuthBrepRoute,
   LayoutAuthHistoryRoute: LayoutAuthHistoryRoute,
   LayoutAuthSettingsRoute: LayoutAuthSettingsRoute,
   LayoutAuthEditorIdRoute: LayoutAuthEditorIdRoute,
