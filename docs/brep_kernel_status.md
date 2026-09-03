@@ -121,13 +121,13 @@ Execution-contract setup continues after these commits.
 ## Active step
 
 ```text
-Phase 1G — authenticated browser acceptance
+Phase 1 — technically complete; review/PR readiness
 ```
 
-Phase 1A–1F are implemented on this branch. The minimal Phase 1 cabinet
-viewer is available at `/brep`; it evaluates only through the authenticated
-`/api/brep/evaluate` boundary. The next required acceptance remains a real
-local login followed by parameter changes and browser/network inspection.
+Phase 1A–1J are implemented and verified through the Phase 1 closeout
+checkpoint. The minimal cabinet viewer at `/brep` evaluates only through the
+authenticated `/api/brep/evaluate` boundary; native STEP uses the separately
+authenticated `/api/brep/export/step` boundary.
 
 ## Validation evidence
 
@@ -180,21 +180,40 @@ npx vitest run BRep suites                           PASS (5 files, 31 tests)
 npm run typecheck; npm run lint; git diff --check    PASS
 ```
 
-### Phase 1G — browser entry and auth redirect review
+### Phase 1G and 1I — authenticated browser acceptance
 
 `2edd5bb` prevents recursive growth of `redirect` values in the auth guard.
 Against the production-like local runtime, an unauthenticated navigation to
-`/brep` ended at exactly:
+`/brep` ended exactly once at:
 
 ```text
 /signin?redirect=%2Fbrep
 ```
 
-with no redirect loop. This is only the unauthenticated half of 1G; parameter
-editing, native evaluation and visible geometry changes still require a valid
-local user session.
+with no redirect loop.
 
-### Phase 1H — direct native STEP export implementation checkpoint
+The authorized local development account then completed browser acceptance in
+the same production-like runtime, using the pinned rootless BRep Podman image:
+
+- login returned to `/brep` and rendered the Phase 1 equipment cabinet;
+- width `1200 -> 1400` and height `1800 -> 2100` each issued a new
+  authenticated `POST /api/brep/evaluate` with HTTP 200;
+- the evaluated bounds changed from `[-600, -300, -900]..[600, 300, 900]` to
+  `[-700, -300, -1050]..[700, 300, 1050]`, and direct visual inspection showed
+  the corresponding cabinet geometry;
+- an invalid height of `100` returned HTTP 400 and showed the bounded,
+  user-visible message `BRep parameter height is below its minimum.`;
+- a pre-existing OpenSCAD cube loaded and rendered; changing its size `50 ->
+60` visibly changed the model, then the local test value was restored to
+  `50`.
+
+Console inspection was clean for functional errors after normal navigation.
+The intentional invalid BRep request produced the expected browser failed-400
+resource entry. The only other messages were the existing no-key PostHog
+warning and headless-WebGL performance warnings; no new application error was
+observed.
+
+### Phase 1H — direct native STEP export
 
 The native evaluator already emits its ISO STEP artifact in its isolated
 workspace. This checkpoint exposes it through a separate authenticated
@@ -202,7 +221,7 @@ workspace. This checkpoint exposes it through a separate authenticated
 same normalized BRep request, constrained Podman runner and bounded artifact
 validation as evaluation; it does not call the OpenSCAD/scad123d STEP path.
 
-Focused evidence (implementation checkpoint, not final 1H acceptance):
+Focused evidence:
 
 ```text
 tests/brepEvaluation.test.ts, brepApi, provider, project   PASS (31 tests)
@@ -212,21 +231,27 @@ POST /api/brep/export/step without a session               PASS (401)
 git diff --check                                            PASS
 ```
 
-Authenticated native STEP download and independent STEP inspection remain
-unverified until the local auth fixture is usable.
+Browser acceptance then issued authenticated `POST /api/brep/export/step`
+with HTTP 200 and downloaded `parametric-model.step`. Independent import in
+the pinned build123d/OCCT image confirmed ISO 10303-21 content, five
+`CYLINDRICAL_SURFACE`/`CIRCLE` records, nine faces, and bounds
+`[-700, -300, -1050]..[700, 300, 1050]`. This preserves the analytic hole and
+matches the final browser parameter values.
 
-## Browser acceptance
+## Phase 1 closeout evidence
 
-The unauthenticated BRep entry route has been browser-checked as above. Full
-1G/1I browser acceptance is blocked by local auth fixture state, not marked
-PASS: the local database contains one pre-existing active admin with an
-unknown password, while `test@brepia.invalid` is absent. Its intended seed
-insert has `pcad_bootstrap: true`, so the deferred first-admin trigger
-correctly rejects it on this already-bootstrapped database
-with `pcad_bootstrap_unavailable`; a transactionally simulated non-bootstrap
-insert is confirmed but creates only a `pending` account. GoTrue returns
-`400 invalid_credentials` for both the absent seed user and the documented
-seed password against the existing admin. No auth policy or seed was changed.
+```text
+scripts/brep/smoke-test.sh                                  PASS (ISO STEP; 732 triangles)
+npm test                                                     PASS (59 files, 474 tests)
+npm run typecheck                                            PASS
+npm run lint                                                 PASS
+npm run build                                                PASS
+git diff --check origin/master...HEAD                        PASS
+```
+
+The browser artifacts were inspected locally and intentionally not committed.
+No credentials, tokens, or local browser/session data are stored in the
+repository.
 
 Existing OpenSCAD behavior is a regression boundary throughout this work.
 
@@ -242,6 +267,6 @@ Existing OpenSCAD behavior is a regression boundary throughout this work.
 
 ## Next status update
 
-Update this document at the next verified Codex checkpoint, including final
-commit SHA, focused and broad evidence, branch ahead/behind state, successful
-push confirmation, and the next active step.
+Record review feedback, a draft PR URL if created, or any post-Phase-1 work as
+a new checkpoint. Do not reopen the Phase 1 acceptance evidence without a
+material implementation change.
