@@ -6,6 +6,7 @@ export const BREP_PROJECT_MAX_ID_CHARS = 64;
 export const BREP_PROJECT_MAX_NAME_CHARS = 120;
 export const BREP_PROJECT_MAX_DESCRIPTION_CHARS = 500;
 export const BREP_PROJECT_MAX_ABS_SCALAR = 1_000_000_000;
+export const BREP_PROJECT_MAX_METADATA_PROPERTIES = 64;
 
 export type BrepProjectUnitSystem = 'mm';
 export type BrepParameterUnit = 'mm' | 'deg' | 'none';
@@ -17,6 +18,23 @@ export type BrepParameterReference = {
 
 export type BrepScalar = number | BrepParameterReference;
 export type BrepVector3 = [BrepScalar, BrepScalar, BrepScalar];
+
+/**
+ * Kernel-neutral object placement.  This maps directly to a future
+ * Grasshopper Plane input without making Rhino a runtime dependency.
+ */
+export type BrepProjectPlacement = {
+  origin: BrepVector3;
+  xAxis: BrepVector3;
+  yAxis: BrepVector3;
+};
+
+/** Metadata carried with the reusable project object, not kernel topology. */
+export type BrepProjectMetadata = {
+  objectType?: string;
+  classification?: string;
+  properties?: Record<string, string>;
+};
 
 export type BrepPublishedNumberParameter = {
   id: string;
@@ -85,6 +103,8 @@ export type BrepProject = {
   id: string;
   name: string;
   units: BrepProjectUnitSystem;
+  placement: BrepProjectPlacement;
+  metadata?: BrepProjectMetadata;
   parameters: BrepPublishedNumberParameter[];
   nodes: BrepNode[];
   resultNodeId: string;
@@ -94,6 +114,7 @@ export type BrepProjectErrorCode =
   | 'invalid_schema'
   | 'invalid_id'
   | 'invalid_parameter'
+  | 'invalid_metadata'
   | 'too_many_parameters'
   | 'duplicate_parameter'
   | 'invalid_node'
@@ -170,9 +191,7 @@ function normalizeNumber(value: unknown, field: string): number {
   return Object.is(value, -0) ? 0 : value;
 }
 
-function normalizeParameter(
-  value: unknown,
-): BrepPublishedNumberParameter {
+function normalizeParameter(value: unknown): BrepPublishedNumberParameter {
   if (!isRecord(value) || value.type !== 'number') {
     throw new BrepProjectError(
       'invalid_parameter',
@@ -186,17 +205,32 @@ function normalizeParameter(
     `BRep parameter ${id} label`,
     BREP_PROJECT_MAX_NAME_CHARS,
   )!;
-  if (typeof value.unit !== 'string' || !PARAMETER_UNITS.has(value.unit as BrepParameterUnit)) {
+  if (
+    typeof value.unit !== 'string' ||
+    !PARAMETER_UNITS.has(value.unit as BrepParameterUnit)
+  ) {
     throw new BrepProjectError(
       'invalid_parameter',
       `BRep parameter ${id} unit must be mm, deg, or none.`,
     );
   }
 
-  const defaultValue = normalizeNumber(value.default, `BRep parameter ${id} default`);
-  const min = value.min == null ? undefined : normalizeNumber(value.min, `BRep parameter ${id} min`);
-  const max = value.max == null ? undefined : normalizeNumber(value.max, `BRep parameter ${id} max`);
-  const step = value.step == null ? undefined : normalizeNumber(value.step, `BRep parameter ${id} step`);
+  const defaultValue = normalizeNumber(
+    value.default,
+    `BRep parameter ${id} default`,
+  );
+  const min =
+    value.min == null
+      ? undefined
+      : normalizeNumber(value.min, `BRep parameter ${id} min`);
+  const max =
+    value.max == null
+      ? undefined
+      : normalizeNumber(value.max, `BRep parameter ${id} max`);
+  const step =
+    value.step == null
+      ? undefined
+      : normalizeNumber(value.step, `BRep parameter ${id} step`);
 
   if (min != null && max != null && min > max) {
     throw new BrepProjectError(
@@ -243,10 +277,27 @@ function normalizeParameter(
   };
 }
 
+function validateReferencedParameterUnit(
+  parameter: string,
+  field: string,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+  allowedUnits: readonly BrepParameterUnit[],
+): void {
+  const unit = parameterUnits.get(parameter);
+  if (!unit || !allowedUnits.includes(unit)) {
+    throw new BrepProjectError(
+      'invalid_parameter',
+      `${field} must reference a parameter with unit ${allowedUnits.join(' or ')}.`,
+    );
+  }
+}
+
 function normalizeScalar(
   value: unknown,
   field: string,
   parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+  allowedUnits: readonly BrepParameterUnit[],
 ): BrepScalar {
   if (typeof value === 'number') return normalizeNumber(value, field);
   if (!isRecord(value)) {
@@ -256,13 +307,22 @@ function normalizeScalar(
     );
   }
 
-  const parameter = normalizeId(value.parameter, `${field} parameter reference`);
+  const parameter = normalizeId(
+    value.parameter,
+    `${field} parameter reference`,
+  );
   if (!parameterIds.has(parameter)) {
     throw new BrepProjectError(
       'invalid_reference',
       `${field} references unknown published parameter ${parameter}.`,
     );
   }
+  validateReferencedParameterUnit(
+    parameter,
+    field,
+    parameterUnits,
+    allowedUnits,
+  );
   return { parameter };
 }
 
@@ -270,22 +330,145 @@ function normalizeVector3(
   value: unknown,
   field: string,
   parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+  allowedUnits: readonly BrepParameterUnit[],
 ): BrepVector3 {
   if (!Array.isArray(value) || value.length !== 3) {
-    throw new BrepProjectError('invalid_node', `${field} must contain exactly three scalar values.`);
+    throw new BrepProjectError(
+      'invalid_node',
+      `${field} must contain exactly three scalar values.`,
+    );
   }
   return [
-    normalizeScalar(value[0], `${field}[0]`, parameterIds),
-    normalizeScalar(value[1], `${field}[1]`, parameterIds),
-    normalizeScalar(value[2], `${field}[2]`, parameterIds),
+    normalizeScalar(
+      value[0],
+      `${field}[0]`,
+      parameterIds,
+      parameterUnits,
+      allowedUnits,
+    ),
+    normalizeScalar(
+      value[1],
+      `${field}[1]`,
+      parameterIds,
+      parameterUnits,
+      allowedUnits,
+    ),
+    normalizeScalar(
+      value[2],
+      `${field}[2]`,
+      parameterIds,
+      parameterUnits,
+      allowedUnits,
+    ),
   ];
+}
+
+function normalizePlacement(
+  value: unknown,
+  parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+): BrepProjectPlacement {
+  // An omitted placement is canonicalized to the world XY plane. This keeps
+  // older hand-authored v1 examples deterministic while every normalized
+  // project has an explicit future GH Plane mapping.
+  if (value == null) {
+    return { origin: [0, 0, 0], xAxis: [1, 0, 0], yAxis: [0, 1, 0] };
+  }
+  if (!isRecord(value)) {
+    throw new BrepProjectError(
+      'invalid_schema',
+      'BRep project placement must be an object.',
+    );
+  }
+  return {
+    origin: normalizeVector3(
+      value.origin,
+      'BRep project placement origin',
+      parameterIds,
+      parameterUnits,
+      ['mm'],
+    ),
+    xAxis: normalizeVector3(
+      value.xAxis,
+      'BRep project placement xAxis',
+      parameterIds,
+      parameterUnits,
+      ['none'],
+    ),
+    yAxis: normalizeVector3(
+      value.yAxis,
+      'BRep project placement yAxis',
+      parameterIds,
+      parameterUnits,
+      ['none'],
+    ),
+  };
+}
+
+function normalizeMetadata(value: unknown): BrepProjectMetadata | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) {
+    throw new BrepProjectError(
+      'invalid_metadata',
+      'BRep project metadata must be an object.',
+    );
+  }
+  const objectType = normalizeText(
+    value.objectType,
+    'BRep project metadata objectType',
+    BREP_PROJECT_MAX_NAME_CHARS,
+    false,
+  );
+  const classification = normalizeText(
+    value.classification,
+    'BRep project metadata classification',
+    BREP_PROJECT_MAX_NAME_CHARS,
+    false,
+  );
+  let properties: Record<string, string> | undefined;
+  if (value.properties != null) {
+    if (!isRecord(value.properties)) {
+      throw new BrepProjectError(
+        'invalid_metadata',
+        'BRep project metadata properties must be an object.',
+      );
+    }
+    const entries = Object.entries(value.properties);
+    if (entries.length > BREP_PROJECT_MAX_METADATA_PROPERTIES) {
+      throw new BrepProjectError(
+        'invalid_metadata',
+        `BRep project metadata has more than ${BREP_PROJECT_MAX_METADATA_PROPERTIES} properties.`,
+      );
+    }
+    properties = {};
+    for (const [key, propertyValue] of entries.sort(([left], [right]) =>
+      left.localeCompare(right, 'en-US'),
+    )) {
+      const normalizedKey = normalizeId(key, 'BRep metadata property');
+      const normalizedValue = normalizeText(
+        propertyValue,
+        `BRep metadata property ${normalizedKey}`,
+        BREP_PROJECT_MAX_DESCRIPTION_CHARS,
+      )!;
+      properties[normalizedKey] = normalizedValue;
+    }
+  }
+  return {
+    ...(objectType ? { objectType } : {}),
+    ...(classification ? { classification } : {}),
+    ...(properties && Object.keys(properties).length > 0 ? { properties } : {}),
+  };
 }
 
 function normalizeNodeReference(value: unknown, field: string): string {
   return normalizeId(value, field);
 }
 
-function normalizeEdgeSelector(value: unknown, nodeId: string): BrepEdgeSelector {
+function normalizeEdgeSelector(
+  value: unknown,
+  nodeId: string,
+): BrepEdgeSelector {
   if (!isRecord(value) || value.kind !== 'parallelToAxis') {
     throw new BrepProjectError(
       'invalid_node',
@@ -301,9 +484,16 @@ function normalizeEdgeSelector(value: unknown, nodeId: string): BrepEdgeSelector
   return { kind: 'parallelToAxis', axis: value.axis as BrepAxis };
 }
 
-function normalizeNode(value: unknown, parameterIds: ReadonlySet<string>): BrepNode {
+function normalizeNode(
+  value: unknown,
+  parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+): BrepNode {
   if (!isRecord(value) || typeof value.type !== 'string') {
-    throw new BrepProjectError('invalid_node', 'BRep nodes must be typed objects.');
+    throw new BrepProjectError(
+      'invalid_node',
+      'BRep nodes must be typed objects.',
+    );
   }
 
   const id = normalizeId(value.id, 'BRep node');
@@ -313,17 +503,47 @@ function normalizeNode(value: unknown, parameterIds: ReadonlySet<string>): BrepN
       return {
         id,
         type: 'box',
-        width: normalizeScalar(value.width, `BRep box ${id} width`, parameterIds),
-        depth: normalizeScalar(value.depth, `BRep box ${id} depth`, parameterIds),
-        height: normalizeScalar(value.height, `BRep box ${id} height`, parameterIds),
+        width: normalizeScalar(
+          value.width,
+          `BRep box ${id} width`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        depth: normalizeScalar(
+          value.depth,
+          `BRep box ${id} depth`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        height: normalizeScalar(
+          value.height,
+          `BRep box ${id} height`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
       };
 
     case 'cylinder':
       return {
         id,
         type: 'cylinder',
-        radius: normalizeScalar(value.radius, `BRep cylinder ${id} radius`, parameterIds),
-        height: normalizeScalar(value.height, `BRep cylinder ${id} height`, parameterIds),
+        radius: normalizeScalar(
+          value.radius,
+          `BRep cylinder ${id} radius`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        height: normalizeScalar(
+          value.height,
+          `BRep cylinder ${id} height`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
       };
 
     case 'transform': {
@@ -336,12 +556,31 @@ function normalizeNode(value: unknown, parameterIds: ReadonlySet<string>): BrepN
       return {
         id,
         type: 'transform',
-        input: normalizeNodeReference(value.input, `BRep transform ${id} input`),
+        input: normalizeNodeReference(
+          value.input,
+          `BRep transform ${id} input`,
+        ),
         ...(value.translate != null
-          ? { translate: normalizeVector3(value.translate, `BRep transform ${id} translate`, parameterIds) }
+          ? {
+              translate: normalizeVector3(
+                value.translate,
+                `BRep transform ${id} translate`,
+                parameterIds,
+                parameterUnits,
+                ['mm'],
+              ),
+            }
           : {}),
         ...(value.rotateDeg != null
-          ? { rotateDeg: normalizeVector3(value.rotateDeg, `BRep transform ${id} rotateDeg`, parameterIds) }
+          ? {
+              rotateDeg: normalizeVector3(
+                value.rotateDeg,
+                `BRep transform ${id} rotateDeg`,
+                parameterIds,
+                parameterUnits,
+                ['deg'],
+              ),
+            }
           : {}),
       };
     }
@@ -379,7 +618,13 @@ function normalizeNode(value: unknown, parameterIds: ReadonlySet<string>): BrepN
         id,
         type: 'fillet',
         input: normalizeNodeReference(value.input, `BRep fillet ${id} input`),
-        radius: normalizeScalar(value.radius, `BRep fillet ${id} radius`, parameterIds),
+        radius: normalizeScalar(
+          value.radius,
+          `BRep fillet ${id} radius`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
         selector: normalizeEdgeSelector(value.selector, id),
       };
 
@@ -430,7 +675,8 @@ function validateNodeReferencesAndCycles(nodes: BrepNode[]): void {
     }
 
     state.set(nodeId, 'visiting');
-    for (const dependency of nodeDependencies(byId.get(nodeId)!)) visit(dependency);
+    for (const dependency of nodeDependencies(byId.get(nodeId)!))
+      visit(dependency);
     state.set(nodeId, 'done');
   };
 
@@ -457,7 +703,10 @@ export function normalizeBrepProject(project: unknown): BrepProject {
       `BRep project exceeds ${BREP_PROJECT_MAX_PARAMETERS} published parameters.`,
     );
   }
-  if (project.nodes.length === 0 || project.nodes.length > BREP_PROJECT_MAX_NODES) {
+  if (
+    project.nodes.length === 0 ||
+    project.nodes.length > BREP_PROJECT_MAX_NODES
+  ) {
     throw new BrepProjectError(
       'too_many_nodes',
       `BRep project must contain between 1 and ${BREP_PROJECT_MAX_NODES} nodes.`,
@@ -473,6 +722,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
 
   const parameters = project.parameters.map(normalizeParameter);
   const parameterIds = new Set<string>();
+  const parameterUnits = new Map<string, BrepParameterUnit>();
   for (const parameter of parameters) {
     if (parameterIds.has(parameter.id)) {
       throw new BrepProjectError(
@@ -481,9 +731,18 @@ export function normalizeBrepProject(project: unknown): BrepProject {
       );
     }
     parameterIds.add(parameter.id);
+    parameterUnits.set(parameter.id, parameter.unit);
   }
 
-  const nodes = project.nodes.map((node) => normalizeNode(node, parameterIds));
+  const placement = normalizePlacement(
+    project.placement,
+    parameterIds,
+    parameterUnits,
+  );
+  const metadata = normalizeMetadata(project.metadata);
+  const nodes = project.nodes.map((node) =>
+    normalizeNode(node, parameterIds, parameterUnits),
+  );
   const nodeIds = new Set<string>();
   for (const node of nodes) {
     if (nodeIds.has(node.id)) {
@@ -513,6 +772,8 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     id,
     name,
     units: 'mm',
+    placement,
+    ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
     parameters,
     nodes,
     resultNodeId,

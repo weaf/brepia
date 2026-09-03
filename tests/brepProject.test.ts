@@ -12,6 +12,16 @@ function cabinetProject(): BrepProject {
     id: 'cabinetA42',
     name: 'Cabinet A42',
     units: 'mm',
+    placement: {
+      origin: [0, 0, 0],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 1, 0],
+    },
+    metadata: {
+      objectType: 'cabinet',
+      classification: 'railway-equipment',
+      properties: { manufacturer: 'Brepia', assetClass: 'A42' },
+    },
     parameters: [
       {
         id: 'width',
@@ -126,6 +136,49 @@ describe('normalizeBrepProject', () => {
       'finishedBody',
       'positionedHole',
     ]);
+    expect(normalized.metadata?.properties).toEqual({
+      assetClass: 'A42',
+      manufacturer: 'Brepia',
+    });
+    expect(normalized.placement).toEqual(project.placement);
+  });
+
+  it('canonicalizes an omitted v1 placement to the world XY plane', () => {
+    const project = cabinetProject() as Partial<BrepProject>;
+    delete project.placement;
+
+    expect(normalizeBrepProject(project).placement).toEqual({
+      origin: [0, 0, 0],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 1, 0],
+    });
+  });
+
+  it('rejects parameter references with a unit incompatible with their semantic field', () => {
+    const project = cabinetProject();
+    project.parameters.push({
+      id: 'turn',
+      label: 'Turn',
+      type: 'number',
+      unit: 'deg',
+      default: 90,
+    });
+    const body = project.nodes.find((node) => node.id === 'cabinetBody');
+    if (!body || body.type !== 'box') throw new Error('Fixture is invalid.');
+    body.width = { parameter: 'turn' };
+
+    expectBrepError(() => normalizeBrepProject(project), 'invalid_parameter');
+  });
+
+  it('rejects unbounded project metadata', () => {
+    const project = cabinetProject() as unknown as {
+      metadata: { properties: Record<string, string> };
+    } & BrepProject;
+    project.metadata.properties = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`key${index}`, 'value']),
+    );
+
+    expectBrepError(() => normalizeBrepProject(project), 'invalid_metadata');
   });
 
   it('rejects duplicate published parameter ids', () => {
@@ -155,8 +208,11 @@ describe('normalizeBrepProject', () => {
 
   it('rejects cyclic feature graphs', () => {
     const project = cabinetProject();
-    const transform = project.nodes.find((node) => node.id === 'positionedHole');
-    if (!transform || transform.type !== 'transform') throw new Error('Fixture is invalid.');
+    const transform = project.nodes.find(
+      (node) => node.id === 'positionedHole',
+    );
+    if (!transform || transform.type !== 'transform')
+      throw new Error('Fixture is invalid.');
     transform.input = 'finishedBody';
 
     expectBrepError(() => normalizeBrepProject(project), 'cycle');
@@ -171,7 +227,9 @@ describe('normalizeBrepProject', () => {
 
   it('rejects invalid parameter ranges before they can become Grasshopper inputs', () => {
     const project = cabinetProject();
-    const width = project.parameters.find((parameter) => parameter.id === 'width');
+    const width = project.parameters.find(
+      (parameter) => parameter.id === 'width',
+    );
     if (!width) throw new Error('Fixture is invalid.');
     width.min = 1500;
     width.default = 1200;
@@ -181,8 +239,11 @@ describe('normalizeBrepProject', () => {
 
   it('rejects transform nodes that do not perform a transform', () => {
     const project = cabinetProject();
-    const transform = project.nodes.find((node) => node.id === 'positionedHole');
-    if (!transform || transform.type !== 'transform') throw new Error('Fixture is invalid.');
+    const transform = project.nodes.find(
+      (node) => node.id === 'positionedHole',
+    );
+    if (!transform || transform.type !== 'transform')
+      throw new Error('Fixture is invalid.');
     delete transform.translate;
     delete transform.rotateDeg;
 
