@@ -3,6 +3,7 @@ import { createBrepProjectArtifact } from '../shared/brepProjectArtifact';
 import { phaseOneCabinetProject } from '../shared/brepSamples';
 import type { AppUIMessage } from '../shared/chatAi';
 import type { BrepAiSourceRevision } from '../shared/brepAiContext';
+import type { BrepAiBuildInput } from '../shared/brepAiTool';
 import {
   executeBrepAiBuild,
   finalizeBrepAiAssistantParts,
@@ -63,11 +64,12 @@ describe('BRep AI turn routing and context', () => {
 });
 
 describe('BRep AI build execution and finalization', () => {
-  it('returns a machine-derived structural diff summary', () => {
+  it('returns a machine-derived structural diff summary and captures the validated candidate', () => {
     const revised = {
       ...phaseOneCabinetProject,
       name: 'AI revised cabinet',
     };
+    let accepted: BrepAiBuildInput | undefined;
     const output = executeBrepAiBuild({
       activeBrepSource: activeSource(),
       input: {
@@ -75,13 +77,18 @@ describe('BRep AI build execution and finalization', () => {
         version: 'v1',
         project: revised,
       },
+      onAcceptedInput: (input) => {
+        accepted = input;
+      },
     });
 
     expect(output.status).toBe('success');
     expect(output.message).toContain('project field');
+    expect(accepted?.project.name).toBe('AI revised cabinet');
   });
 
-  it('rejects project identity replacement before execution succeeds', () => {
+  it('rejects project identity replacement without capturing a candidate', () => {
+    let captured = false;
     expect(() =>
       executeBrepAiBuild({
         activeBrepSource: activeSource(),
@@ -90,8 +97,12 @@ describe('BRep AI build execution and finalization', () => {
           version: 'v1',
           project: { ...phaseOneCabinetProject, id: 'replacementProject' },
         },
+        onAcceptedInput: () => {
+          captured = true;
+        },
       }),
     ).toThrow(/project id/i);
+    expect(captured).toBe(false);
   });
 
   it('persists only the final successful build candidate as canonical source', () => {
@@ -120,6 +131,47 @@ describe('BRep AI build execution and finalization', () => {
     expect(sourceParts).toHaveLength(1);
     expect(result.artifact?.source.source.name).toBe('Final candidate');
     expect(result.diff?.summary).toContain('project field');
+  });
+
+  it('uses the request-local accepted candidate even when the UI message omits the build part', () => {
+    const revised = {
+      ...phaseOneCabinetProject,
+      nodes: phaseOneCabinetProject.nodes.map((node) =>
+        node.id === 'cableHole' && node.type === 'cylinder'
+          ? { ...node, radius: 60 }
+          : node,
+      ),
+    };
+    const acceptedBuildInput: BrepAiBuildInput = {
+      title: revised.name,
+      version: 'v1',
+      project: revised,
+    };
+    const parts = [
+      {
+        type: 'tool-answer_user',
+        toolCallId: 'answer-1',
+        state: 'output-available',
+        input: { message: 'Updated.' },
+        output: { message: 'Updated.' },
+      },
+    ] as AppUIMessage['parts'];
+
+    const result = finalizeBrepAiAssistantParts({
+      parts,
+      activeBrepSource: activeSource(),
+      acceptedBuildInput,
+    });
+
+    expect(result.artifact?.source.source.id).toBe(phaseOneCabinetProject.id);
+    expect(
+      result.artifact?.source.source.nodes.find(
+        (node) => node.id === 'cableHole' && node.type === 'cylinder',
+      ),
+    ).toMatchObject({ radius: 60 });
+    expect(
+      result.parts.filter((part) => part.type === 'data-brep-project'),
+    ).toHaveLength(1);
   });
 
   it('does not invent a new source revision when no successful build exists', () => {
