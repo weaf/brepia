@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { BufferAttribute, BufferGeometry } from 'three';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
 import { exportBrepStep } from '@/services/brepStepExport';
+import { createBrepProjectConversation } from '@/services/brepProjectService';
 import { downloadSTEPFile } from '@/utils/downloadUtils';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
+import type { BrepProject } from '@shared/brepProject';
 import type {
   BrepEvaluationSuccess,
   BrepParameterValues,
@@ -28,19 +31,24 @@ function geometryFromResult(
   return geometry;
 }
 
-export function BrepProjectPreview() {
+export function BrepProjectPreview({
+  project = phaseOneCabinetProject,
+  createProject = false,
+}: {
+  project?: BrepProject;
+  createProject?: boolean;
+}) {
+  const { user } = useAuth();
   const [values, setValues] = useState<BrepParameterValues>(() =>
     Object.fromEntries(
-      phaseOneCabinetProject.parameters.map((parameter) => [
-        parameter.id,
-        parameter.default,
-      ]),
+      project.parameters.map((parameter) => [parameter.id, parameter.default]),
     ),
   );
   const [result, setResult] = useState<BrepEvaluationSuccess | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [creating, setCreating] = useState(false);
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
     [result],
@@ -66,7 +74,7 @@ export function BrepProjectPreview() {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
-            project: phaseOneCabinetProject,
+            project,
             parameterValues: values,
           }),
         });
@@ -101,18 +109,18 @@ export function BrepProjectPreview() {
     };
     void evaluate();
     return () => controller.abort();
-  }, [values]);
+  }, [project, values]);
 
   return (
     <main className="grid h-full min-h-[600px] grid-cols-1 gap-4 p-6 lg:grid-cols-[320px_1fr]">
       <section className="rounded-lg border border-adam-neutral-700 bg-adam-bg-secondary-dark p-5 text-adam-text-primary">
-        <h1 className="text-xl font-semibold">{phaseOneCabinetProject.name}</h1>
+        <h1 className="text-xl font-semibold">{project.name}</h1>
         <p className="mt-2 text-sm text-adam-text-tertiary">
-          Native BRep Phase 1 sample. Published values are ready for future
-          Grasshopper inputs.
+          Native BRep project. Published values are ready for future Grasshopper
+          inputs.
         </p>
         <div className="mt-6 space-y-4">
-          {phaseOneCabinetProject.parameters.map((parameter) => (
+          {project.parameters.map((parameter) => (
             <label className="block text-sm" key={parameter.id}>
               <span>
                 {parameter.label} ({parameter.unit})
@@ -149,7 +157,7 @@ export function BrepProjectPreview() {
             setExporting(true);
             setError(null);
             try {
-              const step = await exportBrepStep(phaseOneCabinetProject, values);
+              const step = await exportBrepStep(project, values);
               downloadSTEPFile(step);
             } catch (reason) {
               setError(
@@ -164,6 +172,35 @@ export function BrepProjectPreview() {
         >
           {exporting ? 'Exporting STEP…' : 'Export native STEP'}
         </Button>
+        {createProject ? (
+          <Button
+            className="mt-3 w-full"
+            disabled={creating || !user?.id}
+            onClick={async () => {
+              if (!user?.id) return;
+              setCreating(true);
+              setError(null);
+              try {
+                const conversationId = await createBrepProjectConversation({
+                  userId: user.id,
+                  title: project.name,
+                  project,
+                });
+                window.location.assign(`/brep/${conversationId}`);
+              } catch (reason) {
+                setError(
+                  reason instanceof Error
+                    ? reason.message
+                    : 'Could not create BRep project.',
+                );
+              } finally {
+                setCreating(false);
+              }
+            }}
+          >
+            {creating ? 'Creating project…' : 'Create BRep project'}
+          </Button>
+        ) : null}
         {loading && <p className="mt-4 text-sm">Evaluating native BRep…</p>}
         {error && (
           <p className="mt-4 rounded border border-destructive p-3 text-sm text-destructive">

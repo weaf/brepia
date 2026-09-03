@@ -12,6 +12,7 @@ import {
 import type { MeshFileType, Model } from './types.ts';
 import {
   normalizeParametricProjectSource,
+  type ParametricProjectSource,
   type ParametricProjectSourceInput,
 } from './parametricProjectSource.ts';
 
@@ -182,8 +183,16 @@ export type ConversationSuggestionsUpdate = {
 export type AppDataTypes = {
   'mesh-context': MeshContextData;
   'mesh-preferences': MeshPreferencesData;
+  'brep-project': BrepProjectArtifactData;
   'title-update': ConversationTitleUpdate;
   'suggestions-update': ConversationSuggestionsUpdate;
+};
+
+/** Immutable canonical BRep source snapshot persisted on a message branch. */
+export type BrepProjectArtifactData = {
+  title: string;
+  version: string;
+  source: Extract<ParametricProjectSource, { kind: 'brep' }>;
 };
 
 export const meshContextDataSchema = z.object({

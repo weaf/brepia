@@ -207,6 +207,33 @@ The focused compatibility tests prove legacy OpenSCAD normalization, determinist
 JSON round-trip of normalized BRep source, stable project placement/metadata and
 published-parameter IDs, and explicit rejection of unsupported BRep versions.
 
+## 2C — Create/open/project selection lifecycle
+
+Status: **complete**.
+
+`/brep` is now a template/creation surface rather than the Phase 1 singleton:
+**Create BRep project** creates an ordinary `parametric` conversation and a
+two-message immutable baseline. The active assistant leaf stores one
+`data-brep-project` payload containing only:
+
+```text
+title, version, { kind: 'brep', source: normalized BrepProject }
+```
+
+The creation service explicitly sets `current_message_leaf_id` to that
+assistant leaf, matching the existing imported-OpenSCAD lifecycle. `/brep/$id`
+loads the authenticated conversation's active leaf and validates the BRep
+artifact before rendering it. It never substitutes the Phase 1 sample when a
+persisted source is absent or malformed. OpenSCAD and Creative routes remain
+unchanged, and no conversation enum or database migration was added.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts tests/brepProject.test.ts` — PASS (17 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `npm run build` — PASS.
+
 ## Current constraints
 
 - Preserve OpenSCAD and Creative behavior.
@@ -246,5 +273,5 @@ Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and mus
 
 ## Next checkpoint
 
-Implement and verify 2C — create/open/project selection lifecycle — using the
-2B source envelope and the existing parametric conversation/message tree.
+Implement and verify 2D — published-parameter editing and revisions — through
+the persisted BRep source and existing message-tree lifecycle.
