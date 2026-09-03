@@ -34,6 +34,7 @@ import { Route as LayoutShareIdRouteImport } from './routes/_layout/share/$id';
 import { Route as ApiAiSettingsPreferencesRouteImport } from './routes/api/ai-settings/preferences';
 import { Route as ApiAiSettingsProfilesRouteImport } from './routes/api/ai-settings/profiles';
 import { Route as ApiAiSettingsProvidersRouteImport } from './routes/api/ai-settings/providers';
+import { Route as ApiBrepEvaluateRouteImport } from './routes/api/brep/evaluate';
 import { Route as ApiConversationsDeleteRouteImport } from './routes/api/conversations/delete';
 import { Route as ApiConversationsWorkspaceRouteImport } from './routes/api/conversations/workspace';
 import { Route as ApiExportStepRouteImport } from './routes/api/export.step';
@@ -178,6 +179,11 @@ const ApiAiSettingsProvidersRoute = ApiAiSettingsProvidersRouteImport.update({
   path: '/api/ai-settings/providers',
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiBrepEvaluateRoute = ApiBrepEvaluateRouteImport.update({
+  id: '/api/brep/evaluate',
+  path: '/api/brep/evaluate',
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiConversationsDeleteRoute = ApiConversationsDeleteRouteImport.update({
   id: '/api/conversations/delete',
   path: '/api/conversations/delete',
@@ -308,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-settings/preferences': typeof ApiAiSettingsPreferencesRoute;
   '/api/ai-settings/profiles': typeof ApiAiSettingsProfilesRouteWithChildren;
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
+  '/api/brep/evaluate': typeof ApiBrepEvaluateRoute;
   '/api/conversations/delete': typeof ApiConversationsDeleteRoute;
   '/api/conversations/workspace': typeof ApiConversationsWorkspaceRoute;
   '/api/export/step': typeof ApiExportStepRoute;
@@ -352,6 +359,7 @@ export interface FileRoutesByTo {
   '/api/ai-settings/preferences': typeof ApiAiSettingsPreferencesRoute;
   '/api/ai-settings/profiles': typeof ApiAiSettingsProfilesRouteWithChildren;
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
+  '/api/brep/evaluate': typeof ApiBrepEvaluateRoute;
   '/api/conversations/delete': typeof ApiConversationsDeleteRoute;
   '/api/conversations/workspace': typeof ApiConversationsWorkspaceRoute;
   '/api/export/step': typeof ApiExportStepRoute;
@@ -399,6 +407,7 @@ export interface FileRoutesById {
   '/api/ai-settings/preferences': typeof ApiAiSettingsPreferencesRoute;
   '/api/ai-settings/profiles': typeof ApiAiSettingsProfilesRouteWithChildren;
   '/api/ai-settings/providers': typeof ApiAiSettingsProvidersRouteWithChildren;
+  '/api/brep/evaluate': typeof ApiBrepEvaluateRoute;
   '/api/conversations/delete': typeof ApiConversationsDeleteRoute;
   '/api/conversations/workspace': typeof ApiConversationsWorkspaceRoute;
   '/api/export/step': typeof ApiExportStepRoute;
@@ -445,6 +454,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/preferences'
     | '/api/ai-settings/profiles'
     | '/api/ai-settings/providers'
+    | '/api/brep/evaluate'
     | '/api/conversations/delete'
     | '/api/conversations/workspace'
     | '/api/export/step'
@@ -489,6 +499,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/preferences'
     | '/api/ai-settings/profiles'
     | '/api/ai-settings/providers'
+    | '/api/brep/evaluate'
     | '/api/conversations/delete'
     | '/api/conversations/workspace'
     | '/api/export/step'
@@ -535,6 +546,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/preferences'
     | '/api/ai-settings/profiles'
     | '/api/ai-settings/providers'
+    | '/api/brep/evaluate'
     | '/api/conversations/delete'
     | '/api/conversations/workspace'
     | '/api/export/step'
@@ -576,6 +588,7 @@ export interface RootRouteChildren {
   ApiAiSettingsPreferencesRoute: typeof ApiAiSettingsPreferencesRoute;
   ApiAiSettingsProfilesRoute: typeof ApiAiSettingsProfilesRouteWithChildren;
   ApiAiSettingsProvidersRoute: typeof ApiAiSettingsProvidersRouteWithChildren;
+  ApiBrepEvaluateRoute: typeof ApiBrepEvaluateRoute;
   ApiConversationsDeleteRoute: typeof ApiConversationsDeleteRoute;
   ApiConversationsWorkspaceRoute: typeof ApiConversationsWorkspaceRoute;
   ApiExportStepRoute: typeof ApiExportStepRoute;
@@ -764,6 +777,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ai-settings/providers';
       fullPath: '/api/ai-settings/providers';
       preLoaderRoute: typeof ApiAiSettingsProvidersRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/api/brep/evaluate': {
+      id: '/api/brep/evaluate';
+      path: '/api/brep/evaluate';
+      fullPath: '/api/brep/evaluate';
+      preLoaderRoute: typeof ApiBrepEvaluateRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/api/conversations/delete': {
@@ -1028,6 +1048,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAiSettingsPreferencesRoute: ApiAiSettingsPreferencesRoute,
   ApiAiSettingsProfilesRoute: ApiAiSettingsProfilesRouteWithChildren,
   ApiAiSettingsProvidersRoute: ApiAiSettingsProvidersRouteWithChildren,
+  ApiBrepEvaluateRoute: ApiBrepEvaluateRoute,
   ApiConversationsDeleteRoute: ApiConversationsDeleteRoute,
   ApiConversationsWorkspaceRoute: ApiConversationsWorkspaceRoute,
   ApiExportStepRoute: ApiExportStepRoute,

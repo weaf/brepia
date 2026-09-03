@@ -1,0 +1,118 @@
+import { createFileRoute } from '@tanstack/react-router';
+import {
+  isRecord,
+  isUnauthorizedError,
+  json,
+  methodNotAllowed,
+  preflight,
+  requireUser,
+} from '@/server/api';
+import {
+  BrepEvaluationError,
+  evaluateBrepProject,
+} from '@/server/brepEvaluation';
+import {
+  BrepEvaluationRequestError,
+  normalizeBrepEvaluationRequest,
+} from '@shared/brepProvider';
+
+export const BREP_EVALUATION_REQUEST_LIMIT_BYTES = 512 * 1024;
+
+async function readBoundedJson(request: Request): Promise<unknown> {
+  const declared = Number(request.headers.get('content-length'));
+  if (
+    Number.isFinite(declared) &&
+    declared > BREP_EVALUATION_REQUEST_LIMIT_BYTES
+  )
+    throw new RangeError('BRep evaluation request body is too large.');
+  if (!request.body)
+    throw new SyntaxError('BRep evaluation request body is required.');
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      size += value.byteLength;
+      if (size > BREP_EVALUATION_REQUEST_LIMIT_BYTES) {
+        await reader.cancel();
+        throw new RangeError('BRep evaluation request body is too large.');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+  ) as unknown;
+}
+
+function errorResponse(error: unknown) {
+  if (error instanceof RangeError)
+    return json({ code: 'request_too_large', error: error.message }, 413);
+  if (
+    error instanceof SyntaxError ||
+    error instanceof BrepEvaluationRequestError
+  )
+    return json(
+      {
+        code: 'invalid_brep_request',
+        error: error instanceof Error ? error.message : 'Invalid BRep request.',
+      },
+      400,
+    );
+  if (error instanceof BrepEvaluationError) {
+    if (error.code === 'capacity_exceeded')
+      return json({ code: error.code, error: error.message }, 429);
+    return json(
+      { code: error.code, error: error.message },
+      error.code === 'provider_unavailable' ? 503 : 400,
+    );
+  }
+  if (isUnauthorizedError(error)) return json({ error: 'Unauthorized' }, 401);
+  console.error('[BRep evaluation] Unexpected failure:', error);
+  return json(
+    { code: 'brep_evaluation_failed', error: 'BRep evaluation failed.' },
+    500,
+  );
+}
+
+export const Route = createFileRoute('/api/brep/evaluate')({
+  server: {
+    handlers: {
+      GET: methodNotAllowed,
+      OPTIONS: preflight,
+      POST: async ({ request }) => {
+        try {
+          await requireUser(request);
+          const body = await readBoundedJson(request);
+          if (!isRecord(body))
+            return json(
+              {
+                code: 'invalid_brep_request',
+                error: 'BRep request must be an object.',
+              },
+              400,
+            );
+          const normalized = normalizeBrepEvaluationRequest(body);
+          const artifact = await evaluateBrepProject(
+            normalized.project,
+            normalized.parameterValues,
+          );
+          return json(artifact.result);
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+  },
+});
