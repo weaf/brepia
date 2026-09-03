@@ -253,9 +253,10 @@ describe('native BRep external-agent result parsing', () => {
       assert.equal(input.project.id, phaseOneCabinetProject.id);
       assert.equal(input.message, 'Cable hole enlarged');
     }
-    assert.equal(parts.at(-1)?.type, 'finish');
-    if (parts.at(-1)?.type === 'finish') {
-      assert.equal(parts.at(-1)?.finishReason.unified, 'tool-calls');
+    const lastPart = parts.at(-1);
+    assert.equal(lastPart?.type, 'finish');
+    if (lastPart?.type === 'finish') {
+      assert.equal(lastPart.finishReason.unified, 'tool-calls');
     }
   });
 });
