@@ -375,6 +375,33 @@ A local development account may be used for browser acceptance, but credentials 
 
 Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and must cover create/open/edit/persist/reopen/revision/restore/branch/import/export/native STEP plus an OpenSCAD regression check.
 
+### 2H runtime correction checkpoint
+
+Status: **in progress; not browser-PASS.**
+
+Authenticated local acceptance exposed two ordinary lifecycle defects before the
+required scenario could be credited:
+
+- `/brep` rendered its template at the parent route without an `Outlet`, so
+  `/brep/$id` retained creation/import controls despite its persisted-project
+  URL. The template is now the explicit `/brep/` index route and `$id` renders
+  the persisted project child.
+- A local RLS update can persist the compare-and-set leaf update while returning
+  no selected representation. Parameter persistence now confirms the exact
+  `current_message_leaf_id` before classifying an empty update response as a
+  lost race; a different leaf remains a visible stale-commit failure.
+
+Focused evidence after the correction:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (17 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `git diff --check` — PASS.
+
+The same authenticated browser flow is being rerun from creation onward. No
+browser acceptance claim is made until its persisted revision, package, STEP
+and OpenSCAD checks have all been observed.
+
 ## 2A verification note
 
 2A changed documentation only. The architecture findings were reconciled against current source on the merged Phase 1 baseline and the Phase 2 branch before this checkpoint. No runtime/test PASS is claimed for source behavior that was not changed by this documentation checkpoint.

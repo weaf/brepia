@@ -29,14 +29,12 @@ const artifact = createBrepProjectArtifact({
 });
 
 function revisionLookupResult(
-  data:
-    | {
-        id: string;
-        parent_message_id: string | null;
-        role: 'assistant';
-        parts: unknown;
-      }
-    | null,
+  data: {
+    id: string;
+    parent_message_id: string | null;
+    role: 'assistant';
+    parts: unknown;
+  } | null,
 ) {
   const maybeSingle = vi.fn().mockResolvedValue({ data, error: null });
   const roleEq = vi.fn().mockReturnValue({ maybeSingle });
@@ -46,10 +44,7 @@ function revisionLookupResult(
   return { select, maybeSingle, idEq, conversationEq, roleEq };
 }
 
-function validRevisionRow(
-  id = sourceMessageId,
-  parent = parentMessageId,
-) {
+function validRevisionRow(id = sourceMessageId, parent = parentMessageId) {
   return {
     id,
     parent_message_id: parent,
@@ -70,6 +65,16 @@ function simpleConversationUpdateResult() {
   const eq = vi.fn().mockResolvedValue({ error: null });
   const update = vi.fn().mockReturnValue({ eq });
   return { update, eq };
+}
+
+function currentLeafConfirmationResult(currentMessageLeafId: string | null) {
+  const maybeSingle = vi.fn().mockResolvedValue({
+    data: { current_message_leaf_id: currentMessageLeafId },
+    error: null,
+  });
+  const eq = vi.fn().mockReturnValue({ maybeSingle });
+  const select = vi.fn().mockReturnValue({ eq });
+  return { select, eq, maybeSingle };
 }
 
 describe('BRep project revision service boundaries', () => {
@@ -165,6 +170,7 @@ describe('BRep project revision service boundaries', () => {
   it('leaves a stale parameter revision inactive when compare-and-set loses the leaf race', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
     const leafUpdate = conversationLeafUpdateResult([]);
+    const confirmation = currentLeafConfirmationResult(parentMessageId);
     mocks.from
       .mockImplementationOnce((table: string) => {
         expect(table).toBe('messages');
@@ -173,6 +179,10 @@ describe('BRep project revision service boundaries', () => {
       .mockImplementationOnce((table: string) => {
         expect(table).toBe('conversations');
         return leafUpdate;
+      })
+      .mockImplementationOnce((table: string) => {
+        expect(table).toBe('conversations');
+        return confirmation;
       });
 
     await expect(
@@ -189,14 +199,38 @@ describe('BRep project revision service boundaries', () => {
       'current_message_leaf_id',
       sourceMessageId,
     );
+    expect(confirmation.eq).toHaveBeenCalledWith('id', conversationId);
+  });
+
+  it('accepts a confirmed active revision when RLS suppresses the update representation', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const leafUpdate = conversationLeafUpdateResult([]);
+    const messageId = 'dddddddd-4444-4444-8444-444444444444';
+    const confirmation = currentLeafConfirmationResult(messageId);
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(messageId);
+    mocks.from
+      .mockImplementationOnce(() => ({ insert }))
+      .mockImplementationOnce(() => leafUpdate)
+      .mockImplementationOnce(() => confirmation);
+
+    await expect(
+      persistBrepProjectParameterRevision({
+        conversationId,
+        parentMessageId: sourceMessageId,
+        artifact,
+        parameterValues: { width: 1400 },
+      }),
+    ).resolves.toMatchObject({ messageId });
   });
 
   it('branches from the selected historical leaf while retaining stable BRep identities', async () => {
     const insertedRows: Array<Record<string, unknown>> = [];
-    const insert = vi.fn().mockImplementation(async (row: Record<string, unknown>) => {
-      insertedRows.push(row);
-      return { error: null };
-    });
+    const insert = vi
+      .fn()
+      .mockImplementation(async (row: Record<string, unknown>) => {
+        insertedRows.push(row);
+        return { error: null };
+      });
     const leafUpdate = conversationLeafUpdateResult([{ id: conversationId }]);
     mocks.from
       .mockImplementationOnce(() => ({ insert }))
@@ -214,9 +248,7 @@ describe('BRep project revision service boundaries', () => {
       role: 'assistant',
       parent_message_id: sourceMessageId,
     });
-    expect(result.artifact.source.source.id).toBe(
-      artifact.source.source.id,
-    );
+    expect(result.artifact.source.source.id).toBe(artifact.source.source.id);
     expect(result.artifact.source.source.resultNodeId).toBe(
       artifact.source.source.resultNodeId,
     );

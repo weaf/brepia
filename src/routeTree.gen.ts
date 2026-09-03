@@ -46,6 +46,7 @@ import { Route as ApiScadImportGithubRouteImport } from './routes/api/scad-impor
 import { Route as ApiSettingsAdminModelsRouteImport } from './routes/api/settings/adminModels';
 import { Route as ApiSettingsInstanceIdentityRouteImport } from './routes/api/settings/instanceIdentity';
 import { Route as ApiSettingsRuntimeIntegrationsRouteImport } from './routes/api/settings/runtimeIntegrations';
+import { Route as LayoutAuthBrepIndexRouteImport } from './routes/_layout/_auth/brep/index';
 import { Route as LayoutAuthBrepIdRouteImport } from './routes/_layout/_auth/brep/$id';
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id';
 import { Route as LayoutAuthProjectIdRouteImport } from './routes/_layout/_auth/project/$id';
@@ -246,6 +247,11 @@ const ApiSettingsRuntimeIntegrationsRoute =
     path: '/api/settings/runtimeIntegrations',
     getParentRoute: () => rootRouteImport,
   } as any);
+const LayoutAuthBrepIndexRoute = LayoutAuthBrepIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LayoutAuthBrepRoute,
+} as any);
 const LayoutAuthBrepIdRoute = LayoutAuthBrepIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -360,6 +366,7 @@ export interface FileRoutesByFullPath {
   '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
+  '/brep/': typeof LayoutAuthBrepIndexRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
   '/api/ai-settings/providers/$providerId/models/$modelId': typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
 }
@@ -381,7 +388,6 @@ export interface FileRoutesByTo {
   '/api/parametric-chat': typeof ApiParametricChatRoute;
   '/api/title-generator': typeof ApiTitleGeneratorRoute;
   '/assets/$': typeof AssetsSplatRoute;
-  '/brep': typeof LayoutAuthBrepRouteWithChildren;
   '/history': typeof LayoutAuthHistoryRoute;
   '/settings': typeof LayoutAuthSettingsRoute;
   '/share/$id': typeof LayoutShareIdRoute;
@@ -409,6 +415,7 @@ export interface FileRoutesByTo {
   '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
+  '/brep': typeof LayoutAuthBrepIndexRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
   '/api/ai-settings/providers/$providerId/models/$modelId': typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
 }
@@ -461,6 +468,7 @@ export interface FileRoutesById {
   '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
+  '/_layout/_auth/brep/': typeof LayoutAuthBrepIndexRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
   '/api/ai-settings/providers/$providerId/models/$modelId': typeof ApiAiSettingsProvidersProviderIdModelsModelIdRoute;
 }
@@ -512,6 +520,7 @@ export interface FileRouteTypes {
     | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
+    | '/brep/'
     | '/api/ai-settings/providers/$providerId/models'
     | '/api/ai-settings/providers/$providerId/models/$modelId';
   fileRoutesByTo: FileRoutesByTo;
@@ -533,7 +542,6 @@ export interface FileRouteTypes {
     | '/api/parametric-chat'
     | '/api/title-generator'
     | '/assets/$'
-    | '/brep'
     | '/history'
     | '/settings'
     | '/share/$id'
@@ -561,6 +569,7 @@ export interface FileRouteTypes {
     | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
+    | '/brep'
     | '/api/ai-settings/providers/$providerId/models'
     | '/api/ai-settings/providers/$providerId/models/$modelId';
   id:
@@ -612,6 +621,7 @@ export interface FileRouteTypes {
     | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
+    | '/_layout/_auth/brep/'
     | '/api/ai-settings/providers/$providerId/models'
     | '/api/ai-settings/providers/$providerId/models/$modelId';
   fileRoutesById: FileRoutesById;
@@ -912,6 +922,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSettingsRuntimeIntegrationsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    '/_layout/_auth/brep/': {
+      id: '/_layout/_auth/brep/';
+      path: '/';
+      fullPath: '/brep/';
+      preLoaderRoute: typeof LayoutAuthBrepIndexRouteImport;
+      parentRoute: typeof LayoutAuthBrepRoute;
+    };
     '/_layout/_auth/brep/$id': {
       id: '/_layout/_auth/brep/$id';
       path: '/$id';
@@ -1001,10 +1018,12 @@ declare module '@tanstack/react-router' {
 
 interface LayoutAuthBrepRouteChildren {
   LayoutAuthBrepIdRoute: typeof LayoutAuthBrepIdRoute;
+  LayoutAuthBrepIndexRoute: typeof LayoutAuthBrepIndexRoute;
 }
 
 const LayoutAuthBrepRouteChildren: LayoutAuthBrepRouteChildren = {
   LayoutAuthBrepIdRoute: LayoutAuthBrepIdRoute,
+  LayoutAuthBrepIndexRoute: LayoutAuthBrepIndexRoute,
 };
 
 const LayoutAuthBrepRouteWithChildren = LayoutAuthBrepRoute._addFileChildren(

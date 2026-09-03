@@ -124,7 +124,19 @@ export async function persistBrepProjectParameterRevision({
     .eq('current_message_leaf_id', parentMessageId)
     .select('id');
   if (leafError) throw leafError;
-  if (!data?.length) {
+  if (data?.length) return { messageId, artifact: nextArtifact };
+
+  // Some local Supabase RLS configurations perform the update but do not
+  // return its selected row. Confirm the exact active leaf before reporting a
+  // lost CAS race; accepting an empty update response directly would make the
+  // UI reject a revision that is already the persisted active source.
+  const { data: confirmed, error: confirmationError } = await supabase
+    .from('conversations')
+    .select('current_message_leaf_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (confirmationError) throw confirmationError;
+  if (confirmed?.current_message_leaf_id !== messageId) {
     throw new Error(
       'BRep project changed before this parameter revision could be activated.',
     );
