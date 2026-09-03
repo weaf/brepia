@@ -26,6 +26,14 @@
       "supportsOverlay": true
     },
     {
+      "key": "tool.build_brep_project",
+      "label": "Build native BRep tool",
+      "description": "Instruction exposed to the model for complete canonical BRep project snapshots.",
+      "category": "tool",
+      "template": "tool-build-brep-project.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "tool.answer_user",
       "label": "Answer user tool",
       "description": "Instruction exposed to the model for answer_user.",
