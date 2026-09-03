@@ -55,20 +55,20 @@ This checkpoint reconciled the current conversation/workspace implementation aga
 
 ### Current ownership map
 
-| Concern | Current owner | Phase 2 BRep integration |
-| --- | --- | --- |
-| Product conversation mode | `conversations.type` and conversation services distinguish `parametric` from `creative` | Keep BRep inside the existing `parametric` mode. Do not add a `brep` conversation enum value unless implementation later proves this impossible. |
-| Active branch/revision pointer | `conversations.current_message_leaf_id` | Reuse unchanged. BRep does not need a parallel revision pointer. |
-| Revision/branch lineage | immutable message tree through `messages.parent_message_id` plus current leaf | Reuse for BRep restore/retry/branch semantics. A BRep snapshot on a message path is revision evidence in the same way the current parametric source artifact is. |
-| Parametric editable source | assistant/workspace artifact payloads currently carry the complete normalized OpenSCAD project (`build_parametric_model`) | Introduce a source-kind discriminator/envelope at the parametric source-artifact boundary so a normalized `BrepProject` can be persisted beside legacy OpenSCAD source. |
-| OpenSCAD normalization | shared chat/tool schemas and conversation workspace model helpers | Preserve legacy behavior. Existing parametric artifacts without a new source discriminator must continue to normalize as OpenSCAD. |
-| BRep canonical source | Phase 1 `shared/brepProject.ts` | Persist normalized/versioned `BrepProject` JSON only. Never persist build123d/OCP objects, tessellation, STEP data or process/runtime state as authoritative source. |
-| Parameter editing | editor state updates the editable source snapshot and persistence path; rendered geometry is derived | BRep parameter edits must update/persist source-level parameter state through the same lifecycle boundary, then reevaluate derived geometry. Stable parameter IDs remain authoritative. |
-| Runtime/viewer result | OpenSCAD/BRep evaluators and viewer paths | Treat BRep evaluation result, tessellation, bounds and STEP as derived/cacheable outputs. They are not revision source-of-truth. |
-| Editor/project loading | parametric conversation/editor workspace resolves current source artifact and renders the appropriate editor/viewer | Dispatch by parametric source kind. OpenSCAD and BRep should share conversation/history infrastructure while retaining separate source editors/runtimes. |
-| Source import | existing parametric import creates a normalized imported baseline/artifact rather than bypassing workspace history | Canonical BRep JSON import should create an imported normalized BRep source snapshot/baseline and then participate normally in revisions/history. |
-| Source export | conversation workspace source export is distinct from native derived export | Add canonical BRep source JSON export. Native STEP remains a geometry export only and must never be promoted into editable BRep history. |
-| AI generation/editing | `shared/chatAi.ts` and current `build_parametric_model` tool contract are OpenSCAD-oriented | Do not broaden AI-native BRep generation/editing in Phase 2. That is Phase 3. Phase 2 should create a source contract that Phase 3 can target later. |
+| Concern                        | Current owner                                                                                                             | Phase 2 BRep integration                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product conversation mode      | `conversations.type` and conversation services distinguish `parametric` from `creative`                                   | Keep BRep inside the existing `parametric` mode. Do not add a `brep` conversation enum value unless implementation later proves this impossible.                                        |
+| Active branch/revision pointer | `conversations.current_message_leaf_id`                                                                                   | Reuse unchanged. BRep does not need a parallel revision pointer.                                                                                                                        |
+| Revision/branch lineage        | immutable message tree through `messages.parent_message_id` plus current leaf                                             | Reuse for BRep restore/retry/branch semantics. A BRep snapshot on a message path is revision evidence in the same way the current parametric source artifact is.                        |
+| Parametric editable source     | assistant/workspace artifact payloads currently carry the complete normalized OpenSCAD project (`build_parametric_model`) | Introduce a source-kind discriminator/envelope at the parametric source-artifact boundary so a normalized `BrepProject` can be persisted beside legacy OpenSCAD source.                 |
+| OpenSCAD normalization         | shared chat/tool schemas and conversation workspace model helpers                                                         | Preserve legacy behavior. Existing parametric artifacts without a new source discriminator must continue to normalize as OpenSCAD.                                                      |
+| BRep canonical source          | Phase 1 `shared/brepProject.ts`                                                                                           | Persist normalized/versioned `BrepProject` JSON only. Never persist build123d/OCP objects, tessellation, STEP data or process/runtime state as authoritative source.                    |
+| Parameter editing              | editor state updates the editable source snapshot and persistence path; rendered geometry is derived                      | BRep parameter edits must update/persist source-level parameter state through the same lifecycle boundary, then reevaluate derived geometry. Stable parameter IDs remain authoritative. |
+| Runtime/viewer result          | OpenSCAD/BRep evaluators and viewer paths                                                                                 | Treat BRep evaluation result, tessellation, bounds and STEP as derived/cacheable outputs. They are not revision source-of-truth.                                                        |
+| Editor/project loading         | parametric conversation/editor workspace resolves current source artifact and renders the appropriate editor/viewer       | Dispatch by parametric source kind. OpenSCAD and BRep should share conversation/history infrastructure while retaining separate source editors/runtimes.                                |
+| Source import                  | existing parametric import creates a normalized imported baseline/artifact rather than bypassing workspace history        | Canonical BRep JSON import should create an imported normalized BRep source snapshot/baseline and then participate normally in revisions/history.                                       |
+| Source export                  | conversation workspace source export is distinct from native derived export                                               | Add canonical BRep source JSON export. Native STEP remains a geometry export only and must never be promoted into editable BRep history.                                                |
+| AI generation/editing          | `shared/chatAi.ts` and current `build_parametric_model` tool contract are OpenSCAD-oriented                               | Do not broaden AI-native BRep generation/editing in Phase 2. That is Phase 3. Phase 2 should create a source contract that Phase 3 can target later.                                    |
 
 ### Canonical Phase 2 source direction
 
@@ -169,23 +169,43 @@ The current reconciliation identified these as the main surfaces to inspect/chan
 - `src/services/conversationService.ts` / `supabase/schemas/conversations.sql` — compatibility boundary; avoid schema changes unless proven necessary;
 - `shared/chatAi.ts` — preserve existing OpenSCAD AI behavior in Phase 2; BRep AI work belongs to Phase 3.
 
-## Active step
+## 2B — Project type + persisted BRep source contract
+
+Status: **complete**.
+
+The shared source boundary is now `shared/parametricProjectSource.ts`:
 
 ```text
-2B — Project type + persisted BRep source contract
+legacy OpenSCAD project JSON
+  -> { kind: 'openscad', source: normalized OpenScadProject }
+
+{ kind: 'brep', source: BrepProject }
+  -> normalized/versioned BrepProject
 ```
 
-2B should implement the smallest backward-compatible discriminated parametric source contract and tests before broader create/open/editor changes.
+The raw legacy representation deliberately has no inferred filename/content
+discriminator: an absent `kind` is the explicit backward-compatible OpenSCAD
+case. New source envelopes are validated at the shared parametric source
+schema boundary. Invalid/unsupported BRep payloads fail explicitly through the
+Phase 1 `normalizeBrepProject` contract; no evaluator, mesh, bounds or STEP
+payload is accepted as source authority.
 
-Acceptance emphasis for the first implementation slice:
+`ParametricArtifact` and the existing `build_parametric_model` UI behavior
+remain OpenSCAD-oriented for now. This preserves the Phase 2 non-goal of
+AI-native BRep editing while allowing 2C to add BRep creation/loading at the
+same persisted source boundary rather than inventing a BRep conversation type.
 
-- normalized/versioned `BrepProject` is the persisted BRep source;
-- source kind distinguishes OpenSCAD and BRep without changing conversation mode;
-- legacy existing parametric/OpenSCAD artifacts remain readable without migration;
-- no OCCT/build123d/viewer/export result becomes persisted authority;
-- contract round-trips deterministically;
-- stable IDs/placement/metadata survive persistence;
-- focused compatibility tests cover both legacy OpenSCAD and new BRep source.
+No database migration was added. Conversations remain `parametric` or
+`creative`; BRep is represented only in the versioned parametric source JSON.
+
+Focused evidence:
+
+- `npm test -- --run tests/parametricProjectSource.test.ts tests/importedArtifact.test.ts` — PASS (13 tests);
+- `npm run typecheck` — PASS.
+
+The focused compatibility tests prove legacy OpenSCAD normalization, deterministic
+JSON round-trip of normalized BRep source, stable project placement/metadata and
+published-parameter IDs, and explicit rejection of unsupported BRep versions.
 
 ## Current constraints
 
@@ -226,4 +246,5 @@ Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and mus
 
 ## Next checkpoint
 
-Implement and verify 2B — the backward-compatible parametric project/source discriminator and persisted normalized BRep source contract — then update this file with concrete types, migration/compatibility evidence and focused tests before continuing into create/open lifecycle work.
+Implement and verify 2C — create/open/project selection lifecycle — using the
+2B source envelope and the existing parametric conversation/message tree.
