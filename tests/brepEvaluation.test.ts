@@ -62,6 +62,11 @@ async function fakeRunner(body: string): Promise<string> {
   return runner;
 }
 
+const validRunnerBody = `cat > "$OUTPUT/result.json" <<'JSON'
+{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.1.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[{"id":"body","bounds":{"min":[0,0,0],"max":[20,5,5]},"viewerMesh":{"bodyId":"body","positions":[0,0,0,20,0,0,0,5,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"warnings":[],"exactExport":{"format":"step","available":true}}
+JSON
+printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"`;
+
 function expectBrepError(
   action: () => Promise<unknown>,
   code: BrepEvaluationError['code'],
@@ -82,11 +87,7 @@ describe('isolated BRep evaluation boundary', () => {
   });
 
   it('accepts only a bounded valid sandbox result and preserves STEP as a separate artifact', async () => {
-    process.env.PCAD_BREP_RUNNER =
-      await fakeRunner(`cat > "$OUTPUT/result.json" <<'JSON'
-{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.1.0","kernelVersion":"7.8"},"projectId":"box","resultNodeId":"body","bodies":[{"id":"body","bounds":{"min":[0,0,0],"max":[20,5,5]},"viewerMesh":{"bodyId":"body","positions":[0,0,0,20,0,0,0,5,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"warnings":[],"exactExport":{"format":"step","available":true}}
-JSON
-printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"`);
+    process.env.PCAD_BREP_RUNNER = await fakeRunner(validRunnerBody);
     const artifact = await evaluateBrepProject(project(), { width: 20 });
     expect(artifact.result.status).toBe('success');
     expect(artifact.stepBytes).toBeInstanceOf(Uint8Array);
@@ -100,5 +101,51 @@ printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"`);
       () => evaluateBrepProject(project()),
       'output_invalid',
     );
+  });
+
+  it('maps runner timeout exits to a stable timeout error', async () => {
+    process.env.PCAD_BREP_RUNNER = await fakeRunner('exit 124');
+    await expectBrepError(
+      () => evaluateBrepProject(project()),
+      'evaluation_timeout',
+    );
+  });
+
+  it('propagates AbortSignal cancellation to the child process and releases capacity', async () => {
+    process.env.PCAD_BREP_MAX_CONCURRENT = '1';
+    process.env.PCAD_BREP_RUNNER = await fakeRunner('sleep 5');
+    const controller = new AbortController();
+    const running = evaluateBrepProject(project(), undefined, controller.signal);
+
+    await expectBrepError(
+      () => evaluateBrepProject(project()),
+      'capacity_exceeded',
+    );
+
+    controller.abort();
+    await expect(running).rejects.toMatchObject({
+      name: 'BrepEvaluationError',
+      code: 'evaluation_cancelled',
+    });
+
+    process.env.PCAD_BREP_RUNNER = await fakeRunner(validRunnerBody);
+    await expect(evaluateBrepProject(project())).resolves.toMatchObject({
+      result: { status: 'success' },
+    });
+  });
+
+  it('rejects an already-aborted request before consuming a capacity slot', async () => {
+    process.env.PCAD_BREP_MAX_CONCURRENT = '1';
+    process.env.PCAD_BREP_RUNNER = await fakeRunner(validRunnerBody);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expectBrepError(
+      () => evaluateBrepProject(project(), undefined, controller.signal),
+      'evaluation_cancelled',
+    );
+    await expect(evaluateBrepProject(project())).resolves.toMatchObject({
+      result: { status: 'success' },
+    });
   });
 });
