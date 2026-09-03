@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import {
   buildBrepProjectBaselineMessages,
   createBrepProjectArtifact,
+  getBrepProjectArtifact,
   withBrepProjectParameterValues,
 } from '@shared/brepProjectArtifact';
 import type { BrepProjectArtifactData } from '@shared/chatAi';
@@ -123,6 +124,10 @@ export async function selectBrepProjectRevision({
   conversationId: string;
   messageId: string;
 }): Promise<void> {
+  const revision = await requireBrepProjectRevision(conversationId, messageId);
+  if (!revision) {
+    throw new Error('BRep source revision was not found in this conversation.');
+  }
   const { error } = await supabase
     .from('conversations')
     .update({ current_message_leaf_id: messageId })
@@ -130,22 +135,46 @@ export async function selectBrepProjectRevision({
   if (error) throw error;
 }
 
+async function requireBrepProjectRevision(
+  conversationId: string,
+  messageId: string,
+) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, parent_message_id, role, parts')
+    .eq('id', messageId)
+    .eq('conversation_id', conversationId)
+    .eq('role', 'assistant')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const artifact = getBrepProjectArtifact(data.parts);
+  return artifact
+    ? { id: data.id, parentMessageId: data.parent_message_id, artifact }
+    : null;
+}
+
 export async function restoreBrepProjectRevision({
   conversationId,
-  parentMessageId,
-  artifact,
+  sourceMessageId,
 }: {
   conversationId: string;
-  parentMessageId: string | null;
-  artifact: BrepProjectArtifactData;
+  sourceMessageId: string;
 }): Promise<string> {
-  const restoredArtifact = createBrepProjectArtifact(artifact);
+  const source = await requireBrepProjectRevision(
+    conversationId,
+    sourceMessageId,
+  );
+  if (!source) {
+    throw new Error('BRep source revision was not found in this conversation.');
+  }
+  const restoredArtifact = createBrepProjectArtifact(source.artifact);
   const restoredMessageId = crypto.randomUUID();
   const { error: messageError } = await supabase.from('messages').insert({
     id: restoredMessageId,
     conversation_id: conversationId,
     role: 'assistant',
-    parent_message_id: parentMessageId,
+    parent_message_id: source.parentMessageId,
     parts: JSON.parse(
       JSON.stringify([{ type: 'data-brep-project', data: restoredArtifact }]),
     ),

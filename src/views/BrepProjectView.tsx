@@ -106,8 +106,7 @@ export default function BrepProjectView() {
         if (!revision) throw new Error('BRep source revision not found.');
         await restoreBrepProjectRevision({
           conversationId: id,
-          parentMessageId: revision.parentMessageId,
-          artifact: revision.artifact,
+          sourceMessageId: revision.id,
         });
         await refetch();
       }}

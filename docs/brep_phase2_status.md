@@ -261,6 +261,14 @@ Focused evidence:
 
 Status: **complete**.
 
+Corrective hardening: selection and restore now resolve the requested message
+through the normal authenticated Supabase client with exact conversation ID and
+assistant-role predicates, then validate its `data-brep-project` payload before
+moving `current_message_leaf_id` or copying a snapshot. A cross-conversation,
+non-assistant, malformed or non-BRep message therefore fails before it can
+alter active state. This preserves RLS/ownership rather than using a privileged
+or inferred source lookup.
+
 The BRep project view reads source revisions from the same assistant-message
 tree and exposes active-revision selection plus restore. Restore copies the
 validated source payload to a fresh assistant sibling under the historical
