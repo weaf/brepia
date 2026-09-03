@@ -1,0 +1,7 @@
+FROM python:3.12-slim
+ARG BUILD123D_VERSION=0.8.0
+ENV VIRTUAL_ENV=/opt/brepia-brep-venv PATH=/opt/brepia-brep-venv/bin:/usr/local/bin:/usr/bin:/bin HOME=/tmp
+RUN python -m venv "$VIRTUAL_ENV" \
+  && "$VIRTUAL_ENV/bin/pip" install --no-cache-dir "build123d==${BUILD123D_VERSION}" \
+  && "$VIRTUAL_ENV/bin/python" -c "import build123d; print(build123d.__version__)"
+WORKDIR /output
