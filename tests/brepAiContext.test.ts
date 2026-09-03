@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BrepAiContextError,
   resolveActiveBrepAiSource,
+  resolveActiveBrepAiSourceForLeaf,
   serializeBrepAiProjectContext,
 } from '../shared/brepAiContext';
 import type { BrepProject } from '../shared/brepProject';
@@ -93,6 +94,84 @@ describe('native BRep AI source context', () => {
           parts: [{ type: 'data-brep-project', data: artifact }],
         },
       ]),
+    ).toThrowError(BrepAiContextError);
+  });
+
+  it('resolves the source ancestor when the current tree leaf is a non-source assistant turn', () => {
+    const source = resolveActiveBrepAiSourceForLeaf(
+      [
+        {
+          ...sourceMessage('a1'),
+          parent_message_id: null,
+        },
+        {
+          id: 'u2',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Change the hole radius.' }],
+          parent_message_id: 'a1',
+        },
+        {
+          id: 'a2',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'tool-build_brep_project',
+              state: 'output-error',
+              errorText: 'Candidate failed validation.',
+            },
+          ],
+          parent_message_id: 'u2',
+        },
+      ],
+      'a2',
+    );
+
+    expect(source?.messageId).toBe('a1');
+    expect(source?.project.id).toBe(phaseOneCabinetProject.id);
+  });
+
+  it('resolves only the selected tree branch when sibling source revisions exist', () => {
+    const revised: BrepProject = {
+      ...phaseOneCabinetProject,
+      name: 'Sibling revision',
+    };
+    const source = resolveActiveBrepAiSourceForLeaf(
+      [
+        {
+          ...sourceMessage('a1'),
+          parent_message_id: null,
+        },
+        {
+          ...sourceMessage('a2', revised),
+          parent_message_id: 'a1',
+        },
+        {
+          id: 'u3',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Continue original branch.' }],
+          parent_message_id: 'a1',
+        },
+      ],
+      'u3',
+    );
+
+    expect(source?.messageId).toBe('a1');
+    expect(source?.project.name).toBe(phaseOneCabinetProject.name);
+  });
+
+  it('fails closed when persisted tree ancestry is incomplete', () => {
+    expect(() =>
+      resolveActiveBrepAiSourceForLeaf(
+        [
+          {
+            id: 'u2',
+            role: 'user',
+            parts: [{ type: 'text', text: 'Continue.' }],
+            parent_message_id: 'missing-parent',
+          },
+        ],
+        'u2',
+      ),
     ).toThrowError(BrepAiContextError);
   });
 
