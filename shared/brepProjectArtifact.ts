@@ -1,4 +1,5 @@
 import type { AppUIMessage, BrepProjectArtifactData } from './chatAi.ts';
+import { normalizeBrepProject, type BrepProject } from './brepProject.ts';
 import { normalizeParametricProjectSource } from './parametricProjectSource.ts';
 
 export type BrepProjectBaselineMessageRow = {
@@ -38,6 +39,31 @@ export function createBrepProjectArtifact(
   value: unknown,
 ): BrepProjectArtifactData {
   return normalizeBrepArtifactData(value);
+}
+
+/** Apply published values to the canonical source, never to evaluator output. */
+export function withBrepProjectParameterValues(
+  project: BrepProject,
+  values: Record<string, number>,
+): BrepProject {
+  const known = new Set(project.parameters.map((parameter) => parameter.id));
+  for (const [id, value] of Object.entries(values)) {
+    if (!known.has(id))
+      throw new Error(`Unknown BRep published parameter: ${id}`);
+    if (!Number.isFinite(value)) {
+      throw new Error(
+        `BRep published parameter ${id} must be a finite number.`,
+      );
+    }
+  }
+  return normalizeBrepProject({
+    ...project,
+    parameters: project.parameters.map((parameter) =>
+      Object.prototype.hasOwnProperty.call(values, parameter.id)
+        ? { ...parameter, default: values[parameter.id] }
+        : parameter,
+    ),
+  });
 }
 
 export function getBrepProjectArtifact(

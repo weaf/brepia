@@ -5,12 +5,14 @@ import { ActivityIndicator } from '@/components/brand';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
+import type { BrepParameterValues } from '@shared/brepProvider';
 import type { Conversation } from '@shared/types';
+import { persistBrepProjectParameterRevision } from '@/services/brepProjectService';
 
 export default function BrepProjectView() {
   const { id } = useParams({ from: '/_layout/_auth/brep/$id' });
   const { user } = useAuth();
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['brep-project', id],
     queryFn: async () => {
       const { data: conversation, error: conversationError } = await supabase
@@ -39,7 +41,7 @@ export default function BrepProjectView() {
         throw new Error(
           'The active project source is not a valid BRep snapshot.',
         );
-      return artifact;
+      return { artifact, leafId: typedConversation.current_message_leaf_id };
     },
   });
   if (isLoading)
@@ -54,5 +56,19 @@ export default function BrepProjectView() {
         {error instanceof Error ? error.message : 'BRep project not found.'}
       </main>
     );
-  return <BrepProjectPreview project={data.source.source} />;
+  return (
+    <BrepProjectPreview
+      key={data.leafId}
+      project={data.artifact.source.source}
+      onParameterValuesCommit={async (parameterValues: BrepParameterValues) => {
+        await persistBrepProjectParameterRevision({
+          conversationId: id,
+          parentMessageId: data.leafId,
+          artifact: data.artifact,
+          parameterValues,
+        });
+        await refetch();
+      }}
+    />
+  );
 }

@@ -4,6 +4,7 @@ import {
   buildBrepProjectBaselineMessages,
   createBrepProjectArtifact,
   getBrepProjectArtifact,
+  withBrepProjectParameterValues,
 } from '@shared/brepProjectArtifact';
 
 const artifact = createBrepProjectArtifact({
@@ -43,5 +44,32 @@ describe('BRep project message baseline', () => {
         },
       }),
     ).toThrow(/kind brep/i);
+  });
+
+  it('creates a normalized revision source while retaining stable identities', () => {
+    const revised = withBrepProjectParameterValues(phaseOneCabinetProject, {
+      width: 1400,
+    });
+    expect(revised.id).toBe(phaseOneCabinetProject.id);
+    expect(revised.resultNodeId).toBe(phaseOneCabinetProject.resultNodeId);
+    expect(revised.placement).toEqual(phaseOneCabinetProject.placement);
+    expect(
+      revised.parameters.find((parameter) => parameter.id === 'width')?.default,
+    ).toBe(1400);
+    expect(
+      revised.parameters.find((parameter) => parameter.id === 'height')
+        ?.default,
+    ).toBe(1800);
+  });
+
+  it('rejects invalid parameter revisions before a source snapshot is created', () => {
+    expect(() =>
+      withBrepProjectParameterValues(phaseOneCabinetProject, {
+        width: Number.NaN,
+      }),
+    ).toThrow(/finite number/i);
+    expect(() =>
+      withBrepProjectParameterValues(phaseOneCabinetProject, { missing: 100 }),
+    ).toThrow(/unknown BRep published parameter/i);
   });
 });

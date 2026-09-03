@@ -34,9 +34,11 @@ function geometryFromResult(
 export function BrepProjectPreview({
   project = phaseOneCabinetProject,
   createProject = false,
+  onParameterValuesCommit,
 }: {
   project?: BrepProject;
   createProject?: boolean;
+  onParameterValuesCommit?: (values: BrepParameterValues) => Promise<void>;
 }) {
   const { user } = useAuth();
   const [values, setValues] = useState<BrepParameterValues>(() =>
@@ -138,6 +140,16 @@ export function BrepProjectPreview({
                     [parameter.id]: Number(event.target.value),
                   }))
                 }
+                onBlur={() => {
+                  if (!onParameterValuesCommit) return;
+                  void onParameterValuesCommit(values).catch((reason) => {
+                    setError(
+                      reason instanceof Error
+                        ? reason.message
+                        : 'Could not persist BRep parameter revision.',
+                    );
+                  });
+                }}
               />
             </label>
           ))}

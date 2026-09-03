@@ -2,7 +2,9 @@ import { supabase } from '@/lib/supabase';
 import {
   buildBrepProjectBaselineMessages,
   createBrepProjectArtifact,
+  withBrepProjectParameterValues,
 } from '@shared/brepProjectArtifact';
+import type { BrepProjectArtifactData } from '@shared/chatAi';
 import type { BrepProject } from '@shared/brepProject';
 
 export async function createBrepProjectConversation({
@@ -61,4 +63,55 @@ export async function createBrepProjectConversation({
     .eq('user_id', userId);
   if (leafError) throw leafError;
   return conversationId;
+}
+
+export async function persistBrepProjectParameterRevision({
+  conversationId,
+  parentMessageId,
+  artifact,
+  parameterValues,
+}: {
+  conversationId: string;
+  parentMessageId: string;
+  artifact: BrepProjectArtifactData;
+  parameterValues: Record<string, number>;
+}): Promise<{ messageId: string; artifact: BrepProjectArtifactData }> {
+  const nextArtifact = createBrepProjectArtifact({
+    ...artifact,
+    source: {
+      kind: 'brep',
+      source: withBrepProjectParameterValues(
+        artifact.source.source,
+        parameterValues,
+      ),
+    },
+  });
+  const messageId = crypto.randomUUID();
+  const { error: messageError } = await supabase.from('messages').insert({
+    id: messageId,
+    conversation_id: conversationId,
+    role: 'assistant',
+    parent_message_id: parentMessageId,
+    parts: JSON.parse(
+      JSON.stringify([{ type: 'data-brep-project', data: nextArtifact }]),
+    ),
+    metadata: {},
+  });
+  if (messageError) throw messageError;
+
+  // Do not let an older tab/async commit replace a newer active source. The
+  // orphaned immutable message is valid branch evidence and can be selected.
+  const { data, error: leafError } = await supabase
+    .from('conversations')
+    .update({ current_message_leaf_id: messageId })
+    .eq('id', conversationId)
+    .eq('current_message_leaf_id', parentMessageId)
+    .select('id');
+  if (leafError) throw leafError;
+  if (!data?.length) {
+    throw new Error(
+      'BRep project changed before this parameter revision could be activated.',
+    );
+  }
+  return { messageId, artifact: nextArtifact };
 }

@@ -234,6 +234,29 @@ Focused evidence:
 - `npm run lint` — PASS;
 - `npm run build` — PASS.
 
+## 2D — Published parameter editing and revisions
+
+Status: **complete**.
+
+BRep published-value commits now produce a new immutable assistant leaf rather
+than mutating derived evaluator data or the previous baseline. The canonical
+source revision is made by replacing only matching published parameter defaults
+in a fresh normalized `BrepProject`; project, feature, result-node, placement,
+metadata and published parameter IDs remain stable. The preview evaluates the
+same source/values through `/api/brep/evaluate`, while viewer mesh and STEP
+remain derived outputs.
+
+The active-leaf update uses compare-and-set against the revision's expected
+parent. A stale commit leaves valid branch evidence but cannot overwrite a
+newer active source. Invalid or unknown values are rejected before a message is
+created, so the last valid persisted revision remains intact and the UI shows
+the persistence error.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (7 tests);
+- `npm run typecheck` — PASS.
+
 ## Current constraints
 
 - Preserve OpenSCAD and Creative behavior.
@@ -273,5 +296,5 @@ Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and mus
 
 ## Next checkpoint
 
-Implement and verify 2D — published-parameter editing and revisions — through
-the persisted BRep source and existing message-tree lifecycle.
+Implement and verify 2E — conversation restore/retry/branch behavior — for
+the BRep source snapshots in the existing message tree.
