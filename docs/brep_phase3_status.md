@@ -21,6 +21,20 @@ Roadmap: `docs/brep_kernel_plan.md`.
 
 Phase 1/2 execution/status files are historical evidence after merge.
 
+## Phase 3 progress
+
+| Step | Status |
+| --- | --- |
+| 3A — Architecture reconciliation and contract lock | **complete** |
+| 3B — Shared BRep AI snapshot schema and structural diff | **complete and accepted** |
+| 3C — Native AI tool/source contract | **complete and accepted** |
+| 3D — Prompting and native-provider follow-up generation | **implementation complete; live normal-provider acceptance remains** |
+| 3E — Immutable AI revision persistence and stale guards | **complete and accepted** |
+| 3F — OpenCode/Codex external-agent parity | not started |
+| 3G — Product integration / creation UX | not started |
+| 3H — Acceptance | later |
+| 3I — Closeout | later |
+
 ## 3A — Architecture reconciliation and contract lock
 
 Status: **complete**.
@@ -32,38 +46,26 @@ Status: **complete**.
 | Parametric project source | `shared/parametricProjectSource.ts` discriminates `openscad | brep`; absent discriminator is legacy OpenSCAD | Reuse unchanged. AI targets a complete normalized `BrepProject` for BRep. |
 | Canonical BRep schema | `shared/brepProject.ts` owns versioning, bounds, IDs, parameter units, DAG/reference/cycle validation and semantic selectors | Remains the sole authoring contract. No AI-specific geometry schema. |
 | Persisted BRep artifact | `shared/brepProjectArtifact.ts` validates `data-brep-project` with `{ title, version, source: { kind: 'brep', source } }` | Reuse for successful AI revisions; no parallel AI artifact/history model. |
-| BRep lifecycle | `src/services/brepProjectService.ts` creates immutable assistant revisions and validated restore branches | AI edits must use the same immutable source model, anchored to the exact source revision used as generation context. |
-| OpenSCAD AI tool | `shared/chatAi.ts` `build_parametric_model` remains intentionally OpenSCAD-only | Preserve historical/current semantics. Native BRep uses a separate tool. |
-| OpenSCAD helpers | `shared/parametricParts.ts` searches `tool-build_parametric_model` and normalizes OpenSCAD artifacts | Keep narrow; do not silently change helper meaning for BRep. |
-| Normal AI server | `src/server/aiChat.ts` owns Parametric instructions/tools, stream lifecycle and tool/message persistence | Add source-kind-aware context/tool selection without regressing OpenSCAD/Creative. |
-| External structured result | `src/server/opencodeAgentResult.ts` currently parses OpenSCAD `{ project, message }` only | Extend later in 3F after native provider path is stable. |
-| OpenCode/Codex continuation | `src/server/cliAgents.ts` serializes latest complete OpenSCAD tool artifact | Extend later in 3F; OpenSCAD asset reconciliation remains OpenSCAD-only. |
+| BRep lifecycle | `src/services/brepProjectService.ts` creates immutable assistant revisions and validated restore branches | AI edits use the same immutable source model, anchored to the exact source revision used as generation context. |
+| OpenSCAD AI tool | `shared/chatAi.ts` `build_parametric_model` remains intentionally OpenSCAD-only | Preserved. Native BRep uses the separate `build_brep_project` tool. |
+| OpenSCAD helpers | `shared/parametricParts.ts` searches `tool-build_parametric_model` and normalizes OpenSCAD artifacts | Kept narrow; BRep does not redefine those helpers. |
+| Normal AI server | `src/server/aiChat.ts` owns Parametric instructions/tools, stream lifecycle and persistence | Now routes active native BRep branches through the BRep context/tool/persistence path. |
+| External structured result | `src/server/opencodeAgentResult.ts` currently parses OpenSCAD `{ project, message }` only | Extend in 3F after native-provider acceptance. |
+| OpenCode/Codex continuation | `src/server/cliAgents.ts` serializes latest complete OpenSCAD tool artifact | Extend in 3F; current BRep external-agent transports fail clearly rather than silently using OpenSCAD semantics. |
 | Previous/current source | Phase 2 BRep resolves canonical source from assistant `data-brep-project` revisions | BRep generation anchors identity validation to the nearest active BRep source revision and stale activation to the request leaf. |
-| Parameter vs DAG edit | Phase 2 BRep parameter editing persists complete normalized snapshots | AI parameter-definition and DAG edits both return complete snapshots; no patch source authority. |
+| Parameter vs DAG edit | Phase 2 BRep parameter editing persists complete normalized snapshots | AI parameter-definition and DAG edits return complete snapshots; no patch source authority. |
 | Selector/topology | v1 supports semantic `parallelToAxis`; canonical tests reject `edgeIndex` | AI may emit only canonical selector vocabulary; unsupported topology operations fail closed. |
-| Runtime | accepted rootless Podman build123d/OCCT evaluator and STEP path | Preserve exactly. AI receives no Python/native execution authority. |
+| Runtime | accepted rootless Podman build123d/OCCT evaluator and STEP path | Preserved. AI receives no Python/native execution authority. |
 
 ### Contract decisions
 
-- Phase 2 supplies the canonical source/persistence representation; no new conversation type or parallel AI history model is needed.
+- Phase 2 supplies the canonical source/persistence representation; no new conversation type or parallel AI history model is introduced.
 - Complete BRep snapshots mirror project-native OpenSCAD editing but use `BrepProject`, not source files.
 - Standalone schema validity is insufficient for follow-up edits: previous→next identity continuity is also validated.
 - Project ID stays stable on ordinary follow-ups; unchanged node/parameter IDs should remain stable; genuinely new objects receive new IDs.
 - Obvious whole-graph ID churn is rejected.
 - Structural diff is deterministic derived diagnostics, never source authority.
 - External-agent integration is downstream of the shared/native contract, not the contract owner.
-
-### Primary regression risks
-
-- polymorphizing `build_parametric_model` and breaking historical OpenSCAD semantics;
-- selecting a historical rather than active BRep snapshot for follow-up context;
-- stale AI completion reactivating an older branch after restore/parameter edit;
-- whole-project ID churn that still passes standalone schema validation;
-- invented raw topology selectors;
-- duplicated source authority between tool data and `data-brep-project`;
-- OpenSCAD asset reconciliation leaking into BRep;
-- native evaluation before AI candidate/identity validation;
-- Phase 4 graph UX leaking into Phase 3.
 
 ## 3B — Shared BRep AI snapshot schema and structural diff
 
@@ -108,7 +110,7 @@ tests/brepAiTool.test.ts
 tests/aiInstructionCatalog.test.ts
 ```
 
-The contract accepts only complete bounded canonical BRep snapshots, rejects runtime/Python/STEP/mesh authority, enumerates only supported topology vocabulary and delegates semantic validation to the canonical normalizer. `chatTools` knows the new type, but live `aiChat` routing is unchanged.
+The contract accepts only complete bounded canonical BRep snapshots, rejects runtime/Python/STEP/mesh authority, enumerates only supported topology vocabulary and delegates semantic validation to the canonical normalizer.
 
 ### Verification evidence
 
@@ -124,89 +126,125 @@ git diff --check origin/master...HEAD  PASS (no output)
 
 3C is accepted.
 
-## 3D — Prompting and native provider generation/follow-up context
+## 3D — Prompting and native-provider generation/follow-up context
 
-Status: **source/context foundation complete and locally verified; live normal-provider wiring remains**.
+Status: **implementation complete; live normal-provider acceptance remains**.
 
-Reconciliation findings:
-
-- `loadBranchFromDb()` already loads the exact current message-tree path selected by `current_message_leaf_id`.
-- A follow-up user message may be the current leaf while the authoritative BRep source is the nearest preceding assistant `data-brep-project` revision. Request-leaf identity and source-revision identity are distinct.
-- `convertToModelMessages()` must not blindly expose every historical `data-brep-project`; the normal provider should receive only the resolved active canonical source snapshot.
-- `parametricTools()` and forced tool-choice logic are currently hard-coded to `build_parametric_model`.
-- OpenSCAD authoritative asset collection remains OpenSCAD-only.
-- Existing Phase 2 BRep conversations already have unambiguous native source identity. AI creation routing belongs in 3G, not in provider heuristics.
-
-### Verified separable 3D foundation
-
-Added/changed:
+Implemented:
 
 ```text
 shared/brepAiContext.ts
+src/server/brepAiTurn.ts
+src/server/brepAiTools.ts
+src/server/aiChat.ts
 config/ai/instructions/context-brep-project.md
-config/ai/instructions/manifest.json
+config/ai/instructions/tool-build-brep-project.md
 tests/brepAiContext.test.ts
-tests/aiInstructionCatalog.test.ts
+tests/brepAiTurn.test.ts
 ```
 
-The helper:
+### Active behavior
 
-- resolves the nearest BRep source revision on the active branch;
-- resolves a preceding assistant source when the request leaf is a user follow-up;
-- retains exact source message ID server-side;
-- fails closed on a malformed nearest BRep marker;
-- rejects BRep source markers on non-assistant messages;
-- serializes only normalized canonical `BrepProject` JSON for model context.
+- The active source is the nearest valid assistant `data-brep-project` revision on the selected branch.
+- A user follow-up leaf and the source revision message are intentionally distinct identities.
+- Only the resolved canonical active BRep snapshot is injected as BRep source context; historical BRep source parts are not blindly exposed as model authority.
+- Active BRep branches use `build_brep_project`; OpenSCAD branches continue to use `build_parametric_model`.
+- `build_brep_project` executes server-side and performs only canonical snapshot validation plus previous→next structural diffing. It does not invoke OCCT/build123d.
+- BRep `answer_user` is also server-resolved so no browser-side pending-tool lifecycle can overwrite the canonical source part.
+- The final successful BRep build candidate is revalidated against the exact source snapshot used for generation and persisted with exactly one canonical `data-brep-project` part.
+- Earlier build calls remain diagnostics only and never become competing source authority.
+- OpenSCAD-specific mesh/import context is not injected into an active BRep turn.
+- BRep through OpenCode/Codex transports is explicitly rejected until 3F rather than routed through the OpenSCAD adapter.
+- Creative and legacy OpenSCAD tool ownership remain unchanged.
 
-### Verification evidence
+### Local verification evidence
 
-Reported from the real local checkout on 2026-09-03:
+Reported from the real local checkout on 2026-09-03 after provider wiring and review hardening:
 
 ```text
-npm test -- --run tests/brepAiContext.test.ts tests/brepAiTool.test.ts tests/brepAiProject.test.ts tests/aiInstructionCatalog.test.ts tests/brepProjectArtifact.test.ts  PASS
+focused BRep AI tests  PASS
+npm run typecheck      PASS
+npm run lint           PASS
+npm run build          PASS
+git diff --check       PASS (no output)
+```
+
+The remaining 3D acceptance item is an end-to-end normal-provider follow-up against a real native BRep conversation. Acceptance should verify that the provider returns a complete valid snapshot, preserves stable IDs where appropriate, persists the canonical revision, exposes the expected structural change and renders/evaluates correctly through the existing native runtime.
+
+## 3E — Immutable AI revision persistence and stale guards
+
+Status: **complete and accepted**.
+
+Implemented:
+
+```text
+src/server/brepAiPersistence.ts
+supabase/schemas/brep_ai.sql
+supabase/migrations/20260903134810_brep_ai_atomic_revision.sql
+shared/database.ts
+tests/brepAiPersistence.test.ts
+tests/brepAiAtomicSql.test.ts
+scripts/brep/test-brep-ai-atomic-race.sh
+```
+
+### Atomic activation contract
+
+The existing `public.update_conversation_leaf()` trigger remains unchanged. A BRep AI response is activated through `public.persist_brep_ai_revision(...)`, which:
+
+1. locks the target conversation row with `SELECT ... FOR UPDATE`;
+2. verifies `current_message_leaf_id` still equals the request leaf captured at generation start;
+3. inserts the immutable assistant revision only when that leaf is still current;
+4. allows the existing insert trigger to advance the leaf inside the same transaction;
+5. returns a stale result without inserting when a newer branch action already won.
+
+The three identities remain deliberately separate:
+
+- **request leaf ID** — current leaf at generation start; used only for stale activation;
+- **source revision message ID** — nearest preceding assistant BRep source; used for previous→next identity validation;
+- **response message ID** — new immutable assistant revision carrying the accepted source.
+
+The RPC runs as `SECURITY INVOKER`, explicitly checks `user_id = auth.uid()`, is not executable by `PUBLIC`, and grants execution to `authenticated`.
+
+### Runtime race evidence
+
+Verified against the real local Supabase runtime on 2026-09-03 after applying the generated migration and regenerating `shared/database.ts`:
+
+```text
+stale-first ordering
+PASS: newer leaf rejects the AI completion without inserting it
+
+AI-lock-first ordering
+PASS: AI revision commits atomically and the genuinely later user message wins the leaf
+
+BRep AI atomic persistence race gate PASS
+```
+
+Post-migration repository gates were also reported green:
+
+```text
 npm run typecheck  PASS
 npm run lint       PASS
 npm run build      PASS
-git diff --check origin/master...HEAD  PASS (no output)
+git diff --check   PASS (no output)
 ```
 
-The separable 3D checkpoint is accepted.
-
-## 3E stale-activation decision gate discovered during handover review
-
-Before live provider wiring, reconcile the database leaf trigger:
-
-```text
-public.update_conversation_leaf()
-AFTER INSERT ON public.messages
--> unconditionally sets conversations.current_message_leaf_id = NEW.id
-```
-
-This means a naive application-level sequence of `INSERT message` followed by `UPDATE ... WHERE current_message_leaf_id = expected` is **not an atomic stale guard**: the insert trigger has already advanced the leaf.
-
-For 3E, do not rely on post-insert CAS alone. The recommended minimal design is a focused transactional database function/RPC that:
-
-1. locks the target conversation row (`SELECT ... FOR UPDATE`);
-2. verifies `current_message_leaf_id` still equals the request leaf captured at generation start;
-3. only then inserts the accepted BRep assistant/source revision in that same transaction;
-4. lets the existing insert trigger advance the leaf to the new message while the row lock is held;
-5. returns a clear accepted/stale result without inserting when the expected leaf no longer matches.
-
-This preserves existing global trigger behavior and avoids a broad trigger rewrite. Reconcile RLS/function conventions and test the race against the real local Supabase runtime before accepting 3E.
-
-Important identities for the implementation:
-
-- **request leaf ID** — `current_message_leaf_id` at generation start; stale/activation guard compares against this;
-- **source revision message ID** — nearest preceding assistant `data-brep-project`; previous→next identity validation uses this project;
-- **response message ID** — new immutable assistant revision that carries the accepted BRep source.
-
-Do not conflate these IDs.
+3E is accepted. The race script remains as a regression gate.
 
 ## Current next action
 
-Proceed with one coherent implementation packet covering only:
+Do not start 3F yet.
 
-- remaining **3D normal-provider BRep routing/context/tool choice**, and
-- core **3E validation + immutable source revision + atomic stale activation**.
+First complete the remaining **3D live normal-provider acceptance** on a real native BRep conversation. Verify the full path:
 
-Do not start 3F external-agent parity, 3G product creation/UI, Phase 4 graph UX or later interoperability work yet. Use `docs/brep_phase3_codex_handover.md` as the focused implementation handover.
+```text
+active BRep source
+-> canonical model context
+-> build_brep_project
+-> complete follow-up snapshot
+-> identity validation + structural diff
+-> atomic immutable persistence
+-> current leaf
+-> native viewer/evaluator
+```
+
+If that live acceptance passes, record the evidence here and proceed to **3F — external-agent/OpenCode parity**. Do not mix in 3G product creation/UI, Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction.
