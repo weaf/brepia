@@ -644,6 +644,16 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      persist_brep_ai_revision: {
+        Args: {
+          p_conversation_id: string;
+          p_expected_leaf_id: string;
+          p_message_id: string;
+          p_metadata?: Json;
+          p_parts: Json;
+        };
+        Returns: Json;
+      };
       set_conversation_suggestions: {
         Args: { p_conversation_id: string; p_suggestions: Json };
         Returns: undefined;
