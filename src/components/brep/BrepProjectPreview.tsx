@@ -47,6 +47,10 @@ export function BrepProjectPreview() {
   );
 
   useEffect(() => {
+    return () => geometry?.dispose();
+  }, [geometry]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const evaluate = async () => {
       setLoading(true);
