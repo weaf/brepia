@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BrepEvaluationRequestError,
   normalizeBrepEvaluationRequest,
+  resolveBrepProjectPlacement,
   type BrepEvaluationSuccess,
 } from '../shared/brepProvider';
 import {
@@ -94,6 +95,64 @@ describe('BRep provider contract', () => {
           parameterValues: { width: 1 },
         }),
       'invalid_parameter_value',
+    );
+  });
+
+  it('resolves a valid placement into an explicit future Grasshopper plane basis', () => {
+    const source = project();
+    const normalized = normalizeBrepEvaluationRequest({ project: source });
+    expect(
+      resolveBrepProjectPlacement(
+        normalized.project.placement,
+        normalized.parameterValues,
+      ),
+    ).toEqual({
+      origin: [0, 0, 0],
+      xAxis: [1, 0, 0],
+      yAxis: [0, 1, 0],
+      zAxis: [0, 0, 1],
+    });
+  });
+
+  it('rejects zero-length and collinear placement axes before provider execution', () => {
+    const zeroAxis = project();
+    zeroAxis.placement.xAxis = [0, 0, 0];
+    expectRequestError(
+      () => normalizeBrepEvaluationRequest({ project: zeroAxis }),
+      'invalid_placement',
+    );
+
+    const collinear = project();
+    collinear.placement.yAxis = [2, 0, 0];
+    expectRequestError(
+      () => normalizeBrepEvaluationRequest({ project: collinear }),
+      'invalid_placement',
+    );
+  });
+
+  it('validates placement after published parameter overrides are resolved', () => {
+    const source = project();
+    source.parameters.push({
+      id: 'axisY',
+      label: 'Placement Y axis',
+      type: 'number',
+      unit: 'none',
+      default: 1,
+      min: 0,
+      max: 1,
+    });
+    source.placement.yAxis = [0, { parameter: 'axisY' }, 0];
+
+    expect(
+      normalizeBrepEvaluationRequest({ project: source }).parameterValues.axisY,
+    ).toBe(1);
+    expectRequestError(
+      () =>
+        normalizeBrepEvaluationRequest({
+          project: source,
+          parameterValues: { axisY: 0 },
+        }),
+      'invalid_placement',
     );
   });
 
