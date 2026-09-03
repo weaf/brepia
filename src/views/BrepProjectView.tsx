@@ -84,6 +84,7 @@ export default function BrepProjectView() {
       key={data.leafId}
       project={data.artifact.source.source}
       exportPackage
+      packageTitle={data.artifact.title}
       onParameterValuesCommit={async (parameterValues: BrepParameterValues) => {
         await persistBrepProjectParameterRevision({
           conversationId: id,
