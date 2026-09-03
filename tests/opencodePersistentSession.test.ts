@@ -6,6 +6,7 @@ import {
   buildOpenCodeSessionIdentity,
   buildPersistentOpenCodePrompt,
   ensureOpenCodeSession,
+  formatPrompt,
 } from '../src/server/opencode';
 import { phaseOneCabinetProject } from '../shared/brepSamples';
 
@@ -25,6 +26,20 @@ afterEach(() => {
 });
 
 describe('persistent OpenCode sessions', () => {
+  it('includes explicit BRep authority in non-persistent OpenCode prompts', () => {
+    const text = formatPrompt(
+      [{ role: 'user', content: [{ type: 'text', text: 'Make it wider' }] }],
+      '',
+      'brep',
+      phaseOneCabinetProject,
+    );
+
+    assert.match(text, /<current_brep_project>/);
+    assert.match(text, new RegExp(`"id":"${phaseOneCabinetProject.id}"`));
+    assert.match(text, /build_brep_project/);
+    assert.doesNotMatch(text, /build_parametric_model/);
+  });
+
   it('derives one stable session id from a pCAD conversation', () => {
     assert.equal(
       buildOpenCodeSessionId('123e4567-e89b-12d3-a456-426614174000'),

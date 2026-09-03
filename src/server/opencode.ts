@@ -284,6 +284,7 @@ export function formatPrompt(
   prompt: LanguageModelV3Prompt,
   transportInstruction = loadBundledInstruction('transport.opencode'),
   sourceKind: AgentParametricSourceKind = 'openscad',
+  currentBrepProject?: BrepProject,
 ): string {
   const lines: string[] = [];
   if (transportInstruction.trim()) {
@@ -301,6 +302,11 @@ export function formatPrompt(
           ? 'Assistant'
           : 'System';
     lines.push(`${label}: ${textParts.join('\n')}`);
+  }
+  if (sourceKind === 'brep' && currentBrepProject) {
+    lines.push(
+      `<current_brep_project>\n${JSON.stringify(currentBrepProject)}\n</current_brep_project>`,
+    );
   }
   lines.push(buildAgentOutputContract(sourceKind));
   return lines.join('\n\n');
@@ -1210,6 +1216,7 @@ async function* streamParts(
       prompt,
       runtime.transportInstruction,
       runtime.sourceKind,
+      runtime.currentBrepProject,
     );
     const identity = buildOpenCodeSessionIdentity(modelId, formattedPrompt);
     const { providerID, id: bareId } = identity.model;

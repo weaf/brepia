@@ -108,6 +108,7 @@ export function selectChatTransport(
   modelId: string,
   executionMode: 'cli' | 'streaming',
 ): ChatTransport {
+  if (modelId.startsWith('agent/codex/')) return { kind: 'cli-agent' };
   const underlying = opencodeAgentUnderlyingModelId(modelId);
   if (underlying === undefined) return { kind: 'normal' };
   if (executionMode === 'streaming') {

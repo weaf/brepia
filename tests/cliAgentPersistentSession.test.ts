@@ -8,6 +8,7 @@ import {
   encodeCliAgentSessionToolCallId,
   parseCodexCliOutput,
   parseOpenCodeCliOutput,
+  selectChatTransport,
 } from '../src/server/cliAgents';
 import { phaseOneCabinetProject } from '../shared/brepSamples';
 
@@ -23,6 +24,15 @@ function project(code: string, support = 'module support_part() { cube(1); }') {
 }
 
 describe('persistent CLI agent sessions', () => {
+  it('routes Codex agent models through the CLI adapter in either OpenCode execution mode', () => {
+    assert.deepEqual(selectChatTransport('agent/codex/default', 'cli'), {
+      kind: 'cli-agent',
+    });
+    assert.deepEqual(selectChatTransport('agent/codex/default', 'streaming'), {
+      kind: 'cli-agent',
+    });
+  });
+
   it('persists and recovers OpenCode and Codex session IDs through tool-call IDs', () => {
     const openCodeId = 'ses_abc123XYZ';
     const codexId = '019d1c0a-0137-73f3-bf4a-88c90739150c';
