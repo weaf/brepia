@@ -4,10 +4,14 @@ import {
   resolveActiveBrepAiSource,
   serializeBrepAiProjectContext,
 } from '../shared/brepAiContext';
+import type { BrepProject } from '../shared/brepProject';
 import { createBrepProjectArtifact } from '../shared/brepProjectArtifact';
 import { phaseOneCabinetProject } from '../shared/brepSamples';
 
-function sourceMessage(id: string, project = phaseOneCabinetProject) {
+function sourceMessage(
+  id: string,
+  project: BrepProject = phaseOneCabinetProject,
+) {
   return {
     id,
     role: 'assistant',
@@ -37,7 +41,7 @@ describe('native BRep AI source context', () => {
   });
 
   it('uses the newest valid BRep source revision on the active branch', () => {
-    const revised = {
+    const revised: BrepProject = {
       ...phaseOneCabinetProject,
       name: 'Revised cabinet',
     };
