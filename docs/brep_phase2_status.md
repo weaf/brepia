@@ -254,7 +254,7 @@ the persistence error.
 
 Focused evidence:
 
-- `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (7 tests);
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (16 tests);
 - `npm run typecheck` — PASS.
 
 ## 2E — Conversation restore/retry/branch behavior
@@ -287,6 +287,23 @@ Focused evidence:
 
 - `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (7 tests);
 - `npm run typecheck` — PASS.
+
+## 2F — Canonical project import/export
+
+Status: **complete**.
+
+The product now exports the active persisted BRep source through the sole
+`brepia-brep-project` package contract and imports that package into a new
+ordinary parametric conversation baseline. The parser runs before persistence,
+enforces its UTF-8 size limit and normalized BRep schema/version, and strips
+non-canonical fields. STEP remains the separate native geometry export; no STEP
+import path attempts parametric reconstruction.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (16 tests);
+- `npm run typecheck` — PASS;
+- `git diff --check` — PASS.
 
 ## Current constraints
 

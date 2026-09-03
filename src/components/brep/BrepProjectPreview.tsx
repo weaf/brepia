@@ -7,9 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
 import { exportBrepStep } from '@/services/brepStepExport';
 import { createBrepProjectConversation } from '@/services/brepProjectService';
+import { importBrepProjectConversation } from '@/services/brepProjectService';
 import { downloadSTEPFile } from '@/utils/downloadUtils';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import type { BrepProject } from '@shared/brepProject';
+import {
+  createBrepProjectPackage,
+  serializeBrepProjectPackage,
+} from '@shared/brepProjectPackage';
 import type {
   BrepEvaluationSuccess,
   BrepParameterValues,
@@ -39,6 +44,8 @@ export function BrepProjectPreview({
   activeRevisionId,
   onSelectRevision,
   onRestoreRevision,
+  exportPackage = false,
+  importPackage = false,
 }: {
   project?: BrepProject;
   createProject?: boolean;
@@ -47,6 +54,8 @@ export function BrepProjectPreview({
   activeRevisionId?: string;
   onSelectRevision?: (id: string) => Promise<void>;
   onRestoreRevision?: (id: string) => Promise<void>;
+  exportPackage?: boolean;
+  importPackage?: boolean;
 }) {
   const { user } = useAuth();
   const [values, setValues] = useState<BrepParameterValues>(() =>
@@ -192,6 +201,30 @@ export function BrepProjectPreview({
         >
           {exporting ? 'Exporting STEP…' : 'Export native STEP'}
         </Button>
+        {exportPackage ? (
+          <Button
+            className="mt-3 w-full"
+            variant="outline"
+            onClick={() => {
+              const text = serializeBrepProjectPackage(
+                createBrepProjectPackage({
+                  title: project.name,
+                  source: { kind: 'brep', source: project },
+                }),
+              );
+              const url = URL.createObjectURL(
+                new Blob([text], { type: 'application/json' }),
+              );
+              const anchor = document.createElement('a');
+              anchor.href = url;
+              anchor.download = `${project.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.brepia-brep.json`;
+              anchor.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Export BRep project
+          </Button>
+        ) : null}
         {createProject ? (
           <Button
             className="mt-3 w-full"
@@ -220,6 +253,38 @@ export function BrepProjectPreview({
           >
             {creating ? 'Creating project…' : 'Create BRep project'}
           </Button>
+        ) : null}
+        {importPackage ? (
+          <label className="mt-3 block">
+            <span className="sr-only">Import BRep project package</span>
+            <input
+              accept="application/json,.json,.brepia-brep.json"
+              className="block w-full text-sm"
+              type="file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file || !user?.id) return;
+                void file
+                  .text()
+                  .then(async (text) => {
+                    const { parseBrepProjectPackageJson } =
+                      await import('@shared/brepProjectPackage');
+                    const conversationId = await importBrepProjectConversation({
+                      userId: user.id,
+                      projectPackage: parseBrepProjectPackageJson(text),
+                    });
+                    window.location.assign(`/brep/${conversationId}`);
+                  })
+                  .catch((reason) =>
+                    setError(
+                      reason instanceof Error
+                        ? reason.message
+                        : 'Could not import BRep project.',
+                    ),
+                  );
+              }}
+            />
+          </label>
         ) : null}
         {revisions.length > 1 ? (
           <div className="mt-6 border-t border-adam-neutral-700 pt-4">

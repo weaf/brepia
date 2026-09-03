@@ -7,6 +7,7 @@ import {
 } from '@shared/brepProjectArtifact';
 import type { BrepProjectArtifactData } from '@shared/chatAi';
 import type { BrepProject } from '@shared/brepProject';
+import type { BrepProjectPackage } from '@shared/brepProjectPackage';
 
 export async function createBrepProjectConversation({
   userId,
@@ -64,6 +65,20 @@ export async function createBrepProjectConversation({
     .eq('user_id', userId);
   if (leafError) throw leafError;
   return conversationId;
+}
+
+export async function importBrepProjectConversation({
+  userId,
+  projectPackage,
+}: {
+  userId: string;
+  projectPackage: BrepProjectPackage;
+}): Promise<string> {
+  return createBrepProjectConversation({
+    userId,
+    title: projectPackage.title,
+    project: projectPackage.source.source,
+  });
 }
 
 export async function persistBrepProjectParameterRevision({
