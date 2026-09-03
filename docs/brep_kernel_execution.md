@@ -48,8 +48,42 @@ For the railway use case, Grasshopper is expected to own project-scale placement
 - Prefer deterministic validation errors/warnings over silently guessing topology or references.
 - Add focused tests with each contract/behavior change before broad gates.
 - Use small forward commits. Do not amend/rebase/squash already-pushed shared history.
+- Every verified logical checkpoint must be committed **and pushed** to `origin/feature/brep-kernel-foundation` before continuing materially beyond that checkpoint. This lets the parallel ChatGPT/GitHub review monitor inspect the exact shared state without user relay.
+- If a checkpoint is intentionally kept local because it is failing/incomplete, do not represent it as shared/verified; report that explicitly in the handoff/status instead.
 - Update `docs/brep_kernel_status.md` at verified checkpoints, not after every trivial edit.
 - Do not implement Rhino.Compute, Grasshopper export, a graph editor or browser-authoritative OCCT early merely because they are future roadmap items.
+
+## Shared-checkpoint publication workflow
+
+At each meaningful verified checkpoint:
+
+```text
+focused verification
+      |
+      v
+update docs/brep_kernel_status.md
+      |
+      v
+commit logical checkpoint
+      |
+      v
+git push origin feature/brep-kernel-foundation
+      |
+      v
+continue implementation
+```
+
+A checkpoint is not considered available for parallel review until the push succeeds.
+
+Before reporting a checkpoint, record/confirm:
+
+- commit SHA;
+- `git status --short`;
+- local branch ahead/behind relative to `origin/feature/brep-kernel-foundation`;
+- push result;
+- relevant test/gate evidence.
+
+Normal development edits between checkpoints may remain local. Do not create noisy commits merely to satisfy this rule; publish coherent, verified slices.
 
 ## Token/work efficiency
 
@@ -243,5 +277,6 @@ At a meaningful checkpoint, report concisely:
 - focused and broad test results;
 - browser/manual verification performed or still required;
 - known limitations/risks;
-- clean/dirty git status and ahead/behind state;
+- clean/dirty git status and ahead/behind state relative to origin;
+- whether the checkpoint commit was successfully pushed and the remote branch now contains it;
 - next active step.
