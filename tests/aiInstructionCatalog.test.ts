@@ -41,6 +41,7 @@ describe('repository-driven AI instruction catalog', () => {
       'vision.reference',
       'conversation.title',
       'context.parametric_attachment',
+      'context.brep_project',
       'transport.opencode',
       'transport.codex',
     ]) {
