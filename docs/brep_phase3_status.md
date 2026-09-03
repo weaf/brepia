@@ -16,125 +16,115 @@ Merge pull request #20 from weaf/feature/brep-project-lifecycle
 Phase 2: native BRep project lifecycle
 ```
 
-Active execution contract:
-
-```text
-docs/brep_phase3_execution.md
-```
-
-Roadmap:
-
-```text
-docs/brep_kernel_plan.md
-```
+Active execution contract: `docs/brep_phase3_execution.md`.
+Roadmap: `docs/brep_kernel_plan.md`.
 
 Phase 1/2 execution/status files are historical evidence after merge.
 
 ## 3A — Architecture reconciliation and contract lock
 
-Status: **complete for architecture reconciliation; separable shared primitives are next.**
+Status: **complete**.
 
 ### Current ownership map
 
 | Concern | Current implementation | Phase 3 direction |
 | --- | --- | --- |
-| Parametric project source | `shared/parametricProjectSource.ts` discriminates `openscad | brep`; absent discriminator is legacy OpenSCAD | Reuse unchanged as source-kind boundary. AI must target `kind: brep` with a complete normalized `BrepProject`. |
-| Canonical BRep schema | `shared/brepProject.ts` owns versioning, bounds, stable IDs, DAG/reference/cycle validation, parameter units and current semantic fillet selector | Keep as the only authoring contract. AI validation must call this normalizer; do not introduce an AI-specific geometry schema. |
-| Persisted BRep artifact | `shared/brepProjectArtifact.ts` validates `data-brep-project` containing `{ title, version, source: { kind: 'brep', source } }` | Reuse this payload for successful AI revisions. Do not introduce a second AI artifact/history model. |
-| BRep lifecycle persistence | `src/services/brepProjectService.ts` creates immutable assistant revisions and uses current-leaf CAS for parameter edits; restore copies validated historical source to a new assistant leaf | AI edits must use the same immutable/CAS semantics, anchored to the exact source leaf used as generation context. |
-| OpenSCAD AI tool | `shared/chatAi.ts` `build_parametric_model` is intentionally OpenSCAD-only; `parametricArtifactSchema` contains a complete normalized OpenSCAD project | Preserve historical/current OpenSCAD semantics. BRep must not be forced into this payload if doing so makes tool recovery/UI parsing ambiguous. |
-| OpenSCAD artifact helpers | `shared/parametricParts.ts` searches `tool-build_parametric_model` and normalizes only OpenSCAD `ParametricArtifact` | Keep OpenSCAD helpers narrow. Add BRep-specific/shared source helpers rather than silently changing existing helper meaning. |
-| Normal AI server | `src/server/aiChat.ts` loads Parametric instructions/tools, converts persisted branch messages to model messages and owns stream/tool persistence | Phase 3 must add source-kind-aware context/tool selection while preserving current Creative/OpenSCAD paths. |
-| External-agent structured result | `src/server/opencodeAgentResult.ts` parses `{ project, message }` where `project` is OpenSCAD only and synthesizes `build_parametric_model` | Extend only after the shared BRep tool/result contract is fixed. The parser should discriminate project kind explicitly rather than infer from shape. |
-| OpenCode/Codex continuation context | `src/server/cliAgents.ts` finds the latest `build_parametric_model` tool call and serializes `<current_pcad_artifact>` containing the complete OpenSCAD project | Needs BRep-aware current-source lookup. BRep continuation must receive the complete current canonical `BrepProject`; OpenSCAD asset reconciliation stays OpenSCAD-only. |
-| OpenCode streaming continuation | `src/server/opencode.ts` mirrors the same current-artifact/user/build-result concept | Must reach semantic parity with CLI after the shared result contract is stable. |
-| Previous/current artifact semantics | Existing OpenSCAD external-agent paths use the latest complete project artifact and latest user request/build feedback; Phase 2 BRep view resolves the active assistant leaf | For BRep, the exact active `data-brep-project` leaf at generation start is authoritative. A later restore/branch/edit must make an older completion stale. |
-| Parameter edits vs full project edits | Phase 2 BRep parameter UI rewrites published defaults in a complete normalized source snapshot; OpenSCAD Customizer rewrites entrypoint source | AI parameter edits and DAG edits both return complete BRep snapshots. Internal optimization must not create patch persistence semantics. |
-| Selector/topology semantics | `BrepProject` v1 exposes semantic `parallelToAxis`; tests reject invented `edgeIndex` selectors | AI instructions must enumerate supported selectors only. Unsupported topology requests fail closed rather than creating raw indices. |
-| Runtime boundary | `/api/brep/evaluate` and STEP export use the accepted rootless Podman build123d/OCCT runtime | Preserve exactly. AI never receives Python/native execution authority. |
+| Parametric project source | `shared/parametricProjectSource.ts` discriminates `openscad | brep`; absent discriminator is legacy OpenSCAD | Reuse unchanged. AI targets a complete normalized `BrepProject` for BRep. |
+| Canonical BRep schema | `shared/brepProject.ts` owns versioning, bounds, IDs, parameter units, DAG/reference/cycle validation and semantic selectors | Remains the sole authoring contract. No AI-specific geometry schema. |
+| Persisted BRep artifact | `shared/brepProjectArtifact.ts` validates `data-brep-project` with `{ title, version, source: { kind: 'brep', source } }` | Reuse for successful AI revisions; no parallel AI artifact/history model. |
+| BRep lifecycle | `src/services/brepProjectService.ts` creates immutable assistant revisions, current-leaf CAS for parameter edits and validated restore branches | AI edits must use the same immutable/CAS semantics, anchored to the exact source leaf used as generation context. |
+| OpenSCAD AI tool | `shared/chatAi.ts` `build_parametric_model` remains intentionally OpenSCAD-only | Preserve historical/current semantics unless a later reviewed discriminated change is demonstrably safe. |
+| OpenSCAD helpers | `shared/parametricParts.ts` searches `tool-build_parametric_model` and normalizes OpenSCAD artifacts | Keep narrow; do not silently change helper meaning for BRep. |
+| Normal AI server | `src/server/aiChat.ts` owns Parametric instructions/tools, stream lifecycle and tool/message persistence | Later add source-kind-aware context/tool selection without regressing OpenSCAD/Creative. |
+| External structured result | `src/server/opencodeAgentResult.ts` currently parses OpenSCAD `{ project, message }` only | Extend after shared/native BRep contract is stable; discriminate explicitly. |
+| OpenCode/Codex continuation | `src/server/cliAgents.ts` serializes latest complete OpenSCAD tool artifact | Later add active BRep source lookup; OpenSCAD asset reconciliation remains OpenSCAD-only. |
+| Previous/current source | OpenSCAD external paths use latest complete project; Phase 2 BRep resolves active assistant leaf | BRep generation must anchor to the exact active `data-brep-project` leaf at request start. |
+| Parameter vs DAG edit | Phase 2 BRep parameter editing persists complete normalized snapshots | AI parameter-definition and DAG edits both return complete snapshots; no patch source authority. |
+| Selector/topology | v1 supports semantic `parallelToAxis`; canonical tests reject `edgeIndex` | AI may emit only canonical selector vocabulary; unsupported topology operations fail closed. |
+| Runtime | accepted rootless Podman build123d/OCCT evaluator and STEP path | Preserve exactly. AI receives no Python/native execution authority. |
 
-### Reconciliation conclusions
+### Contract decisions
 
-1. **Phase 2 already created the correct persistence seam.** No new conversation type or database history model is needed.
-2. **The existing OpenSCAD AI tool contract should remain narrow until proven safe to generalize.** `build_parametric_model`, `ParametricArtifact` and `parametricParts` have substantial historical/recovery/OpenCode assumptions.
-3. **A BRep AI result must be a complete snapshot.** This mirrors the successful multi-file OpenSCAD project-native design while using `BrepProject` rather than source files.
-4. **BRep AI persistence must be source-leaf anchored.** Phase 2 parameter CAS already demonstrates the correct stale-write policy; AI completion must not reactivate a branch that ceased to be current while generation was running.
-5. **Structural diff is derived diagnostics, not persistence authority.** It should be computed from normalized previous/next snapshots and keyed by stable IDs.
-6. **Identity preservation needs explicit validation beyond schema validity.** `normalizeBrepProject` correctly validates each snapshot but cannot know whether a follow-up AI edit unnecessarily replaced all IDs. Phase 3 therefore needs a previous-vs-next identity policy.
-7. **Topology safety is currently strong.** The v1 schema has only a semantic axis selector and already rejects index selectors; Phase 3 should preserve that constraint rather than widening it for AI convenience.
-8. **External agents are a later integration layer, not the first contract owner.** Their current protocol is OpenSCAD-specific and should be extended only after shared/native provider semantics are stable.
-
-### Canonical Phase 3 AI snapshot direction
-
-Creation candidate:
-
-```text
-{
-  title,
-  version,
-  source: {
-    kind: 'brep',
-    source: <complete BrepProject>
-  }
-}
-```
-
-Follow-up candidate uses the same complete shape. Validation additionally compares `previous.source.source` with the next normalized project to enforce project identity and compute structural diff.
-
-The final structured tool shape may wrap these fields differently for AI SDK ergonomics, but persistence authority remains the existing `BrepProjectArtifactData` semantics.
-
-### Stable-ID policy locked for first implementation
-
-- project ID must remain identical on ordinary follow-up edits;
-- unchanged node/parameter IDs should remain identical;
-- existing IDs may carry changed content to represent a modification;
-- genuinely new nodes/parameters get new IDs;
-- removed nodes/parameters disappear only when references remain valid;
-- obvious whole-project ID churn should fail closed or trigger a decision gate;
-- display labels/names are not identity;
-- raw topology/viewer/OCCT indices are never IDs.
-
-The first implementation does not require semantic graph-isomorphism detection. It does require enough churn detection to reject clearly destructive all-new-ID rewrites.
-
-### Initial structural diff vocabulary
-
-Derived diff should report:
-
-```text
-project fields changed
-parameters: added / removed / changed / unchanged count
-nodes:      added / removed / changed / unchanged count
-changed entries keyed by stable id
-concise summary
-```
-
-Canonical normalization sorts parameters/nodes by ID, so comparisons can be deterministic without array-order noise.
+- Phase 2 already supplies the correct persistence seam; no new conversation type/database history model is needed.
+- Complete BRep snapshots mirror the successful project-native OpenSCAD editing principle, but use `BrepProject`, not source files.
+- Standalone schema validity is insufficient for follow-up edits: previous→next identity continuity must also be validated.
+- Project ID must remain stable on ordinary follow-ups; unchanged node/parameter IDs should remain stable; genuinely new objects receive new IDs.
+- Obvious whole-graph ID churn is rejected rather than silently accepted.
+- Structural diff is deterministic derived diagnostics, never source authority.
+- BRep source-leaf anchoring plus existing compare-and-set activation is the required stale-result policy.
+- External-agent integration is downstream of the shared/native contract, not the contract owner.
 
 ### Primary regression risks
 
-- making `build_parametric_model` polymorphic and breaking historical OpenSCAD tool parts, dangling-tool recovery or imported artifact logic;
-- external agents accidentally selecting a historical instead of active BRep snapshot;
-- stale AI completion moving `current_message_leaf_id` after restore/branch/parameter edit;
+- polymorphizing `build_parametric_model` and breaking historical OpenSCAD tool parts/recovery;
+- selecting a historical rather than active BRep snapshot for follow-up context;
+- stale AI completion reactivating an older branch after restore/parameter edit;
 - whole-project ID churn that still passes standalone schema validation;
-- teaching AI unsupported topology selector forms;
-- duplicating the BRep source into tool data and `data-brep-project` with divergent authority;
-- OpenSCAD asset reconciliation being applied to BRep data;
-- native evaluator invocation before AI result normalization/identity validation;
-- persisting diff/runtime diagnostics as editable source;
+- invented raw topology selectors;
+- duplicated source authority between tool data and `data-brep-project`;
+- OpenSCAD asset reconciliation leaking into BRep;
+- native evaluation before AI candidate/identity validation;
 - Phase 4 graph UX leaking into Phase 3.
 
-### Decision gates
+## 3B — Shared BRep AI snapshot schema and structural diff
 
-Stop before implementation broadening if:
+Status: **implemented; local test/type/lint verification pending**.
 
-- a BRep tool cannot be added without changing historical OpenSCAD message semantics;
-- project-ID continuity or stale-parent anchoring cannot be enforced at the existing message-tree boundary;
-- a requested topology edit needs selectors outside canonical schema;
+Added:
+
+```text
+shared/brepAiProject.ts
+tests/brepAiProject.test.ts
+```
+
+The shared contract now provides:
+
+- `normalizeBrepAiProjectCandidate()` — validates every complete AI candidate through canonical `normalizeBrepProject()` and wraps failures as an AI-boundary error;
+- `diffBrepProjects()` — normalizes both snapshots then computes deterministic project-field, published-parameter and node diffs keyed by stable IDs;
+- field-level changed paths for modified parameters/nodes;
+- added/removed/changed/unchanged counts and a concise human summary;
+- `validateBrepAiFollowUp()` — enforces project-ID continuity and rejects obvious complete feature-node ID churn before returning the normalized next project and derived diff.
+
+Focused tests cover:
+
+- canonical normalization and order independence;
+- no false diff from source array ordering;
+- parameter-default/definition changes keyed by stable parameter ID;
+- node modification/addition and result-node change;
+- valid node removal;
+- project-ID replacement rejection;
+- whole-graph node-ID churn rejection;
+- fail-closed rejection of invented raw `edgeIndex` topology selectors.
+
+No provider, AI SDK tool, message persistence, OpenCode/Codex adapter, UI, evaluator or native sandbox code changed in 3B.
+
+### Verification state
+
+GitHub connector writes do not execute the local repository test/type/lint toolchain, and no push-triggered workflow run exists for the current checkpoint. Therefore 3B must not yet be called verified.
+
+Run locally before 3C:
+
+```bash
+npm test -- --run tests/brepAiProject.test.ts tests/brepProject.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts
+npm run typecheck
+npm run lint
+git diff --check origin/master...HEAD
+```
+
+If these expose a contract/type issue, fix 3B before touching AI transports.
+
+## Decision gates
+
+Stop before broadening implementation if:
+
+- BRep tool integration would require breaking historical OpenSCAD message/tool semantics;
+- project-ID continuity or stale-parent anchoring cannot be enforced at the current message-tree boundary;
+- a requested topology edit requires selectors outside canonical schema;
 - provider/external-agent parity would require arbitrary Python/build123d execution;
 - broad database changes appear necessary merely for AI editing.
 
 ## Current next action
 
-Implement **3B — Shared BRep AI snapshot schema and structural diff** as a provider-independent shared contract with focused tests. This work does not require Codex, local native runtime or browser interaction.
+Verify the 3B checkpoint locally. Once green, proceed to **3C — Native AI tool/source contract**.
 
-After 3B is reviewed and green, 3C–3G become the point where a single Codex thread is valuable because `aiChat`, AI SDK tool streaming/persistence, OpenCode CLI/streaming parity and product state must be changed coherently.
+3C–3G are the point where one coherent Codex thread becomes valuable because `aiChat`, AI SDK structured-tool streaming/persistence, message-tree stale guards, OpenCode CLI/streaming parity and product state must evolve together.
