@@ -4,7 +4,10 @@ import { BrepProjectPreview } from '@/components/brep/BrepProjectPreview';
 import { ActivityIndicator } from '@/components/brand';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
+import {
+  getBrepProjectArtifact,
+} from '@shared/brepProjectArtifact';
+import { resolveActiveBrepAiSourceForLeaf } from '@shared/brepAiContext';
 import type { BrepParameterValues } from '@shared/brepProvider';
 import type { Conversation } from '@shared/types';
 import {
@@ -35,12 +38,23 @@ export default function BrepProjectView() {
       }
       const { data: messages, error: messageError } = await supabase
         .from('messages')
-        .select('id, parent_message_id, parts')
+        .select('id, parent_message_id, role, parts')
         .eq('conversation_id', id)
-        .eq('role', 'assistant')
         .order('created_at', { ascending: true });
       if (messageError) throw messageError;
+
+      const activeSource = resolveActiveBrepAiSourceForLeaf(
+        messages ?? [],
+        typedConversation.current_message_leaf_id,
+      );
+      if (!activeSource) {
+        throw new Error(
+          'The active project branch has no valid BRep source snapshot.',
+        );
+      }
+
       const revisions = (messages ?? []).flatMap((message) => {
+        if (message.role !== 'assistant') return [];
         const artifact = getBrepProjectArtifact(message.parts);
         return artifact
           ? [
@@ -52,17 +66,11 @@ export default function BrepProjectView() {
             ]
           : [];
       });
-      const active = revisions.find(
-        (revision) => revision.id === typedConversation.current_message_leaf_id,
-      );
-      const artifact = active?.artifact;
-      if (!artifact)
-        throw new Error(
-          'The active project source is not a valid BRep snapshot.',
-        );
+
       return {
-        artifact,
+        artifact: activeSource.artifact,
         leafId: typedConversation.current_message_leaf_id,
+        sourceRevisionId: activeSource.messageId,
         revisions,
       };
     },
@@ -94,7 +102,7 @@ export default function BrepProjectView() {
         });
         await refetch();
       }}
-      activeRevisionId={data.leafId}
+      activeRevisionId={data.sourceRevisionId}
       revisions={data.revisions.map((revision, index) => ({
         id: revision.id,
         label: `Revision ${index + 1}`,
