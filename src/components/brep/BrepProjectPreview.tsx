@@ -12,7 +12,9 @@ import { downloadSTEPFile } from '@/utils/downloadUtils';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import type { BrepProject } from '@shared/brepProject';
 import {
+  BREP_PROJECT_PACKAGE_MAX_BYTES,
   createBrepProjectPackage,
+  parseBrepProjectPackageJson,
   serializeBrepProjectPackage,
 } from '@shared/brepProjectPackage';
 import type {
@@ -46,6 +48,7 @@ export function BrepProjectPreview({
   onRestoreRevision,
   exportPackage = false,
   importPackage = false,
+  packageTitle,
 }: {
   project?: BrepProject;
   createProject?: boolean;
@@ -56,6 +59,7 @@ export function BrepProjectPreview({
   onRestoreRevision?: (id: string) => Promise<void>;
   exportPackage?: boolean;
   importPackage?: boolean;
+  packageTitle?: string;
 }) {
   const { user } = useAuth();
   const [values, setValues] = useState<BrepParameterValues>(() =>
@@ -206,9 +210,10 @@ export function BrepProjectPreview({
             className="mt-3 w-full"
             variant="outline"
             onClick={() => {
+              const title = packageTitle ?? project.name;
               const text = serializeBrepProjectPackage(
                 createBrepProjectPackage({
-                  title: project.name,
+                  title,
                   source: { kind: 'brep', source: project },
                 }),
               );
@@ -217,7 +222,7 @@ export function BrepProjectPreview({
               );
               const anchor = document.createElement('a');
               anchor.href = url;
-              anchor.download = `${project.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.brepia-brep.json`;
+              anchor.download = `${title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.brepia-brep.json`;
               anchor.click();
               URL.revokeObjectURL(url);
             }}
@@ -263,12 +268,18 @@ export function BrepProjectPreview({
               type="file"
               onChange={(event) => {
                 const file = event.target.files?.[0];
+                event.currentTarget.value = '';
                 if (!file || !user?.id) return;
+                setError(null);
+                if (file.size > BREP_PROJECT_PACKAGE_MAX_BYTES) {
+                  setError(
+                    `BRep project package exceeds ${BREP_PROJECT_PACKAGE_MAX_BYTES} bytes.`,
+                  );
+                  return;
+                }
                 void file
                   .text()
                   .then(async (text) => {
-                    const { parseBrepProjectPackageJson } =
-                      await import('@shared/brepProjectPackage');
                     const conversationId = await importBrepProjectConversation({
                       userId: user.id,
                       projectPackage: parseBrepProjectPackageJson(text),
