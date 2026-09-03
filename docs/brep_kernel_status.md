@@ -63,7 +63,7 @@ docs/brep_kernel_execution.md
 
 ### Phase 1A — Canonical project contract
 
-Implementation started, not yet locally verified/closed in the shared status record.
+Closed and locally verified.
 
 Current files:
 
@@ -87,7 +87,25 @@ Current intended capabilities include:
 - initial semantic edge selector contract;
 - rejection of unsupported raw edge-index selection.
 
-The local Codex implementation thread must reconcile and run the focused tests/type checks before declaring Phase 1A complete. The schema is not released yet, so material design flaws should be corrected now rather than carried as compatibility debt.
+Reconciliation improvements in `1421fb6a2492b5668c54883ed92531b0791242a2`:
+
+- normalized projects now have an explicit kernel-neutral placement plane
+  (`origin`, `xAxis`, `yAxis`), defaulting deterministically to world XY for
+  hand-authored v1 input;
+- bounded, normalized project-object metadata supports future Grasshopper
+  classification/property transfer without encoding kernel topology;
+- parameter references are unit-checked against each semantic field.
+
+Evidence recorded before this checkpoint:
+
+```text
+npx vitest run tests/brepProject.test.ts  PASS (1 file, 12 tests)
+npm run typecheck                            PASS
+npm run lint                                 PASS
+git diff --check                             PASS
+```
+
+The local Codex implementation thread must first reconcile and run the focused tests/type checks before declaring Phase 1A complete. The schema is not released yet, so material design flaws should be corrected now rather than carried as compatibility debt.
 
 ## Commits on the foundation branch before Codex execution contract
 
@@ -103,22 +121,15 @@ Execution-contract setup continues after these commits.
 ## Active step
 
 ```text
-Phase 1A — reconcile and verify canonical BrepProject contract
-```
-
-After Phase 1A is green, proceed to:
-
-```text
-Phase 1B — kernel-neutral provider and result contracts
+Phase 1B — provider and result contracts
 ```
 
 Follow `docs/brep_kernel_execution.md` rather than improvising roadmap order.
 
 ## Validation evidence
 
-No Phase 1 implementation gate is yet recorded as PASS in this shared status file.
-
-Do not infer success from code presence alone. Codex must run the relevant local tests and record exact evidence here at verified checkpoints, then push that checkpoint so the evidence is reviewable from GitHub.
+Phase 1A is PASS with the exact evidence recorded above. Later Phase 1 gates
+remain unverified until their own focused evidence is recorded.
 
 ## Browser acceptance
 
@@ -138,12 +149,6 @@ Existing OpenSCAD behavior is a regression boundary throughout this work.
 
 ## Next status update
 
-Update this document at the next verified Codex checkpoint, including:
-
-- final commit SHA;
-- focused test result;
-- typecheck/lint result as applicable;
-- any schema changes made during reconciliation;
-- clean/dirty status and branch ahead/behind relative to origin;
-- successful push confirmation;
-- next active step.
+Update this document at the next verified Codex checkpoint, including final
+commit SHA, focused and broad evidence, branch ahead/behind state, successful
+push confirmation, and the next active step.
