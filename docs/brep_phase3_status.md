@@ -68,7 +68,7 @@ Status: **complete**.
 
 ## 3B — Shared BRep AI snapshot schema and structural diff
 
-Status: **implemented; local test/type/lint verification pending**.
+Status: **complete and locally verified**.
 
 Added:
 
@@ -77,7 +77,7 @@ shared/brepAiProject.ts
 tests/brepAiProject.test.ts
 ```
 
-The shared contract now provides:
+The shared contract provides:
 
 - `normalizeBrepAiProjectCandidate()` — validates every complete AI candidate through canonical `normalizeBrepProject()` and wraps failures as an AI-boundary error;
 - `diffBrepProjects()` — normalizes both snapshots then computes deterministic project-field, published-parameter and node diffs keyed by stable IDs;
@@ -98,20 +98,18 @@ Focused tests cover:
 
 No provider, AI SDK tool, message persistence, OpenCode/Codex adapter, UI, evaluator or native sandbox code changed in 3B.
 
-### Verification state
+### Verification evidence
 
-GitHub connector writes do not execute the local repository test/type/lint toolchain, and no push-triggered workflow run exists for the current checkpoint. Therefore 3B must not yet be called verified.
+Reported from the real local checkout on 2026-09-03:
 
-Run locally before 3C:
-
-```bash
-npm test -- --run tests/brepAiProject.test.ts tests/brepProject.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts
-npm run typecheck
-npm run lint
-git diff --check origin/master...HEAD
+```text
+npm test -- --run tests/brepAiProject.test.ts tests/brepProject.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts  PASS
+npm run typecheck  PASS
+npm run lint       PASS
+git diff --check origin/master...HEAD  PASS (no output)
 ```
 
-If these expose a contract/type issue, fix 3B before touching AI transports.
+3B is therefore accepted as the shared provider-independent foundation for Phase 3.
 
 ## Decision gates
 
@@ -125,6 +123,6 @@ Stop before broadening implementation if:
 
 ## Current next action
 
-Verify the 3B checkpoint locally. Once green, proceed to **3C — Native AI tool/source contract**.
+Proceed to **3C — Native AI tool/source contract**.
 
-3C–3G are the point where one coherent Codex thread becomes valuable because `aiChat`, AI SDK structured-tool streaming/persistence, message-tree stale guards, OpenCode CLI/streaming parity and product state must evolve together.
+Keep the existing OpenSCAD `build_parametric_model` payload and helper semantics unchanged. Review a separate BRep-specific structured tool as the default safe direction before any provider/runtime wiring.
