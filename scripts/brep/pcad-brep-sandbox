@@ -23,7 +23,7 @@ mkdir -p "$OUTPUT"
 OUTPUT="$(cd "$OUTPUT" && pwd -P)"
 
 PODMAN_BIN="${PCAD_PODMAN_BIN:-podman}"
-IMAGE="${PCAD_BREP_IMAGE:-localhost/brepia-brep:build123d-0.8.0}"
+IMAGE="${PCAD_BREP_IMAGE:-localhost/brepia-brep:build123d-0.11.1}"
 MEMORY="${PCAD_BREP_MEMORY:-2g}"
 CPUS="${PCAD_BREP_CPUS:-2}"
 PIDS_LIMIT="${PCAD_BREP_PIDS_LIMIT:-128}"

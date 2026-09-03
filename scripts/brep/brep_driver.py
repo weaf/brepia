@@ -3,9 +3,9 @@ import json
 import sys
 from pathlib import Path
 
-from build123d import Box, Cylinder, Location, Rotation, export_step
+from build123d import Box, Cylinder, Location, export_step
 
-PROVIDER = {"id": "build123d-occt", "providerVersion": "0.1.0", "kernelVersion": "build123d-0.8.0"}
+PROVIDER = {"id": "build123d-occt", "providerVersion": "0.1.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 
 def scalar(value, parameters):
     return parameters[value["parameter"]] if isinstance(value, dict) else value
@@ -41,24 +41,32 @@ def evaluate(request):
     project = request["project"]
     parameters = request["parameterValues"]
     shapes = {}
-    for node in project["nodes"]:
+    nodes = {node["id"]: node for node in project["nodes"]}
+
+    def evaluate_node(node_id):
+        if node_id in shapes:
+            return shapes[node_id]
+        node = nodes[node_id]
         kind = node["type"]
         if kind == "box": shape = Box(scalar(node["width"], parameters), scalar(node["depth"], parameters), scalar(node["height"], parameters))
         elif kind == "cylinder": shape = Cylinder(scalar(node["radius"], parameters), scalar(node["height"], parameters))
         elif kind == "transform":
-            shape = shapes[node["input"]]
+            shape = evaluate_node(node["input"])
             translation = vector(node.get("translate", [0, 0, 0]), parameters)
             rotation = vector(node.get("rotateDeg", [0, 0, 0]), parameters)
-            shape = shape.moved(Location(translation, Rotation(*rotation)))
+            shape = shape.moved(Location(translation, rotation))
         elif kind == "subtract":
-            shape = shapes[node["base"]]
-            for tool in node["tools"]: shape = shape - shapes[tool]
+            shape = evaluate_node(node["base"])
+            for tool in node["tools"]: shape = shape - evaluate_node(tool)
         elif kind == "fillet":
-            shape = shapes[node["input"]].fillet(scalar(node["radius"], parameters), axis_edges(shapes[node["input"]], node["selector"]["axis"]))
+            input_shape = evaluate_node(node["input"])
+            shape = input_shape.fillet(scalar(node["radius"], parameters), axis_edges(input_shape, node["selector"]["axis"]))
         else: raise ValueError(f"unsupported_operation: {kind}")
-        shapes[node["id"]] = shape
+        shapes[node_id] = shape
+        return shape
+
     result_id = project["resultNodeId"]
-    result = shapes[result_id]
+    result = evaluate_node(result_id)
     result_bounds = bounds(result)
     return result, {"status": "success", "provider": PROVIDER, "projectId": project["id"], "resultNodeId": result_id, "bodies": [{"id": result_id, "bounds": result_bounds, "viewerMesh": mesh(result, result_id)}], "bounds": result_bounds, "warnings": [], "exactExport": {"format": "step", "available": True}}
 

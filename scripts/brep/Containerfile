@@ -1,7 +1,9 @@
 FROM python:3.12-slim
-ARG BUILD123D_VERSION=0.8.0
+ARG BUILD123D_VERSION=0.11.1
+ARG CADQUERY_OCP_NOVTK_VERSION=7.9.3.1.1
 ENV VIRTUAL_ENV=/opt/brepia-brep-venv PATH=/opt/brepia-brep-venv/bin:/usr/local/bin:/usr/bin:/bin HOME=/tmp
-RUN python -m venv "$VIRTUAL_ENV" \
-  && "$VIRTUAL_ENV/bin/pip" install --no-cache-dir "build123d==${BUILD123D_VERSION}" \
-  && "$VIRTUAL_ENV/bin/python" -c "import build123d; print(build123d.__version__)"
+RUN apt-get update && apt-get install -y --no-install-recommends libgl1 && rm -rf /var/lib/apt/lists/* \
+  && python -m venv "$VIRTUAL_ENV" \
+  && "$VIRTUAL_ENV/bin/pip" install --no-cache-dir "build123d==${BUILD123D_VERSION}" "cadquery-ocp-novtk==${CADQUERY_OCP_NOVTK_VERSION}" \
+  && "$VIRTUAL_ENV/bin/python" -c "import importlib.metadata as m; import build123d, OCP; assert m.version('build123d') == '${BUILD123D_VERSION}'; assert m.version('cadquery-ocp-novtk') == '${CADQUERY_OCP_NOVTK_VERSION}'; print('build123d=' + build123d.__version__); print('cadquery-ocp-novtk=' + m.version('cadquery-ocp-novtk')); print('OCP=' + OCP.__version__)"
 WORKDIR /output
