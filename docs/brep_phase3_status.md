@@ -312,7 +312,7 @@ The implementation checkpoint is `62ae20706461b9175ceef4bf81c3bd693dc34383`, fol
 Focused 3F-D checks passed on 2026-09-03:
 
 ```text
-npm test -- --run tests/opencodeAgentResult.test.ts tests/cliAgentPersistentSession.test.ts tests/opencodePersistentSession.test.ts tests/aiInstructionCatalog.test.ts  PASS (36 tests)
+npm test -- --run tests/opencodeAgentResult.test.ts tests/cliAgentPersistentSession.test.ts tests/opencodePersistentSession.test.ts tests/aiInstructionCatalog.test.ts  PASS (38 tests)
 npm test       PASS (69 files, 536 tests)
 npm run typecheck  PASS
 npm run lint       PASS
