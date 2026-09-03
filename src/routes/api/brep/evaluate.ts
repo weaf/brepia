@@ -18,7 +18,7 @@ import {
 
 export const BREP_EVALUATION_REQUEST_LIMIT_BYTES = 512 * 1024;
 
-async function readBoundedJson(request: Request): Promise<unknown> {
+export async function readBoundedBrepJson(request: Request): Promise<unknown> {
   const declared = Number(request.headers.get('content-length'));
   if (
     Number.isFinite(declared) &&
@@ -56,7 +56,7 @@ async function readBoundedJson(request: Request): Promise<unknown> {
   ) as unknown;
 }
 
-function errorResponse(error: unknown) {
+export function brepEvaluationErrorResponse(error: unknown) {
   if (error instanceof RangeError)
     return json({ code: 'request_too_large', error: error.message }, 413);
   if (
@@ -73,6 +73,11 @@ function errorResponse(error: unknown) {
   if (error instanceof BrepEvaluationError) {
     if (error.code === 'capacity_exceeded')
       return json({ code: error.code, error: error.message }, 429);
+    if (
+      error.code === 'evaluation_timeout' ||
+      error.code === 'evaluation_cancelled'
+    )
+      return json({ code: error.code, error: error.message }, 408);
     return json(
       { code: error.code, error: error.message },
       error.code === 'provider_unavailable' ? 503 : 400,
@@ -94,7 +99,7 @@ export const Route = createFileRoute('/api/brep/evaluate')({
       POST: async ({ request }) => {
         try {
           await requireUser(request);
-          const body = await readBoundedJson(request);
+          const body = await readBoundedBrepJson(request);
           if (!isRecord(body))
             return json(
               {
@@ -107,10 +112,11 @@ export const Route = createFileRoute('/api/brep/evaluate')({
           const artifact = await evaluateBrepProject(
             normalized.project,
             normalized.parameterValues,
+            request.signal,
           );
           return json(artifact.result);
         } catch (error) {
-          return errorResponse(error);
+          return brepEvaluationErrorResponse(error);
         }
       },
     },
