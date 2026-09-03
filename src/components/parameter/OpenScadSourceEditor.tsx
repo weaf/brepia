@@ -233,6 +233,7 @@ export function OpenScadSourceEditor({
         }}
         onClick={(event) => syncCursor(event.currentTarget)}
         onKeyUp={(event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === ' ') return;
           if (
             event.key !== 'ArrowDown' &&
             event.key !== 'ArrowUp' &&
@@ -244,7 +245,6 @@ export function OpenScadSourceEditor({
           }
         }}
         onKeyDown={handleKeyDown}
-        onSelect={(event) => syncCursor(event.currentTarget)}
         onScroll={(event) => handleScroll(event.currentTarget)}
         readOnly={readOnly}
         spellCheck={false}
@@ -261,8 +261,8 @@ export function OpenScadSourceEditor({
           role="listbox"
           className="absolute z-20 max-h-48 w-72 overflow-y-auto rounded-md border border-adam-neutral-600 bg-adam-bg-secondary-dark p-1 shadow-xl"
           style={{
-            left: `min(${completionLeft}px, calc(100% - 18rem - 8px))`,
-            top: `min(${completionTop}px, calc(100% - 12rem - 8px))`,
+            left: `max(8px, min(${completionLeft}px, calc(100% - 18rem - 8px)))`,
+            top: `max(8px, min(${completionTop}px, calc(100% - 12rem - 8px)))`,
           }}
         >
           {completionContext.options.map((option, index) => (

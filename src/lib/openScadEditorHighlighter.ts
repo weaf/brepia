@@ -11,13 +11,20 @@ const createHighlighter = createBundledHighlighter({
   engine: () => createJavaScriptRegexEngine({ forgiving: true }),
 });
 
-const highlighterPromise = createHighlighter({
-  langs: ['openscad'],
-  themes: ['github-dark'],
-});
+let highlighterPromise: ReturnType<typeof createHighlighter> | null = null;
+
+function getOpenScadHighlighter() {
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighter({
+      langs: ['openscad'],
+      themes: ['github-dark'],
+    });
+  }
+  return highlighterPromise;
+}
 
 export async function highlightOpenScadSource(source: string): Promise<string> {
-  const highlighter = await highlighterPromise;
+  const highlighter = await getOpenScadHighlighter();
   return highlighter.codeToHtml(source || ' ', {
     lang: 'openscad',
     theme: 'github-dark',
