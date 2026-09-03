@@ -37,6 +37,7 @@ describe('repository-driven AI instruction catalog', () => {
       'parametric',
       'creative',
       'tool.build_parametric_model',
+      'tool.build_brep_project',
       'vision.reference',
       'conversation.title',
       'context.parametric_attachment',
