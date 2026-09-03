@@ -1,16 +1,11 @@
-CREATE OR REPLACE FUNCTION public.persist_brep_ai_revision(
-  p_conversation_id uuid,
-  p_expected_leaf_id uuid,
-  p_message_id uuid,
-  p_parts jsonb,
-  p_metadata jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY INVOKER
-SET search_path = public
-AS $$
+set check_function_bodies = off;
+
+CREATE OR REPLACE FUNCTION public.persist_brep_ai_revision(p_conversation_id uuid, p_expected_leaf_id uuid, p_message_id uuid, p_parts jsonb, p_metadata jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ SET search_path TO 'public'
+AS $function$
 DECLARE
   v_current_leaf_id uuid;
 BEGIN
@@ -69,7 +64,8 @@ BEGIN
     'messageId', p_message_id
   );
 END;
-$$;
+$function$
+;
 
 REVOKE ALL ON FUNCTION public.persist_brep_ai_revision(
   uuid, uuid, uuid, jsonb, jsonb

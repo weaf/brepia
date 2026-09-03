@@ -1127,6 +1127,13 @@ export async function handleAiChatRequest(req: Request) {
     {
       tools,
       convertDataPart: (part) => {
+        if (
+          activeBrepSource &&
+          (part.type === 'data-mesh-context' ||
+            part.type === 'data-mesh-preferences')
+        ) {
+          return undefined;
+        }
         if (part.type === 'data-mesh-context') {
           const { meshId, fileType, filename, boundingBox } = part.data;
           if (conversation.type === 'parametric' && filename) {
@@ -1560,11 +1567,18 @@ export async function handleAiChatRequest(req: Request) {
             });
             let error: { message: string } | null = null;
             if (persistAction === 'update') {
-              ({ error } = await supabaseClient
-                .from('messages')
-                .update(serializedMessage)
-                .eq('id', responseMessage.id)
-                .eq('conversation_id', conversation.id));
+              if (activeBrepSource) {
+                error = {
+                  message:
+                    'Native BRep AI attempted to update an immutable assistant revision in place.',
+                };
+              } else {
+                ({ error } = await supabaseClient
+                  .from('messages')
+                  .update(serializedMessage)
+                  .eq('id', responseMessage.id)
+                  .eq('conversation_id', conversation.id));
+              }
             } else if (persistAction === 'insert') {
               if (activeBrepSource) {
                 try {
@@ -1611,7 +1625,7 @@ export async function handleAiChatRequest(req: Request) {
               });
             }
 
-            if (!hasPendingToolCall && anthropicAuxiliaryAvailable) {
+            if (!error && !hasPendingToolCall && anthropicAuxiliaryAvailable) {
               await emitConversationSuggestions({
                 writer,
                 anthropic: providers.anthropic(),
