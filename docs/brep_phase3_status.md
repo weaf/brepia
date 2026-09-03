@@ -77,15 +77,7 @@ shared/brepAiProject.ts
 tests/brepAiProject.test.ts
 ```
 
-The shared contract provides:
-
-- `normalizeBrepAiProjectCandidate()` — validates every complete AI candidate through canonical `normalizeBrepProject()` and wraps failures as an AI-boundary error;
-- `diffBrepProjects()` — normalizes both snapshots then computes deterministic project-field, published-parameter and node diffs keyed by stable IDs;
-- field-level changed paths for modified parameters/nodes;
-- added/removed/changed/unchanged counts and a concise human summary;
-- `validateBrepAiFollowUp()` — enforces project-ID continuity and rejects obvious complete feature-node ID churn before returning the normalized next project and derived diff.
-
-Focused tests cover canonical normalization/order independence, parameter edits, node add/remove/change, project-ID replacement, whole-graph node-ID churn and fail-closed raw topology selector rejection.
+The shared contract provides canonical normalization, deterministic project/parameter/node diffing and follow-up identity validation. Focused tests cover normalization/order independence, parameter edits, node add/remove/change, project-ID replacement, whole-graph node-ID churn and fail-closed raw topology selector rejection.
 
 ### Verification evidence
 
@@ -98,13 +90,13 @@ npm run lint       PASS
 git diff --check origin/master...HEAD  PASS (no output)
 ```
 
-3B is accepted as the shared provider-independent foundation for Phase 3.
+3B is accepted.
 
 ## 3C — Native AI tool/source contract
 
 Status: **complete and locally verified**.
 
-Decision: legacy `build_parametric_model` stays strictly OpenSCAD. Native BRep uses the separate `build_brep_project` tool contract, preventing historical OpenSCAD tool parts, recovery helpers, imports and editor assumptions from becoming ambiguous.
+Decision: legacy `build_parametric_model` stays strictly OpenSCAD. Native BRep uses the separate `build_brep_project` tool contract.
 
 Added/changed:
 
@@ -117,17 +109,7 @@ tests/brepAiTool.test.ts
 tests/aiInstructionCatalog.test.ts
 ```
 
-The BRep tool contract:
-
-- exposes a provider-visible bounded Zod representation of canonical `BrepProject` v1;
-- accepts complete snapshots only, never patches;
-- is strict at object boundaries so arbitrary Python/build123d/STEP/mesh/runtime fields are rejected;
-- enumerates only canonical node types and the semantic `parallelToAxis` selector;
-- delegates final graph/reference/unit/range/cycle/result validation to the canonical BRep normalizer;
-- has a minimal strict success result containing only `status` and `message`;
-- has its own instruction surface `tool.build_brep_project` with stable-ID/no-runtime-code rules.
-
-`chatTools` knows the `build_brep_project` message type, but `src/server/aiChat.ts` still exposes only legacy `build_parametric_model` in the active Parametric toolset. This keeps 3C transport-neutral.
+The contract accepts only complete bounded canonical BRep snapshots, rejects runtime/Python/STEP/mesh authority, enumerates only supported topology vocabulary and delegates semantic validation to the canonical normalizer. `chatTools` knows the new type, but live `aiChat` routing is still unchanged.
 
 ### Verification evidence
 
@@ -145,33 +127,58 @@ git diff --check origin/master...HEAD  PASS (no output)
 
 ## 3D — Prompting and native provider generation/follow-up context
 
-Status: **analysis active; live provider wiring not started**.
+Status: **separable source/context foundation implemented; local verification pending. Live provider wiring not started.**
 
 Reconciliation findings:
 
 - `loadBranchFromDb()` already loads the exact current message-tree path selected by `current_message_leaf_id`.
 - A persisted native BRep source is already represented on that path as `data-brep-project`; no second DB/source lookup is necessary.
-- A follow-up user message may be the current leaf while the authoritative BRep source is the nearest preceding assistant revision. Therefore request leaf identity and source revision identity are distinct and both must be retained for 3E stale handling.
+- A follow-up user message may be the current leaf while the authoritative BRep source is the nearest preceding assistant revision. Request leaf identity and source revision identity are therefore distinct and both matter for 3E stale handling.
 - `convertToModelMessages()` currently has no conversion for `data-brep-project`, so normal providers do not yet receive canonical BRep source context.
 - `parametricTools()` and forced tool-choice logic are currently hard-coded to `build_parametric_model`.
 - OpenSCAD authoritative asset collection is separate and must remain OpenSCAD-only.
-- Phase 2 BRep routes already create/open native BRep conversations with canonical source snapshots. Existing BRep follow-ups therefore need no new conversation type or database field.
-- Creation of an entirely new AI-authored BRep project needs an explicit product entry/mode decision. That routing decision belongs in 3G rather than being inferred heuristically inside the provider layer.
+- Existing Phase 2 BRep conversations already have an unambiguous native source identity. Creation of an entirely new AI-authored BRep conversation needs an explicit product entry/mode decision in 3G rather than provider-layer heuristics.
 
-### 3D contract direction
+### Implemented separable 3D foundation
 
-For an existing native BRep conversation:
+Added/changed:
 
-1. scan the loaded active branch from newest to oldest for the nearest valid `data-brep-project` source revision;
-2. fail closed if the nearest BRep source marker is malformed rather than silently falling back to an older project;
-3. retain its message ID server-side as the identity-validation source anchor;
-4. expose only the normalized project JSON to the model as explicit current BRep context;
-5. use `build_brep_project` + `answer_user` for that turn;
-6. use `build_parametric_model` + `answer_user` unchanged when no native BRep source is active;
-7. force/verify the source-appropriate build tool name rather than hard-coding the OpenSCAD tool;
-8. do not persist/evaluate the returned BRep candidate as part of 3D — that atomic validation/revision/CAS path belongs to 3E.
+```text
+shared/brepAiContext.ts
+config/ai/instructions/context-brep-project.md
+config/ai/instructions/manifest.json
+tests/brepAiContext.test.ts
+tests/aiInstructionCatalog.test.ts
+```
 
-The first separable 3D work should therefore be a pure active-source resolver plus repository-driven BRep context template/tests. Live `aiChat` wiring should follow only after that helper is green.
+The helper now:
+
+- scans the loaded active branch newest-to-oldest for the nearest `data-brep-project` revision;
+- correctly resolves a preceding BRep assistant source when the request leaf is a user follow-up;
+- retains the exact source message ID server-side for later 3E identity validation;
+- fails closed if the nearest BRep marker is malformed instead of silently falling back to an older snapshot;
+- rejects a BRep source marker on a non-assistant message;
+- serializes only a normalized canonical `BrepProject` JSON snapshot for model context, excluding message IDs/runtime authority.
+
+The repository-driven `context.brep_project` template tells the model that the supplied JSON is exact source authority, requires complete-snapshot output/stable IDs and forbids Python/build123d/STEP/mesh/raw topology/runtime objects.
+
+No live `src/server/aiChat.ts`, OpenCode/Codex, BRep evaluator, persistence, client tool recovery or product UI behavior changed in this checkpoint.
+
+### Verification pending
+
+Run locally:
+
+```text
+npm test -- --run tests/brepAiContext.test.ts tests/brepAiTool.test.ts tests/brepAiProject.test.ts tests/aiInstructionCatalog.test.ts tests/brepProjectArtifact.test.ts
+npm run typecheck
+npm run lint
+npm run build
+git diff --check origin/master...HEAD
+```
+
+### Next runtime boundary
+
+After this checkpoint is green, do not expose `build_brep_project` by itself as a half-wired client tool. The next coherent change should combine the remaining 3D normal-provider source-kind routing/context/tool-choice work with the core 3E validation + immutable revision + stale/CAS path, so a produced BRep tool call can immediately converge to the existing canonical `data-brep-project` source lifecycle.
 
 ## Decision gates
 
@@ -185,4 +192,4 @@ Stop before broadening implementation if:
 
 ## Current next action
 
-Implement and verify the separable 3D active-BRep-source/context helper without changing the live provider path. Then wire normal `aiChat` source-kind-aware tool/context selection together with 3E persistence/stale guards as one coherent runtime change.
+Verify the separable 3D source/context checkpoint locally. Once green, prepare one coherent 3D-runtime + 3E implementation packet; that is the point where a focused Codex/local-runtime thread becomes materially useful.
