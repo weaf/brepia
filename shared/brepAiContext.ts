@@ -1,9 +1,7 @@
 import type { BrepProject } from './brepProject.ts';
-import {
-  getBrepProjectArtifact,
-  type BrepProjectArtifactData,
-} from './brepProjectArtifact.ts';
+import { getBrepProjectArtifact } from './brepProjectArtifact.ts';
 import { normalizeBrepAiProjectCandidate } from './brepAiProject.ts';
+import type { BrepProjectArtifactData } from './chatAi.ts';
 
 export type BrepAiBranchMessage = {
   id: string;
