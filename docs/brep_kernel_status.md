@@ -164,7 +164,20 @@ npx vitest run BRep suites                           PASS (5 files, 20 tests)
 npm run typecheck; npm run lint; git diff --check    PASS
 ```
 
-The next active step is Phase 1F integration hardening, followed by the UI
+### Shared review hardening checkpoint
+
+The shared review series through
+`2a4b1c5175bc45c83ccc1b082074e0d435f9c146` was fast-forwarded and reviewed
+without rewriting its history. It adds resolved placement/Grasshopper Plane
+validation, request cancellation propagation, cleanup/capacity hardening, and
+bounded/malformed API body coverage.
+
+```text
+npx vitest run BRep suites                           PASS (5 files, 31 tests)
+npm run typecheck; npm run lint; git diff --check    PASS
+```
+
+The next active step is Phase 1F integration completion, followed by the UI
 vertical slice. Native direct STEP inspection and browser acceptance remain
 unverified and are not yet marked PASS.
 
