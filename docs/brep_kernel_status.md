@@ -121,10 +121,13 @@ Execution-contract setup continues after these commits.
 ## Active step
 
 ```text
-Phase 1B — provider and result contracts
+Phase 1G — authenticated browser acceptance
 ```
 
-Follow `docs/brep_kernel_execution.md` rather than improvising roadmap order.
+Phase 1A–1F are implemented on this branch. The minimal Phase 1 cabinet
+viewer is available at `/brep`; it evaluates only through the authenticated
+`/api/brep/evaluate` boundary. The next required acceptance remains a real
+local login followed by parameter changes and browser/network inspection.
 
 ## Validation evidence
 
@@ -177,13 +180,53 @@ npx vitest run BRep suites                           PASS (5 files, 31 tests)
 npm run typecheck; npm run lint; git diff --check    PASS
 ```
 
-The next active step is Phase 1F integration completion, followed by the UI
-vertical slice. Native direct STEP inspection and browser acceptance remain
-unverified and are not yet marked PASS.
+### Phase 1G — browser entry and auth redirect review
+
+`2edd5bb` prevents recursive growth of `redirect` values in the auth guard.
+Against the production-like local runtime, an unauthenticated navigation to
+`/brep` ended at exactly:
+
+```text
+/signin?redirect=%2Fbrep
+```
+
+with no redirect loop. This is only the unauthenticated half of 1G; parameter
+editing, native evaluation and visible geometry changes still require a valid
+local user session.
+
+### Phase 1H — direct native STEP export implementation checkpoint
+
+The native evaluator already emits its ISO STEP artifact in its isolated
+workspace. This checkpoint exposes it through a separate authenticated
+`POST /api/brep/export/step` route and a viewer download action. It reuses the
+same normalized BRep request, constrained Podman runner and bounded artifact
+validation as evaluation; it does not call the OpenSCAD/scad123d STEP path.
+
+Focused evidence (implementation checkpoint, not final 1H acceptance):
+
+```text
+tests/brepEvaluation.test.ts, brepApi, provider, project   PASS (31 tests)
+scripts/brep/smoke-test.sh                                 PASS (ISO 10303-21; 732 triangles)
+npm run typecheck; npm run lint; npm run build             PASS
+POST /api/brep/export/step without a session               PASS (401)
+git diff --check                                            PASS
+```
+
+Authenticated native STEP download and independent STEP inspection remain
+unverified until the local auth fixture is usable.
 
 ## Browser acceptance
 
-Not started for the BRep path. Browser acceptance begins when the Phase 1 vertical slice reaches UI/viewer integration.
+The unauthenticated BRep entry route has been browser-checked as above. Full
+1G/1I browser acceptance is blocked by local auth fixture state, not marked
+PASS: the local database contains one pre-existing active admin with an
+unknown password, while `test@brepia.invalid` is absent. Its intended seed
+insert has `pcad_bootstrap: true`, so the deferred first-admin trigger
+correctly rejects it on this already-bootstrapped database
+with `pcad_bootstrap_unavailable`; a transactionally simulated non-bootstrap
+insert is confirmed but creates only a `pending` account. GoTrue returns
+`400 invalid_credentials` for both the absent seed user and the documented
+seed password against the existing admin. No auth policy or seed was changed.
 
 Existing OpenSCAD behavior is a regression boundary throughout this work.
 

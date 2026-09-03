@@ -145,6 +145,30 @@ export async function evaluateBrepProject(
   return evaluateNormalizedBrepProject(request, signal);
 }
 
+/**
+ * Return the exact STEP artifact emitted by the isolated native evaluator.
+ * This deliberately shares the same constrained request and Podman runner as
+ * viewer evaluation; it never routes native BRep through the OpenSCAD export
+ * provider.
+ */
+export async function exportBrepProjectToStep(
+  project: BrepProject,
+  parameterValues?: BrepParameterValues,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  const artifact = await evaluateBrepProject(project, parameterValues, signal);
+  if (
+    artifact.result.status !== 'success' ||
+    !artifact.result.exactExport.available ||
+    !artifact.stepBytes
+  )
+    throw new BrepEvaluationError(
+      'output_invalid',
+      'BRep sandbox did not produce a valid exact STEP artifact.',
+    );
+  return artifact.stepBytes;
+}
+
 export async function evaluateNormalizedBrepProject(
   request: NormalizedBrepEvaluationRequest,
   signal?: AbortSignal,

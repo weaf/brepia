@@ -51,6 +51,7 @@ import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api
 import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId';
 import { Route as ApiAiSettingsProvidersBuiltinsRouteImport } from './routes/api/ai-settings/providers/builtins';
 import { Route as ApiAiSettingsProvidersTestRouteImport } from './routes/api/ai-settings/providers/test';
+import { Route as ApiBrepExportStepRouteImport } from './routes/api/brep/export.step';
 import { Route as ApiInternalAccountDeleteRouteImport } from './routes/api/internal/account/delete';
 import { Route as ApiModelsCatalogAllRouteImport } from './routes/api/models/catalog/all';
 import { Route as ApiAiSettingsProvidersProviderIdModelsRouteImport } from './routes/api/ai-settings/providers/$providerId/models';
@@ -272,6 +273,11 @@ const ApiAiSettingsProvidersTestRoute =
     path: '/test',
     getParentRoute: () => ApiAiSettingsProvidersRoute,
   } as any);
+const ApiBrepExportStepRoute = ApiBrepExportStepRouteImport.update({
+  id: '/api/brep/export/step',
+  path: '/api/brep/export/step',
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiInternalAccountDeleteRoute =
   ApiInternalAccountDeleteRouteImport.update({
     id: '/api/internal/account/delete',
@@ -337,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute;
+  '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
@@ -383,6 +390,7 @@ export interface FileRoutesByTo {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute;
+  '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
@@ -432,6 +440,7 @@ export interface FileRoutesById {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute;
+  '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
   '/api/ai-settings/providers/$providerId/models': typeof ApiAiSettingsProvidersProviderIdModelsRouteWithChildren;
@@ -480,6 +489,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
+    | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
     | '/api/ai-settings/providers/$providerId/models'
@@ -526,6 +536,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
+    | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
     | '/api/ai-settings/providers/$providerId/models'
@@ -574,6 +585,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
+    | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
     | '/api/ai-settings/providers/$providerId/models'
@@ -611,6 +623,7 @@ export interface RootRouteChildren {
   ApiSettingsAdminModelsRoute: typeof ApiSettingsAdminModelsRoute;
   ApiSettingsInstanceIdentityRoute: typeof ApiSettingsInstanceIdentityRoute;
   ApiSettingsRuntimeIntegrationsRoute: typeof ApiSettingsRuntimeIntegrationsRoute;
+  ApiBrepExportStepRoute: typeof ApiBrepExportStepRoute;
   ApiInternalAccountDeleteRoute: typeof ApiInternalAccountDeleteRoute;
 }
 
@@ -910,6 +923,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiSettingsProvidersTestRouteImport;
       parentRoute: typeof ApiAiSettingsProvidersRoute;
     };
+    '/api/brep/export/step': {
+      id: '/api/brep/export/step';
+      path: '/api/brep/export/step';
+      fullPath: '/api/brep/export/step';
+      preLoaderRoute: typeof ApiBrepExportStepRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     '/api/internal/account/delete': {
       id: '/api/internal/account/delete';
       path: '/api/internal/account/delete';
@@ -1080,6 +1100,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSettingsAdminModelsRoute: ApiSettingsAdminModelsRoute,
   ApiSettingsInstanceIdentityRoute: ApiSettingsInstanceIdentityRoute,
   ApiSettingsRuntimeIntegrationsRoute: ApiSettingsRuntimeIntegrationsRoute,
+  ApiBrepExportStepRoute: ApiBrepExportStepRoute,
   ApiInternalAccountDeleteRoute: ApiInternalAccountDeleteRoute,
 };
 export const routeTree = rootRouteImport

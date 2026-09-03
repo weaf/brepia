@@ -4,6 +4,8 @@ import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
+import { exportBrepStep } from '@/services/brepStepExport';
+import { downloadSTEPFile } from '@/utils/downloadUtils';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import type {
   BrepEvaluationSuccess,
@@ -38,6 +40,7 @@ export function BrepProjectPreview() {
   const [result, setResult] = useState<BrepEvaluationSuccess | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
     [result],
@@ -133,6 +136,29 @@ export function BrepProjectPreview() {
           onClick={() => setValues((current) => ({ ...current }))}
         >
           Re-evaluate
+        </Button>
+        <Button
+          className="mt-3 w-full"
+          disabled={exporting || loading}
+          variant="outline"
+          onClick={async () => {
+            setExporting(true);
+            setError(null);
+            try {
+              const step = await exportBrepStep(phaseOneCabinetProject, values);
+              downloadSTEPFile(step);
+            } catch (reason) {
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : 'BRep STEP export failed.',
+              );
+            } finally {
+              setExporting(false);
+            }
+          }}
+        >
+          {exporting ? 'Exporting STEP…' : 'Export native STEP'}
         </Button>
         {loading && <p className="mt-4 text-sm">Evaluating native BRep…</p>}
         {error && (

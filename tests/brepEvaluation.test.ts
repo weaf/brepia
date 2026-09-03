@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   evaluateBrepProject,
   BrepEvaluationError,
+  exportBrepProjectToStep,
 } from '@/server/brepEvaluation';
 import {
   BREP_PROJECT_SCHEMA_VERSION,
@@ -93,6 +94,23 @@ describe('isolated BRep evaluation boundary', () => {
     expect(artifact.stepBytes).toBeInstanceOf(Uint8Array);
   });
 
+  it('exports only an exact STEP artifact from the same isolated evaluator', async () => {
+    process.env.PCAD_BREP_RUNNER = await fakeRunner(validRunnerBody);
+    await expect(
+      exportBrepProjectToStep(project(), { width: 20 }),
+    ).resolves.toEqual(expect.any(Uint8Array));
+
+    process.env.PCAD_BREP_RUNNER = await fakeRunner(
+      `cat > "$OUTPUT/result.json" <<'JSON'
+{"status":"success","provider":{},"projectId":"box","resultNodeId":"body","bodies":[{"id":"body","bounds":{"min":[0,0,0],"max":[1,1,1]}}],"bounds":{"min":[0,0,0],"max":[1,1,1]},"warnings":[],"exactExport":{"format":"step","available":false}}
+JSON`,
+    );
+    await expectBrepError(
+      () => exportBrepProjectToStep(project()),
+      'output_invalid',
+    );
+  });
+
   it('fails closed when the sandbox result violates the viewer contract', async () => {
     process.env.PCAD_BREP_RUNNER = await fakeRunner(
       `printf '{}' > "$OUTPUT/result.json"`,
@@ -115,7 +133,11 @@ describe('isolated BRep evaluation boundary', () => {
     process.env.PCAD_BREP_MAX_CONCURRENT = '1';
     process.env.PCAD_BREP_RUNNER = await fakeRunner('sleep 5');
     const controller = new AbortController();
-    const running = evaluateBrepProject(project(), undefined, controller.signal);
+    const running = evaluateBrepProject(
+      project(),
+      undefined,
+      controller.signal,
+    );
 
     await expectBrepError(
       () => evaluateBrepProject(project()),
