@@ -29,6 +29,20 @@ The roadmap's explicit end goal is not static CAD export. A Brepia parametric pr
 - Stable feature/parameter IDs and semantic topology selectors are preferred over persistent raw OCCT topology indexes.
 - Grasshopper/Rhino is a downstream project-composition target and optional provider/interoperability surface, not Brepia's mandatory core.
 
+## Collaboration / checkpoint rule
+
+Codex and ChatGPT/GitHub review now work in parallel through the shared branch.
+
+Every meaningful **verified** Codex checkpoint must therefore be:
+
+```text
+verify -> update status -> commit -> push to origin/feature/brep-kernel-foundation
+```
+
+Only pushed state is available to the parallel GitHub reviewer/monitor. Incomplete or failing experiments may remain local, but must not be reported as shared/verified checkpoints.
+
+This rule is defined authoritatively in `docs/brep_kernel_execution.md`.
+
 ## Current implementation state
 
 ### Phase 0 — Architecture closure
@@ -49,7 +63,7 @@ docs/brep_kernel_execution.md
 
 ### Phase 1A — Canonical project contract
 
-Implementation started, not yet locally verified/closed.
+Implementation started, not yet locally verified/closed in the shared status record.
 
 Current files:
 
@@ -73,7 +87,7 @@ Current intended capabilities include:
 - initial semantic edge selector contract;
 - rejection of unsupported raw edge-index selection.
 
-The local Codex implementation thread must first reconcile and run the focused tests/type checks before declaring Phase 1A complete. The schema is not released yet, so material design flaws should be corrected now rather than carried as compatibility debt.
+The local Codex implementation thread must reconcile and run the focused tests/type checks before declaring Phase 1A complete. The schema is not released yet, so material design flaws should be corrected now rather than carried as compatibility debt.
 
 ## Commits on the foundation branch before Codex execution contract
 
@@ -102,9 +116,9 @@ Follow `docs/brep_kernel_execution.md` rather than improvising roadmap order.
 
 ## Validation evidence
 
-No Phase 1 implementation gate is yet recorded as PASS in this file.
+No Phase 1 implementation gate is yet recorded as PASS in this shared status file.
 
-Do not infer success from code presence alone. Codex must run the relevant local tests and record exact evidence here at verified checkpoints.
+Do not infer success from code presence alone. Codex must run the relevant local tests and record exact evidence here at verified checkpoints, then push that checkpoint so the evidence is reviewable from GitHub.
 
 ## Browser acceptance
 
@@ -124,11 +138,12 @@ Existing OpenSCAD behavior is a regression boundary throughout this work.
 
 ## Next status update
 
-Update this document when Phase 1A has been locally verified and closed, including:
+Update this document at the next verified Codex checkpoint, including:
 
 - final commit SHA;
 - focused test result;
 - typecheck/lint result as applicable;
 - any schema changes made during reconciliation;
-- clean/dirty status and branch ahead/behind;
+- clean/dirty status and branch ahead/behind relative to origin;
+- successful push confirmation;
 - next active step.
