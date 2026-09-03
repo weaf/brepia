@@ -28,7 +28,7 @@ Phase 1/2 execution/status files are historical evidence after merge.
 | 3A — Architecture reconciliation and contract lock | **complete** |
 | 3B — Shared BRep AI snapshot schema and structural diff | **complete and accepted** |
 | 3C — Native AI tool/source contract | **complete and accepted** |
-| 3D — Prompting and native-provider follow-up generation | **implementation complete; live normal-provider acceptance remains** |
+| 3D — Prompting and native-provider follow-up generation | **complete and accepted** |
 | 3E — Immutable AI revision persistence and stale guards | **complete and accepted** |
 | 3F — OpenCode/Codex external-agent parity | not started |
 | 3G — Product integration / creation UX | not started |
@@ -49,7 +49,7 @@ Status: **complete**.
 | BRep lifecycle | `src/services/brepProjectService.ts` creates immutable assistant revisions and validated restore branches | AI edits use the same immutable source model, anchored to the exact source revision used as generation context. |
 | OpenSCAD AI tool | `shared/chatAi.ts` `build_parametric_model` remains intentionally OpenSCAD-only | Preserved. Native BRep uses the separate `build_brep_project` tool. |
 | OpenSCAD helpers | `shared/parametricParts.ts` searches `tool-build_parametric_model` and normalizes OpenSCAD artifacts | Kept narrow; BRep does not redefine those helpers. |
-| Normal AI server | `src/server/aiChat.ts` owns Parametric instructions/tools, stream lifecycle and persistence | Now routes active native BRep branches through the BRep context/tool/persistence path. |
+| Normal AI server | `src/server/aiChat.ts` owns Parametric instructions/tools, stream lifecycle and persistence | Routes active native BRep branches through the BRep context/tool/persistence path. |
 | External structured result | `src/server/opencodeAgentResult.ts` currently parses OpenSCAD `{ project, message }` only | Extend in 3F after native-provider acceptance. |
 | OpenCode/Codex continuation | `src/server/cliAgents.ts` serializes latest complete OpenSCAD tool artifact | Extend in 3F; current BRep external-agent transports fail clearly rather than silently using OpenSCAD semantics. |
 | Previous/current source | Phase 2 BRep resolves canonical source from assistant `data-brep-project` revisions | BRep generation anchors identity validation to the nearest active BRep source revision and stale activation to the request leaf. |
@@ -128,7 +128,7 @@ git diff --check origin/master...HEAD  PASS (no output)
 
 ## 3D — Prompting and native-provider generation/follow-up context
 
-Status: **implementation complete; live normal-provider acceptance remains**.
+Status: **complete and accepted**.
 
 Implemented:
 
@@ -137,6 +137,7 @@ shared/brepAiContext.ts
 src/server/brepAiTurn.ts
 src/server/brepAiTools.ts
 src/server/aiChat.ts
+src/views/BrepProjectView.tsx
 config/ai/instructions/context-brep-project.md
 config/ai/instructions/tool-build-brep-project.md
 tests/brepAiContext.test.ts
@@ -146,18 +147,21 @@ tests/brepAiTurn.test.ts
 ### Active behavior
 
 - The active source is the nearest valid assistant `data-brep-project` revision on the selected branch.
-- A user follow-up leaf and the source revision message are intentionally distinct identities.
+- A user/tool-only leaf and the authoritative BRep source revision are intentionally distinct identities.
+- The BRep project view follows the parent chain from `current_message_leaf_id` and resolves the nearest valid BRep source rather than requiring the current leaf itself to carry source data.
 - Only the resolved canonical active BRep snapshot is injected as BRep source context; historical BRep source parts are not blindly exposed as model authority.
 - Active BRep branches use `build_brep_project`; OpenSCAD branches continue to use `build_parametric_model`.
 - `build_brep_project` executes server-side and performs only canonical snapshot validation plus previous→next structural diffing. It does not invoke OCCT/build123d.
-- BRep `answer_user` is also server-resolved so no browser-side pending-tool lifecycle can overwrite the canonical source part.
-- The final successful BRep build candidate is revalidated against the exact source snapshot used for generation and persisted with exactly one canonical `data-brep-project` part.
+- BRep `answer_user` is also server-resolved so no browser-side pending-tool lifecycle can overwrite canonical source data.
+- A successful `build_brep_project.execute()` records the final validated candidate in request-local server state.
+- Final persistence revalidates that accepted candidate against the exact source snapshot used for generation and attaches exactly one canonical `data-brep-project` part.
+- UI tool parts remain diagnostics; canonical source persistence no longer depends on AI SDK reconstruction of the final UI-message tool part.
 - Earlier build calls remain diagnostics only and never become competing source authority.
 - OpenSCAD-specific mesh/import context is not injected into an active BRep turn.
 - BRep through OpenCode/Codex transports is explicitly rejected until 3F rather than routed through the OpenSCAD adapter.
 - Creative and legacy OpenSCAD tool ownership remain unchanged.
 
-### Local verification evidence
+### Local static verification evidence
 
 Reported from the real local checkout on 2026-09-03 after provider wiring and review hardening:
 
@@ -169,7 +173,66 @@ npm run build          PASS
 git diff --check       PASS (no output)
 ```
 
-The remaining 3D acceptance item is an end-to-end normal-provider follow-up against a real native BRep conversation. Acceptance should verify that the provider returns a complete valid snapshot, preserves stable IDs where appropriate, persists the canonical revision, exposes the expected structural change and renders/evaluates correctly through the existing native runtime.
+### Live normal-provider acceptance evidence
+
+Verified against the real authenticated Brepia deployment and native BRep runtime on 2026-09-03.
+
+Baseline persisted source:
+
+```text
+project_id        = phaseOneCabinet
+width_default     = 1200
+cable_hole_radius = 40
+```
+
+First normal-provider follow-up changed only the published Width default from 1200 to 1400 mm while preserving project and existing object identities. The persisted assistant revision contained both the BRep tool result and one canonical source snapshot:
+
+```text
+source_parts      = 1
+brep_build_parts  = 1
+project_id        = phaseOneCabinet
+width_default     = 1400
+cable_hole_radius = 40
+```
+
+The native BRep viewer then evaluated and rendered the revised geometry with Width 1400 after configuring the accepted `PCAD_BREP_RUNNER` runtime.
+
+The second follow-up requested `cableHole.radius` 40 -> 60 while preserving Width 1400 and stable IDs. This uncovered a real persistence regression: two server tool results were persisted as `output-available / success` with the correct candidate and structural diff, but their rows contained no `data-brep-project` source part. The candidate itself was valid:
+
+```text
+output_status        = success
+candidate_project_id = phaseOneCabinet
+candidate_width      = 1400
+candidate_radius     = 60
+output_message       = 0 nodes added, 0 nodes removed, 1 node changed
+```
+
+The regression was hardened in two places:
+
+1. `BrepProjectView` now resolves the nearest valid source ancestor so a user/tool-only leaf cannot brick an otherwise valid project branch.
+2. Canonical persistence now uses the request-local candidate captured directly from successful server tool execution instead of depending on final UI-message tool-part reconstruction.
+
+The same second prompt was then rerun successfully. The active assistant row contained both the diagnostic tool result and canonical source snapshot:
+
+```text
+active            = true
+source_parts      = 1
+brep_build_parts  = 1
+project_id        = phaseOneCabinet
+width_default     = 1400
+cable_hole_radius = 60
+```
+
+The BRep project view showed three source revisions and rendered the updated native geometry successfully. The two historical tool-only rows were intentionally retained as regression evidence rather than deleted.
+
+Checkpoint containing the request-local accepted-candidate wiring:
+
+```text
+41b80327cfbf29b1667359c5cb1ab73490ef5e4a
+Persist validated BRep AI candidates from server execution
+```
+
+3D is accepted.
 
 ## 3E — Immutable AI revision persistence and stale guards
 
@@ -232,19 +295,16 @@ git diff --check   PASS (no output)
 
 ## Current next action
 
-Do not start 3F yet.
+Proceed to **3F — external-agent/OpenCode parity**.
 
-First complete the remaining **3D live normal-provider acceptance** on a real native BRep conversation. Verify the full path:
+Keep the scope narrow:
 
 ```text
 active BRep source
--> canonical model context
--> build_brep_project
--> complete follow-up snapshot
--> identity validation + structural diff
--> atomic immutable persistence
--> current leaf
--> native viewer/evaluator
+-> external-agent BRep context/transport
+-> complete canonical BRep snapshot result
+-> shared validation + stable-ID policy
+-> existing atomic immutable persistence
 ```
 
-If that live acceptance passes, record the evidence here and proceed to **3F — external-agent/OpenCode parity**. Do not mix in 3G product creation/UI, Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction.
+Do not mix in 3G product creation/UI, Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction.
