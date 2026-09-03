@@ -148,17 +148,18 @@ Any future selector expansion belongs in the canonical schema first, with determ
 
 ## Stale/concurrent edit policy
 
-AI generation can outlive a user parameter edit, restore or branch action. Therefore the AI request must be anchored to the exact source message/leaf it was generated from.
+AI generation can outlive a user parameter edit, restore or branch action. The request leaf captured at generation start and the nearest preceding BRep source revision are distinct identities and must remain separate.
 
 Before activating an AI-produced revision:
 
 1. validate/normalize the returned project;
-2. validate identity policy against the anchored previous project;
-3. persist immutable branch evidence under the anchored parent according to existing message semantics;
-4. move `current_message_leaf_id` only with compare-and-set against the expected active leaf;
-5. if CAS loses, do not reactivate the stale result.
+2. validate identity policy against the exact anchored previous BRep project;
+3. lock the target conversation row in the persistence transaction;
+4. verify `current_message_leaf_id` still equals the request leaf captured at generation start;
+5. only when it matches, insert the immutable assistant/source revision in the same transaction and let the existing insert trigger advance the leaf;
+6. when it does not match, return stale and insert nothing.
 
-A stale result may remain branch evidence if that matches the existing lifecycle policy, but it must never overwrite a newer active branch.
+The accepted implementation is `public.persist_brep_ai_revision(...)` using `SELECT ... FOR UPDATE`. A stale candidate is not persisted by this activation RPC and must never overwrite or reactivate a newer branch. Any future requirement to retain stale candidates as branch evidence would need an explicit separate lifecycle contract rather than weakening this guard.
 
 ## Execution sequence
 
@@ -217,16 +218,16 @@ Decision gate: if making `build_parametric_model` polymorphic would make histori
 
 ### 3D — Prompting and native provider generation/follow-up context
 
-Teach normal AI SDK providers to create/edit BRep snapshots.
+Teach normal AI SDK providers to edit existing canonical BRep snapshots. Product routing for creating a new BRep project through AI belongs to 3G and must not be inferred here.
 
 Acceptance:
 
-- project creation receives the BRep schema/constraints and returns one complete valid snapshot;
 - follow-up receives the exact current canonical BRep snapshot plus user request;
 - instructions explicitly require stable IDs and supported selectors only;
 - provider output is validated before persistence;
 - parameter-only and DAG edits both work through the same snapshot lifecycle;
-- unsupported requests return a clear limitation instead of invented topology semantics.
+- unsupported requests return a clear limitation instead of invented topology semantics;
+- live normal-provider acceptance proves a real BRep follow-up can traverse context -> tool -> validated complete snapshot -> persistence -> native evaluation.
 
 ### 3E — Immutable AI revision persistence and stale guards
 
@@ -235,11 +236,13 @@ Connect successful BRep AI results to the Phase 2 lifecycle.
 Acceptance:
 
 - accepted AI edits create immutable source revisions;
-- current leaf moves only via expected-parent/CAS semantics;
+- current leaf moves only after a transactional expected-leaf check while the conversation row is locked;
 - restore/branch during generation cannot be overwritten by stale AI completion;
+- stale rejection inserts no AI revision through the activation RPC;
 - failed validation creates no active source corruption;
 - retry/branch preserves the exact source snapshot used as AI context;
-- diff/summary corresponds to previous vs accepted next snapshot.
+- diff/summary corresponds to previous vs accepted next snapshot;
+- a real local concurrency gate proves both stale-first and AI-lock-first orderings against the existing leaf trigger.
 
 ### 3F — External-agent/OpenCode parity
 
