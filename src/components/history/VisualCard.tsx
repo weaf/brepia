@@ -151,7 +151,7 @@ export function VisualCard({
       )}
     >
       <Link
-        to="/editor/$id"
+        to="/project/$id"
         params={{ id: conversation.id }}
         onClick={handleSelectionClick}
       >

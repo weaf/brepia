@@ -1,0 +1,485 @@
+# BRep Phase 2 status
+
+## Status
+
+Phase 2 — Native BRep project lifecycle — is active on:
+
+```text
+feature/brep-project-lifecycle
+```
+
+Base:
+
+```text
+3d0adc8e3b0507da81fbe095946cc05c947a7e91
+Merge pull request #19 from weaf/feature/brep-kernel-foundation
+Phase 1: BRep kernel foundation
+```
+
+Active execution contract:
+
+```text
+docs/brep_phase2_execution.md
+```
+
+Roadmap:
+
+```text
+docs/brep_kernel_plan.md
+```
+
+Phase 1 execution/status documents are now historical evidence and must not drive the active Phase 2 sequence.
+
+## Phase 1 inherited foundation
+
+Verified and merged before this phase:
+
+- versioned kernel-neutral `BrepProject` contract;
+- stable project/feature/published-parameter IDs;
+- placement-plane and metadata semantics designed for future Grasshopper mapping;
+- constrained build123d/OCCT evaluator;
+- rootless, networkless, read-only native Podman sandbox;
+- bounded/authenticated native BRep evaluation API;
+- tessellated Three.js viewer result;
+- direct authenticated exact STEP export;
+- independent native STEP inspection preserving analytic cylindrical geometry;
+- Phase 1 browser acceptance and OpenSCAD regression acceptance;
+- GPU geometry replacement cleanup;
+- PR #19 / Quality Gate #351 PASS before merge.
+
+## 2A — Lifecycle architecture reconciliation
+
+Status: **complete**.
+
+This checkpoint reconciled the current conversation/workspace implementation against the Phase 2 BRep lifecycle requirements. No source implementation was changed as part of 2A; this is an architecture/ownership checkpoint.
+
+### Current ownership map
+
+| Concern                        | Current owner                                                                                                             | Phase 2 BRep integration                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product conversation mode      | `conversations.type` and conversation services distinguish `parametric` from `creative`                                   | Keep BRep inside the existing `parametric` mode. Do not add a `brep` conversation enum value unless implementation later proves this impossible.                                        |
+| Active branch/revision pointer | `conversations.current_message_leaf_id`                                                                                   | Reuse unchanged. BRep does not need a parallel revision pointer.                                                                                                                        |
+| Revision/branch lineage        | immutable message tree through `messages.parent_message_id` plus current leaf                                             | Reuse for BRep restore/retry/branch semantics. A BRep snapshot on a message path is revision evidence in the same way the current parametric source artifact is.                        |
+| Parametric editable source     | assistant/workspace artifact payloads currently carry the complete normalized OpenSCAD project (`build_parametric_model`) | Introduce a source-kind discriminator/envelope at the parametric source-artifact boundary so a normalized `BrepProject` can be persisted beside legacy OpenSCAD source.                 |
+| OpenSCAD normalization         | shared chat/tool schemas and conversation workspace model helpers                                                         | Preserve legacy behavior. Existing parametric artifacts without a new source discriminator must continue to normalize as OpenSCAD.                                                      |
+| BRep canonical source          | Phase 1 `shared/brepProject.ts`                                                                                           | Persist normalized/versioned `BrepProject` JSON only. Never persist build123d/OCP objects, tessellation, STEP data or process/runtime state as authoritative source.                    |
+| Parameter editing              | editor state updates the editable source snapshot and persistence path; rendered geometry is derived                      | BRep parameter edits must update/persist source-level parameter state through the same lifecycle boundary, then reevaluate derived geometry. Stable parameter IDs remain authoritative. |
+| Runtime/viewer result          | OpenSCAD/BRep evaluators and viewer paths                                                                                 | Treat BRep evaluation result, tessellation, bounds and STEP as derived/cacheable outputs. They are not revision source-of-truth.                                                        |
+| Editor/project loading         | parametric conversation/editor workspace resolves current source artifact and renders the appropriate editor/viewer       | Dispatch by parametric source kind. OpenSCAD and BRep should share conversation/history infrastructure while retaining separate source editors/runtimes.                                |
+| Source import                  | existing parametric import creates a normalized imported baseline/artifact rather than bypassing workspace history        | Canonical BRep JSON import should create an imported normalized BRep source snapshot/baseline and then participate normally in revisions/history.                                       |
+| Source export                  | conversation workspace source export is distinct from native derived export                                               | Add canonical BRep source JSON export. Native STEP remains a geometry export only and must never be promoted into editable BRep history.                                                |
+| AI generation/editing          | `shared/chatAi.ts` and current `build_parametric_model` tool contract are OpenSCAD-oriented                               | Do not broaden AI-native BRep generation/editing in Phase 2. That is Phase 3. Phase 2 should create a source contract that Phase 3 can target later.                                    |
+
+### Canonical Phase 2 source direction
+
+The integration seam should be a small, kernel-neutral, discriminated parametric source contract rather than a new conversation type or a second persistence system. The exact TypeScript shape is a 2B implementation detail, but the intended semantics are equivalent to:
+
+```text
+ParametricProjectSource
+  kind: openscad | brep
+  source: normalized OpenScadProject | normalized BrepProject
+  source/version identity as required
+  persisted parameter/source state
+```
+
+Important compatibility rule:
+
+```text
+legacy parametric artifact without source-kind discriminator
+    -> normalize as OpenSCAD
+```
+
+This avoids rewriting existing conversations or requiring a destructive migration simply to introduce BRep projects.
+
+### Database decision
+
+The first Phase 2 implementation should target **zero database migration**.
+
+The current conversation/message model already provides:
+
+- parametric vs Creative conversation classification;
+- immutable message/artifact payload storage;
+- parent-message branch lineage;
+- current-leaf selection.
+
+A source discriminator and normalized BRep snapshot can therefore live at the existing JSON artifact/source boundary. If 2B discovers a concrete requirement that cannot be represented safely there, stop and document it before introducing a migration. Do not add a database enum/value merely for BRep project type selection.
+
+### Revision and restore semantics
+
+BRep must not invent another revision system.
+
+The intended lifecycle is:
+
+```text
+normalized BRep source snapshot
+        |
+        v
+message/artifact on existing conversation tree
+        |
+        +--> later parameter/source revision
+        |
+        +--> restore historical snapshot
+        |
+        +--> retry/branch from historical parent
+        v
+current_message_leaf_id selects active path
+```
+
+Historical source snapshots remain immutable evidence. Restore/retry/branch operations should reuse the generic conversation lifecycle and preserve stable BRep project/feature/parameter IDs whenever the source itself has not semantically replaced those objects.
+
+### Import/export semantics
+
+Phase 2 must maintain a strict distinction:
+
+```text
+canonical BRep project JSON = editable source
+STEP                        = derived exact geometry
+viewer mesh                 = derived rendering data
+```
+
+A canonical BRep import is allowed to establish a new imported baseline snapshot after schema validation/normalization. STEP import must not synthesize parametric history or pretend to reconstruct the `BrepProject` DAG.
+
+The concrete file extension/package name for canonical BRep source can be finalized in 2F; the data contract must remain versioned and self-contained regardless of naming.
+
+### Grasshopper roadmap invariants preserved by Phase 2
+
+Although Grasshopper work remains deferred, Phase 2 persistence must not lose or re-key:
+
+- stable published parameter IDs;
+- parameter units/defaults/ranges;
+- project and feature IDs;
+- placement plane/orientation semantics;
+- project metadata/classification;
+- source/model version identity.
+
+These are future inputs to the smart Grasshopper object/`.gh` contract.
+
+### Primary implementation seams for 2B–2F
+
+The current reconciliation identified these as the main surfaces to inspect/change narrowly rather than broadly rewriting the app:
+
+- `shared/brepProject.ts` — canonical BRep source schema;
+- a new or existing shared parametric-source envelope near the workspace boundary;
+- `src/server/conversationWorkspaceModels.ts` — source artifact resolution/normalization;
+- `src/services/messageService.ts` — generic message-tree persistence, expected mostly unchanged;
+- `src/server/conversationWorkspaceLifecycle.ts` — restore/retry/branch integration, expected to be reused;
+- `src/views/EditorView.tsx` and related parametric editor loading — source-kind dispatch;
+- current parameter persistence/update path — add BRep source persistence without storing runtime results;
+- `src/server/conversationWorkspaceExportRequest.ts` and related import/export services — canonical source import/export;
+- `src/services/conversationService.ts` / `supabase/schemas/conversations.sql` — compatibility boundary; avoid schema changes unless proven necessary;
+- `shared/chatAi.ts` — preserve existing OpenSCAD AI behavior in Phase 2; BRep AI work belongs to Phase 3.
+
+## 2B — Project type + persisted BRep source contract
+
+Status: **complete**.
+
+The shared source boundary is now `shared/parametricProjectSource.ts`:
+
+```text
+legacy OpenSCAD project JSON
+  -> { kind: 'openscad', source: normalized OpenScadProject }
+
+{ kind: 'brep', source: BrepProject }
+  -> normalized/versioned BrepProject
+```
+
+The raw legacy representation deliberately has no inferred filename/content
+discriminator: an absent `kind` is the explicit backward-compatible OpenSCAD
+case. New source envelopes are validated at the shared parametric source
+schema boundary. Invalid/unsupported BRep payloads fail explicitly through the
+Phase 1 `normalizeBrepProject` contract; no evaluator, mesh, bounds or STEP
+payload is accepted as source authority.
+
+`ParametricArtifact` and the existing `build_parametric_model` UI behavior
+remain OpenSCAD-oriented for now. This preserves the Phase 2 non-goal of
+AI-native BRep editing while allowing 2C to add BRep creation/loading at the
+same persisted source boundary rather than inventing a BRep conversation type.
+
+No database migration was added. Conversations remain `parametric` or
+`creative`; BRep is represented only in the versioned parametric source JSON.
+
+Focused evidence:
+
+- `npm test -- --run tests/parametricProjectSource.test.ts tests/importedArtifact.test.ts` — PASS (13 tests);
+- `npm run typecheck` — PASS.
+
+The focused compatibility tests prove legacy OpenSCAD normalization, deterministic
+JSON round-trip of normalized BRep source, stable project placement/metadata and
+published-parameter IDs, and explicit rejection of unsupported BRep versions.
+
+## 2C — Create/open/project selection lifecycle
+
+Status: **complete**.
+
+`/brep` is now a template/creation surface rather than the Phase 1 singleton:
+**Create BRep project** creates an ordinary `parametric` conversation and a
+two-message immutable baseline. The active assistant leaf stores one
+`data-brep-project` payload containing only:
+
+```text
+title, version, { kind: 'brep', source: normalized BrepProject }
+```
+
+The creation service explicitly sets `current_message_leaf_id` to that
+assistant leaf, matching the existing imported-OpenSCAD lifecycle. `/brep/$id`
+loads the authenticated conversation's active leaf and validates the BRep
+artifact before rendering it. It never substitutes the Phase 1 sample when a
+persisted source is absent or malformed. OpenSCAD and Creative routes remain
+unchanged, and no conversation enum or database migration was added.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts tests/brepProject.test.ts` — PASS (17 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `npm run build` — PASS.
+
+## 2D — Published parameter editing and revisions
+
+Status: **complete**.
+
+BRep published-value commits now produce a new immutable assistant leaf rather
+than mutating derived evaluator data or the previous baseline. The canonical
+source revision is made by replacing only matching published parameter defaults
+in a fresh normalized `BrepProject`; project, feature, result-node, placement,
+metadata and published parameter IDs remain stable. The preview evaluates the
+same source/values through `/api/brep/evaluate`, while viewer mesh and STEP
+remain derived outputs.
+
+The active-leaf update uses compare-and-set against the revision's expected
+parent. A stale commit leaves valid branch evidence but cannot overwrite a
+newer active source. Invalid or unknown values are rejected before a message is
+created, so the last valid persisted revision remains intact and the UI shows
+the persistence error.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (16 tests);
+- `npm run typecheck` — PASS.
+
+## 2E — Conversation restore/retry/branch behavior
+
+Status: **complete**.
+
+Corrective hardening: selection and restore now resolve the requested message
+through the normal authenticated Supabase client with exact conversation ID and
+assistant-role predicates, then validate its `data-brep-project` payload before
+moving `current_message_leaf_id` or copying a snapshot. A cross-conversation,
+non-assistant, malformed or non-BRep message therefore fails before it can
+alter active state. This preserves RLS/ownership rather than using a privileged
+or inferred source lookup.
+
+The BRep project view reads source revisions from the same assistant-message
+tree and exposes active-revision selection plus restore. Restore copies the
+validated source payload to a fresh assistant sibling under the historical
+parent, then moves `current_message_leaf_id`; it does not mutate the historical
+snapshot. Selecting a prior snapshot and committing a parameter value therefore
+creates an independent child branch with the unchanged BRep IDs preserved.
+
+No BRep AI retry is introduced: Phase 2 must not ask an AI provider to rewrite
+the source. The applicable retry behavior is the existing message-tree retry
+semantics; a BRep source selection/restore never falls back to the Phase 1
+sample. Parameter persistence retains its compare-and-set leaf guard, so stale
+commit/evaluation work cannot reactivate an older branch after restore or
+selection.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (7 tests);
+- `npm run typecheck` — PASS.
+
+## 2F — Canonical project import/export
+
+Status: **complete**.
+
+The product now exports the active persisted BRep source through the sole
+`brepia-brep-project` package contract and imports that package into a new
+ordinary parametric conversation baseline. The parser runs before persistence,
+enforces its UTF-8 size limit and normalized BRep schema/version, and strips
+non-canonical fields. STEP remains the separate native geometry export; no STEP
+import path attempts parametric reconstruction.
+
+Focused evidence:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (16 tests);
+- `npm run typecheck` — PASS;
+- `git diff --check` — PASS.
+
+## 2G — Product UX integration and diagnostic cleanup
+
+Status: **complete (static/product integration evidence; browser acceptance is
+recorded separately in 2H).**
+
+Native BRep projects are now reachable from the normal authenticated product
+navigation via **New BRep project**. Recent-project and History cards use the
+new `/project/$id` dispatcher rather than assuming every parametric
+conversation is an OpenSCAD editor. The dispatcher resolves the authenticated
+conversation's _active assistant leaf_ and selects `/brep/$id` only when that
+exact persisted artifact validates as BRep; all other existing projects keep
+the established `/editor/$id` path. Routing is therefore based on canonical
+source data rather than a filename, title or historical message inference.
+
+`/brep` remains the explicit new-project/template/import surface. Its cabinet
+is only the creation template: pressing create persists a normal independent
+conversation before opening it, and imported packages open with their persisted
+artifact title rather than silently presenting `BrepProject.name` as the
+project title.
+
+The BRep parameter controls now prevent overlapping blur commits by disabling
+controls and native STEP export while the compare-and-set source revision is
+being persisted. An evaluation clears the prior rendered geometry and aborts
+on dependency cleanup, so an older request cannot replace a newer source
+revision's result. `BufferGeometry` continues to be disposed when its result is
+replaced or the preview unmounts. The existing single-column-to-two-column grid
+remains responsive; no graph editor, AI-native BRep mutation, Rhino or
+Grasshopper scope was added.
+
+Focused/static evidence:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (16 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `npm run build` — PASS;
+- `git diff --check` — PASS.
+
+## Current constraints
+
+- Preserve OpenSCAD and Creative behavior.
+- Persist normalized/versioned `BrepProject`, not build123d/OCCT objects.
+- Stable IDs remain architectural invariants for later Grasshopper export.
+- No AI-native BRep editing in Phase 2.
+- No graph editor in Phase 2.
+- No Rhino/rhino3dm/Grasshopper integration in Phase 2.
+- No arbitrary user Python.
+- No destructive database reset/migration as a shortcut.
+- Native runtime remains sandboxed outside Nitro.
+- STEP remains geometry export and must not be treated as editable parametric project import.
+
+## Shared checkpoint workflow
+
+For every verified logical checkpoint:
+
+```text
+focused verification
+  -> update this status file
+  -> commit
+  -> push origin feature/brep-project-lifecycle
+  -> continue
+```
+
+Do not represent local failing/incomplete work as shared PASS.
+
+## Browser acceptance
+
+A local development account may be used for browser acceptance, but credentials must never be committed, documented here, logged intentionally, or placed in tracked files.
+
+Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and must cover create/open/edit/persist/reopen/revision/restore/branch/import/export/native STEP plus an OpenSCAD regression check.
+
+### 2H — Browser and local-runtime acceptance
+
+Status: **complete.**
+
+The acceptance used the existing local development account and the accepted
+rootless, networkless, read-only `build123d-0.11.1` Podman runner. Authentication
+completed with a 200 token exchange; no credential material was recorded in the
+repository or this status file.
+
+The first authenticated pass exposed two ordinary lifecycle defects, which were
+fixed before the scenario was credited:
+
+- `/brep` rendered its template at the parent route without an `Outlet`, so
+  `/brep/$id` retained creation/import controls despite its persisted-project
+  URL. The template is now the explicit `/brep/` index route and `$id` renders
+  the persisted project child.
+- A local RLS update can persist the compare-and-set leaf update while returning
+  no selected representation. Parameter persistence now confirms the exact
+  `current_message_leaf_id` before classifying an empty update response as a
+  lost race; a different leaf remains a visible stale-commit failure.
+
+Focused evidence after the correction:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (17 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `git diff --check` — PASS.
+
+Observed browser/runtime flow after those corrections:
+
+- Normal authenticated navigation created a persisted BRep conversation and
+  opened it through `/project/$id` to `/brep/$id`; the persisted route showed
+  project controls only, while `/brep/` remained the explicit template/import
+  surface.
+- Native evaluation returned 200 responses for initial load and edits. Width
+  was changed from 1200 to 1400, then height from 1800 to 2100; refresh showed
+  the persisted values and a new source revision. The viewer/canvas remained
+  mounted for the evaluated result. Headless WebGL does not provide reliable
+  pixel-level mesh inspection, so geometry change was independently confirmed
+  by the successful native responses and the exact STEP bounds below.
+- Selecting revision 1 and restoring created immutable revision 4 with the
+  older values (1200 × 1800). Editing that restored point to width 1300 created
+  revision 5 on its own branch. The observed message lineage had the restored
+  snapshot as a sibling of the earlier path and the new width revision as its
+  child; the active leaf was that child. Project, feature and published
+  parameter IDs remained unchanged. The compare-and-set/leaf-confirmation
+  behavior prevented a stale parameter commit from replacing the newer leaf;
+  dependency cleanup aborted obsolete evaluation requests before replacement
+  geometry was installed.
+- Exported the active 1300 × 1800 source as a canonical
+  `brepia-brep-project` package. Import created a distinct conversation and a
+  fresh baseline/leaf while preserving `projectId` `phaseOneCabinet`, result
+  node `cabinetWithCableHole`, parameter IDs `height`/`width`, placement
+  origin/axes, classification metadata, and current defaults 1800/1300.
+  The original and imported message-tree identities were directly checked as
+  different. A separate package whose title differed from `BrepProject.name`
+  imported with that package title as the persisted artifact title, proving the
+  title is preserved rather than derived from the source name.
+- Invalid JSON and a 1,048,577-byte package were rejected in the browser with
+  no additional conversation persisted and no native execution. The latter was
+  rejected by file size before text parsing; the parser's byte limit remains
+  the server/shared defense-in-depth boundary.
+- Native STEP export from the final active persisted state was independently
+  imported inside the pinned, networkless/read-only build123d/OCCT image. It
+  passed ISO STEP import, had bounds `(-650, -300, -900)` to
+  `(650, 300, 900)` (the current width 1300 and height 1800), volume
+  `1402441770.044`, and retained analytic cylindrical entities. This rules out
+  export from the earlier 1400-width or restored 1200-width source state.
+- A normal OpenSCAD project resolved `/project/$id` to `/editor/$id`; changing
+  Cube Size from 50 to 60 worked without a browser console error. The current
+  local account had no Creative conversation available for a direct browser
+  record. The dispatcher remains deliberately source-kind based: only an exact
+  BRep artifact takes `/brep/$id`; all non-BRep projects, including Creative,
+  retain `/editor/$id` behavior.
+- At a 390 × 844 viewport, the BRep project retained a usable single-column
+  control/viewer layout with no horizontal overflow. The final browser session
+  reported zero console errors (one non-blocking warning); final native/API
+  requests relevant to the accepted flow returned 200. The obsolete
+  `/brep-template` diagnostic path was not used as source authority.
+
+## 2I — Phase closeout
+
+Status: **complete.**
+
+Final local closeout evidence (after the 2H corrections):
+
+- `scripts/brep/smoke-test.sh` — PASS (result cut: 732 triangles);
+- BRep lifecycle/package focused suite — PASS (4 files, 17 tests);
+- `npm test` — PASS (63 files, 491 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `npm run build` — PASS;
+- `git diff --check origin/master...HEAD` — PASS.
+
+Known follow-up boundary: Phase 2 intentionally does not add a graph editor,
+AI-native BRep editing, Rhino/Grasshopper generation, or a Creative project
+fixture solely for local browser acceptance. The direct OpenSCAD regression and
+source-kind dispatcher cover the unchanged non-BRep route boundary.
+
+## 2A verification note
+
+2A changed documentation only. The architecture findings were reconciled against current source on the merged Phase 1 baseline and the Phase 2 branch before this checkpoint. No runtime/test PASS is claimed for source behavior that was not changed by this documentation checkpoint.
+
+## Phase 2 outcome
+
+Phases 2A–2I are complete on this branch. The next action is review of the
+Phase 2 draft pull request; merging remains intentionally outside this
+checkpoint.

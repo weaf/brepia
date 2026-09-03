@@ -10,6 +10,11 @@ import {
   type OpenScadProjectAsset,
 } from './openScadProject.ts';
 import type { MeshFileType, Model } from './types.ts';
+import {
+  normalizeParametricProjectSource,
+  type ParametricProjectSource,
+  type ParametricProjectSourceInput,
+} from './parametricProjectSource.ts';
 
 export const createMeshInputSchema = z.object({
   text: z.string().optional(),
@@ -79,6 +84,21 @@ export const parametricArtifactSchema = z.object({
   version: z.string().default('v1'),
   project: openScadProjectSchema,
 });
+
+/**
+ * Persisted project-source boundary shared by the Phase 2 lifecycle. It is
+ * intentionally separate from the OpenSCAD-only AI build tool until Phase 3
+ * explicitly authorizes AI-native BRep editing.
+ */
+export const parametricProjectSourceSchema =
+  z.custom<ParametricProjectSourceInput>((value) => {
+    try {
+      normalizeParametricProjectSource(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Invalid parametric project source.');
 
 export const parametricCompileOutputSchema = z.object({
   status: z.literal('success'),
@@ -163,8 +183,16 @@ export type ConversationSuggestionsUpdate = {
 export type AppDataTypes = {
   'mesh-context': MeshContextData;
   'mesh-preferences': MeshPreferencesData;
+  'brep-project': BrepProjectArtifactData;
   'title-update': ConversationTitleUpdate;
   'suggestions-update': ConversationSuggestionsUpdate;
+};
+
+/** Immutable canonical BRep source snapshot persisted on a message branch. */
+export type BrepProjectArtifactData = {
+  title: string;
+  version: string;
+  source: Extract<ParametricProjectSource, { kind: 'brep' }>;
 };
 
 export const meshContextDataSchema = z.object({
