@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react';
 import type { OpenScadProject } from '@shared/openScadProject';
 import { cn } from '@/lib/utils';
 import {
+  applyOpenScadAutoPair,
   getOpenScadCompletionContext,
   type OpenScadCompletion,
 } from '@/lib/openScadEditor';
@@ -131,6 +132,15 @@ export function OpenScadSourceEditor({
     setCompletionDismissed(false);
   };
 
+  const restoreSelection = (selectionStart: number, selectionEnd: number) => {
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(selectionStart, selectionEnd);
+    });
+  };
+
   const applyCompletion = (option: OpenScadCompletion) => {
     const insertion = option.insertText ?? option.label;
     const nextValue =
@@ -143,16 +153,32 @@ export function OpenScadSourceEditor({
     setCursor(nextCursor);
     setExplicitCompletion(false);
     setCompletionDismissed(true);
-
-    window.requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      textarea.focus();
-      textarea.setSelectionRange(nextCursor, nextCursor);
-    });
+    restoreSelection(nextCursor, nextCursor);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!readOnly && ['(', ')', '<', '>'].includes(event.key)) {
+      const autoPairEdit = applyOpenScadAutoPair({
+        source: value,
+        selectionStart: event.currentTarget.selectionStart,
+        selectionEnd: event.currentTarget.selectionEnd,
+        key: event.key,
+      });
+
+      if (autoPairEdit) {
+        event.preventDefault();
+        if (autoPairEdit.value !== value) onChange(autoPairEdit.value);
+        setCursor(autoPairEdit.selectionEnd);
+        setExplicitCompletion(false);
+        setCompletionDismissed(false);
+        restoreSelection(
+          autoPairEdit.selectionStart,
+          autoPairEdit.selectionEnd,
+        );
+        return;
+      }
+    }
+
     if ((event.ctrlKey || event.metaKey) && event.key === ' ') {
       event.preventDefault();
       setCursor(event.currentTarget.selectionStart);
@@ -234,6 +260,7 @@ export function OpenScadSourceEditor({
         onClick={(event) => syncCursor(event.currentTarget)}
         onKeyUp={(event) => {
           if ((event.ctrlKey || event.metaKey) && event.key === ' ') return;
+          if (['(', ')', '<', '>'].includes(event.key)) return;
           if (
             event.key !== 'ArrowDown' &&
             event.key !== 'ArrowUp' &&

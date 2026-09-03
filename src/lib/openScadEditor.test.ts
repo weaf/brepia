@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { OpenScadProject } from '@shared/openScadProject';
-import { getOpenScadCompletionContext } from './openScadEditor';
+import {
+  applyOpenScadAutoPair,
+  getOpenScadCompletionContext,
+} from './openScadEditor';
 
 const project: OpenScadProject = {
   schemaVersion: 1,
@@ -89,5 +92,89 @@ describe('getOpenScadCompletionContext', () => {
     });
 
     expect(result.options.length).toBeGreaterThan(0);
+  });
+});
+
+describe('applyOpenScadAutoPair', () => {
+  it('inserts matching parentheses and leaves the caret between them', () => {
+    expect(
+      applyOpenScadAutoPair({
+        source: 'cube',
+        selectionStart: 4,
+        selectionEnd: 4,
+        key: '(',
+      }),
+    ).toEqual({
+      value: 'cube()',
+      selectionStart: 5,
+      selectionEnd: 5,
+    });
+  });
+
+  it('wraps selected text in parentheses while preserving the selection', () => {
+    expect(
+      applyOpenScadAutoPair({
+        source: 'size',
+        selectionStart: 0,
+        selectionEnd: 4,
+        key: '(',
+      }),
+    ).toEqual({
+      value: '(size)',
+      selectionStart: 1,
+      selectionEnd: 5,
+    });
+  });
+
+  it('auto-pairs angle brackets only for include/use paths', () => {
+    expect(
+      applyOpenScadAutoPair({
+        source: 'include ',
+        selectionStart: 8,
+        selectionEnd: 8,
+        key: '<',
+      }),
+    ).toEqual({
+      value: 'include <>',
+      selectionStart: 9,
+      selectionEnd: 9,
+    });
+
+    expect(
+      applyOpenScadAutoPair({
+        source: 'a ',
+        selectionStart: 2,
+        selectionEnd: 2,
+        key: '<',
+      }),
+    ).toBeNull();
+  });
+
+  it('steps over an existing matching closer instead of duplicating it', () => {
+    expect(
+      applyOpenScadAutoPair({
+        source: 'cube()',
+        selectionStart: 5,
+        selectionEnd: 5,
+        key: ')',
+      }),
+    ).toEqual({
+      value: 'cube()',
+      selectionStart: 6,
+      selectionEnd: 6,
+    });
+
+    expect(
+      applyOpenScadAutoPair({
+        source: 'include <>',
+        selectionStart: 9,
+        selectionEnd: 9,
+        key: '>',
+      }),
+    ).toEqual({
+      value: 'include <>',
+      selectionStart: 10,
+      selectionEnd: 10,
+    });
   });
 });

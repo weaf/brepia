@@ -20,12 +20,25 @@ export interface OpenScadCompletionContext {
   options: OpenScadCompletion[];
 }
 
+export interface OpenScadAutoPairEdit {
+  value: string;
+  selectionStart: number;
+  selectionEnd: number;
+}
+
 interface CompletionRequest {
   source: string;
   cursor: number;
   project?: OpenScadProject;
   currentPath?: string | null;
   explicit?: boolean;
+}
+
+interface AutoPairRequest {
+  source: string;
+  selectionStart: number;
+  selectionEnd: number;
+  key: string;
 }
 
 const keywordCompletions: OpenScadCompletion[] = [
@@ -194,6 +207,50 @@ function rankOptions(
       return a.label.localeCompare(b.label);
     })
     .slice(0, 10);
+}
+
+export function applyOpenScadAutoPair({
+  source,
+  selectionStart,
+  selectionEnd,
+  key,
+}: AutoPairRequest): OpenScadAutoPairEdit | null {
+  const start = Math.max(0, Math.min(selectionStart, source.length));
+  const end = Math.max(start, Math.min(selectionEnd, source.length));
+
+  if ((key === ')' || key === '>') && start === end && source[start] === key) {
+    return {
+      value: source,
+      selectionStart: start + 1,
+      selectionEnd: start + 1,
+    };
+  }
+
+  const close = key === '(' ? ')' : key === '<' ? '>' : null;
+  if (!close) return null;
+
+  if (key === '<') {
+    const beforeSelection = source.slice(0, start);
+    if (!/\b(?:include|use)\s*$/.test(beforeSelection)) return null;
+  }
+
+  const selected = source.slice(start, end);
+  const value =
+    source.slice(0, start) + key + selected + close + source.slice(end);
+
+  if (start !== end) {
+    return {
+      value,
+      selectionStart: start + 1,
+      selectionEnd: end + 1,
+    };
+  }
+
+  return {
+    value,
+    selectionStart: start + 1,
+    selectionEnd: start + 1,
+  };
 }
 
 export function getOpenScadCompletionContext({
