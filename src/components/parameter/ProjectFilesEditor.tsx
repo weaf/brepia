@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
+import { OpenScadSourceEditor } from '@/components/parameter/OpenScadSourceEditor';
 import type { OpenScadProject } from '@shared/openScadProject';
 
 interface ProjectFilesEditorProps {
@@ -143,15 +143,17 @@ export function ProjectFilesEditor({
             </DialogDescription>
           </DialogHeader>
 
-          <Textarea
-            aria-label={
-              selectedFile ? `OpenSCAD source for ${selectedFile.path}` : 'OpenSCAD source'
+          <OpenScadSourceEditor
+            ariaLabel={
+              selectedFile
+                ? `OpenSCAD source for ${selectedFile.path}`
+                : 'OpenSCAD source'
             }
             value={draftContent}
-            onChange={(event) => setDraftContent(event.target.value)}
+            onChange={setDraftContent}
             readOnly={!canEdit}
-            spellCheck={false}
-            className="min-h-[45dvh] flex-1 resize-none overflow-auto whitespace-pre font-mono text-xs leading-5 text-adam-text-primary"
+            project={project}
+            currentPath={selectedFile?.path}
           />
 
           {saveError && (
