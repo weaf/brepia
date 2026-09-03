@@ -3,11 +3,15 @@ import {
   BrepProjectError,
   normalizeBrepProject,
   type BrepProject,
+  type BrepProjectPlacement,
+  type BrepScalar,
 } from './brepProject';
 
 export const BREP_EVALUATION_MAX_BODY_COUNT = 64;
 export const BREP_EVALUATION_MAX_VIEWER_VERTICES = 500_000;
 export const BREP_EVALUATION_MAX_VIEWER_TRIANGLES = 1_000_000;
+const BREP_PLACEMENT_MIN_SQUARED_LENGTH = 1e-18;
+const BREP_PLACEMENT_MIN_SINE_SQUARED = 1e-12;
 
 export type BrepParameterValues = Record<string, number>;
 
@@ -20,6 +24,14 @@ export type NormalizedBrepEvaluationRequest = {
   project: BrepProject;
   /** Complete, sorted, resolved public parameter values; the source project is never mutated. */
   parameterValues: BrepParameterValues;
+};
+
+export type BrepResolvedPlacement = {
+  origin: [number, number, number];
+  xAxis: [number, number, number];
+  yAxis: [number, number, number];
+  /** Derived from xAxis × yAxis; consumers may normalize it as needed. */
+  zAxis: [number, number, number];
 };
 
 export type BrepProviderMetadata = {
@@ -80,7 +92,8 @@ export type BrepEvaluationFailure = {
 };
 
 export type BrepEvaluationResult =
-  BrepEvaluationSuccess | BrepEvaluationFailure;
+  | BrepEvaluationSuccess
+  | BrepEvaluationFailure;
 
 /** This boundary is intentionally process-agnostic. Native implementations live behind a sandbox runner. */
 export interface BrepProvider {
@@ -93,7 +106,10 @@ export interface BrepProvider {
 
 export class BrepEvaluationRequestError extends Error {
   constructor(
-    public readonly code: 'invalid_request' | 'invalid_parameter_value',
+    public readonly code:
+      | 'invalid_request'
+      | 'invalid_parameter_value'
+      | 'invalid_placement',
     message: string,
   ) {
     super(message);
@@ -117,6 +133,80 @@ function normalizeOverride(value: unknown, parameterId: string): number {
     );
   }
   return Object.is(value, -0) ? 0 : value;
+}
+
+function resolveScalar(
+  value: BrepScalar,
+  parameterValues: Readonly<BrepParameterValues>,
+): number {
+  return typeof value === 'number' ? value : parameterValues[value.parameter];
+}
+
+function resolveVector(
+  value: BrepProjectPlacement['origin'],
+  parameterValues: Readonly<BrepParameterValues>,
+): [number, number, number] {
+  return [
+    resolveScalar(value[0], parameterValues),
+    resolveScalar(value[1], parameterValues),
+    resolveScalar(value[2], parameterValues),
+  ];
+}
+
+function squaredLength(vector: readonly number[]): number {
+  return vector.reduce((sum, component) => sum + component * component, 0);
+}
+
+function cross(
+  left: readonly [number, number, number],
+  right: readonly [number, number, number],
+): [number, number, number] {
+  return [
+    left[1] * right[2] - left[2] * right[1],
+    left[2] * right[0] - left[0] * right[2],
+    left[0] * right[1] - left[1] * right[0],
+  ];
+}
+
+/**
+ * Resolve the kernel-neutral placement using the same published parameter
+ * values as geometry evaluation and reject planes that Rhino/Grasshopper could
+ * not represent reliably. Axis magnitudes are intentionally preserved; only
+ * zero/near-zero and collinear/near-collinear axes are rejected.
+ */
+export function resolveBrepProjectPlacement(
+  placement: BrepProjectPlacement,
+  parameterValues: Readonly<BrepParameterValues>,
+): BrepResolvedPlacement {
+  const origin = resolveVector(placement.origin, parameterValues);
+  const xAxis = resolveVector(placement.xAxis, parameterValues);
+  const yAxis = resolveVector(placement.yAxis, parameterValues);
+  const xLengthSquared = squaredLength(xAxis);
+  const yLengthSquared = squaredLength(yAxis);
+
+  if (
+    xLengthSquared <= BREP_PLACEMENT_MIN_SQUARED_LENGTH ||
+    yLengthSquared <= BREP_PLACEMENT_MIN_SQUARED_LENGTH
+  ) {
+    throw new BrepEvaluationRequestError(
+      'invalid_placement',
+      'BRep placement axes must have non-zero length.',
+    );
+  }
+
+  const zAxis = cross(xAxis, yAxis);
+  const crossLengthSquared = squaredLength(zAxis);
+  if (
+    crossLengthSquared <=
+    BREP_PLACEMENT_MIN_SINE_SQUARED * xLengthSquared * yLengthSquared
+  ) {
+    throw new BrepEvaluationRequestError(
+      'invalid_placement',
+      'BRep placement xAxis and yAxis must not be collinear.',
+    );
+  }
+
+  return { origin, xAxis, yAxis, zAxis };
 }
 
 export function normalizeBrepEvaluationRequest(
@@ -188,6 +278,8 @@ export function normalizeBrepEvaluationRequest(
     }
     parameterValues[parameter.id] = normalized;
   }
+
+  resolveBrepProjectPlacement(project.placement, parameterValues);
 
   return { project, parameterValues };
 }
