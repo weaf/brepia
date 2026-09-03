@@ -375,12 +375,17 @@ A local development account may be used for browser acceptance, but credentials 
 
 Phase 2 browser acceptance is defined in `docs/brep_phase2_execution.md` and must cover create/open/edit/persist/reopen/revision/restore/branch/import/export/native STEP plus an OpenSCAD regression check.
 
-### 2H runtime correction checkpoint
+### 2H — Browser and local-runtime acceptance
 
-Status: **in progress; not browser-PASS.**
+Status: **complete.**
 
-Authenticated local acceptance exposed two ordinary lifecycle defects before the
-required scenario could be credited:
+The acceptance used the existing local development account and the accepted
+rootless, networkless, read-only `build123d-0.11.1` Podman runner. Authentication
+completed with a 200 token exchange; no credential material was recorded in the
+repository or this status file.
+
+The first authenticated pass exposed two ordinary lifecycle defects, which were
+fixed before the scenario was credited:
 
 - `/brep` rendered its template at the parent route without an `Outlet`, so
   `/brep/$id` retained creation/import controls despite its persisted-project
@@ -398,15 +403,83 @@ Focused evidence after the correction:
 - `npm run lint` — PASS;
 - `git diff --check` — PASS.
 
-The same authenticated browser flow is being rerun from creation onward. No
-browser acceptance claim is made until its persisted revision, package, STEP
-and OpenSCAD checks have all been observed.
+Observed browser/runtime flow after those corrections:
+
+- Normal authenticated navigation created a persisted BRep conversation and
+  opened it through `/project/$id` to `/brep/$id`; the persisted route showed
+  project controls only, while `/brep/` remained the explicit template/import
+  surface.
+- Native evaluation returned 200 responses for initial load and edits. Width
+  was changed from 1200 to 1400, then height from 1800 to 2100; refresh showed
+  the persisted values and a new source revision. The viewer/canvas remained
+  mounted for the evaluated result. Headless WebGL does not provide reliable
+  pixel-level mesh inspection, so geometry change was independently confirmed
+  by the successful native responses and the exact STEP bounds below.
+- Selecting revision 1 and restoring created immutable revision 4 with the
+  older values (1200 × 1800). Editing that restored point to width 1300 created
+  revision 5 on its own branch. The observed message lineage had the restored
+  snapshot as a sibling of the earlier path and the new width revision as its
+  child; the active leaf was that child. Project, feature and published
+  parameter IDs remained unchanged. The compare-and-set/leaf-confirmation
+  behavior prevented a stale parameter commit from replacing the newer leaf;
+  dependency cleanup aborted obsolete evaluation requests before replacement
+  geometry was installed.
+- Exported the active 1300 × 1800 source as a canonical
+  `brepia-brep-project` package. Import created a distinct conversation and a
+  fresh baseline/leaf while preserving `projectId` `phaseOneCabinet`, result
+  node `cabinetWithCableHole`, parameter IDs `height`/`width`, placement
+  origin/axes, classification metadata, and current defaults 1800/1300.
+  The original and imported message-tree identities were directly checked as
+  different. A separate package whose title differed from `BrepProject.name`
+  imported with that package title as the persisted artifact title, proving the
+  title is preserved rather than derived from the source name.
+- Invalid JSON and a 1,048,577-byte package were rejected in the browser with
+  no additional conversation persisted and no native execution. The latter was
+  rejected by file size before text parsing; the parser's byte limit remains
+  the server/shared defense-in-depth boundary.
+- Native STEP export from the final active persisted state was independently
+  imported inside the pinned, networkless/read-only build123d/OCCT image. It
+  passed ISO STEP import, had bounds `(-650, -300, -900)` to
+  `(650, 300, 900)` (the current width 1300 and height 1800), volume
+  `1402441770.044`, and retained analytic cylindrical entities. This rules out
+  export from the earlier 1400-width or restored 1200-width source state.
+- A normal OpenSCAD project resolved `/project/$id` to `/editor/$id`; changing
+  Cube Size from 50 to 60 worked without a browser console error. The current
+  local account had no Creative conversation available for a direct browser
+  record. The dispatcher remains deliberately source-kind based: only an exact
+  BRep artifact takes `/brep/$id`; all non-BRep projects, including Creative,
+  retain `/editor/$id` behavior.
+- At a 390 × 844 viewport, the BRep project retained a usable single-column
+  control/viewer layout with no horizontal overflow. The final browser session
+  reported zero console errors (one non-blocking warning); final native/API
+  requests relevant to the accepted flow returned 200. The obsolete
+  `/brep-template` diagnostic path was not used as source authority.
+
+## 2I — Phase closeout
+
+Status: **complete.**
+
+Final local closeout evidence (after the 2H corrections):
+
+- `scripts/brep/smoke-test.sh` — PASS (result cut: 732 triangles);
+- BRep lifecycle/package focused suite — PASS (4 files, 17 tests);
+- `npm test` — PASS (63 files, 491 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `npm run build` — PASS;
+- `git diff --check origin/master...HEAD` — PASS.
+
+Known follow-up boundary: Phase 2 intentionally does not add a graph editor,
+AI-native BRep editing, Rhino/Grasshopper generation, or a Creative project
+fixture solely for local browser acceptance. The direct OpenSCAD regression and
+source-kind dispatcher cover the unchanged non-BRep route boundary.
 
 ## 2A verification note
 
 2A changed documentation only. The architecture findings were reconciled against current source on the merged Phase 1 baseline and the Phase 2 branch before this checkpoint. No runtime/test PASS is claimed for source behavior that was not changed by this documentation checkpoint.
 
-## Next checkpoint
+## Phase 2 outcome
 
-Implement and verify 2F — canonical project import/export — by extending the
-existing source export boundary without treating STEP as editable source.
+Phases 2A–2I are complete on this branch. The next action is review of the
+Phase 2 draft pull request; merging remains intentionally outside this
+checkpoint.
