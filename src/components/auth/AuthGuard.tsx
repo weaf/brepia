@@ -18,6 +18,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const hasFiredSsoRedirect = useRef(false);
+  const hasFiredPasswordRedirect = useRef(false);
 
   const { data: access, isLoading: isAccessLoading } = useQuery({
     queryKey: ['account-access', user?.id],
@@ -28,28 +29,52 @@ export function AuthGuard({ children }: AuthGuardProps) {
   });
 
   useEffect(() => {
-    if (!isLoading && !session && !user) {
-      const currentPath = location.pathname + location.searchStr;
+    if (isLoading) return;
 
-      if (ssoProvider) {
-        if (hasFiredSsoRedirect.current) return;
-        hasFiredSsoRedirect.current = true;
-
-        signInWithSsoProvider(currentPath).catch((error) => {
-          toast({
-            title: 'Whoopsies',
-            description:
-              error instanceof Error ? error.message : 'Something went wrong',
-            variant: 'destructive',
-          });
-          navigate({ to: '/', replace: true });
-        });
-        return;
-      }
-
-      const search = currentPath !== '/' ? { redirect: currentPath } : {};
-      navigate({ to: '/signin', search, replace: true });
+    if (session || user) {
+      // A later sign-out from the same mounted guard must be allowed to start a
+      // fresh redirect, but a single unauthenticated transition may only fire
+      // once. TanStack can briefly keep this guard mounted while navigating to
+      // /signin; without this latch the changing location would recursively
+      // become signin?redirect=/signin?redirect=... .
+      hasFiredSsoRedirect.current = false;
+      hasFiredPasswordRedirect.current = false;
+      return;
     }
+
+    const currentPath = location.pathname + location.searchStr;
+
+    if (ssoProvider) {
+      if (hasFiredSsoRedirect.current) return;
+      hasFiredSsoRedirect.current = true;
+
+      signInWithSsoProvider(currentPath).catch((error) => {
+        toast({
+          title: 'Whoopsies',
+          description:
+            error instanceof Error ? error.message : 'Something went wrong',
+          variant: 'destructive',
+        });
+        navigate({ to: '/', replace: true });
+      });
+      return;
+    }
+
+    if (hasFiredPasswordRedirect.current) return;
+    hasFiredPasswordRedirect.current = true;
+
+    // /signin is not a guarded route, but the old guarded tree can remain
+    // mounted for one render during router transition. Never capture an auth
+    // surface itself as the post-login destination.
+    const redirectablePath =
+      currentPath !== '/' &&
+      location.pathname !== '/signin' &&
+      location.pathname !== '/signup' &&
+      location.pathname !== '/reset-password'
+        ? currentPath
+        : undefined;
+    const search = redirectablePath ? { redirect: redirectablePath } : {};
+    navigate({ to: '/signin', search, replace: true });
   }, [
     session,
     user,
