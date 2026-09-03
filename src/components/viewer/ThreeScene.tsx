@@ -9,7 +9,7 @@ import {
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { Suspense, useEffect, useMemo, useState } from 'react';
-import { Lock, Moon, Sun, Unlock } from 'lucide-react';
+import { Box, Lock, Moon, Sun, Unlock } from 'lucide-react';
 import { OrthographicPerspectiveToggle } from '@/components/viewer/OrthographicPerspectiveToggle';
 import { ViewGizmo } from '@/components/viewer/ViewGizmo';
 import { Button } from '@/components/ui/button';
@@ -59,7 +59,12 @@ export function ThreeScene({
   coloredGroup,
 }: ThreeSceneProps) {
   const [isOrthographic, setIsOrthographic] = useState(true);
-  const [uprightLocked, setUprightLocked] = useState(false);
+  const [uprightLocked, setUprightLocked] = useState(true);
+  // Keep the initial layout stable across responsive resizes. Desktop retains
+  // the existing visible cube by default, while mobile gains an explicit cube
+  // toggle without permanently consuming the smaller viewport.
+  const [initialIsMobile] = useState(isMobile);
+  const [showViewGizmo, setShowViewGizmo] = useState(() => !isMobile);
   const defaultBackgroundLightness = useMemo(
     () => hexColorToLightness(backgroundColor),
     [backgroundColor],
@@ -85,9 +90,6 @@ export function ThreeScene({
       String(backgroundLightness),
     );
   }, [backgroundLightness]);
-
-  // Store the initial isMobile value to prevent position changes during resize
-  const [initialIsMobile] = useState(isMobile);
 
   // The colored group's meshes sit at their raw OpenSCAD coordinates.
   // Offset so the combined bounds are centered at origin, mirroring the
@@ -178,7 +180,12 @@ export function ThreeScene({
           infiniteGrid={true}
         /> */}
           <ViewerControls uprightLocked={uprightLocked} />
-          {!initialIsMobile && <ViewGizmo />}
+          {showViewGizmo && (
+            <ViewGizmo
+              alignment={initialIsMobile ? 'top-right' : 'bottom-right'}
+              margin={initialIsMobile ? [58, 58] : [80, 80]}
+            />
+          )}
         </Canvas>
       </Suspense>
 
@@ -233,6 +240,26 @@ export function ThreeScene({
             ) : (
               <Unlock className="h-4 w-4" />
             )}
+          </Button>
+          <Button
+            type="button"
+            variant={showViewGizmo ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-8 w-8 rounded-full border border-adam-neutral-700/70 bg-adam-background-1/85 text-adam-text-primary backdrop-blur-sm"
+            aria-label={
+              showViewGizmo
+                ? 'Hide orientation cube'
+                : 'Show orientation cube'
+            }
+            aria-pressed={showViewGizmo}
+            title={
+              showViewGizmo
+                ? 'Hide orientation cube'
+                : 'Show orientation cube'
+            }
+            onClick={() => setShowViewGizmo((visible) => !visible)}
+          >
+            <Box className="h-4 w-4" />
           </Button>
           <OrthographicPerspectiveToggle
             isOrthographic={isOrthographic}
