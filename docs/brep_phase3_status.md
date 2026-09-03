@@ -307,13 +307,13 @@ active BRep source
 -> existing atomic immutable persistence
 ```
 
-The implementation checkpoint is `f66e9290a667a294eb3f4c58c0756d5d37805bb5` after `a61ba61d1edc3857bea4595ec302c5ac6120f08c`. CLI, streaming OpenCode and Codex CLI now carry an explicit source kind and the exact current `BrepProject`; every BRep continuation injects it as `<current_brep_project>`. BRep responses parse and emit `build_brep_project`, while OpenSCAD continues to use its existing artifact extraction, asset reconciliation, compiler validation and repair path.
+The implementation checkpoint is `62ae20706461b9175ceef4bf81c3bd693dc34383`, following `a61ba61d1edc3857bea4595ec302c5ac6120f08c` and `f66e9290a667a294eb3f4c58c0756d5d37805bb5`. CLI, streaming OpenCode and Codex CLI now carry an explicit source kind and the exact current `BrepProject`; every BRep continuation injects it as `<current_brep_project>`. BRep responses parse and emit `build_brep_project`, while OpenSCAD continues to use its existing artifact extraction, asset reconciliation, compiler validation and repair path.
 
 Focused 3F-D checks passed on 2026-09-03:
 
 ```text
 npm test -- --run tests/opencodeAgentResult.test.ts tests/cliAgentPersistentSession.test.ts tests/opencodePersistentSession.test.ts tests/aiInstructionCatalog.test.ts  PASS (36 tests)
-npm test       PASS (69 files, 534 tests)
+npm test       PASS (69 files, 536 tests)
 npm run typecheck  PASS
 npm run lint       PASS
 npm run build      PASS
