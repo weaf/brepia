@@ -940,6 +940,8 @@ export async function handleAiChatRequest(req: Request) {
   let creativeSuggestionsInstruction: string;
   let openCodeTransportInstruction: string;
   let codexTransportInstruction: string;
+  let openCodeBrepTransportInstruction: string;
+  let codexBrepTransportInstruction: string;
   try {
     [
       buildToolDescription,
@@ -956,6 +958,8 @@ export async function handleAiChatRequest(req: Request) {
       creativeSuggestionsInstruction,
       openCodeTransportInstruction,
       codexTransportInstruction,
+      openCodeBrepTransportInstruction,
+      codexBrepTransportInstruction,
     ] = await Promise.all([
       aiRuntime.instruction('tool.build_parametric_model'),
       aiRuntime.instruction('tool.build_brep_project'),
@@ -971,6 +975,8 @@ export async function handleAiChatRequest(req: Request) {
       aiRuntime.instruction('suggestions.creative'),
       aiRuntime.instruction('transport.opencode'),
       aiRuntime.instruction('transport.codex'),
+      aiRuntime.instruction('transport.opencode_brep'),
+      aiRuntime.instruction('transport.codex_brep'),
     ]);
   } catch (error) {
     logError(error, {
@@ -1264,12 +1270,16 @@ export async function handleAiChatRequest(req: Request) {
         : 'chat.creativeMaxOutputTokens',
   );
   const openCodeRuntime: OpenCodeRuntimeOptions = {
-    transportInstruction: openCodeTransportInstruction,
+    transportInstruction: activeBrepSource
+      ? openCodeBrepTransportInstruction
+      : openCodeTransportInstruction,
     timeoutMs: aiRuntime.number('transport.openCodeTimeoutMs'),
     validationAttempts: aiRuntime.number(
       'transport.openCodeValidationAttempts',
     ),
-    authoritativeAssets: authoritativeOpenScadAssets,
+    authoritativeAssets: activeBrepSource ? [] : authoritativeOpenScadAssets,
+    sourceKind: activeBrepSource ? 'brep' : 'openscad',
+    currentBrepProject: activeBrepSource?.project,
   };
   const cliTimeoutMs = aiRuntime.number('transport.cliTimeoutMs');
 
@@ -1279,15 +1289,6 @@ export async function handleAiChatRequest(req: Request) {
       {
         error:
           'Creative mode currently requires a direct AI model; OpenCode/Codex agent adapters are parametric-only',
-      },
-      400,
-    );
-  }
-  if (activeBrepSource && transport.kind !== 'normal') {
-    return jsonResponse(
-      {
-        error:
-          'Native BRep editing through OpenCode/Codex is not available until Phase 3F; choose a direct tool-capable model.',
       },
       400,
     );
@@ -1316,10 +1317,18 @@ export async function handleAiChatRequest(req: Request) {
     } else if (transport.kind === 'cli-agent') {
       chatLanguageModel = cliAgentChatModel(actualModelId, {
         transportInstruction: actualModelId.startsWith('agent/codex/')
-          ? codexTransportInstruction
-          : openCodeTransportInstruction,
+          ? activeBrepSource
+            ? codexBrepTransportInstruction
+            : codexTransportInstruction
+          : activeBrepSource
+            ? openCodeBrepTransportInstruction
+            : openCodeTransportInstruction,
         timeoutMs: cliTimeoutMs,
-        authoritativeAssets: authoritativeOpenScadAssets,
+        authoritativeAssets: activeBrepSource
+          ? []
+          : authoritativeOpenScadAssets,
+        sourceKind: activeBrepSource ? 'brep' : 'openscad',
+        currentBrepProject: activeBrepSource?.project,
       });
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
@@ -1455,7 +1464,9 @@ export async function handleAiChatRequest(req: Request) {
       return {};
     },
     stopWhen: streamingOpenCode
-      ? hasToolCall('build_parametric_model')
+      ? activeBrepSource
+        ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
+        : hasToolCall('build_parametric_model')
       : activeBrepSource
         ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
         : stepCountIs(maxSteps),
