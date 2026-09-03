@@ -305,6 +305,43 @@ Focused evidence:
 - `npm run typecheck` — PASS;
 - `git diff --check` — PASS.
 
+## 2G — Product UX integration and diagnostic cleanup
+
+Status: **complete (static/product integration evidence; browser acceptance is
+recorded separately in 2H).**
+
+Native BRep projects are now reachable from the normal authenticated product
+navigation via **New BRep project**. Recent-project and History cards use the
+new `/project/$id` dispatcher rather than assuming every parametric
+conversation is an OpenSCAD editor. The dispatcher resolves the authenticated
+conversation's _active assistant leaf_ and selects `/brep/$id` only when that
+exact persisted artifact validates as BRep; all other existing projects keep
+the established `/editor/$id` path. Routing is therefore based on canonical
+source data rather than a filename, title or historical message inference.
+
+`/brep` remains the explicit new-project/template/import surface. Its cabinet
+is only the creation template: pressing create persists a normal independent
+conversation before opening it, and imported packages open with their persisted
+artifact title rather than silently presenting `BrepProject.name` as the
+project title.
+
+The BRep parameter controls now prevent overlapping blur commits by disabling
+controls and native STEP export while the compare-and-set source revision is
+being persisted. An evaluation clears the prior rendered geometry and aborts
+on dependency cleanup, so an older request cannot replace a newer source
+revision's result. `BufferGeometry` continues to be disposed when its result is
+replaced or the preview unmounts. The existing single-column-to-two-column grid
+remains responsive; no graph editor, AI-native BRep mutation, Rhino or
+Grasshopper scope was added.
+
+Focused/static evidence:
+
+- `npm test -- --run tests/brepProjectService.test.ts tests/brepProjectPackage.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts` — PASS (16 tests);
+- `npm run typecheck` — PASS;
+- `npm run lint` — PASS;
+- `npm run build` — PASS;
+- `git diff --check` — PASS.
+
 ## Current constraints
 
 - Preserve OpenSCAD and Creative behavior.

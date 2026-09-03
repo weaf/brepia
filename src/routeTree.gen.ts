@@ -48,6 +48,7 @@ import { Route as ApiSettingsInstanceIdentityRouteImport } from './routes/api/se
 import { Route as ApiSettingsRuntimeIntegrationsRouteImport } from './routes/api/settings/runtimeIntegrations';
 import { Route as LayoutAuthBrepIdRouteImport } from './routes/_layout/_auth/brep/$id';
 import { Route as LayoutAuthEditorIdRouteImport } from './routes/_layout/_auth/editor/$id';
+import { Route as LayoutAuthProjectIdRouteImport } from './routes/_layout/_auth/project/$id';
 import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api/ai-settings/profiles/$profileId';
 import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId';
 import { Route as ApiAiSettingsProvidersBuiltinsRouteImport } from './routes/api/ai-settings/providers/builtins';
@@ -255,6 +256,11 @@ const LayoutAuthEditorIdRoute = LayoutAuthEditorIdRouteImport.update({
   path: '/editor/$id',
   getParentRoute: () => LayoutAuthRoute,
 } as any);
+const LayoutAuthProjectIdRoute = LayoutAuthProjectIdRouteImport.update({
+  id: '/project/$id',
+  path: '/project/$id',
+  getParentRoute: () => LayoutAuthRoute,
+} as any);
 const ApiAiSettingsProfilesProfileIdRoute =
   ApiAiSettingsProfilesProfileIdRouteImport.update({
     id: '/$profileId',
@@ -346,6 +352,7 @@ export interface FileRoutesByFullPath {
   '/api/settings/runtimeIntegrations': typeof ApiSettingsRuntimeIntegrationsRoute;
   '/brep/$id': typeof LayoutAuthBrepIdRoute;
   '/editor/$id': typeof LayoutAuthEditorIdRoute;
+  '/project/$id': typeof LayoutAuthProjectIdRoute;
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute;
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
@@ -394,6 +401,7 @@ export interface FileRoutesByTo {
   '/api/settings/runtimeIntegrations': typeof ApiSettingsRuntimeIntegrationsRoute;
   '/brep/$id': typeof LayoutAuthBrepIdRoute;
   '/editor/$id': typeof LayoutAuthEditorIdRoute;
+  '/project/$id': typeof LayoutAuthProjectIdRoute;
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute;
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
@@ -445,6 +453,7 @@ export interface FileRoutesById {
   '/api/settings/runtimeIntegrations': typeof ApiSettingsRuntimeIntegrationsRoute;
   '/_layout/_auth/brep/$id': typeof LayoutAuthBrepIdRoute;
   '/_layout/_auth/editor/$id': typeof LayoutAuthEditorIdRoute;
+  '/_layout/_auth/project/$id': typeof LayoutAuthProjectIdRoute;
   '/api/ai-settings/profiles/$profileId': typeof ApiAiSettingsProfilesProfileIdRoute;
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
@@ -495,6 +504,7 @@ export interface FileRouteTypes {
     | '/api/settings/runtimeIntegrations'
     | '/brep/$id'
     | '/editor/$id'
+    | '/project/$id'
     | '/api/ai-settings/profiles/$profileId'
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
@@ -543,6 +553,7 @@ export interface FileRouteTypes {
     | '/api/settings/runtimeIntegrations'
     | '/brep/$id'
     | '/editor/$id'
+    | '/project/$id'
     | '/api/ai-settings/profiles/$profileId'
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
@@ -593,6 +604,7 @@ export interface FileRouteTypes {
     | '/api/settings/runtimeIntegrations'
     | '/_layout/_auth/brep/$id'
     | '/_layout/_auth/editor/$id'
+    | '/_layout/_auth/project/$id'
     | '/api/ai-settings/profiles/$profileId'
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
@@ -914,6 +926,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthEditorIdRouteImport;
       parentRoute: typeof LayoutAuthRoute;
     };
+    '/_layout/_auth/project/$id': {
+      id: '/_layout/_auth/project/$id';
+      path: '/project/$id';
+      fullPath: '/project/$id';
+      preLoaderRoute: typeof LayoutAuthProjectIdRouteImport;
+      parentRoute: typeof LayoutAuthRoute;
+    };
     '/api/ai-settings/profiles/$profileId': {
       id: '/api/ai-settings/profiles/$profileId';
       path: '/$profileId';
@@ -997,6 +1016,7 @@ interface LayoutAuthRouteChildren {
   LayoutAuthHistoryRoute: typeof LayoutAuthHistoryRoute;
   LayoutAuthSettingsRoute: typeof LayoutAuthSettingsRoute;
   LayoutAuthEditorIdRoute: typeof LayoutAuthEditorIdRoute;
+  LayoutAuthProjectIdRoute: typeof LayoutAuthProjectIdRoute;
 }
 
 const LayoutAuthRouteChildren: LayoutAuthRouteChildren = {
@@ -1004,6 +1024,7 @@ const LayoutAuthRouteChildren: LayoutAuthRouteChildren = {
   LayoutAuthHistoryRoute: LayoutAuthHistoryRoute,
   LayoutAuthSettingsRoute: LayoutAuthSettingsRoute,
   LayoutAuthEditorIdRoute: LayoutAuthEditorIdRoute,
+  LayoutAuthProjectIdRoute: LayoutAuthProjectIdRoute,
 };
 
 const LayoutAuthRouteWithChildren = LayoutAuthRoute._addFileChildren(

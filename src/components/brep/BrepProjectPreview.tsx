@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BufferAttribute, BufferGeometry } from 'three';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,8 @@ export function BrepProjectPreview({
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [committing, setCommitting] = useState(false);
+  const valuesRef = useRef(values);
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
     [result],
@@ -82,10 +84,15 @@ export function BrepProjectPreview({
   }, [geometry]);
 
   useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const evaluate = async () => {
       setLoading(true);
       setError(null);
+      setResult(null);
       try {
         const token = (await supabase.auth.getSession()).data.session
           ?.access_token;
@@ -137,7 +144,9 @@ export function BrepProjectPreview({
   return (
     <main className="grid h-full min-h-[600px] grid-cols-1 gap-4 p-6 lg:grid-cols-[320px_1fr]">
       <section className="rounded-lg border border-adam-neutral-700 bg-adam-bg-secondary-dark p-5 text-adam-text-primary">
-        <h1 className="text-xl font-semibold">{project.name}</h1>
+        <h1 className="text-xl font-semibold">
+          {packageTitle ?? project.name}
+        </h1>
         <p className="mt-2 text-sm text-adam-text-tertiary">
           Native BRep project. Published values are ready for future Grasshopper
           inputs.
@@ -155,21 +164,27 @@ export function BrepProjectPreview({
                 max={parameter.max}
                 step={parameter.step}
                 value={values[parameter.id]}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
+                disabled={committing}
+                onChange={(event) => {
+                  const nextValues = {
+                    ...valuesRef.current,
                     [parameter.id]: Number(event.target.value),
-                  }))
-                }
+                  };
+                  valuesRef.current = nextValues;
+                  setValues(nextValues);
+                }}
                 onBlur={() => {
-                  if (!onParameterValuesCommit) return;
-                  void onParameterValuesCommit(values).catch((reason) => {
-                    setError(
-                      reason instanceof Error
-                        ? reason.message
-                        : 'Could not persist BRep parameter revision.',
-                    );
-                  });
+                  if (!onParameterValuesCommit || committing) return;
+                  setCommitting(true);
+                  void onParameterValuesCommit(valuesRef.current)
+                    .catch((reason) => {
+                      setError(
+                        reason instanceof Error
+                          ? reason.message
+                          : 'Could not persist BRep parameter revision.',
+                      );
+                    })
+                    .finally(() => setCommitting(false));
                 }}
               />
             </label>
@@ -184,7 +199,7 @@ export function BrepProjectPreview({
         </Button>
         <Button
           className="mt-3 w-full"
-          disabled={exporting || loading}
+          disabled={exporting || loading || committing}
           variant="outline"
           onClick={async () => {
             setExporting(true);
@@ -203,7 +218,11 @@ export function BrepProjectPreview({
             }
           }}
         >
-          {exporting ? 'Exporting STEP…' : 'Export native STEP'}
+          {exporting
+            ? 'Exporting STEP…'
+            : committing
+              ? 'Saving parameters…'
+              : 'Export native STEP'}
         </Button>
         {exportPackage ? (
           <Button

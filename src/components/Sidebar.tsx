@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   LayoutGrid,
+  Box,
   LogOut,
   Menu,
   MessageCircle,
@@ -57,7 +58,7 @@ interface SidebarProps {
   setIsSidebarOpen: (open: boolean) => void;
 }
 
-type SidebarPath = '/' | '/history';
+type SidebarPath = '/' | '/history' | '/brep';
 
 const appearanceOptions = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -264,6 +265,28 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
               </Button>
             </div>
           </ConditionalWrapper>
+          <ConditionalWrapper
+            condition={!isSidebarOpen}
+            wrapper={(children) => (
+              <Tooltip>
+                <TooltipTrigger asChild>{children}</TooltipTrigger>
+                <TooltipContent side="right">
+                  New native BRep project
+                </TooltipContent>
+              </Tooltip>
+            )}
+          >
+            <div className="ml-[9px]">
+              <Button
+                variant={isSidebarOpen ? 'adam_dark' : 'adam_dark_collapsed'}
+                className={`${isSidebarOpen ? 'mb-4 w-[216px] justify-start gap-2' : 'mb-4 ml-[1px] h-[30px] w-[30px] p-[2px]'}`}
+                onClick={() => sidebarNavigate('/brep')}
+              >
+                <Box className="h-5 w-5" />
+                {isSidebarOpen && 'New BRep project'}
+              </Button>
+            </div>
+          </ConditionalWrapper>
           <nav className="space-y-1">
             {[
               {
@@ -313,7 +336,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                       ) => {
                         return (
                           <Link
-                            to="/editor/$id"
+                            to="/project/$id"
                             params={{ id: conversation.id }}
                             key={conversation.id}
                             onClick={() => {

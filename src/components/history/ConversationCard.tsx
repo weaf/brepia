@@ -70,7 +70,7 @@ export function ConversationCard({
       )}
     >
       <Link
-        to="/editor/$id"
+        to="/project/$id"
         params={{ id: conversation.id }}
         onClick={(event) => {
           if (selectionMode) {
