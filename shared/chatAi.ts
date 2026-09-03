@@ -2,6 +2,10 @@ import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
 import { loadBundledInstruction } from './aiInstructionCatalog.ts';
 import {
+  brepAiBuildInputSchema,
+  brepAiBuildOutputSchema,
+} from './brepAiTool.ts';
+import {
   OPENSCAD_PROJECT_MAX_ASSETS,
   OPENSCAD_PROJECT_MAX_FILES,
   OPENSCAD_PROJECT_SCHEMA_VERSION,
@@ -122,6 +126,11 @@ export const chatTools = {
     description: loadBundledInstruction('tool.build_parametric_model'),
     inputSchema: parametricArtifactSchema,
     outputSchema: parametricCompileOutputSchema,
+  }),
+  build_brep_project: tool({
+    description: loadBundledInstruction('tool.build_brep_project'),
+    inputSchema: brepAiBuildInputSchema,
+    outputSchema: brepAiBuildOutputSchema,
   }),
   answer_user: tool({
     description: loadBundledInstruction('tool.answer_user'),
