@@ -29,6 +29,7 @@ export class BrepEvaluationError extends Error {
       | 'capacity_exceeded'
       | 'evaluation_failed'
       | 'evaluation_timeout'
+      | 'evaluation_cancelled'
       | 'output_invalid'
       | 'output_too_large',
     message: string,
@@ -69,6 +70,15 @@ function acquireSlot(): () => void {
       activeEvaluations = Math.max(0, activeEvaluations - 1);
     }
   };
+}
+
+function throwIfEvaluationAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new BrepEvaluationError(
+      'evaluation_cancelled',
+      'BRep evaluation was cancelled.',
+    );
+  }
 }
 
 function finiteVector(value: unknown): value is [number, number, number] {
@@ -129,25 +139,31 @@ export type BrepEvaluationArtifact = {
 export async function evaluateBrepProject(
   project: BrepProject,
   parameterValues?: BrepParameterValues,
+  signal?: AbortSignal,
 ): Promise<BrepEvaluationArtifact> {
   const request = normalizeBrepEvaluationRequest({ project, parameterValues });
-  return evaluateNormalizedBrepProject(request);
+  return evaluateNormalizedBrepProject(request, signal);
 }
 
 export async function evaluateNormalizedBrepProject(
   request: NormalizedBrepEvaluationRequest,
+  signal?: AbortSignal,
 ): Promise<BrepEvaluationArtifact> {
   // Resolve configuration before entering the child-process error mapping so
   // missing configuration remains a stable fail-closed provider error.
   const configuredRunner = runner();
+  throwIfEvaluationAborted(signal);
   const release = acquireSlot();
-  const workspace = await mkdtemp(path.join(tmpdir(), 'brepia-brep-'));
-  const inputPath = path.join(workspace, 'request.json');
-  const outputDir = path.join(workspace, 'output');
-  const resultPath = path.join(outputDir, 'result.json');
-  const stepPath = path.join(outputDir, 'model.step');
+  let workspace: string | undefined;
   try {
+    workspace = await mkdtemp(path.join(tmpdir(), 'brepia-brep-'));
+    const inputPath = path.join(workspace, 'request.json');
+    const outputDir = path.join(workspace, 'output');
+    const resultPath = path.join(outputDir, 'result.json');
+    const stepPath = path.join(outputDir, 'model.step');
+
     await writeFile(inputPath, JSON.stringify(request), 'utf8');
+    throwIfEvaluationAborted(signal);
     try {
       await execFileAsync(
         configuredRunner,
@@ -156,6 +172,7 @@ export async function evaluateNormalizedBrepProject(
           timeout: BREP_EVALUATION_TIMEOUT_MS,
           maxBuffer: 4 * 1024 * 1024,
           env: process.env,
+          signal,
         },
       );
     } catch (error) {
@@ -167,7 +184,13 @@ export async function evaluateNormalizedBrepProject(
         code?: string | number;
         killed?: boolean;
         signal?: string;
+        name?: string;
       };
+      if (failure.name === 'AbortError' || failure.code === 'ABORT_ERR')
+        throw new BrepEvaluationError(
+          'evaluation_cancelled',
+          'BRep evaluation was cancelled.',
+        );
       if (failure.code === 'ENOENT' || failure.code === 69)
         throw new BrepEvaluationError(
           'provider_unavailable',
@@ -189,6 +212,8 @@ export async function evaluateNormalizedBrepProject(
           : 'BRep evaluation failed.',
       );
     }
+
+    throwIfEvaluationAborted(signal);
     const stat = await lstat(resultPath).catch(() => undefined);
     if (!stat || !stat.isFile() || stat.isSymbolicLink())
       throw new BrepEvaluationError(
@@ -220,8 +245,10 @@ export async function evaluateNormalizedBrepProject(
     return { result: parsed, ...(stepBytes ? { stepBytes } : {}) };
   } finally {
     release();
-    await rm(workspace, { recursive: true, force: true }).catch(
-      () => undefined,
-    );
+    if (workspace) {
+      await rm(workspace, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+    }
   }
 }
