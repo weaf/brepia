@@ -111,6 +111,60 @@ git diff --check origin/master...HEAD  PASS (no output)
 
 3B is therefore accepted as the shared provider-independent foundation for Phase 3.
 
+## 3C — Native AI tool/source contract
+
+Status: **implemented; local verification pending**.
+
+Decision: keep legacy `build_parametric_model` strictly OpenSCAD and introduce a separate `build_brep_project` tool contract. This avoids changing the meaning of historical OpenSCAD tool parts, recovery helpers, imported artifacts or editor assumptions.
+
+Added/changed:
+
+```text
+shared/brepAiTool.ts
+shared/chatAi.ts
+config/ai/instructions/tool-build-brep-project.md
+config/ai/instructions/manifest.json
+tests/brepAiTool.test.ts
+tests/aiInstructionCatalog.test.ts
+```
+
+The BRep tool contract:
+
+- exposes a provider-visible bounded Zod representation of the current canonical `BrepProject` v1 vocabulary;
+- accepts complete project snapshots only, never patches;
+- is strict at every object boundary so arbitrary Python/build123d/STEP/mesh/runtime fields are rejected rather than silently stripped;
+- enumerates only canonical node types and the semantic `parallelToAxis` selector;
+- delegates final graph/reference/unit/range/cycle/result validation to `normalizeBrepAiProjectCandidate()` / `normalizeBrepProject()`;
+- has a minimal strict success result contract containing only `status` and `message`;
+- registers its own instruction surface `tool.build_brep_project` with explicit stable-ID and no-runtime-code rules.
+
+`chatTools` now knows the `build_brep_project` type so future BRep AI messages can be represented by the normal AI SDK message union. Crucially, `src/server/aiChat.ts` has **not** been changed: the active Parametric toolset still includes only legacy `build_parametric_model` plus `answer_user`. Therefore normal OpenSCAD conversations cannot see or call the new BRep tool yet.
+
+Focused tests cover:
+
+- valid complete canonical BRep input;
+- raw topology selector rejection;
+- rejection of Python/STEP/runtime authority fields;
+- canonical invalid-reference/cycle rejection;
+- explicit separation between legacy OpenSCAD and BRep tool payloads;
+- strict BRep tool-result validation;
+- instruction-catalog registration.
+
+### Verification state
+
+The GitHub-connected environment cannot execute the repository Node toolchain, and the isolated container available to ChatGPT has no external DNS access to clone GitHub. Local repository verification is therefore required before 3D.
+
+Recommended checkpoint verification:
+
+```bash
+npm test -- --run tests/brepAiTool.test.ts tests/brepAiProject.test.ts tests/aiInstructionCatalog.test.ts tests/brepProject.test.ts tests/brepProjectArtifact.test.ts tests/parametricProjectSource.test.ts
+npm run typecheck
+npm run lint
+git diff --check origin/master...HEAD
+```
+
+Do not wire `build_brep_project` into `aiChat`, OpenCode or the client tool lifecycle until this checkpoint is green.
+
 ## Decision gates
 
 Stop before broadening implementation if:
@@ -123,6 +177,6 @@ Stop before broadening implementation if:
 
 ## Current next action
 
-Proceed to **3C — Native AI tool/source contract**.
+Verify **3C** locally. Once green, proceed to **3D — Prompting and native provider generation/follow-up context**.
 
-Keep the existing OpenSCAD `build_parametric_model` payload and helper semantics unchanged. Review a separate BRep-specific structured tool as the default safe direction before any provider/runtime wiring.
+3D is the first phase that changes the live `aiChat` tool selection/context pipeline. Keep it source-kind-aware: OpenSCAD must continue to receive only `build_parametric_model`, while an active BRep project receives `build_brep_project` and its exact current canonical snapshot as follow-up context.
