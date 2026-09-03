@@ -7,6 +7,7 @@ import {
   resolveActiveBrepAiSource,
   type BrepAiSourceRevision,
 } from '@shared/brepAiContext';
+import type { BrepAiBuildInput } from '@shared/brepAiTool';
 import {
   isAiInstructionProfileId,
   loadBundledInstruction,
@@ -1031,6 +1032,8 @@ export async function handleAiChatRequest(req: Request) {
     activeBrepSource,
   });
 
+  let acceptedBrepBuildInput: BrepAiBuildInput | undefined;
+
   const tools =
     conversation.type === 'creative'
       ? creativeTools({
@@ -1044,6 +1047,9 @@ export async function handleAiChatRequest(req: Request) {
             activeBrepSource,
             buildDescription: brepBuildToolDescription,
             answerDescription: answerToolDescription,
+            onAcceptedBuild: (input) => {
+              acceptedBrepBuildInput = input;
+            },
           })
         : parametricTools({
             supabaseClient,
@@ -1552,6 +1558,7 @@ export async function handleAiChatRequest(req: Request) {
             const brepFinalized = finalizeBrepAiAssistantParts({
               parts: baseFinalizedParts,
               activeBrepSource,
+              acceptedBuildInput: acceptedBrepBuildInput,
             });
             const finalizedParts = brepFinalized.parts;
 
