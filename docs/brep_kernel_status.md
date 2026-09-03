@@ -131,6 +131,43 @@ Follow `docs/brep_kernel_execution.md` rather than improvising roadmap order.
 Phase 1A is PASS with the exact evidence recorded above. Later Phase 1 gates
 remain unverified until their own focused evidence is recorded.
 
+### Phase 1B–1E — provider, isolated evaluator, sandbox and tessellation
+
+Implemented and locally verified through
+`6ccdb5947e916153c3de95069f72e65565b3c439`. The provider request resolves published parameter overrides without
+mutating the canonical project. Native evaluation is executed only by the
+dedicated rootless Podman runner; it mounts a validated JSON input read-only and
+writes to a dedicated output directory under `network=none`, read-only root,
+`no-new-privileges`, dropped capabilities, bounded PIDs/CPU/RAM and timeout.
+
+The original native smoke exposed a real incompatible pair:
+
+```text
+Python 3.12.14
+build123d 0.8.0
+cadquery-ocp 7.9.3.1.1 / OCP 7.9.3.1
+AttributeError: TopoDS_Shape has no attribute HashCode
+```
+
+The image now pins and build-verifies `build123d==0.11.1` together with
+`cadquery-ocp-novtk==7.9.3.1.1` (OCP 7.9.3.1). `libgl1` is retained because the
+selected OCP binding cannot import without `libGL.so.1`. This is the no-VTK
+binding variant; runtime execution remains networkless.
+
+Native smoke evidence after the coherent dependency update:
+
+```text
+scripts/brep/build-image.sh                         PASS
+scripts/brep/smoke-test.sh                          PASS (box/cylinder/transform/subtract/fillet)
+native output                                        PASS (ISO 10303-21 STEP; 732 triangles)
+npx vitest run BRep suites                           PASS (5 files, 20 tests)
+npm run typecheck; npm run lint; git diff --check    PASS
+```
+
+The next active step is Phase 1F integration hardening, followed by the UI
+vertical slice. Native direct STEP inspection and browser acceptance remain
+unverified and are not yet marked PASS.
+
 ## Browser acceptance
 
 Not started for the BRep path. Browser acceptance begins when the Phase 1 vertical slice reaches UI/viewer integration.
