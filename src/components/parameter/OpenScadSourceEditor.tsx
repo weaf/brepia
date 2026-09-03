@@ -52,6 +52,7 @@ export function OpenScadSourceEditor({
   const [cursor, setCursor] = useState(0);
   const [activeCompletion, setActiveCompletion] = useState(0);
   const [explicitCompletion, setExplicitCompletion] = useState(false);
+  const [completionDismissed, setCompletionDismissed] = useState(false);
   const [scrollPosition, setScrollPosition] = useState({ left: 0, top: 0 });
 
   useEffect(() => {
@@ -79,7 +80,7 @@ export function OpenScadSourceEditor({
 
   const completionContext = useMemo(
     () =>
-      readOnly
+      readOnly || completionDismissed
         ? { from: cursor, to: cursor, options: [] }
         : getOpenScadCompletionContext({
             source: value,
@@ -89,6 +90,7 @@ export function OpenScadSourceEditor({
             explicit: explicitCompletion,
           }),
     [
+      completionDismissed,
       currentPath,
       cursor,
       explicitCompletion,
@@ -106,10 +108,10 @@ export function OpenScadSourceEditor({
   const hasCurrentHighlight =
     highlightedHtml !== null && highlightedSource === value;
 
-  const beforeCursor = value.slice(0, cursor);
+  const beforeCursor = value.slice(0, Math.max(0, cursor));
   const lastLineBreak = beforeCursor.lastIndexOf('\n');
   const lineNumber = beforeCursor.split('\n').length - 1;
-  const columnNumber = cursor - lastLineBreak - 1;
+  const columnNumber = Math.max(0, cursor - lastLineBreak - 1);
   const completionLeft = Math.max(
     8,
     EDITOR_PADDING_PX +
@@ -126,6 +128,7 @@ export function OpenScadSourceEditor({
   const syncCursor = (textarea: HTMLTextAreaElement) => {
     setCursor(textarea.selectionStart);
     setExplicitCompletion(false);
+    setCompletionDismissed(false);
   };
 
   const applyCompletion = (option: OpenScadCompletion) => {
@@ -139,6 +142,7 @@ export function OpenScadSourceEditor({
     onChange(nextValue);
     setCursor(nextCursor);
     setExplicitCompletion(false);
+    setCompletionDismissed(true);
 
     window.requestAnimationFrame(() => {
       const textarea = textareaRef.current;
@@ -152,6 +156,7 @@ export function OpenScadSourceEditor({
     if ((event.ctrlKey || event.metaKey) && event.key === ' ') {
       event.preventDefault();
       setCursor(event.currentTarget.selectionStart);
+      setCompletionDismissed(false);
       setExplicitCompletion(true);
       return;
     }
@@ -184,7 +189,7 @@ export function OpenScadSourceEditor({
     if (event.key === 'Escape') {
       event.preventDefault();
       setExplicitCompletion(false);
-      setCursor(-1);
+      setCompletionDismissed(true);
     }
   };
 
@@ -203,7 +208,7 @@ export function OpenScadSourceEditor({
         aria-hidden="true"
         className={cn(
           'pointer-events-none absolute inset-0 overflow-hidden font-mono text-xs leading-5',
-          '[&_.shiki]:m-0 [&_.shiki]:min-h-full [&_.shiki]:min-w-max [&_.shiki]:bg-transparent! [&_.shiki]:p-3 [&_.shiki]:font-mono [&_.shiki]:text-xs [&_.shiki]:leading-5',
+          '[&_.shiki]:m-0 [&_.shiki]:min-h-full [&_.shiki]:min-w-max [&_.shiki]:!bg-transparent [&_.shiki]:p-3 [&_.shiki]:font-mono [&_.shiki]:text-xs [&_.shiki]:leading-5',
         )}
         dangerouslySetInnerHTML={{ __html: highlightedHtml ?? '' }}
       />
@@ -224,6 +229,7 @@ export function OpenScadSourceEditor({
           onChange(event.target.value);
           setCursor(event.target.selectionStart);
           setExplicitCompletion(false);
+          setCompletionDismissed(false);
         }}
         onClick={(event) => syncCursor(event.currentTarget)}
         onKeyUp={(event) => {
@@ -231,7 +237,8 @@ export function OpenScadSourceEditor({
             event.key !== 'ArrowDown' &&
             event.key !== 'ArrowUp' &&
             event.key !== 'Enter' &&
-            event.key !== 'Tab'
+            event.key !== 'Tab' &&
+            event.key !== 'Escape'
           ) {
             syncCursor(event.currentTarget);
           }
@@ -265,6 +272,7 @@ export function OpenScadSourceEditor({
               type="button"
               role="option"
               aria-selected={index === activeCompletion}
+              title={option.detail}
               className={cn(
                 'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs',
                 index === activeCompletion

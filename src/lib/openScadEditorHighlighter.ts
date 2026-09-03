@@ -1,7 +1,4 @@
-import {
-  createBundledHighlighter,
-  createSingletonShorthands,
-} from '@shikijs/core';
+import { createBundledHighlighter } from '@shikijs/core';
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript';
 import {
   bundledLanguages,
@@ -14,10 +11,14 @@ const createHighlighter = createBundledHighlighter({
   engine: () => createJavaScriptRegexEngine({ forgiving: true }),
 });
 
-const { codeToHtml } = createSingletonShorthands(createHighlighter);
+const highlighterPromise = createHighlighter({
+  langs: ['openscad'],
+  themes: ['github-dark'],
+});
 
-export function highlightOpenScadSource(source: string): Promise<string> {
-  return codeToHtml(source || ' ', {
+export async function highlightOpenScadSource(source: string): Promise<string> {
+  const highlighter = await highlighterPromise;
+  return highlighter.codeToHtml(source || ' ', {
     lang: 'openscad',
     theme: 'github-dark',
   });
