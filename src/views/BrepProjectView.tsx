@@ -1,7 +1,12 @@
 import { ChatTitle } from '@/components/chat/ChatTitle';
 import { BrepChatSession } from '@/components/brep/BrepChatSession';
-import { BrepProjectPreview } from '@/components/brep/BrepProjectPreview';
+import {
+  BrepProjectEditorProvider,
+  BrepProjectParametersPanel,
+  BrepProjectViewerPanel,
+} from '@/components/brep/BrepProjectEditor';
 import { ActivityIndicator } from '@/components/brand';
+import { Button } from '@/components/ui/button';
 import { ConversationContext, useConversation } from '@/contexts/ConversationContext';
 import { SelectedItemsContext } from '@/contexts/SelectedItemsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,7 +23,9 @@ import {
   useMessagesQuery,
 } from '@/services/messageService';
 import {
+  hiddenBrepRevisionIds,
   persistBrepProjectParameterRevision,
+  removeBrepProjectRevisionFromHistory,
   restoreBrepProjectRevision,
   selectBrepProjectRevision,
 } from '@/services/brepProjectService';
@@ -30,8 +37,10 @@ import Tree from '@shared/Tree';
 import type { Conversation, Message, Model } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
+import { Box } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import type { MessageItem } from '../types/misc.ts';
+import { ConversationView } from './ConversationView';
 
 function hasEmptyMetadata(metadata: unknown): boolean {
   return (
@@ -165,6 +174,7 @@ function BrepProjectWorkspace() {
     conversation.settings?.openCodeExecutionMode ?? 'cli',
   );
   const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const [mobilePreviewVersion, setMobilePreviewVersion] = useState(0);
 
   const { data: dbMessages = [], isFetched: areMessagesFetched } =
     useMessagesQuery();
@@ -216,13 +226,25 @@ function BrepProjectWorkspace() {
           ? [
               {
                 id: message.id,
-                parentMessageId: message.parent_message_id,
                 artifact,
               },
             ]
           : [];
       }),
     [dbMessages],
+  );
+  const hiddenRevisionIdSet = useMemo(
+    () => new Set(hiddenBrepRevisionIds(conversation.settings)),
+    [conversation.settings],
+  );
+  const editorRevisions = useMemo(
+    () =>
+      revisions.flatMap((revision, index) =>
+        hiddenRevisionIdSet.has(revision.id)
+          ? []
+          : [{ id: revision.id, label: `Revision ${index + 1}` }],
+      ),
+    [hiddenRevisionIdSet, revisions],
   );
 
   const refreshWorkspace = useCallback(async () => {
@@ -283,10 +305,6 @@ function BrepProjectWorkspace() {
         metadata: { model },
         parentMessageId: conversation.current_message_leaf_id ?? null,
       });
-      // The insert trigger advances the persisted conversation leaf. Keep the
-      // currently rendered BRep source stable until the authoritative messages
-      // and conversation queries refetch together instead of creating a cache
-      // snapshot that points at a message not present locally yet.
       return { userMessageId };
     },
     [conversation, model, user?.id],
@@ -419,75 +437,97 @@ function BrepProjectWorkspace() {
   }
 
   return (
-    <main className="grid h-full min-h-0 grid-cols-1 overflow-auto bg-adam-bg-secondary-dark xl:grid-cols-[minmax(360px,0.8fr)_minmax(0,2fr)] xl:overflow-hidden">
-      <section className="flex min-h-[520px] min-w-0 flex-col border-b border-adam-neutral-700 xl:min-h-0 xl:border-b-0 xl:border-r">
-        <div className="flex items-center justify-between gap-3 border-b border-adam-neutral-700 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <ChatTitle />
-          </div>
-          <span className="shrink-0 text-xs text-adam-text-tertiary">
-            {isChatStreaming ? 'AI editing…' : 'Native BRep'}
-          </span>
-        </div>
-        <BrepChatSession
-          conversation={conversation}
-          dbMessages={dbMessages}
-          initialBranch={initialBranch}
-          model={model}
-          setModel={updateSelectedModel}
-          executionMode={executionMode}
-          onExecutionModeChange={handleExecutionModeChange}
-          onSendParts={handleSendParts}
-          onRetry={handleRetry}
-          onEdit={handleEdit}
-          onRestore={handleRestore}
-          onSelectLeaf={handleSelectLeaf}
-          branchForLeaf={branchForLeaf}
-          onChangeRating={handleChangeRating}
-          onLoadingChange={setIsChatStreaming}
-        />
-      </section>
-
-      <section className="min-h-[620px] min-w-0 overflow-auto xl:min-h-0">
-        <BrepProjectPreview
-          key={leafId}
-          project={activeSource.artifact.source.source}
-          exportPackage
-          packageTitle={activeSource.artifact.title}
-          onParameterValuesCommit={async (
-            parameterValues: BrepParameterValues,
-          ) => {
-            await persistBrepProjectParameterRevision({
-              conversationId: conversation.id,
-              parentMessageId: leafId,
-              artifact: activeSource.artifact,
-              parameterValues,
-            });
-            await refreshWorkspace();
-          }}
-          activeRevisionId={activeSource.messageId}
-          revisions={revisions.map((revision, index) => ({
-            id: revision.id,
-            label: `Revision ${index + 1}`,
-          }))}
-          onSelectRevision={async (messageId) => {
-            await selectBrepProjectRevision({
-              conversationId: conversation.id,
-              messageId,
-            });
-            await refreshWorkspace();
-          }}
-          onRestoreRevision={async (messageId) => {
-            const revision = revisions.find((item) => item.id === messageId);
-            if (!revision) throw new Error('BRep source revision not found.');
-            await restoreBrepProjectRevision({
-              conversationId: conversation.id,
-              sourceMessageId: revision.id,
-            });
-            await refreshWorkspace();
-          }}
-        />
-      </section>
-    </main>
+    <BrepProjectEditorProvider
+      project={activeSource.artifact.source.source}
+      packageTitle={activeSource.artifact.title}
+      activeRevisionId={activeSource.messageId}
+      revisions={editorRevisions}
+      onParameterValuesCommit={async (
+        parameterValues: BrepParameterValues,
+      ) => {
+        await persistBrepProjectParameterRevision({
+          conversationId: conversation.id,
+          parentMessageId: leafId,
+          artifact: activeSource.artifact,
+          parameterValues,
+        });
+        await refreshWorkspace();
+      }}
+      onSelectRevision={async (messageId) => {
+        await selectBrepProjectRevision({
+          conversationId: conversation.id,
+          messageId,
+        });
+        await refreshWorkspace();
+      }}
+      onRestoreRevision={async (messageId) => {
+        await restoreBrepProjectRevision({
+          conversationId: conversation.id,
+          sourceMessageId: messageId,
+        });
+        await refreshWorkspace();
+      }}
+      onDeleteRevision={async (messageId) => {
+        await removeBrepProjectRevisionFromHistory({
+          conversationId: conversation.id,
+          messageId,
+          activeRevisionId: activeSource.messageId,
+        });
+        await refreshWorkspace();
+      }}
+    >
+      <ConversationView
+        hasParameters
+        mobilePreviewKey={`brep:${activeSource.messageId}`}
+        mobilePreviewVersion={mobilePreviewVersion}
+        chatPanelSlot={
+          <>
+            <div className="flex w-full items-center justify-between gap-3 border-b border-adam-neutral-700 px-4 py-3 md:pl-12">
+              <div className="min-w-0 flex-1">
+                <ChatTitle />
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="[@media(min-width:1025px)]:hidden"
+                  onClick={() =>
+                    setMobilePreviewVersion((current) => current + 1)
+                  }
+                >
+                  <Box className="mr-1 h-4 w-4" />
+                  Model
+                </Button>
+                <span className="hidden text-xs text-adam-text-tertiary sm:inline">
+                  {isChatStreaming ? 'AI editing…' : 'Native BRep'}
+                </span>
+              </div>
+            </div>
+            <BrepChatSession
+              conversation={conversation}
+              dbMessages={dbMessages}
+              initialBranch={initialBranch}
+              model={model}
+              setModel={updateSelectedModel}
+              executionMode={executionMode}
+              onExecutionModeChange={handleExecutionModeChange}
+              onSendParts={handleSendParts}
+              onRetry={handleRetry}
+              onEdit={handleEdit}
+              onRestore={handleRestore}
+              onSelectLeaf={handleSelectLeaf}
+              branchForLeaf={branchForLeaf}
+              onChangeRating={handleChangeRating}
+              onLoadingChange={setIsChatStreaming}
+            />
+          </>
+        }
+        previewSlot={<BrepProjectViewerPanel />}
+        parametersSlot={<BrepProjectParametersPanel />}
+        mobilePreviewSlot={<BrepProjectViewerPanel isMobile />}
+        mobileParametersSlot={<BrepProjectParametersPanel />}
+      />
+    </BrepProjectEditorProvider>
   );
 }
