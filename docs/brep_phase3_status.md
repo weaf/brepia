@@ -23,17 +23,17 @@ Phase 1/2 execution/status files are historical evidence after merge.
 
 ## Phase 3 progress
 
-| Step                                                    | Status                                                                                 |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 3A — Architecture reconciliation and contract lock      | **complete**                                                                           |
-| 3B — Shared BRep AI snapshot schema and structural diff | **complete and accepted**                                                              |
-| 3C — Native AI tool/source contract                     | **complete and accepted**                                                              |
-| 3D — Prompting and native-provider follow-up generation | **complete and accepted**                                                              |
-| 3E — Immutable AI revision persistence and stale guards | **complete and accepted**                                                              |
-| 3F — OpenCode/Codex external-agent parity               | **in progress: 3F-A through 3F-C implemented; focused 3F-D regression coverage green** |
-| 3G — Product integration / creation UX                  | not started                                                                            |
-| 3H — Acceptance                                         | later                                                                                  |
-| 3I — Closeout                                           | later                                                                                  |
+| Step                                                    | Status                    |
+| ------------------------------------------------------- | ------------------------- |
+| 3A — Architecture reconciliation and contract lock      | **complete**              |
+| 3B — Shared BRep AI snapshot schema and structural diff | **complete and accepted** |
+| 3C — Native AI tool/source contract                     | **complete and accepted** |
+| 3D — Prompting and native-provider follow-up generation | **complete and accepted** |
+| 3E — Immutable AI revision persistence and stale guards | **complete and accepted** |
+| 3F — OpenCode/Codex external-agent parity               | **complete and accepted** |
+| 3G — Product integration / creation UX                  | not started               |
+| 3H — Acceptance                                         | later                     |
+| 3I — Closeout                                           | later                     |
 
 ## 3A — Architecture reconciliation and contract lock
 
@@ -158,7 +158,6 @@ tests/brepAiTurn.test.ts
 - UI tool parts remain diagnostics; canonical source persistence no longer depends on AI SDK reconstruction of the final UI-message tool part.
 - Earlier build calls remain diagnostics only and never become competing source authority.
 - OpenSCAD-specific mesh/import context is not injected into an active BRep turn.
-- BRep through OpenCode/Codex transports is explicitly rejected until 3F rather than routed through the OpenSCAD adapter.
 - Creative and legacy OpenSCAD tool ownership remain unchanged.
 
 ### Local static verification evidence
@@ -293,33 +292,64 @@ git diff --check   PASS (no output)
 
 3E is accepted. The race script remains as a regression gate.
 
-## Current next action
+## 3F — OpenCode/Codex external-agent parity
 
-Proceed with **3F-D live external-agent acceptance** for the implemented BRep transport path.
+Status: **complete and accepted**.
 
-Keep the scope narrow:
+The shared external-agent result contract now distinguishes OpenSCAD and BRep explicitly. BRep continuation receives the exact current canonical `BrepProject`, returns a complete snapshot through `build_brep_project`, and never passes through OpenSCAD asset reconciliation/compiler validation/repair semantics. OpenSCAD remains on the existing `build_parametric_model` path.
 
-```text
-active BRep source
--> external-agent BRep context/transport
--> complete canonical BRep snapshot result
--> shared validation + stable-ID policy
--> existing atomic immutable persistence
-```
+The CLI adapter preserves OpenCode/Codex resumable session IDs. Streaming OpenCode preserves its conversation-scoped session while using the BRep-specific transport contract.
 
-The implementation checkpoint is `62ae20706461b9175ceef4bf81c3bd693dc34383`, following `a61ba61d1edc3857bea4595ec302c5ac6120f08c` and `f66e9290a667a294eb3f4c58c0756d5d37805bb5`. CLI, streaming OpenCode and Codex CLI now carry an explicit source kind and the exact current `BrepProject`; every BRep continuation injects it as `<current_brep_project>`. BRep responses parse and emit `build_brep_project`, while OpenSCAD continues to use its existing artifact extraction, asset reconciliation, compiler validation and repair path.
-
-Focused 3F-D checks passed on 2026-09-03:
+Static verification before live acceptance was green:
 
 ```text
-npm test -- --run tests/opencodeAgentResult.test.ts tests/cliAgentPersistentSession.test.ts tests/opencodePersistentSession.test.ts tests/aiInstructionCatalog.test.ts  PASS (38 tests)
-npm test       PASS (69 files, 536 tests)
-npm run typecheck  PASS
-npm run lint       PASS
-npm run build      PASS
+focused 3F-D tests  PASS
+npm test            PASS (69 files, 536 tests at the implementation checkpoint)
+npm run typecheck   PASS
+npm run lint        PASS
+npm run build       PASS
 git diff --check origin/master...HEAD  PASS
 ```
 
-The live acceptance remains outstanding: use an existing native BRep conversation and perform an identity-preserving external OpenCode streaming or CLI numeric edit, then verify one `data-brep-project` source part, atomic persisted revision and native BRep evaluator/viewer result. Do not expand into 3G while that acceptance is pending.
+Live acceptance found and fixed two real regressions that the static suite had missed:
 
-Do not mix in 3G product creation/UI, Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction.
+1. Streaming external BRep turns incorrectly continued after `build_brep_project`, repeatedly re-entering the same OpenCode session. External BRep now treats `build_brep_project` as terminal for that AI SDK turn.
+2. The external adapter included an OpenSCAD-era `message` field in strict BRep tool input. BRep tool calls now emit only `title`, `version` and `project`; the emitted input is regression-tested against the real `brepAiBuildInputSchema`.
+
+Accepted live Streaming edit:
+
+```text
+cableHole.radius = 60 -> 75
+active            = true
+source_parts      = 1
+brep_build_parts  = 1
+tool_state        = output-available
+output_status     = success
+```
+
+Accepted live OpenCode CLI edit:
+
+```text
+cableHole.radius = 75 -> 85
+active            = true
+source_parts      = 1
+brep_build_parts  = 1
+tool_state        = output-available
+output_status     = success
+```
+
+The active radius-85 revision was refreshed/reopened and confirmed to evaluate/render correctly in the native BRep viewer without a new browser/server error.
+
+A separate live Codex CLI run is not required for 3F acceptance because Codex and OpenCode CLI share the same source-aware BRep prompt/result path, while focused tests cover Codex routing and resumable-session syntax.
+
+Detailed evidence: `docs/brep_phase3_3f_live_checkpoint.md`.
+
+3F is accepted.
+
+## Current next action
+
+The next planned BRep Phase 3 step is **3G — Product integration / creation UX**.
+
+Do not mix unrelated product defects into 3G. Broad cross-cutting defects discovered while operating Brepia should be fixed on their own focused branch/checkpoint when practical.
+
+Do not start Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction as part of 3G.
