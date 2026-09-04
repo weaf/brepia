@@ -23,6 +23,12 @@ import type {
 } from '@shared/brepProvider';
 
 const BREP_EVALUATION_DEBOUNCE_MS = 120;
+// The accepted native server defaults to one evaluator slot. Keep evaluation
+// requests from this browser serialized across preview remounts as well as
+// rapid value changes. This avoids racing a newly mounted revision against the
+// still-finishing Podman request from the previous revision without weakening
+// the server-side capacity guard.
+let browserBrepEvaluationQueue: Promise<void> = Promise.resolve();
 
 function geometryFromResult(
   result: BrepEvaluationSuccess,
@@ -89,9 +95,7 @@ export function BrepProjectPreview({
   const [committing, setCommitting] = useState(false);
   const valuesRef = useRef(values);
   const committedValuesRef = useRef(values);
-  const evaluationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const evaluationVersionRef = useRef(0);
-  const evaluationAbortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
@@ -111,7 +115,6 @@ export function BrepProjectPreview({
     return () => {
       mountedRef.current = false;
       evaluationVersionRef.current += 1;
-      evaluationAbortRef.current?.abort();
     };
   }, []);
 
@@ -125,24 +128,21 @@ export function BrepProjectPreview({
     setError(null);
 
     const timer = window.setTimeout(() => {
-      evaluationQueueRef.current = evaluationQueueRef.current
+      browserBrepEvaluationQueue = browserBrepEvaluationQueue
         .catch(() => undefined)
         .then(async () => {
           // Fast input can enqueue an evaluation before a newer value arrives.
-          // Skip obsolete queued work before it consumes the single native
-          // evaluator slot. An already-running evaluation is allowed to finish;
-          // the latest request then starts only after its slot is released.
+          // Skip obsolete queued work before it consumes the native evaluator.
+          // An already-running request is allowed to finish so its server slot
+          // is definitely released before a newer/remounted preview starts.
           if (!mountedRef.current || version !== evaluationVersionRef.current)
             return;
 
-          const controller = new AbortController();
-          evaluationAbortRef.current = controller;
           try {
             const token = (await supabase.auth.getSession()).data.session
               ?.access_token;
             const response = await fetch(apiUrl('brep/evaluate'), {
               method: 'POST',
-              signal: controller.signal,
               headers: {
                 'Content-Type': 'application/json',
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -177,7 +177,6 @@ export function BrepProjectPreview({
             }
           } catch (reason) {
             if (
-              !controller.signal.aborted &&
               mountedRef.current &&
               version === evaluationVersionRef.current
             ) {
@@ -188,9 +187,6 @@ export function BrepProjectPreview({
               );
             }
           } finally {
-            if (evaluationAbortRef.current === controller) {
-              evaluationAbortRef.current = null;
-            }
             if (
               mountedRef.current &&
               version === evaluationVersionRef.current
