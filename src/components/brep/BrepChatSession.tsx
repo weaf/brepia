@@ -142,14 +142,11 @@ export function BrepChatSession({
         );
       }
     },
-    onFinish: ({ message }) => {
-      if (message?.id) {
-        queryClient.setQueryData(
-          ['conversation', conversation.id],
-          (old: Conversation | undefined) =>
-            old ? { ...old, current_message_leaf_id: message.id } : old,
-        );
-      }
+    onFinish: () => {
+      // Native BRep persistence advances current_message_leaf_id atomically on
+      // the server. Do not point the client cache at the streamed assistant id
+      // before the persisted message snapshot has arrived; doing so creates a
+      // transient branch with a leaf that the messages cache cannot resolve.
       queryClient.invalidateQueries({
         queryKey: ['messages', conversation.id],
       });
