@@ -15,6 +15,7 @@ import {
   makeCustomProviderModelId,
   parseCustomProviderModelId,
 } from '../../shared/customModelIds';
+import { isModelVisibleByPreference } from '../../shared/modelVisibility';
 import { getUserProviders, getProviderModels } from './customProviders';
 import type { User } from '@supabase/supabase-js';
 import { opencodeModels } from './opencode';
@@ -308,21 +309,20 @@ export async function buildCatalog(
   ];
 }
 
-async function getHiddenModelIds(user: User): Promise<Set<string>> {
-  try {
-    const prefs = await getPreferences(user);
-    return new Set(prefs.hiddenModelIds ?? []);
-  } catch {
-    return new Set();
-  }
-}
-
 export function filterSelectableCatalog(
   catalog: CatalogEntry[],
   hiddenIds: Set<string>,
+  enabledOpenCodeIds: Set<string> = new Set(),
 ): CatalogEntry[] {
   return catalog.filter((entry) => {
-    if (hiddenIds.has(entry.id)) return false;
+    if (
+      !isModelVisibleByPreference(entry, {
+        hiddenModelIds: hiddenIds,
+        enabledOpenCodeModelIds: enabledOpenCodeIds,
+      })
+    ) {
+      return false;
+    }
     if (!entry.enabled) return false;
     if (!entry.available) return false;
     return true;
@@ -339,10 +339,20 @@ export async function buildSelectableCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
   const catalog = await buildCatalog(user);
-  const hiddenIds = user
-    ? await getHiddenModelIds(user)
-    : (new Set<string>() as Set<string>);
-  return filterSelectableCatalog(catalog, hiddenIds);
+  if (!user) {
+    return filterSelectableCatalog(catalog, new Set(), new Set());
+  }
+
+  try {
+    const prefs = await getPreferences(user);
+    return filterSelectableCatalog(
+      catalog,
+      new Set(prefs.hiddenModelIds ?? []),
+      new Set(prefs.enabledOpenCodeModelIds ?? []),
+    );
+  } catch {
+    return filterSelectableCatalog(catalog, new Set(), new Set());
+  }
 }
 
 export function getDefaultModel(): string {
