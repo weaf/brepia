@@ -9,7 +9,14 @@ import {
   useState,
 } from 'react';
 import { BufferAttribute, BufferGeometry } from 'three';
-import { ChevronDown, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  FileCode2,
+  RefreshCcw,
+  Trash2,
+} from 'lucide-react';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +35,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
 import { exportBrepStep } from '@/services/brepStepExport';
@@ -47,6 +68,8 @@ const BREP_EVALUATION_DEBOUNCE_MS = 120;
 // preview work across editor remounts so an immutable revision change cannot
 // race the Podman request from the previous source snapshot.
 let browserBrepEditorEvaluationQueue: Promise<void> = Promise.resolve();
+
+type BrepDownloadFormat = 'step' | 'brep';
 
 export type BrepEditorRevision = {
   id: string;
@@ -454,6 +477,65 @@ export function BrepProjectViewerPanel({
   );
 }
 
+function BrepProjectFilesPanel() {
+  const { project, dirty } = useBrepProjectEditor();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const sourceJson = useMemo(() => JSON.stringify(project, null, 2), [project]);
+
+  return (
+    <div className="border-b border-adam-neutral-700 bg-adam-bg-secondary-dark px-4 py-3">
+      <div className="mb-2 min-w-0">
+        <div className="text-xs font-semibold text-adam-text-primary">
+          Project files
+        </div>
+        <div className="text-[10px] text-adam-neutral-400">
+          1 canonical source file
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setDialogOpen(true)}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-adam-neutral-300 transition-colors hover:bg-adam-neutral-800 hover:text-adam-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-adam-neutral-500"
+      >
+        <FileCode2 className="h-3.5 w-3.5 shrink-0" />
+        <span className="min-w-0 flex-1 truncate font-mono">
+          project.brep.json
+        </span>
+        <span className="shrink-0 rounded-full border border-adam-neutral-600 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-adam-neutral-300">
+          Canonical
+        </span>
+      </button>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-4xl flex-col gap-4 bg-adam-bg-secondary-dark p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex min-w-0 items-center gap-2 text-adam-text-primary">
+              <FileCode2 className="h-4 w-4 shrink-0" />
+              <span className="truncate font-mono text-sm sm:text-base">
+                project.brep.json
+              </span>
+            </DialogTitle>
+            <DialogDescription className="text-adam-neutral-400">
+              Canonical BRep source for the active immutable revision.
+              {dirty
+                ? ' Unsaved parameter preview values are intentionally not written into this JSON until you save a parameter revision.'
+                : ' The JSON is read-only here so source changes continue through validated BRep revisions.'}
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            aria-label="Canonical BRep project JSON"
+            value={sourceJson}
+            readOnly
+            spellCheck={false}
+            className="min-h-[55dvh] w-full resize-none overflow-auto whitespace-pre rounded-md border border-adam-neutral-700 bg-adam-background-1 p-3 font-mono text-xs leading-5 text-adam-text-primary outline-none"
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function RevisionHistory() {
   const {
     revisions,
@@ -472,21 +554,26 @@ function RevisionHistory() {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="border-t border-adam-neutral-700 pt-3"
+      className="border-t border-adam-neutral-700/60 pt-3"
     >
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center justify-between rounded-lg px-1 py-2 text-left text-sm font-medium text-adam-text-primary hover:text-white"
+          className="group flex w-full items-center justify-between gap-2 rounded-md py-1 text-xs font-semibold text-adam-text-primary transition-colors focus:outline-none"
         >
-          <span>Revision history · {revisions.length}</span>
+          <span className="flex items-center gap-2">
+            Revision history
+            <span className="text-[10px] text-adam-neutral-400">
+              {revisions.length}
+            </span>
+          </span>
           <ChevronDown
-            className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`h-3.5 w-3.5 text-adam-neutral-400 transition-all duration-200 group-hover:text-adam-text-primary ${open ? 'rotate-180' : ''}`}
           />
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1 max-h-[220px] space-y-1 overflow-y-auto pr-1">
+        <div className="mt-3 max-h-[220px] space-y-1 overflow-y-auto pr-1">
           {orderedRevisions.map((revision) => {
             const active = revision.id === activeRevisionId;
             const busy = revisionActionId === revision.id;
@@ -499,7 +586,7 @@ function RevisionHistory() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="min-w-0 flex-1 justify-start px-2"
+                  className="min-w-0 flex-1 justify-start px-2 text-xs"
                   disabled={active || !!revisionActionId}
                   onClick={() => void selectRevision(revision.id)}
                 >
@@ -512,6 +599,7 @@ function RevisionHistory() {
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="text-xs"
                   disabled={!!revisionActionId}
                   onClick={() => void restoreRevision(revision.id)}
                 >
@@ -562,111 +650,210 @@ function RevisionHistory() {
   );
 }
 
+function BrepExportBar() {
+  const {
+    dirty,
+    saving,
+    loading,
+    exporting,
+    exportStep,
+    exportProjectPackage,
+  } = useBrepProjectEditor();
+  const [selectedFormat, setSelectedFormat] =
+    useState<BrepDownloadFormat>('step');
+
+  const stepAvailable = !saving && !loading && !exporting;
+  const brepAvailable = !dirty && !saving;
+  const selectedAvailable =
+    selectedFormat === 'step' ? stepAvailable : brepAvailable;
+
+  const handleDownload = () => {
+    if (selectedFormat === 'step') {
+      void exportStep();
+      return;
+    }
+    exportProjectPackage();
+  };
+
+  return (
+    <div className="flex flex-col gap-4 border-t border-adam-neutral-700 px-6 py-6">
+      <div className="flex">
+        <Button
+          type="button"
+          onClick={handleDownload}
+          disabled={!selectedAvailable}
+          aria-label={`download ${selectedFormat.toUpperCase()} file`}
+          className="h-12 flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900"
+        >
+          <Download className="mr-2 h-4 w-4" />
+          {exporting && selectedFormat === 'step'
+            ? 'EXPORTING…'
+            : selectedFormat.toUpperCase()}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              aria-label="select BRep download format"
+              className="h-12 w-12 rounded-l-none border-l border-adam-neutral-300 bg-adam-neutral-50 p-0 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-64 border-none bg-adam-neutral-800 shadow-md"
+          >
+            <DropdownMenuItem
+              onClick={() => setSelectedFormat('step')}
+              disabled={!stepAvailable}
+              className="cursor-pointer text-adam-text-primary"
+            >
+              <span className="text-sm">.STEP</span>
+              <span className="ml-3 text-xs text-adam-text-primary/60">
+                Native CAD exchange
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setSelectedFormat('brep')}
+              disabled={!brepAvailable}
+              className="cursor-pointer text-adam-text-primary"
+            >
+              <span className="text-sm">.BREP JSON</span>
+              <span className="ml-3 text-xs text-adam-text-primary/60">
+                Canonical Brepia project
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {dirty ? (
+        <p className="text-[10px] text-adam-neutral-400">
+          Save the parameter draft before exporting the canonical BRep project
+          package. STEP can still export the current preview values.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function BrepProjectParametersPanel() {
   const {
     project,
     values,
     setParameterValue,
-    loading,
     error,
     dirty,
     saving,
     exporting,
     reEvaluate,
     saveParameters,
-    exportStep,
-    exportProjectPackage,
   } = useBrepProjectEditor();
+  const [parametersOpen, setParametersOpen] = useState(true);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-adam-bg-secondary-dark text-adam-text-primary">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="mb-4">
-          <h2 className="text-base font-semibold">Parameters</h2>
-          <p className="mt-1 text-xs text-adam-text-tertiary">
-            Changes update the native preview immediately. Save when you want to
-            create a new source revision.
-          </p>
-        </div>
+    <div className="flex h-full min-h-0 flex-col border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
+      <BrepProjectFilesPanel />
 
-        <div className="space-y-3">
-          {project.parameters.map((parameter) => (
-            <label className="block text-sm" key={parameter.id}>
-              <span className="text-adam-text-secondary">
-                {parameter.label} ({parameter.unit})
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-adam-neutral-700 bg-gradient-to-r from-adam-bg-secondary-dark to-adam-bg-secondary-dark/95 px-6 py-6">
+        <span className="text-lg font-semibold tracking-tight text-adam-text-primary">
+          Parameters
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          title="Re-evaluate native BRep preview"
+          aria-label="Re-evaluate native BRep preview"
+          className="h-8 w-8 rounded-full p-0 text-adam-text-primary transition-colors [@media(hover:hover)]:hover:bg-adam-neutral-950 [@media(hover:hover)]:hover:text-adam-neutral-10"
+          onClick={reEvaluate}
+          disabled={saving || exporting}
+        >
+          <RefreshCcw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden">
+        <ScrollArea className="flex-1 px-6 py-6">
+          <Collapsible open={parametersOpen} onOpenChange={setParametersOpen}>
+            <CollapsibleTrigger
+              aria-label={`${parametersOpen ? 'Collapse' : 'Expand'} BRep parameters`}
+              className="group flex w-full items-center justify-between gap-2 rounded-md py-1 text-xs font-semibold text-adam-text-primary transition-colors focus:outline-none"
+            >
+              <span className="flex items-center gap-2">
+                Dimensions
+                <span className="text-[10px] text-adam-neutral-400">
+                  {project.parameters.length}
+                </span>
               </span>
-              <input
-                className="mt-1 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-3 py-2 text-adam-text-primary outline-none focus:border-adam-blue-dark"
-                type="number"
-                min={parameter.min}
-                max={parameter.max}
-                step={parameter.step}
-                value={values[parameter.id]}
-                disabled={saving || exporting}
-                onChange={(event) =>
-                  setParameterValue(parameter.id, Number(event.target.value))
-                }
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-adam-neutral-400 transition-all duration-200 group-hover:text-adam-text-primary ${parametersOpen ? 'rotate-180' : ''}`}
               />
-            </label>
-          ))}
-        </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-3 flex flex-col gap-3">
+                {project.parameters.map((parameter) => (
+                  <label
+                    className="grid grid-cols-[minmax(0,1fr)_92px_28px] items-center gap-2 text-xs"
+                    key={parameter.id}
+                  >
+                    <span className="min-w-0 truncate text-adam-neutral-300">
+                      {parameter.label}
+                    </span>
+                    <input
+                      className="h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-adam-text-primary outline-none focus:border-adam-blue-dark"
+                      type="number"
+                      min={parameter.min}
+                      max={parameter.max}
+                      step={parameter.step}
+                      value={values[parameter.id]}
+                      disabled={saving || exporting}
+                      onChange={(event) =>
+                        setParameterValue(
+                          parameter.id,
+                          Number(event.target.value),
+                        )
+                      }
+                    />
+                    <span className="truncate text-[10px] text-adam-neutral-400">
+                      {parameter.unit}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-        <div className="mt-5 space-y-2">
-          <Button
-            type="button"
-            className="w-full"
-            disabled={!dirty || saving}
-            onClick={() => void saveParameters()}
-          >
-            {saving
-              ? 'Saving parameter revision…'
-              : dirty
-                ? 'Save parameter revision'
-                : 'Parameters saved'}
-          </Button>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="mt-6">
             <Button
               type="button"
-              variant="outline"
-              disabled={loading || saving || exporting}
-              onClick={reEvaluate}
+              className="w-full"
+              disabled={!dirty || saving}
+              onClick={() => void saveParameters()}
             >
-              Re-evaluate
+              {saving
+                ? 'Saving parameter revision…'
+                : dirty
+                  ? 'Save parameter revision'
+                  : 'Parameters saved'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loading || saving || exporting}
-              onClick={() => void exportStep()}
-            >
-              {exporting ? 'Exporting…' : 'Export STEP'}
-            </Button>
+            <p className="mt-2 text-[10px] text-adam-neutral-400">
+              Parameter changes update the native preview immediately. Save only
+              when you want a new immutable source revision.
+            </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={dirty || saving}
-            onClick={exportProjectPackage}
-          >
-            Export BRep project
-          </Button>
-          {dirty ? (
-            <p className="text-xs text-adam-text-tertiary">
-              Save the draft before exporting the canonical BRep project package.
+
+          <div className="mt-6">
+            <RevisionHistory />
+          </div>
+
+          {error ? (
+            <p className="mt-4 rounded-lg border border-destructive p-3 text-sm text-destructive">
+              {error}
             </p>
           ) : null}
-        </div>
+        </ScrollArea>
 
-        <div className="mt-5">
-          <RevisionHistory />
-        </div>
-
-        {error ? (
-          <p className="mt-4 rounded-lg border border-destructive p-3 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+        <BrepExportBar />
       </div>
     </div>
   );
