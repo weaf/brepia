@@ -18,6 +18,8 @@ import { createBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import { renderInstructionTemplate } from '@shared/aiInstructionCatalog';
 import { serializeBrepAiProjectContext } from '@shared/brepAiContext';
 
+const DEFAULT_BREP_CREATION_CONTEXT = `This turn was explicitly routed by the product to create a new native BRep project. No previous BRep project exists. Ignore OpenSCAD-specific creation instructions for this turn and return one complete canonical native BRep project through build_brep_project. Do not fabricate previous-project state, emit OpenSCAD/Python/build123d source, STEP, mesh/tessellation authority, filesystem paths, or raw topology indices. Use only the canonical BRep schema and supported semantic selectors.`;
+
 export type ParametricBuildToolName =
   | 'build_parametric_model'
   | 'build_brep_project';
@@ -47,9 +49,8 @@ export function withBrepProjectSystemContext({
 }): string {
   if (!activeBrepSource) return systemPrompt;
   if (isBrepAiCreationRoute(activeBrepSource)) {
-    return creationContext?.trim()
-      ? `${systemPrompt.trim()}\n\n${creationContext.trim()}`
-      : systemPrompt;
+    const context = creationContext?.trim() || DEFAULT_BREP_CREATION_CONTEXT;
+    return `${systemPrompt.trim()}\n\n${context}`;
   }
   const context = renderInstructionTemplate(contextTemplate, {
     projectJson: serializeBrepAiProjectContext(activeBrepSource.project),
