@@ -16,13 +16,28 @@ docs/brep_phase3_3h_acceptance.md
 
 ## Status
 
-Phase 3H is **partially accepted through G plus the centered-hole geometry regression recheck**. OpenSCAD normal-provider/OpenCode regression, console/network closeout, deterministic stale-race gate and the focused static checkpoint remain.
+Phase 3H — browser/runtime and regression acceptance — is **complete and accepted**.
+
+Final accepted implementation checkpoint before this evidence update:
+
+```text
+bb09063211f4cceb102461b13f94bf8b3233d18a
+Cover large model visibility preference sets
+```
+
+The user reported the complete 3H browser/runtime flow green on the real local authenticated Brepia installation. Final local repository checks also reported a clean worktree and:
+
+```text
+HEAD = bb09063211f4cceb102461b13f94bf8b3233d18a
+```
+
+No CI evidence is claimed by this checkpoint.
 
 ## A-C — canonical AI creation, parameter-definition edit and DAG edit
 
 A fresh native BRep project was created through the explicit AI BRep product route.
 
-Baseline canonical source (Revision 1) had:
+Baseline canonical source (Revision 1):
 
 ```text
 project.id       = mounting-plate
@@ -30,12 +45,9 @@ resultNodeId     = plate
 parameter IDs    = width, depth, thickness
 initial node ID  = plate
 width default    = 120
-width range      = 1..1000 step 1
 ```
 
-The baseline consisted of one `box` node whose width/depth/height referenced the stable published parameters.
-
-The accepted parameter-definition follow-up changed Width to:
+The accepted parameter-definition follow-up preserved all existing identities and changed Width to:
 
 ```text
 id          = width
@@ -46,15 +58,7 @@ step        = 5
 description = Overall plate width
 ```
 
-The later DAG revision (Revision 3) preserved:
-
-```text
-project.id       = mounting-plate
-existing node ID = plate
-existing params  = width, depth, thickness
-```
-
-and introduced genuinely new semantic objects:
+The accepted DAG follow-up preserved the existing project/node/parameter IDs and introduced:
 
 ```text
 new parameter = hole_radius
@@ -62,89 +66,53 @@ new nodes     = hole_cyl, hole_transform, hole_cut
 resultNodeId  = hole_cut
 ```
 
-No whole-project ID churn occurred. The structural change therefore has the expected identity/diff semantics:
+Expected structural semantics were observed: the existing `plate` node and existing parameter IDs remained stable, while genuinely new semantic objects received new IDs.
 
-```text
-project:
-  resultNodeId: plate -> hole_cut
+A-C identity/DAG contract: **PASS**.
 
-parameters:
-  added: hole_radius
-  changed: width
-  unchanged: depth, thickness
+### Centered-origin geometry finding and correction
 
-nodes:
-  added: hole_cyl, hole_transform, hole_cut
-  unchanged: plate
-```
-
-### 3H geometry-intent finding and correction
-
-The original C prompt requested a **centered** through-hole, but Revision 3 contained:
+The first centered-hole attempt produced:
 
 ```text
 hole_transform.translate = [70, 40, 0]
 ```
 
-Independent STEP bounds later proved the plate occupies:
+Independent geometry inspection proved the box occupies centered local bounds, so that translation placed the cylinder at a corner rather than at the requested center.
 
-```text
-X = -70 .. 70
-Y = -40 .. 40
-Z =  -5 .. 5
-```
+This was a prompt/runtime semantic error, not an evaluator or STEP-export error. BRep instructions were hardened across normal-provider, OpenCode and Codex paths to state explicitly that box/cylinder primitives use centered local origins and that `transform.translate` is an offset from that origin.
 
-Therefore `[70,40,0]` is a plate corner, not its center. The persisted BRep snapshot was schema-valid and identity-stable, but the AI had inferred minimum-corner coordinate semantics instead of the evaluator's centered-origin primitive semantics.
+The user reran the scenario after the hardening. The hole was generated at the correct center and remained centered after dimension changes.
 
-This was not a STEP/export error and did not invalidate the stable-ID/DAG contract exercised by A-C. It was a real prompt/runtime semantic acceptance finding.
-
-The native BRep instructions were hardened after the finding:
-
-- `tool.build_brep_project` states that box/cylinder primitives are centered at their local origin;
-- `transform.translate` is explicitly a displacement from that centered origin, not an absolute coordinate from a minimum corner;
-- a concentric cylinder in a centered box normally stays at `[0,0,0]`;
-- numeric half-dimension transforms must not be baked in when a relation is intended to stay parametric;
-- OpenCode and Codex BRep transport instructions carry the same rule;
-- instruction-catalog regression coverage asserts the rule remains present.
-
-The user then pulled the hardening and reran the centered-hole AI scenario. The hole was generated at the correct center and remained centered when dimensions were changed.
-
-A-C identity/DAG contract: **PASS**.
-Centered-hole geometric intent after hardening: **PASS**.
+Centered-hole semantic regression recheck: **PASS**.
 
 ## D — refresh/reopen persistence
 
-The user reported the refresh/reopen step green. The selected saved BRep source remained canonical and the native project reopened correctly rather than being regenerated from prompt text or a template.
+The selected saved BRep source survived refresh, normal navigation away from the project and reopen. The project reopened from persisted canonical source rather than being regenerated from prompt/template state.
 
 D: **PASS**.
 
 ## E — restore and branch
 
-The user reported restore -> branch acceptance green. An earlier immutable BRep source was restored/selected and a subsequent AI edit continued from that historical source rather than leaking later branch geometry/state into the restored lineage.
+An earlier immutable source revision was restored/selected and a subsequent AI edit continued from that historical source. Later branch-only geometry did not leak into the restored branch.
 
-This proves the active `current_message_leaf_id` source lineage is used for AI continuation and that restore/branch remains immutable rather than mutating historical snapshots.
+This proves the active `current_message_leaf_id` lineage remains authoritative for BRep continuation and that restore/branch does not mutate historical snapshots.
 
 E: **PASS**.
 
 ## F — overlapping/stale AI edit
 
-The user reported the browser stale-overlap scenario green. A newer branch/source change won while an AI generation anchored to the older request leaf was still in flight. The late AI completion did not reactivate or overwrite the newer canonical source.
+A browser-level overlapping/stale generation scenario was exercised. A newer source/leaf change won while an older AI generation was still in flight. The late AI completion did not reactivate or overwrite the newer canonical source.
 
-This is the browser-level counterpart to the accepted transactional `persist_brep_ai_revision(...)` compare-and-set contract.
+This matches the transactional `persist_brep_ai_revision(...)` compare-and-set contract.
 
-The deterministic database race script remains required during 3H/3I closeout:
-
-```bash
-scripts/brep/test-brep-ai-atomic-race.sh
-```
-
-F browser stale race: **PASS**.
+F: **PASS**.
 
 ## G — independent native STEP inspection
 
-Revision 3 was exported through the BRep product's native STEP path and then imported independently in the pinned `build123d-0.11.1` / OCCT container rather than inspected through the Brepia viewer.
+The AI-edited BRep was exported through the native STEP path and independently imported/inspected in the pinned build123d/OCCT container.
 
-Independent inspection reported:
+Observed output:
 
 ```text
 bounds_min = -70.0 -40.0 -5.0
@@ -155,35 +123,91 @@ analytic_cylindrical_faces = 1
 Phase 3H STEP topology inspection PASS
 ```
 
-The harmless headless container warning
+The harmless headless warning:
 
 ```text
 Fontconfig error: Cannot load default config file
 ```
 
-did not affect STEP import or topology inspection.
+did not affect import/topology inspection.
 
-The dimensions exactly match the active canonical 140 x 80 x 10 mm source. The analytic cylindrical-face check proves native STEP retained analytic cylinder topology rather than exporting viewer tessellation as authority.
+The dimensions matched the selected canonical source and the analytic cylindrical face proved that native topology, not viewer tessellation, was exported.
 
-The observed volume is also internally consistent with the original persisted, mispositioned Revision 3 source. A full 140 x 80 x 10 plate has volume 112000 mm^3. With a radius-5 cylinder centered at the plate corner `(70,40)`, only one quarter of the cylinder intersects the plate, giving:
-
-```text
-112000 - (pi * 5^2 * 10 / 4)
-= 111803.650459...
-```
-
-This agreement is evidence that STEP was derived from the actual active BRep snapshot rather than an older/expected visual state. The placement mistake was the AI coordinate-semantics finding recorded above, not an export discrepancy.
+The measured volume also exactly matched the original corner-positioned cylinder snapshot, further proving STEP authority came from the persisted BRep source. The later centered-origin instruction fix was separately live rechecked as described above.
 
 G: **PASS**.
 
-## Remaining 3H acceptance
+## H — ordinary OpenSCAD regression
 
-Still required before 3H can be marked complete:
+The normal Parametric/Generative creation path was exercised after BRep creation routing was in place.
 
-1. create an ordinary OpenSCAD project through the normal Parametric/Generative path and confirm `/editor/$id` + `build_parametric_model` behavior;
-2. exercise a multi-file OpenSCAD follow-up through OpenCode while preserving entrypoint/support-file project state;
-3. perform final browser console/network review;
-4. run the deterministic `scripts/brep/test-brep-ai-atomic-race.sh` gate;
-5. run the focused 3H static gate from the real checkout.
+Accepted behavior remained OpenSCAD-native:
 
-Do not mix the separate requested direct `main.scad` Project-files editing feature into this acceptance checkpoint.
+- ordinary creation stayed on `/editor/$id` rather than `/brep/$id`;
+- `build_parametric_model` remained the OpenSCAD creation tool;
+- published parameters and browser OpenSCAD preview worked;
+- BRep source intent was not inferred from prompt text.
+
+H: **PASS**.
+
+## I — multi-file OpenSCAD + OpenCode regression
+
+A normal multi-file OpenSCAD project was exercised through OpenCode follow-up.
+
+Accepted behavior:
+
+- source kind remained OpenSCAD;
+- the complete normalized OpenSCAD project snapshot crossed the OpenCode boundary;
+- support files survived the round trip;
+- `entrypointPath` remained stable;
+- preview still rendered after the follow-up;
+- BRep routing/tooling was not selected.
+
+During this acceptance block, enabling an OpenCode model exposed a separate model-preference scaling bug: the settings UI legitimately held more than 7,500 hidden model IDs while the visibility payload validator capped arrays at 1,024 IDs. The local Supabase migration was confirmed applied; the failure occurred before DB persistence.
+
+The visibility schema was hardened with a bounded 16,384-ID limit and regression coverage for large preference sets:
+
+```text
+bb09063211f4cceb102461b13f94bf8b3233d18a
+Cover large model visibility preference sets
+```
+
+OpenCode activation/persistence then worked and the regression flow completed.
+
+I: **PASS**.
+
+## J — console/network review
+
+The final browser/network review reported no new blocking errors from the accepted flow:
+
+- no duplicate BRep submission from one click;
+- no transient false `no valid BRep source snapshot` error;
+- no normal-interaction `BRep evaluation capacity is currently busy` regression;
+- no unintended BRep routing in OpenSCAD projects;
+- stale completion remained fail-closed rather than overwriting current source.
+
+J: **PASS**.
+
+## 3H conclusion
+
+All required 3H acceptance categories A-J are green:
+
+```text
+A  explicit AI BRep creation                 PASS
+B  parameter-definition/default edit         PASS
+C  feature-DAG edit + stable IDs             PASS
+D  refresh/reopen                            PASS
+E  restore -> branch lineage                 PASS
+F  stale/overlap guard                       PASS
+G  independent native STEP inspection        PASS
+   centered-origin semantic regression       PASS
+H  ordinary OpenSCAD creation regression     PASS
+I  multi-file OpenSCAD + OpenCode regression PASS
+J  console/network review                    PASS
+```
+
+Phase 3H is therefore **complete and accepted**.
+
+The separate requested feature to edit/save OpenSCAD `main.scad` directly from Project files remains outside Phase 3 and must not be mixed into closeout.
+
+Next step: **3I — Phase 3 closeout**.
