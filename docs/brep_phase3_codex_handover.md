@@ -1,4 +1,4 @@
-# BRep Phase 3G-B Codex handover
+# BRep Phase 3H handover
 
 ## Mission
 
@@ -8,15 +8,15 @@ Continue `weaf/brepia` on branch:
 feature/brep-ai-native-editing
 ```
 
-Phase 3A-3F are complete and accepted. 3G-A — existing BRep project AI follow-up product integration — is also complete and live accepted.
+Phase 3A-3G are complete and accepted.
 
-The only active step is:
+The active Phase 3 step is:
 
 ```text
-3G-B — explicit AI BRep creation routing
+3H — browser/runtime and regression acceptance
 ```
 
-Do not start 3G-C polish, 3H broad acceptance, Phase 4 graph UX, Rhino/3DM/GH interoperability, generic STEP reconstruction, or arbitrary Python/build123d authoring until 3G-B is coherent and accepted.
+Do not start Phase 4 graph UX, Rhino/3DM/GH interoperability, generic STEP reconstruction, or arbitrary Python/build123d authoring.
 
 Use small forward commits. Never amend/rebase/squash/force-push shared pushed history.
 
@@ -25,231 +25,177 @@ Use small forward commits. Never amend/rebase/squash/force-push shared pushed hi
 1. `AGENTS.md`
 2. `docs/brep_phase3_execution.md`
 3. `docs/brep_phase3_status.md`
-4. this handover
-5. `src/server/aiChat.ts`
-6. `src/server/brepAiTurn.ts`
-7. `src/server/brepAiTools.ts`
-8. `shared/brepAiProject.ts`
-9. `shared/brepAiContext.ts`
-10. `shared/brepAiTool.ts`
-11. `src/components/brep/BrepChatSession.tsx`
-12. `src/views/BrepProjectView.tsx`
-13. the product/home creation flow (`PromptView`/conversation creation/routing)
-14. relevant OpenSCAD first-turn creation tests
+4. `docs/brep_phase3_3g_live_checkpoint.md`
+5. this handover
+6. `src/views/BrepProjectView.tsx`
+7. `src/components/brep/BrepProjectEditor.tsx`
+8. `src/components/brep/BrepChatSession.tsx`
+9. `src/server/aiChat.ts`
+10. `src/server/brepAiTurn.ts`
+11. `shared/brepAiContext.ts`
+12. `shared/brepAiProject.ts`
+13. `src/server/brepAiPersistence.ts`
+14. `src/services/brepProjectService.ts`
 
 Reconcile docs against actual branch implementation before editing.
 
-## Current accepted product behavior
+## Accepted Phase 3G product state
 
-### Existing BRep follow-up
-
-`/brep/$id` now combines the existing Parametric conversation lifecycle with the native BRep viewer.
-
-The BRep product chat:
-
-- uses the shared `parametric-chat` endpoint;
-- uses server-executed `build_brep_project` and canonical `data-brep-project` persistence;
-- does not execute the OpenSCAD browser compiler or `addToolOutput` path;
-- does not client-auto-continue a BRep build;
-- allows text/image context but rejects OpenSCAD-only STL/mesh context;
-- reuses model selection and OpenCode CLI/Streaming selection;
-- preserves retry/edit/restore/branch semantics on the same message tree.
-
-`/editor/$id` and `/brep/$id` deliberately use different AI-SDK cached chat IDs because their client-tool semantics differ:
+Accepted live checkpoint before the 3G evidence commit:
 
 ```text
-/editor -> <conversation-id>
-/brep   -> brep:<conversation-id>
+4522865f55bdd8bbf720ff79c67c1fedb149f0d7
+Cover Parametric-style BRep sidebar chrome
 ```
 
-A synchronous BRep submit guard prevents duplicate UI dispatch before AI-SDK status flips to `submitted`.
-
-### Leaf/source synchronization hardening
-
-Live 3G-A acceptance exposed three integration bugs and all are fixed:
-
-1. A transient conversation/messages cache mismatch could make the strict BRep branch resolver throw `Native BRep message branch is missing <leaf>` and hit the page error boundary.
-2. Shared Editor/BRep cached Chat state plus the small submit timing window could start duplicate BRep turns. Atomic BRep persistence correctly rejected the second turn as stale; the client now prevents the duplicate instead.
-3. Optimistic client movement of `current_message_leaf_id` could briefly display `The active project branch has no valid BRep source snapshot.` even though persistence/evaluation were healthy.
-
-Current product rules:
-
-- a leaf absent from the current message snapshot is treated as temporarily unresolved, not as corrupted ancestry;
-- a leaf that exists but has a broken parent chain still fails closed;
-- BRep chat does not optimistically move the persisted conversation leaf for sends/finishes;
-- persisted server state is authoritative;
-- transient cache mismatch shows synchronization/loading state instead of a false source error.
-
-The user reported the final focused gate and live `/brep/$id` follow-up flow green after these fixes.
-
-Checkpoint before the 3G-A status closeout:
+3G evidence commit:
 
 ```text
-9708f7ced0202f64de466ab04e093b0eca0f4e2c
-Cover BRep leaf synchronization UX
+75074fc60e46bd7ffe4fa5f6c88aa8661c2d6da9
+Record Phase 3G product acceptance
 ```
 
-Status closeout commit:
+Detailed evidence: `docs/brep_phase3_3g_live_checkpoint.md`.
 
-```text
-3266ca195acc0c43451857a899eba6944b6408f0
-Record Phase 3G-A product acceptance
-```
+### Explicit AI BRep creation
 
-## Locked architecture for 3G-B
-
-### No new conversation type
-
-Keep:
+The product keeps:
 
 ```text
 conversation.type = 'parametric'
 ```
 
-Do not add `brep` as a new conversation type and do not create a second history model.
+New BRep AI creation is driven by explicit persisted product/source intent, not prompt heuristics. The first native turn can select `build_brep_project` without an existing source and validates the result as canonical creation rather than fabricating previous-project identity.
 
-### Explicit first-turn source intent
+After the first canonical `data-brep-project` exists, source-derived BRep routing becomes authoritative again.
 
-Current `aiChat.ts` routes to BRep tools only when `resolveActiveBrepAiSource(...)` finds an existing BRep source. Therefore an empty/new Parametric conversation currently defaults to OpenSCAD creation.
+Ordinary OpenSCAD first-turn creation remains unchanged and uses `build_parametric_model`.
 
-3G-B must make BRep creation an explicit product routing decision, not a prompt heuristic.
+### Existing BRep follow-up
 
-Preferred shape:
+`/brep/$id` uses the same Parametric conversation/message lifecycle while keeping a BRep-specific cached chat ID and server-executed BRep tools.
 
-```text
-Parametric conversation settings
-  + explicit source/creation intent = brep
-  -> first user turn uses BRep creation contract
-  -> successful build persists first canonical data-brep-project
-  -> once source exists, source-derived BRep routing is authoritative
-```
+Preserve:
 
-A field such as `parametricSourceKind: 'brep'` in the existing JSON conversation settings is acceptable if current types/usage support it cleanly. Avoid a database migration solely for routing intent.
+- `brep:<conversation-id>` cache isolation from `/editor`;
+- synchronous duplicate-submit guard;
+- server-authoritative `current_message_leaf_id` synchronization;
+- temporary conversation/message cache mismatches render synchronization state rather than false no-source errors;
+- OpenSCAD-only mesh/compiler behavior stays out of native BRep turns;
+- canonical source persistence stays atomic and stale-guarded.
 
-### Initial creation validation differs from follow-up validation
+### Parameter/edit lifecycle
 
-For follow-up BRep edits, `validateBrepAiFollowUp(previous, next)` enforces project ID continuity and stable identity policy.
+Accepted product behavior:
 
-For first-turn creation there is no previous project. The returned project must still:
+- changing BRep parameters updates native preview locally;
+- focus changes do not create source revisions;
+- explicit **Save parameter revision** creates one immutable canonical source revision;
+- AI always follows the latest saved canonical source, not unsaved preview values;
+- native preview evaluation is debounced/serialized across remounts so rapid changes do not race the accepted one-slot evaluator;
+- lifecycle-only source messages remain authoritative history but are hidden from the visible AI chat branch.
 
-- normalize through the canonical `BrepProject` schema;
-- use only supported selector semantics;
-- exclude Python/build123d/STEP/viewer mesh/raw topology authority;
-- be complete, not a patch;
-- persist as one canonical BRep source revision.
+### Shared Parametric-style BRep workspace
 
-Do not fake a previous sample project merely to reuse the follow-up validator.
-
-### Persistence
-
-The existing atomic RPC `persist_brep_ai_revision(...)` is designed for activating an assistant revision against an exact current request leaf and is useful for first-turn BRep creation after the user message exists.
-
-Before changing persistence, reconcile the actual request lifecycle carefully:
+The BRep route now reuses `ConversationView`:
 
 ```text
-new parametric conversation
--> first persisted user message becomes current leaf
--> AI request loads that leaf
--> BRep creation tool validates complete project
--> atomic assistant/source revision inserts only if that user leaf is still current
+Desktop: Chat | Preview | Parameters
+Mobile:  Chat + shared model/parameters bottom sheet
 ```
 
-Prefer reusing the accepted RPC and immutable assistant/source semantics rather than adding a separate BRep-creation persistence path.
+The right panel now includes:
 
-### Product entry flow
+- Parametric-style header/spacing;
+- `Project files` with `project.brep.json` canonical-source inspection;
+- Parameters;
+- explicit parameter Save;
+- compact collapsible revision history;
+- approximately five visible revision rows with internal scroll;
+- select/restore actions;
+- safe Delete revision product tombstones;
+- sticky Parametric-style export control;
+- native STEP and canonical BRep JSON/package export choices.
 
-The current normal creation prompt flow creates a Parametric conversation and navigates to the ordinary editor. 3G-B needs an explicit BRep entry affordance/routing path that:
+Delete revision intentionally does not physically delete a message-tree node. Hidden revision IDs are stored in conversation settings so immutable ancestry required by AI retry/branch/source resolution is preserved. The active revision cannot be deleted.
 
-- creates/marks the Parametric conversation as BRep-intent before first AI generation;
-- starts the first AI turn using BRep tools;
-- navigates to `/brep/$id` once appropriate;
-- does not change ordinary OpenSCAD creation behavior.
+The user reported all 3G-C browser checks green on desktop/mobile, including refresh/reopen behavior and native STEP export.
 
-There is already a `New BRep project` product area with direct sample/import lifecycle functionality. Reconcile whether AI creation should start there, through a dedicated action/modal, or through the existing general prompt with an explicit source selector. Keep the implementation narrow; do not redesign the whole home screen.
+## 3H acceptance contract
 
-## Required 3G-B tests
+Run the real local authenticated browser/native BRep runtime against the accepted Phase 3 implementation.
 
-At minimum cover:
+Minimum acceptance from `docs/brep_phase3_execution.md`:
 
-### Server routing
+1. create a BRep project through AI;
+2. make a parameter-definition/default follow-up edit;
+3. make a feature-DAG follow-up edit adding or modifying a feature;
+4. verify unchanged project/node/parameter IDs remain stable;
+5. inspect structural diff/summary;
+6. refresh/reopen and verify persisted source;
+7. restore an earlier revision, branch with another AI edit and verify lineage;
+8. trigger an overlapping/stale edit scenario and verify newer active state wins;
+9. export native STEP from the AI-edited persisted state and independently inspect it;
+10. run an OpenSCAD AI creation and multi-file follow-up through normal provider/OpenCode paths;
+11. inspect browser console/network for new errors.
 
-- new Parametric conversation with explicit BRep intent and no existing source selects `build_brep_project`;
-- ordinary Parametric conversation with no BRep intent still selects `build_parametric_model`;
-- after a canonical BRep source exists, source-derived BRep routing wins regardless of stale creation intent;
-- malformed/unsupported BRep creation output fails closed;
-- first BRep creation does not run follow-up project-ID continuity against a fabricated previous project.
+Do not dilute these checks into a visual smoke test. 3H is the cross-layer acceptance gate for the Phase 3 contracts already implemented.
 
-### Persistence
+## Recommended 3H order
 
-- successful first-turn BRep creation creates exactly one canonical `data-brep-project` source revision;
-- stale current-leaf mismatch still inserts nothing;
-- project route can reopen the persisted first source.
+Use one new AI-created BRep project and keep its exact IDs/results as evidence.
 
-### Product
-
-- explicit AI BRep creation affordance marks the conversation before generation;
-- successful creation navigates/lands in `/brep/$id` with chat + native viewer;
-- ordinary OpenSCAD creation remains unchanged.
-
-Run focused tests before broad gates.
-
-## Live acceptance target for 3G-B
-
-Use the real local/authenticated Brepia runtime and create a genuinely new BRep project through AI rather than starting from the Phase 1 cabinet sample.
-
-Acceptance chain:
+Suggested sequence:
 
 ```text
-explicit product BRep creation intent
--> first user prompt
--> BRep tool routing without previous source
--> complete canonical BrepProject
--> validation
--> atomic immutable assistant/source persistence
--> /brep/$id
--> native evaluator/viewer renders project
--> refresh/reopen preserves source
+A. explicit AI BRep create
+B. record project/node/parameter IDs
+C. parameter-definition/default AI follow-up
+D. feature-DAG AI follow-up
+E. compare IDs + structural summaries
+F. refresh/reopen
+G. restore old source + branch with a different AI edit
+H. stale/overlap test
+I. native STEP export + independent import/inspection
+J. ordinary OpenSCAD creation regression
+K. multi-file OpenSCAD follow-up regression
+L. console/network review
 ```
 
-Also create one ordinary OpenSCAD project afterward to prove first-turn backward compatibility.
+Reuse already accepted 3G browser evidence where it proves an identical criterion, but do not claim a 3H criterion unless the required cross-layer behavior has actually been exercised.
 
-## Do not regress 3G-A
+## Static/final gates
 
-While implementing 3G-B preserve:
-
-- BRep-specific chat cache isolation;
-- duplicate-submit guard;
-- server-authoritative leaf synchronization;
-- transient leaf/message snapshot reconciliation;
-- no false `no valid BRep source snapshot` flash;
-- server-executed BRep tool boundary;
-- OpenSCAD mesh/compiler paths remaining OpenSCAD-only.
-
-## Verification gates
-
-Focused tests first, then when 3G-B implementation is coherent:
+3H may add only narrow fixes required by acceptance findings. After 3H is coherent, 3I closeout will run:
 
 ```bash
+scripts/brep/smoke-test.sh
 npm test
 npm run typecheck
 npm run lint
 npm run build
 git diff --check origin/master...HEAD
-git status --short
 ```
 
-Report branch HEAD and ahead/behind state. Do not claim CI evidence that has not actually run.
+Do not claim CI evidence unless CI actually ran.
 
-## Expected next checkpoint
+## Separate Parametric request
 
-Return:
+A separate product request has been identified for ordinary Parametric/OpenSCAD workspaces: allow direct editing and saving of the project entrypoint (`main.scad`) from `ProjectFilesEditor`, not only support modules.
 
-- starting/final SHA;
-- exact explicit creation-intent representation;
-- first-turn server routing changes;
-- creation-vs-follow-up validation split;
-- persistence semantics;
-- product entry/navigation behavior;
-- focused/broad gate evidence;
-- live acceptance completed or exact remaining browser steps;
-- any remaining 3G-C work.
+Current implementation deliberately blocks this in both `ProjectFilesEditor.tsx` and `EditorView.tsx`.
+
+That feature is feasible, but it is **not part of BRep Phase 3H**. Handle it as its own focused Parametric workspace checkpoint/branch after Phase 3 is coherent, unless the user explicitly reprioritizes it.
+
+When implemented, preserve:
+
+- project snapshot integrity;
+- support files/assets/entrypointPath;
+- parameter-write serialization;
+- metadata/originalCode default semantics;
+- active preview refresh/reparse;
+- AI-streaming write exclusion.
+
+## Next action
+
+Begin only **3H — browser/runtime and regression acceptance**. Start by reconciling the accepted 3G checkpoint against the exact 3H acceptance list and identifying which criteria are already evidenced versus which still need a fresh live run.
