@@ -246,12 +246,12 @@ describe('native BRep external-agent result parsing', () => {
         title: string;
         version: string;
         project: typeof revisedBrep;
-        message: string;
+        message?: string;
       };
       assert.equal(input.title, revisedBrep.name);
       assert.equal(input.version, 'v1');
       assert.equal(input.project.id, phaseOneCabinetProject.id);
-      assert.equal(input.message, 'Cable hole enlarged');
+      assert.equal(input.message, undefined);
     }
     const lastPart = parts.at(-1);
     assert.equal(lastPart?.type, 'finish');

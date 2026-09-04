@@ -1463,13 +1463,14 @@ export async function handleAiChatRequest(req: Request) {
       }
       return {};
     },
-    stopWhen: streamingOpenCode
-      ? activeBrepSource
-        ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
-        : hasToolCall('build_parametric_model')
-      : activeBrepSource
-        ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
-        : stepCountIs(maxSteps),
+    stopWhen:
+      activeBrepSource && transport.kind !== 'normal'
+        ? hasToolCall('build_brep_project')
+        : streamingOpenCode
+          ? hasToolCall('build_parametric_model')
+          : activeBrepSource
+            ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
+            : stepCountIs(maxSteps),
     maxOutputTokens,
     abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),

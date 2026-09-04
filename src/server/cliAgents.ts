@@ -765,7 +765,9 @@ export function cliAgentChatModel(
                 : 'Generated model',
             version: 'v1',
             project: result.project,
-            message: result.message || 'Model generated.',
+            ...(sourceKind === 'openscad'
+              ? { message: result.message || 'Model generated.' }
+              : {}),
           }),
         });
       } else if (result.message) {

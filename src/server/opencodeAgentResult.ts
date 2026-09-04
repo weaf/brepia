@@ -334,7 +334,7 @@ export type ParametricBuildInput<
   title: string;
   version: string;
   project: TProject;
-  message: string;
+  message?: string;
 };
 
 export function parametricBuildInput(
@@ -361,7 +361,9 @@ export function parametricBuildInput(
         : 'Generated model',
     version: 'v1',
     project: result.project,
-    message: result.message || 'Model generated.',
+    ...(sourceKind === 'openscad'
+      ? { message: result.message || 'Model generated.' }
+      : {}),
   };
 }
 
@@ -408,6 +410,8 @@ function parametricBuildInputForKind(
         : 'Generated model',
     version: 'v1',
     project: result.project,
-    message: result.message || 'Model generated.',
+    ...(sourceKind === 'openscad'
+      ? { message: result.message || 'Model generated.' }
+      : {}),
   };
 }
