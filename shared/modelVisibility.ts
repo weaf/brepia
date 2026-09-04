@@ -1,3 +1,10 @@
+import { z } from 'zod';
+
+const modelIdListSchema = z
+  .array(z.string().min(1).max(256))
+  .min(0)
+  .max(1024);
+
 export interface ModelVisibilityEntry {
   id: string;
 }
@@ -6,6 +13,15 @@ export interface ModelVisibilityPreferences {
   hiddenModelIds: Iterable<string>;
   enabledOpenCodeModelIds: Iterable<string>;
 }
+
+export const UpdateModelVisibilitySchema = z.object({
+  hiddenModelIds: modelIdListSchema.optional(),
+  enabledOpenCodeModelIds: modelIdListSchema.optional(),
+});
+
+export type UpdateModelVisibilityInput = z.infer<
+  typeof UpdateModelVisibilitySchema
+>;
 
 export function isDiscoveredOpenCodeModelId(modelId: string): boolean {
   return modelId.startsWith('agent/opencode/');
