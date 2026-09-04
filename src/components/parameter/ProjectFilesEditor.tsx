@@ -1,4 +1,4 @@
-import { FileCode2, LockKeyhole, Save, Undo2 } from 'lucide-react';
+import { FileCode2, Save, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,7 +35,7 @@ export function ProjectFilesEditor({
     [files, selectedPath],
   );
   const isEntrypoint = selectedPath === project?.entrypointPath;
-  const canEdit = !!selectedFile && !isEntrypoint && !!onSaveFile && !disabled;
+  const canEdit = !!selectedFile && !!onSaveFile && !disabled;
   const isDirty = !!selectedFile && draftContent !== selectedFile.content;
 
   useEffect(() => {
@@ -125,20 +125,16 @@ export function ProjectFilesEditor({
         <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-4xl flex-col gap-4 bg-adam-bg-secondary-dark p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex min-w-0 items-center gap-2 text-adam-text-primary">
-              {isEntrypoint ? (
-                <LockKeyhole className="h-4 w-4 shrink-0" />
-              ) : (
-                <FileCode2 className="h-4 w-4 shrink-0" />
-              )}
+              <FileCode2 className="h-4 w-4 shrink-0" />
               <span className="truncate font-mono text-sm sm:text-base">
                 {selectedFile?.path ?? 'Project file'}
               </span>
             </DialogTitle>
             <DialogDescription className="text-adam-neutral-400">
-              {isEntrypoint
-                ? 'Entrypoint source is read-only here. Parameters and AI edits continue to own entrypoint changes.'
-                : disabled
-                  ? 'Project file editing is disabled while the current AI turn is streaming.'
+              {disabled
+                ? 'Project file editing is disabled while the current AI turn is streaming.'
+                : isEntrypoint
+                  ? 'Edit the project entrypoint inside the current project snapshot. Saving preserves support files, assets and the entrypoint path, then refreshes parameters and preview from the saved source.'
                   : 'Edit this support file inside the current project snapshot. Saving preserves the entrypoint, other source files and asset manifest.'}
             </DialogDescription>
           </DialogHeader>
@@ -162,28 +158,30 @@ export function ProjectFilesEditor({
             </p>
           )}
 
-          {!isEntrypoint && (
-            <DialogFooter className="gap-2 sm:space-x-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={discardDraft}
-                disabled={!isDirty || isSaving}
-                className="text-adam-text-primary"
-              >
-                <Undo2 className="mr-2 h-4 w-4" />
-                Discard
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void saveDraft()}
-                disabled={!canEdit || !isDirty || isSaving}
-              >
-                <Save className="mr-2 h-4 w-4" />
-                {isSaving ? 'Saving…' : 'Save support file'}
-              </Button>
-            </DialogFooter>
-          )}
+          <DialogFooter className="gap-2 sm:space-x-0">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={discardDraft}
+              disabled={!isDirty || isSaving}
+              className="text-adam-text-primary"
+            >
+              <Undo2 className="mr-2 h-4 w-4" />
+              Discard
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void saveDraft()}
+              disabled={!canEdit || !isDirty || isSaving}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {isSaving
+                ? 'Saving…'
+                : isEntrypoint
+                  ? 'Save entrypoint'
+                  : 'Save support file'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
