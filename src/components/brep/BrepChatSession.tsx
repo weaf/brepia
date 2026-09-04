@@ -77,6 +77,12 @@ export function BrepChatSession({
 }: BrepChatSessionProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  // /editor and /brep can address the same persisted conversation, but their
+  // chat runtimes have different client-tool semantics. Keep the cached Chat
+  // instances separate so a previously mounted OpenSCAD editor cannot leak
+  // auto-continuation/callback state into the native BRep workspace.
+  const chatCacheId = `brep:${conversation.id}`;
+  const submitInFlightRef = useRef(false);
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const token = (await supabase.auth.getSession()).data.session?.access_token;
@@ -101,7 +107,7 @@ export function BrepChatSession({
   );
 
   const chat = useCachedAiChat({
-    id: conversation.id,
+    id: chatCacheId,
     messages: initialBranch,
     transport,
     // BRep build/answer tools are server-executed. Client continuation here
@@ -258,29 +264,39 @@ export function BrepChatSession({
         });
         return;
       }
+      // TextAreaChat can dispatch again before the SDK status flips to
+      // submitted. A native BRep turn is CAS-persisted against one exact leaf,
+      // so duplicate sends from the same UI action would intentionally make
+      // one result stale. Close that small client-side window synchronously.
+      if (submitInFlightRef.current) return;
+      submitInFlightRef.current = true;
 
-      const text = parts
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('');
-      const imageCount = parts.filter(
-        (part) => part.type === 'file' && part.mediaType.startsWith('image/'),
-      ).length;
-      posthog.capture('message_sent', {
-        type: conversation.type,
-        source_kind: 'brep',
-        model_name: model,
-        text,
-        image_count: imageCount,
-        mesh_count: 0,
-        conversation_id: conversation.id,
-      });
+      try {
+        const text = parts
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text)
+          .join('');
+        const imageCount = parts.filter(
+          (part) => part.type === 'file' && part.mediaType.startsWith('image/'),
+        ).length;
+        posthog.capture('message_sent', {
+          type: conversation.type,
+          source_kind: 'brep',
+          model_name: model,
+          text,
+          image_count: imageCount,
+          mesh_count: 0,
+          conversation_id: conversation.id,
+        });
 
-      const { userMessageId } = await onSendParts(parts);
-      await sendMessage(
-        { id: userMessageId, parts, metadata: { model } },
-        { body: { model } },
-      );
+        const { userMessageId } = await onSendParts(parts);
+        await sendMessage(
+          { id: userMessageId, parts, metadata: { model } },
+          { body: { model } },
+        );
+      } finally {
+        submitInFlightRef.current = false;
+      }
     },
     [conversation.id, conversation.type, model, onSendParts, sendMessage, toast],
   );
