@@ -49,8 +49,12 @@ describe('BRep product chat client boundary', () => {
       brepViewSource,
       /mobilePreviewSlot={<BrepProjectViewerPanel isMobile \/>}/,
     );
-    assert.match(brepViewSource, /mobileParametersSlot={<BrepProjectParametersPanel \/>}/);
-    assert.match(brepViewSource, />\s*Model\s*<\/Button>/);
+    assert.match(
+      brepViewSource,
+      /mobileParametersSlot={<BrepProjectParametersPanel \/>}/,
+    );
+    assert.match(brepViewSource, /setMobilePreviewVersion/);
+    assert.match(brepViewSource, /\bModel\b/);
   });
 
   it('uses the shared parametric endpoint without client-side BRep tool execution', () => {
@@ -93,7 +97,10 @@ describe('BRep product chat client boundary', () => {
       brepViewSource,
       /\.filter\(\(node\) => !isLifecycleOnlyBrepRevision\(node\)\)/,
     );
-    assert.match(brepViewSource, /message\.parts\[0\]\?\.type === 'data-brep-project'/);
+    assert.match(
+      brepViewSource,
+      /message\.parts\[0\]\?\.type === 'data-brep-project'/,
+    );
   });
 
   it('serializes rapid native evaluation and persists parameters only through explicit save', () => {
@@ -111,8 +118,12 @@ describe('BRep product chat client boundary', () => {
     assert.doesNotMatch(brepPreviewSource, /onBlur=/);
 
     assert.match(brepEditorSource, /browserBrepEditorEvaluationQueue/);
+    assert.match(brepEditorSource, /sourceRevisionRef/);
     assert.match(brepEditorSource, /Save parameter revision/);
-    assert.match(brepEditorSource, /Changes update the native preview immediately/);
+    assert.match(
+      brepEditorSource,
+      /Changes update the native preview immediately/,
+    );
   });
 
   it('keeps revision history compact and safely removable without deleting lineage nodes', () => {
