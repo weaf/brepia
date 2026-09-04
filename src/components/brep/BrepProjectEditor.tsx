@@ -82,7 +82,9 @@ const BrepProjectEditorContext =
 function useBrepProjectEditor() {
   const value = useContext(BrepProjectEditorContext);
   if (!value) {
-    throw new Error('BRep project editor panels require BrepProjectEditorProvider.');
+    throw new Error(
+      'BRep project editor panels require BrepProjectEditorProvider.',
+    );
   }
   return value;
 }
@@ -142,7 +144,10 @@ export function BrepProjectEditorProvider({
   onDeleteRevision: (id: string) => Promise<void>;
   children: ReactNode;
 }) {
-  const initialValues = useMemo(() => projectParameterValues(project), [project]);
+  const initialValues = useMemo(
+    () => projectParameterValues(project),
+    [project],
+  );
   const [values, setValues] = useState<BrepParameterValues>(initialValues);
   const [savedValues, setSavedValues] =
     useState<BrepParameterValues>(initialValues);
@@ -155,6 +160,7 @@ export function BrepProjectEditorProvider({
   const [revisionActionId, setRevisionActionId] = useState<string | null>(null);
   const evaluationVersionRef = useRef(0);
   const mountedRef = useRef(true);
+  const sourceRevisionRef = useRef(activeRevisionId);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -163,6 +169,21 @@ export function BrepProjectEditorProvider({
       evaluationVersionRef.current += 1;
     };
   }, []);
+
+  useEffect(() => {
+    // Query invalidation can reconstruct an equivalent project object while the
+    // same source revision stays active. Preserve unsaved local preview values
+    // across those harmless refetches; reset only when source authority really
+    // moves to another immutable revision.
+    if (sourceRevisionRef.current === activeRevisionId) return;
+    sourceRevisionRef.current = activeRevisionId;
+    const nextValues = projectParameterValues(project);
+    evaluationVersionRef.current += 1;
+    setValues(nextValues);
+    setSavedValues(nextValues);
+    setResult(null);
+    setError(null);
+  }, [activeRevisionId, project]);
 
   const setParameterValue = useCallback((id: string, value: number) => {
     setValues((current) => ({ ...current, [id]: value }));
@@ -390,7 +411,11 @@ export function BrepProjectEditorProvider({
   );
 }
 
-export function BrepProjectViewerPanel({ isMobile = false }: { isMobile?: boolean }) {
+export function BrepProjectViewerPanel({
+  isMobile = false,
+}: {
+  isMobile?: boolean;
+}) {
   const { result, loading, error } = useBrepProjectEditor();
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
@@ -444,7 +469,11 @@ function RevisionHistory() {
   if (revisions.length === 0) return null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-t border-adam-neutral-700 pt-3">
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="border-t border-adam-neutral-700 pt-3"
+    >
       <CollapsibleTrigger asChild>
         <button
           type="button"
@@ -475,7 +504,8 @@ function RevisionHistory() {
                   onClick={() => void selectRevision(revision.id)}
                 >
                   <span className="truncate">
-                    {revision.label}{active ? ' · Active' : ''}
+                    {revision.label}
+                    {active ? ' · Active' : ''}
                   </span>
                 </Button>
                 <Button
@@ -502,7 +532,9 @@ function RevisionHistory() {
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete {revision.label}?</AlertDialogTitle>
+                      <AlertDialogTitle>
+                        Delete {revision.label}?
+                      </AlertDialogTitle>
                       <AlertDialogDescription>
                         This removes the revision from the project revision list.
                         Its immutable lineage record is retained internally so
