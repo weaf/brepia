@@ -107,6 +107,7 @@ export function BrepProjectPreview({
   }, [values]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       evaluationVersionRef.current += 1;
