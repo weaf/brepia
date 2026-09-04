@@ -51,6 +51,19 @@ describe('repository-driven AI instruction catalog', () => {
     }
   });
 
+  it('documents centered-origin primitive semantics across native BRep generation paths', () => {
+    for (const key of [
+      'tool.build_brep_project',
+      'transport.opencode_brep',
+      'transport.codex_brep',
+    ] as const) {
+      const instruction = loadBundledInstruction(key);
+      expect(instruction).toMatch(/centered[- ]origin/i);
+      expect(instruction).toContain('[0, 0, 0]');
+      expect(instruction).toMatch(/minimum corner/i);
+    }
+  });
+
   it('renders placeholders without hard-coding context strings in callers', () => {
     expect(
       renderInstructionTemplate('A {{first}} / {{second}}', {
