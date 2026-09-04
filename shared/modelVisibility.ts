@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
+export const MAX_MODEL_VISIBILITY_IDS = 16_384;
+
 const modelIdListSchema = z
   .array(z.string().min(1).max(256))
   .min(0)
-  .max(1024);
+  .max(MAX_MODEL_VISIBILITY_IDS);
 
 export interface ModelVisibilityEntry {
   id: string;
