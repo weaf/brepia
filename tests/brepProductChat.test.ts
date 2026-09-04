@@ -73,12 +73,19 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /message\.parts\[0\]\?\.type === 'data-brep-project'/);
   });
 
-  it('serializes rapid native evaluation across preview remounts and skips no-op parameter revisions', () => {
+  it('serializes rapid native evaluation and persists parameters only through explicit save', () => {
     assert.match(brepPreviewSource, /BREP_EVALUATION_DEBOUNCE_MS/);
     assert.match(brepPreviewSource, /browserBrepEvaluationQueue/);
     assert.match(brepPreviewSource, /version !== evaluationVersionRef\.current/);
     assert.match(brepPreviewSource, /parameterValuesEqual/);
     assert.match(brepPreviewSource, /committedValuesRef/);
+    assert.match(brepPreviewSource, /hasUnsavedParameterChanges/);
+    assert.match(brepPreviewSource, /Save parameter revision/);
+    assert.match(
+      brepPreviewSource,
+      /Preview values are not yet saved as a source revision\./,
+    );
+    assert.doesNotMatch(brepPreviewSource, /onBlur=/);
   });
 
   it('keeps OpenSCAD-only mesh assets out of native BRep follow-up turns', () => {
