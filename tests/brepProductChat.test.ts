@@ -6,6 +6,14 @@ const brepChatSource = fs.readFileSync(
   new URL('../src/components/brep/BrepChatSession.tsx', import.meta.url),
   'utf8',
 );
+const brepCreateSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepAiCreatePanel.tsx', import.meta.url),
+  'utf8',
+);
+const brepIndexSource = fs.readFileSync(
+  new URL('../src/routes/_layout/_auth/brep/index.tsx', import.meta.url),
+  'utf8',
+);
 const brepViewSource = fs.readFileSync(
   new URL('../src/views/BrepProjectView.tsx', import.meta.url),
   'utf8',
@@ -55,5 +63,16 @@ describe('BRep product chat client boundary', () => {
   it('keeps OpenSCAD-only mesh assets out of native BRep follow-up turns', () => {
     assert.match(brepChatSource, /part\.type === 'data-mesh-context'/);
     assert.match(brepChatSource, /STL attachments are OpenSCAD-only/);
+  });
+
+  it('exposes explicit AI BRep creation without changing the ordinary Generative start page', () => {
+    assert.match(brepIndexSource, /<BrepAiCreatePanel \/>/);
+    assert.match(brepCreateSource, /type:\s*'parametric'/);
+    assert.match(brepCreateSource, /parametricSourceKind:\s*'brep'/);
+    assert.match(brepCreateSource, /id:\s*`brep:\$\{conversationId\}`/);
+    assert.match(brepCreateSource, /apiUrl\('parametric-chat'\)/);
+    assert.match(brepCreateSource, /sendAutomaticallyWhen:\s*\(\) => false/);
+    assert.match(brepCreateSource, /submitInFlightRef/);
+    assert.doesNotMatch(brepCreateSource, /build_parametric_model/);
   });
 });
