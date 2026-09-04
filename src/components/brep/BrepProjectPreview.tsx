@@ -97,6 +97,10 @@ export function BrepProjectPreview({
   const committedValuesRef = useRef(values);
   const evaluationVersionRef = useRef(0);
   const mountedRef = useRef(true);
+  const hasUnsavedParameterChanges = !parameterValuesEqual(
+    values,
+    committedValuesRef.current,
+  );
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
     [result],
@@ -232,37 +236,49 @@ export function BrepProjectPreview({
                   valuesRef.current = nextValues;
                   setValues(nextValues);
                 }}
-                onBlur={() => {
-                  if (
-                    !onParameterValuesCommit ||
-                    committing ||
-                    parameterValuesEqual(
-                      valuesRef.current,
-                      committedValuesRef.current,
-                    )
-                  )
-                    return;
-                  const committedValues = { ...valuesRef.current };
-                  setCommitting(true);
-                  void onParameterValuesCommit(committedValues)
-                    .then(() => {
-                      committedValuesRef.current = committedValues;
-                    })
-                    .catch((reason) => {
-                      setError(
-                        reason instanceof Error
-                          ? reason.message
-                          : 'Could not persist BRep parameter revision.',
-                      );
-                    })
-                    .finally(() => setCommitting(false));
-                }}
               />
             </label>
           ))}
         </div>
+        {onParameterValuesCommit ? (
+          <>
+            <Button
+              className="mt-6 w-full"
+              disabled={committing || !hasUnsavedParameterChanges}
+              onClick={() => {
+                if (committing || !hasUnsavedParameterChanges) return;
+                const committedValues = { ...valuesRef.current };
+                setCommitting(true);
+                setError(null);
+                void onParameterValuesCommit(committedValues)
+                  .then(() => {
+                    committedValuesRef.current = committedValues;
+                  })
+                  .catch((reason) => {
+                    setError(
+                      reason instanceof Error
+                        ? reason.message
+                        : 'Could not persist BRep parameter revision.',
+                    );
+                  })
+                  .finally(() => setCommitting(false));
+              }}
+            >
+              {committing
+                ? 'Saving parameter revision…'
+                : hasUnsavedParameterChanges
+                  ? 'Save parameter revision'
+                  : 'Parameters saved'}
+            </Button>
+            {hasUnsavedParameterChanges ? (
+              <p className="mt-2 text-xs text-adam-text-tertiary">
+                Preview values are not yet saved as a source revision.
+              </p>
+            ) : null}
+          </>
+        ) : null}
         <Button
-          className="mt-6"
+          className={onParameterValuesCommit ? 'mt-3' : 'mt-6'}
           variant="outline"
           onClick={() => setValues((current) => ({ ...current }))}
         >
