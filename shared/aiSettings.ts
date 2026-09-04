@@ -61,6 +61,7 @@ const nonReservedSlugSchema = z
 export const AiPreferencesSchema = z.object({
   userId: z.string().uuid(),
   hiddenModelIds: z.array(z.string().min(1).max(256)).default([]),
+  enabledOpenCodeModelIds: z.array(z.string().min(1).max(256)).default([]),
   defaultInstructionProfileId: AiInstructionProfileIdSchema.default(
     DEFAULT_INSTRUCTION_PROFILE_ID,
   ),
