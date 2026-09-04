@@ -7,17 +7,40 @@ export type BrepAiBranchMessage = {
   id: string;
   role: string;
   parts: unknown;
+  metadata?: unknown;
 };
 
 export type BrepAiTreeMessage = BrepAiBranchMessage & {
   parent_message_id: string | null;
 };
 
-export type BrepAiSourceRevision = {
+export type BrepAiPersistedSourceRevision = {
+  kind?: 'source';
   messageId: string;
   artifact: BrepProjectArtifactData;
   project: BrepProject;
 };
+
+export type BrepAiCreationRoute = {
+  kind: 'creation';
+  messageId: string;
+  artifact?: undefined;
+  project?: undefined;
+};
+
+/**
+ * Server-side native BRep route state. A creation route is deliberately not a
+ * source revision and therefore carries no fabricated previous project.
+ */
+export type BrepAiSourceRevision =
+  | BrepAiPersistedSourceRevision
+  | BrepAiCreationRoute;
+
+export function isBrepAiCreationRoute(
+  source: BrepAiSourceRevision,
+): source is BrepAiCreationRoute {
+  return source.kind === 'creation';
+}
 
 export class BrepAiContextError extends Error {
   constructor(
@@ -42,17 +65,24 @@ function hasBrepProjectMarker(parts: unknown): boolean {
   );
 }
 
-/**
- * Resolve the BRep source revision nearest to the active branch leaf.
- *
- * A follow-up user message can itself be the current conversation leaf, so the
- * authoritative BRep source is the nearest preceding assistant revision rather
- * than necessarily the leaf message. If the nearest source marker is malformed,
- * fail closed instead of silently falling back to an older project snapshot.
- */
-export function resolveActiveBrepAiSource(
+function hasExplicitBrepCreationIntent(message: BrepAiBranchMessage): boolean {
+  if (message.role !== 'user') return false;
+  if (
+    typeof message.metadata !== 'object' ||
+    message.metadata === null ||
+    Array.isArray(message.metadata)
+  ) {
+    return false;
+  }
+  return (
+    (message.metadata as { parametricSourceKind?: unknown })
+      .parametricSourceKind === 'brep'
+  );
+}
+
+function resolvePersistedBrepAiSource(
   messages: readonly BrepAiBranchMessage[],
-): BrepAiSourceRevision | undefined {
+): BrepAiPersistedSourceRevision | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!hasBrepProjectMarker(message.parts)) continue;
@@ -73,7 +103,30 @@ export function resolveActiveBrepAiSource(
     }
 
     const project = normalizeBrepAiProjectCandidate(artifact.source.source);
-    return { messageId: message.id, artifact, project };
+    return { kind: 'source', messageId: message.id, artifact, project };
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolve the native BRep route nearest to the active branch leaf.
+ *
+ * Persisted canonical source always wins. Only when no data-brep-project exists
+ * may the root user message's explicit product metadata arm first-turn BRep
+ * creation. Prompt text is intentionally ignored. The creation route carries no
+ * previous project, so first-result validation cannot accidentally become a
+ * follow-up identity check against fabricated state.
+ */
+export function resolveActiveBrepAiSource(
+  messages: readonly BrepAiBranchMessage[],
+): BrepAiSourceRevision | undefined {
+  const persisted = resolvePersistedBrepAiSource(messages);
+  if (persisted) return persisted;
+
+  const firstMessage = messages[0];
+  if (firstMessage && hasExplicitBrepCreationIntent(firstMessage)) {
+    return { kind: 'creation', messageId: firstMessage.id };
   }
 
   return undefined;
@@ -81,24 +134,16 @@ export function resolveActiveBrepAiSource(
 
 /**
  * Build the exact root-to-leaf branch from persisted message-tree rows and
- * resolve the same authoritative BRep source used by the AI server.
+ * resolve the authoritative persisted BRep source used by product views.
  *
- * Product views must not assume that current_message_leaf_id is itself a source
- * revision: user prompts and failed/limitation assistant turns can legitimately
- * be leaves while the nearest preceding data-brep-project remains authoritative.
- *
- * The conversation row and message list are fetched through separate React
- * Query snapshots in product views. A cached conversation can therefore name a
- * leaf that is not present in the current message snapshot for one render while
- * the authoritative conversation refetch catches up. Treat that specific
- * top-level absence as "not resolved yet" rather than malformed ancestry. Once
- * the selected leaf itself is present, every parent in its ancestry must still
- * be present and valid or the resolver fails closed.
+ * Product views intentionally ignore the first-turn creation route. Until the
+ * AI result has been atomically persisted there is no canonical project to
+ * render. Once a source exists, it is the sole authority.
  */
 export function resolveActiveBrepAiSourceForLeaf(
   messages: readonly BrepAiTreeMessage[],
   leafMessageId: string,
-): BrepAiSourceRevision | undefined {
+): BrepAiPersistedSourceRevision | undefined {
   const byId = new Map<string, BrepAiTreeMessage>();
   for (const message of messages) {
     if (byId.has(message.id)) {
@@ -139,11 +184,12 @@ export function resolveActiveBrepAiSourceForLeaf(
       id: message.id,
       role: message.role,
       parts: message.parts,
+      metadata: message.metadata,
     });
     currentId = message.parent_message_id;
   }
 
-  return resolveActiveBrepAiSource(reversedBranch.reverse());
+  return resolvePersistedBrepAiSource(reversedBranch.reverse());
 }
 
 /** Serialize only canonical editable source semantics for model context. */
