@@ -33,7 +33,10 @@ describe('dynamic OpenCode model visibility', () => {
   const second = entry('agent/opencode/llama-swap/model-b');
 
   it('keeps newly discovered OpenCode models disabled by default', () => {
-    assert.equal(filterSelectableCatalog([first], new Set()).length, 0);
+    assert.equal(
+      filterSelectableCatalog([first], new Set(), new Set()).length,
+      0,
+    );
     assert.equal(
       isModelVisibleByPreference(first, {
         hiddenModelIds: [],
