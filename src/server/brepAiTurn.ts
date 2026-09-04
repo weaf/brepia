@@ -6,10 +6,14 @@ import {
   type BrepAiBuildOutput,
 } from '@shared/brepAiTool';
 import {
+  validateBrepAiCreation,
   validateBrepAiFollowUp,
   type BrepProjectStructuralDiff,
 } from '@shared/brepAiProject';
-import type { BrepAiSourceRevision } from '@shared/brepAiContext';
+import {
+  isBrepAiCreationRoute,
+  type BrepAiSourceRevision,
+} from '@shared/brepAiContext';
 import { createBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import { renderInstructionTemplate } from '@shared/aiInstructionCatalog';
 import { serializeBrepAiProjectContext } from '@shared/brepAiContext';
@@ -33,13 +37,20 @@ export function parametricBuildToolName(
 export function withBrepProjectSystemContext({
   systemPrompt,
   contextTemplate,
+  creationContext,
   activeBrepSource,
 }: {
   systemPrompt: string;
   contextTemplate: string;
+  creationContext?: string;
   activeBrepSource: BrepAiSourceRevision | undefined;
 }): string {
   if (!activeBrepSource) return systemPrompt;
+  if (isBrepAiCreationRoute(activeBrepSource)) {
+    return creationContext?.trim()
+      ? `${systemPrompt.trim()}\n\n${creationContext.trim()}`
+      : systemPrompt;
+  }
   const context = renderInstructionTemplate(contextTemplate, {
     projectJson: serializeBrepAiProjectContext(activeBrepSource.project),
   });
@@ -56,13 +67,16 @@ export function executeBrepAiBuild({
   onAcceptedInput?: (input: BrepAiBuildInput) => void;
 }): BrepAiBuildOutput {
   const parsed = brepAiBuildInputSchema.parse(input) as BrepAiBuildInput;
-  const { diff } = validateBrepAiFollowUp(
-    activeBrepSource.project,
-    parsed.project,
-  );
+  const message = isBrepAiCreationRoute(activeBrepSource)
+    ? (() => {
+        validateBrepAiCreation(parsed.project);
+        return 'Created canonical native BRep project.';
+      })()
+    : validateBrepAiFollowUp(activeBrepSource.project, parsed.project).diff
+        .summary;
   const output = brepAiBuildOutputSchema.parse({
     status: 'success',
-    message: diff.summary,
+    message,
   });
   // Keep the last successfully validated candidate in request-local server
   // state. Persistence must not depend on how the AI SDK later reconstructs
@@ -90,11 +104,12 @@ function finalSuccessfulBuildInput(
 
 /**
  * Revalidate the final successful BRep candidate against the exact source
- * snapshot used for generation, then attach one canonical data-brep-project
- * part to the same immutable assistant response. The request-local accepted
- * candidate is authoritative when available; scanning the UI message remains a
- * compatibility fallback only. Earlier build calls remain diagnostics and
- * never become competing source revisions.
+ * snapshot used for generation, or as standalone canonical creation when the
+ * turn was explicitly armed for first-source BRep creation. Then attach one
+ * canonical data-brep-project part to the same immutable assistant response.
+ * The request-local accepted candidate is authoritative when available;
+ * scanning the UI message remains a compatibility fallback only. Earlier build
+ * calls remain diagnostics and never become competing source revisions.
  */
 export function finalizeBrepAiAssistantParts({
   parts,
@@ -110,10 +125,9 @@ export function finalizeBrepAiAssistantParts({
   const finalInput = acceptedBuildInput ?? finalSuccessfulBuildInput(parts);
   if (!finalInput) return { parts };
 
-  const validation = validateBrepAiFollowUp(
-    activeBrepSource.project,
-    finalInput.project,
-  );
+  const validation = isBrepAiCreationRoute(activeBrepSource)
+    ? validateBrepAiCreation(finalInput.project)
+    : validateBrepAiFollowUp(activeBrepSource.project, finalInput.project);
   const artifact = createBrepProjectArtifact({
     title: finalInput.title,
     version: finalInput.version,
@@ -129,6 +143,6 @@ export function finalizeBrepAiAssistantParts({
       { type: 'data-brep-project', data: artifact },
     ],
     artifact,
-    diff: validation.diff,
+    ...('diff' in validation ? { diff: validation.diff } : {}),
   };
 }
