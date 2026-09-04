@@ -22,6 +22,8 @@ import type {
   BrepParameterValues,
 } from '@shared/brepProvider';
 
+const BREP_EVALUATION_DEBOUNCE_MS = 120;
+
 function geometryFromResult(
   result: BrepEvaluationSuccess,
 ): BufferGeometry | null {
@@ -36,6 +38,18 @@ function geometryFromResult(
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+function parameterValuesEqual(
+  left: BrepParameterValues,
+  right: BrepParameterValues,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => left[key] === right[key])
+  );
 }
 
 export function BrepProjectPreview({
@@ -74,6 +88,11 @@ export function BrepProjectPreview({
   const [creating, setCreating] = useState(false);
   const [committing, setCommitting] = useState(false);
   const valuesRef = useRef(values);
+  const committedValuesRef = useRef(values);
+  const evaluationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const evaluationVersionRef = useRef(0);
+  const evaluationAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
   const geometry = useMemo(
     () => (result ? geometryFromResult(result) : null),
     [result],
@@ -88,57 +107,100 @@ export function BrepProjectPreview({
   }, [values]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const evaluate = async () => {
-      setLoading(true);
-      setError(null);
-      setResult(null);
-      try {
-        const token = (await supabase.auth.getSession()).data.session
-          ?.access_token;
-        const response = await fetch(apiUrl('brep/evaluate'), {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            project,
-            parameterValues: values,
-          }),
-        });
-        const payload: unknown = await response.json();
-        if (
-          !response.ok ||
-          !payload ||
-          typeof payload !== 'object' ||
-          !('status' in payload) ||
-          payload.status !== 'success'
-        ) {
-          const detail =
-            payload &&
-            typeof payload === 'object' &&
-            'error' in payload &&
-            typeof payload.error === 'string'
-              ? payload.error
-              : `BRep evaluation failed (${response.status}).`;
-          throw new Error(detail);
-        }
-        setResult(payload as BrepEvaluationSuccess);
-      } catch (reason) {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : 'BRep evaluation failed.',
-          );
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+    return () => {
+      mountedRef.current = false;
+      evaluationVersionRef.current += 1;
+      evaluationAbortRef.current?.abort();
     };
-    void evaluate();
-    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const version = evaluationVersionRef.current + 1;
+    evaluationVersionRef.current = version;
+    const requestProject = project;
+    const requestValues = { ...values };
+
+    setLoading(true);
+    setError(null);
+
+    const timer = window.setTimeout(() => {
+      evaluationQueueRef.current = evaluationQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          // Fast input can enqueue an evaluation before a newer value arrives.
+          // Skip obsolete queued work before it consumes the single native
+          // evaluator slot. An already-running evaluation is allowed to finish;
+          // the latest request then starts only after its slot is released.
+          if (!mountedRef.current || version !== evaluationVersionRef.current)
+            return;
+
+          const controller = new AbortController();
+          evaluationAbortRef.current = controller;
+          try {
+            const token = (await supabase.auth.getSession()).data.session
+              ?.access_token;
+            const response = await fetch(apiUrl('brep/evaluate'), {
+              method: 'POST',
+              signal: controller.signal,
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                project: requestProject,
+                parameterValues: requestValues,
+              }),
+            });
+            const payload: unknown = await response.json();
+            if (
+              !response.ok ||
+              !payload ||
+              typeof payload !== 'object' ||
+              !('status' in payload) ||
+              payload.status !== 'success'
+            ) {
+              const detail =
+                payload &&
+                typeof payload === 'object' &&
+                'error' in payload &&
+                typeof payload.error === 'string'
+                  ? payload.error
+                  : `BRep evaluation failed (${response.status}).`;
+              throw new Error(detail);
+            }
+            if (
+              mountedRef.current &&
+              version === evaluationVersionRef.current
+            ) {
+              setResult(payload as BrepEvaluationSuccess);
+            }
+          } catch (reason) {
+            if (
+              !controller.signal.aborted &&
+              mountedRef.current &&
+              version === evaluationVersionRef.current
+            ) {
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : 'BRep evaluation failed.',
+              );
+            }
+          } finally {
+            if (evaluationAbortRef.current === controller) {
+              evaluationAbortRef.current = null;
+            }
+            if (
+              mountedRef.current &&
+              version === evaluationVersionRef.current
+            ) {
+              setLoading(false);
+            }
+          }
+        });
+    }, BREP_EVALUATION_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
   }, [project, values]);
 
   return (
@@ -174,9 +236,21 @@ export function BrepProjectPreview({
                   setValues(nextValues);
                 }}
                 onBlur={() => {
-                  if (!onParameterValuesCommit || committing) return;
+                  if (
+                    !onParameterValuesCommit ||
+                    committing ||
+                    parameterValuesEqual(
+                      valuesRef.current,
+                      committedValuesRef.current,
+                    )
+                  )
+                    return;
+                  const committedValues = { ...valuesRef.current };
                   setCommitting(true);
-                  void onParameterValuesCommit(valuesRef.current)
+                  void onParameterValuesCommit(committedValues)
+                    .then(() => {
+                      committedValuesRef.current = committedValues;
+                    })
                     .catch((reason) => {
                       setError(
                         reason instanceof Error
