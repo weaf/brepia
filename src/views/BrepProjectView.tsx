@@ -164,17 +164,20 @@ function BrepProjectWorkspace() {
   );
   const leafId =
     conversation.current_message_leaf_id ?? dbMessages.at(-1)?.id ?? '';
+  const leafPresentInMessages =
+    !leafId || dbMessages.some((message) => message.id === leafId);
   const initialBranch = useMemo(
-    () => (leafId ? branchForLeaf(leafId) : []),
-    [branchForLeaf, leafId],
+    () =>
+      leafId && leafPresentInMessages ? branchForLeaf(leafId) : [],
+    [branchForLeaf, leafId, leafPresentInMessages],
   );
 
   const activeSource = useMemo(
     () =>
-      leafId
+      leafId && leafPresentInMessages
         ? resolveActiveBrepAiSourceForLeaf(dbMessages, leafId)
         : undefined,
-    [dbMessages, leafId],
+    [dbMessages, leafId, leafPresentInMessages],
   );
   const revisions = useMemo(
     () =>
@@ -252,14 +255,13 @@ function BrepProjectWorkspace() {
         metadata: { model },
         parentMessageId: conversation.current_message_leaf_id ?? null,
       });
-      queryClient.setQueryData(
-        ['conversation', conversation.id],
-        (old: Conversation | undefined) =>
-          old ? { ...old, current_message_leaf_id: userMessageId } : old,
-      );
+      // The insert trigger advances the persisted conversation leaf. Keep the
+      // currently rendered BRep source stable until the authoritative messages
+      // and conversation queries refetch together instead of creating a cache
+      // snapshot that points at a message not present locally yet.
       return { userMessageId };
     },
-    [conversation, model, queryClient, user?.id],
+    [conversation, model, user?.id],
   );
 
   const handleRetry = useCallback(
@@ -289,17 +291,12 @@ function BrepProjectWorkspace() {
         metadata: { model },
         parentMessageId: parentId,
       });
-      queryClient.setQueryData(
-        ['conversation', conversation.id],
-        (old: Conversation | undefined) =>
-          old ? { ...old, current_message_leaf_id: newUserMessageId } : old,
-      );
       return {
         newUserMessageId,
         parentPath: parentId ? branchForLeaf(parentId) : [],
       };
     },
-    [branchForLeaf, conversation, model, queryClient, user?.id],
+    [branchForLeaf, conversation, model, user?.id],
   );
 
   const handleRestore = useCallback(
@@ -377,10 +374,10 @@ function BrepProjectWorkspace() {
     [changeRating],
   );
 
-  if (!areMessagesFetched) {
+  if (!areMessagesFetched || !leafPresentInMessages) {
     return (
       <div className="flex h-full items-center justify-center">
-        <ActivityIndicator label="Loading BRep conversation" />
+        <ActivityIndicator label="Synchronizing BRep conversation" />
       </div>
     );
   }
