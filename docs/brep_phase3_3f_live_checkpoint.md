@@ -2,9 +2,9 @@
 
 ## Scope
 
-This checkpoint records live 3F-D acceptance evidence for external OpenCode **Streaming** BRep editing on `feature/brep-ai-native-editing`.
+This checkpoint records live 3F-D acceptance evidence for external OpenCode **Streaming** and **CLI** BRep editing on `feature/brep-ai-native-editing`.
 
-Phase 3F remains in progress until the remaining external transport acceptance is completed. Do not treat this checkpoint as permission to start 3G.
+The transport/result/persistence portion of 3F-D is now live-accepted for both OpenCode execution modes. Do not expand into 3G until the remaining native viewer confirmation is recorded.
 
 ## Implementation checkpoint
 
@@ -15,31 +15,32 @@ The live fixes are contained in:
 Fix live external BRep streaming regressions
 ```
 
-A focused regression test for the strict external BRep tool-input boundary was added immediately afterward.
+The strict external BRep tool-input boundary is regression-covered by:
+
+```text
+29310a06a62625875464bf3d58ca153c742228fe
+Harden external BRep tool input contract
+```
 
 ## Live environment
 
-The accepted Streaming test used an existing native BRep conversation with the canonical cabinet source at:
+The tests used an existing native BRep conversation with the canonical cabinet source and stable published dimensions:
 
 ```text
-project_id        = phaseOneCabinet
-width_default     = 1400
-height_default    = 1800
-cable_hole_radius = 60
+project_id      = phaseOneCabinet
+width_default   = 1400
+height_default  = 1800
 ```
 
-External model/transport:
+External model:
 
 ```text
 agent/opencode/llama-swap/qwen3.6-35b-mtp-128k
-OpenCode execution mode: Streaming
 ```
-
-The requested follow-up changed only `cableHole.radius` from 60 mm to 75 mm while requesting stable project/node/parameter identities and preservation of the published Width/Height defaults.
 
 ## Live-discovered regression 1 — repeated external BRep turns
 
-Initial live execution repeatedly re-entered the same persistent OpenCode session after a successful `build_brep_project` result.
+Initial Streaming execution repeatedly re-entered the same persistent OpenCode session after a successful `build_brep_project` result.
 
 Root cause: Streaming BRep used a stop condition that waited for `answer_user` or the step limit, while the external adapter's terminal structured result is `build_brep_project`.
 
@@ -59,7 +60,7 @@ A regression test now parses the emitted external BRep tool input through the re
 
 ## Accepted Streaming evidence
 
-The rerun completed with one OpenCode session invocation and produced the following persisted active assistant revision:
+The Streaming rerun changed `cableHole.radius` from 60 mm to 75 mm and produced one active immutable assistant/source revision:
 
 ```text
 active            = true
@@ -70,20 +71,59 @@ output_status     = success
 candidate_radius  = 75
 ```
 
-This demonstrates the Streaming path reached the shared native BRep tool, passed validation, attached one canonical `data-brep-project` source snapshot, and activated the immutable revision through the existing persistence path.
+This demonstrates the Streaming path reached the shared native BRep tool, passed validation, attached one canonical `data-brep-project` source snapshot and activated the revision through the existing atomic persistence path.
 
-Historical failed rows were intentionally retained as regression evidence.
+## Accepted CLI evidence
+
+A follow-up in OpenCode execution mode **CLI** changed `cableHole.radius` from 75 mm to 85 mm using the same BRep conversation.
+
+Runtime transport evidence:
+
+```text
+transportKind = cli-agent
+agent         = opencode
+model         = llama-swap/qwen3.6-35b-mtp-128k
+```
+
+The persistent OpenCode server session was reused. The CLI-agent session was created for this first CLI-mode turn, which is expected when switching from Streaming to CLI because the two adapters maintain their own resumable session identities.
+
+The resulting active persisted revision was:
+
+```text
+created_at        = 2026-09-04 06:01:26.122674+00
+id                = ffe6fcdf-2174-4058-9efe-b05cb77f287a
+parent_message_id = 62c65f3a-2630-47a7-a3ba-807813ec0bbd
+active            = true
+source_parts      = 1
+brep_build_parts  = 1
+tool_state        = output-available
+output_status     = success
+candidate_radius  = 85
+```
+
+This proves the CLI path also:
+
+- received and returned a complete native BRep snapshot;
+- emitted one successful `build_brep_project` part;
+- attached exactly one canonical `data-brep-project` source part;
+- activated the new immutable revision;
+- preserved the existing conversation/source lifecycle rather than falling back to OpenSCAD semantics.
+
+Historical failed rows remain intentionally retained as regression evidence.
+
+## Codex parity decision
+
+A separate live Codex CLI run is not required for 3F acceptance at this checkpoint. Codex and OpenCode CLI share the same source-aware `buildPersistentCliAgentPrompt`/BRep result path; focused tests already cover Codex routing, resumable session-ID parsing and native resume syntax while the shared BRep continuation test proves the CLI prompt receives the exact current `BrepProject` and no OpenSCAD artifact wrapper.
+
+A future Codex live run may still be useful as an operator smoke test, but it is not necessary to duplicate the same BRep semantic acceptance merely to close 3F.
 
 ## Remaining 3F-D acceptance
 
-Next verify the **OpenCode CLI** path on the same conversation using a single identity-preserving numeric follow-up. The expected acceptance evidence is:
+Only record the native evaluator/viewer confirmation for the active radius-85 revision. Expected evidence:
 
-- one external CLI invocation/continuation;
-- one successful `build_brep_project` part;
-- exactly one `data-brep-project` source part;
-- the new immutable revision becomes active;
-- project ID and unchanged node/parameter IDs remain stable;
-- Width remains 1400 mm and Height remains 1800 mm;
-- native BRep evaluation/rendering succeeds after refresh.
+- refresh/reopen resolves the new active BRep source;
+- native BRep evaluation succeeds;
+- rendered geometry corresponds to the radius-85 source;
+- no new browser/server error appears.
 
-After OpenCode CLI acceptance, reconcile whether a separate live Codex CLI call is necessary or whether the shared CLI adapter plus existing Codex session/routing regression coverage provides sufficient parity evidence.
+Once that is confirmed, 3F can be marked complete and accepted and the next active step becomes 3G.
