@@ -3,6 +3,7 @@ import { describe, it } from 'vitest';
 import {
   isDiscoveredOpenCodeModelId,
   isModelVisibleByPreference,
+  MAX_MODEL_VISIBILITY_IDS,
   UpdateModelVisibilitySchema,
 } from '../shared/modelVisibility';
 import {
@@ -93,6 +94,34 @@ describe('dynamic OpenCode model visibility', () => {
     assert.equal(isDiscoveredOpenCodeModelId(first.id), true);
     assert.equal(isDiscoveredOpenCodeModelId('agent/codex/gpt-5.6-sol'), false);
     assert.equal(isDiscoveredOpenCodeModelId('local/model-a'), false);
+  });
+
+  it('accepts visibility payloads for the current multi-thousand-model catalog', () => {
+    const hiddenModelIds = Array.from(
+      { length: 7_600 },
+      (_, index) => `catalog/model-${index}`,
+    );
+
+    assert.equal(
+      UpdateModelVisibilitySchema.safeParse({
+        hiddenModelIds,
+        enabledOpenCodeModelIds: [first.id],
+      }).success,
+      true,
+    );
+  });
+
+  it('keeps a bounded upper limit on visibility preference payloads', () => {
+    const oversized = Array.from(
+      { length: MAX_MODEL_VISIBILITY_IDS + 1 },
+      (_, index) => `catalog/model-${index}`,
+    );
+
+    assert.equal(
+      UpdateModelVisibilitySchema.safeParse({ hiddenModelIds: oversized })
+        .success,
+      false,
+    );
   });
 
   it('rejects malformed visibility preference payloads', () => {
