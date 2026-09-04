@@ -126,13 +126,23 @@ export function finalizeBrepAiAssistantParts({
   const finalInput = acceptedBuildInput ?? finalSuccessfulBuildInput(parts);
   if (!finalInput) return { parts };
 
-  const validation = isBrepAiCreationRoute(activeBrepSource)
-    ? validateBrepAiCreation(finalInput.project)
-    : validateBrepAiFollowUp(activeBrepSource.project, finalInput.project);
+  let project: ReturnType<typeof validateBrepAiCreation>['project'];
+  let diff: BrepProjectStructuralDiff | undefined;
+  if (isBrepAiCreationRoute(activeBrepSource)) {
+    project = validateBrepAiCreation(finalInput.project).project;
+  } else {
+    const validation = validateBrepAiFollowUp(
+      activeBrepSource.project,
+      finalInput.project,
+    );
+    project = validation.project;
+    diff = validation.diff;
+  }
+
   const artifact = createBrepProjectArtifact({
     title: finalInput.title,
     version: finalInput.version,
-    source: { kind: 'brep', source: validation.project },
+    source: { kind: 'brep', source: project },
   });
   const withoutPriorBrepData = parts.filter(
     (part) => part.type !== 'data-brep-project',
@@ -144,6 +154,6 @@ export function finalizeBrepAiAssistantParts({
       { type: 'data-brep-project', data: artifact },
     ],
     artifact,
-    ...('diff' in validation ? { diff: validation.diff } : {}),
+    ...(diff ? { diff } : {}),
   };
 }
