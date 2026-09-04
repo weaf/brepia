@@ -2,13 +2,13 @@
 
 ## Status
 
-Phase 3 — AI-native BRep editing — is active on:
+Phase 3 — AI-native BRep editing — is in final closeout on:
 
 ```text
 feature/brep-ai-native-editing
 ```
 
-Base:
+Base / merge-base against `master`:
 
 ```text
 6e0ec92a439fb7e936a5d02001742df38a4c38d7
@@ -32,90 +32,57 @@ Phase 1/2 execution/status files are historical evidence after merge.
 | 3E — Immutable AI revision persistence and stale guards | **complete and accepted** |
 | 3F — OpenCode/Codex external-agent parity               | **complete and accepted** |
 | 3G — Product integration / creation UX                  | **complete and accepted** |
-| 3H — Browser/runtime and regression acceptance          | **active**                |
-| 3I — Closeout                                           | later                     |
+| 3H — Browser/runtime and regression acceptance          | **complete and accepted** |
+| 3I — Phase 3 closeout                                   | **active**                |
 
 ## Current architecture lock
 
-Phase 3 continues to preserve the Phase 2 lifecycle and native runtime boundaries:
+Phase 3 preserves the Phase 2 lifecycle and native runtime boundaries:
 
 - `conversation.type` remains `parametric`; there is no separate BRep conversation type.
-- `shared/brepProject.ts` remains the canonical authoring schema.
+- `shared/brepProject.ts` remains the canonical native authoring schema.
 - persisted native source revisions remain assistant `data-brep-project` snapshots.
-- `build_parametric_model` remains OpenSCAD-only.
-- native BRep uses the separate `build_brep_project` contract.
-- AI returns complete canonical BRep snapshots, never patches as source authority.
-- ordinary follow-up validation preserves project identity and stable unchanged object IDs.
-- native BRep AI output cannot introduce arbitrary Python/build123d execution, raw STEP, viewer mesh authority or raw topology indices.
-- the accepted rootless Podman build123d/OCCT evaluator and native STEP path remain authoritative for derived geometry/export.
-- immutable source history, restore/branch and stale-leaf behavior share the existing Parametric conversation tree rather than introducing an AI-specific history model.
+- `current_message_leaf_id` selects active source/branch state.
+- AI BRep output is a complete canonical snapshot, never a patch as source authority.
+- follow-up validation preserves project identity and unchanged node/parameter IDs.
+- `build_parametric_model` remains OpenSCAD-only; native BRep uses `build_brep_project`.
+- arbitrary Python/build123d source, STEP, viewer mesh authority and raw topology indices remain forbidden as AI-authored source.
+- the accepted rootless Podman build123d/OCCT evaluator remains the only native geometry execution boundary.
+- exact native STEP is derived from canonical BRep source, not viewer tessellation.
+- restore/branch/retry/stale handling reuse the existing Parametric message tree.
 
-## 3A — Architecture reconciliation and contract lock
+## Accepted implementation summary
 
-Status: **complete and accepted**.
+### 3A-3C — contracts
 
-The ownership map and Phase 3 contract were reconciled against Phase 2 before implementation. The key decision was to reuse the canonical `BrepProject`, existing message tree and native lifecycle rather than introducing provider/runtime-specific BRep representations.
+The Phase 3 ownership map was reconciled against Phase 2 before implementation. Shared BRep AI primitives now provide:
 
-## 3B — Shared BRep AI snapshot schema and structural diff
-
-Status: **complete and accepted**.
-
-Implemented primarily in:
-
-```text
-shared/brepAiProject.ts
-tests/brepAiProject.test.ts
-```
-
-The shared contract provides:
-
-- canonical creation normalization;
-- separate follow-up identity validation;
+- standalone canonical creation normalization;
+- follow-up identity validation;
 - deterministic project/parameter/node structural diffing;
-- fail-closed selector/reference/DAG validation through the canonical normalizer.
+- fail-closed selector/reference/DAG validation;
+- separate strongly validated `build_brep_project` tool semantics without changing historical OpenSCAD `build_parametric_model` meaning.
 
-Reported focused/typecheck/lint gates were green during acceptance.
+### 3D — normal-provider BRep editing
 
-## 3C — Native AI tool/source contract
+Normal AI SDK providers receive the exact current canonical BRep source and return complete snapshots through `build_brep_project`.
 
-Status: **complete and accepted**.
+Accepted behavior includes request-local validated-candidate capture, exactly one canonical `data-brep-project` source on successful persistence, stable-ID follow-up validation and native evaluation of the accepted snapshot.
 
-Native BRep uses `build_brep_project`; legacy OpenSCAD `build_parametric_model` semantics remain unchanged.
-
-The BRep tool contract accepts only complete bounded canonical BRep snapshots and excludes runtime/Python/STEP/mesh authority.
-
-Reported focused/typecheck/lint/build/diff gates were green during acceptance.
-
-## 3D — Prompting and normal-provider follow-up
-
-Status: **complete and accepted**.
-
-Accepted behavior includes:
-
-- nearest valid canonical BRep source resolution on the active branch;
-- exact current BRep snapshot injection for follow-up context;
-- server-side `build_brep_project` execution and validation;
-- request-local accepted-candidate capture;
-- exactly one canonical `data-brep-project` source on successful persistence;
-- structural diff as diagnostics rather than source authority;
-- OpenSCAD-only mesh/import context excluded from BRep turns.
-
-Live normal-provider acceptance changed real BRep parameter/DAG state, persisted canonical sources and rendered the accepted native geometry.
-
-A live-found persistence regression where successful tool results could lack `data-brep-project` was fixed by persisting the request-local validated candidate directly and by resolving the nearest valid source ancestor in the product view.
-
-Key checkpoint:
+Key persistence correction:
 
 ```text
 41b80327cfbf29b1667359c5cb1ab73490ef5e4a
 Persist validated BRep AI candidates from server execution
 ```
 
-## 3E — Immutable AI revision persistence and stale guards
+### 3E — immutable persistence and stale guards
 
-Status: **complete and accepted**.
+`public.persist_brep_ai_revision(...)` locks the conversation, checks the expected current request leaf and inserts/activates the immutable AI source revision only when still current.
 
-Implemented around:
+Both stale-first and AI-lock-first orderings were accepted against the real local Supabase runtime. Late/stale generation cannot overwrite a newer parameter/restore/branch source.
+
+Relevant files:
 
 ```text
 src/server/brepAiPersistence.ts
@@ -124,26 +91,11 @@ supabase/migrations/20260903134810_brep_ai_atomic_revision.sql
 scripts/brep/test-brep-ai-atomic-race.sh
 ```
 
-`public.persist_brep_ai_revision(...)` locks the conversation, checks the expected current request leaf, inserts the immutable assistant/source revision only if still current and otherwise returns stale without inserting.
+### 3F — OpenCode/Codex parity
 
-Both stale-first and AI-lock-first runtime race orderings were accepted against the real local Supabase runtime.
+External-agent routing is source-aware. BRep receives the complete current canonical `BrepProject`; OpenSCAD retains the existing project/assets path and reconciliation behavior.
 
-## 3F — OpenCode/Codex external-agent parity
-
-Status: **complete and accepted**.
-
-External-agent routing is source-aware:
-
-- OpenSCAD continues through the existing project/source path;
-- BRep receives the complete current canonical `BrepProject`;
-- BRep output is validated through the same native snapshot contract;
-- OpenSCAD asset reconciliation remains OpenSCAD-only;
-- resumable OpenCode/Codex session continuity is preserved.
-
-Live acceptance covered Streaming OpenCode and OpenCode CLI BRep edits. It also found and fixed:
-
-1. external BRep streaming continuing after terminal `build_brep_project`;
-2. an OpenSCAD-era extra `message` field in strict BRep tool input.
+Live acceptance covered Streaming OpenCode and OpenCode CLI BRep edits and fixed two live-found regressions around terminal BRep tool completion and strict BRep tool input.
 
 Detailed evidence:
 
@@ -151,137 +103,128 @@ Detailed evidence:
 docs/brep_phase3_3f_live_checkpoint.md
 ```
 
-## 3G — Product integration / creation UX
+### 3G — product integration / creation UX
 
-Status: **complete and accepted**.
+Explicit BRep creation is product/source-intent driven rather than prompt-heuristic driven:
 
-Detailed live evidence:
+```text
+conversation.type = 'parametric'
+explicit BRep source intent
+-> first AI turn
+-> build_brep_project without fabricated previous source
+-> canonical creation validation
+-> atomic source persistence
+-> /brep/$id
+```
+
+After the first canonical source exists, persisted source-derived routing is authoritative again. Ordinary OpenSCAD creation remains unchanged.
+
+The accepted BRep workspace reuses the shared Parametric interaction model:
+
+- desktop resizable/collapsible Chat | Preview | Parameters;
+- mobile/tablet chat-first layout with shared model/parameter bottom sheet;
+- local live parameter preview plus explicit **Save parameter revision**;
+- focus changes do not create source revisions;
+- debounced/serialized native evaluation;
+- lifecycle-only source revisions hidden from visible AI chat while retained as authoritative history;
+- compact latest-first revision history with restore/select and safe product-level Delete tombstones;
+- `project.brep.json` canonical-source inspection;
+- sticky Parametric-style native STEP / BRep JSON export control.
+
+Detailed evidence:
 
 ```text
 docs/brep_phase3_3g_live_checkpoint.md
 ```
 
-Accepted implementation checkpoint before the 3G evidence commit:
+### 3H — browser/runtime and regression acceptance
 
-```text
-4522865f55bdd8bbf720ff79c67c1fedb149f0d7
-Cover Parametric-style BRep sidebar chrome
-```
+Status: **complete and accepted**.
 
-3G evidence commit:
-
-```text
-75074fc60e46bd7ffe4fa5f6c88aa8661c2d6da9
-Record Phase 3G product acceptance
-```
-
-### 3G-A — existing BRep follow-up product integration
-
-Accepted protections include:
-
-- `/brep/$id` reuses the existing Parametric conversation lifecycle;
-- BRep-specific cached chat identity `brep:<conversation-id>` is isolated from `/editor`;
-- duplicate-submit guard prevents two UI turns racing the same source;
-- server state remains authoritative for `current_message_leaf_id`;
-- temporary conversation/message cache mismatches show synchronization state instead of false no-source errors;
-- BRep uses the shared `parametric-chat` endpoint with server-executed `build_brep_project`;
-- OpenSCAD browser compiler and mesh-only context stay OpenSCAD-only.
-
-3G-A was live accepted after fixing cache/leaf synchronization regressions.
-
-### 3G-B — explicit AI BRep creation routing
-
-Accepted first-turn behavior:
-
-```text
-conversation.type = 'parametric'
-explicit persisted BRep source intent
--> first user turn
--> build_brep_project with no previous BRep source
--> canonical creation validation
--> atomic assistant + data-brep-project persistence
--> /brep/$id native product view
-```
-
-The first result is validated as standalone canonical creation; no sample/previous project is fabricated solely to reuse follow-up identity validation.
-
-Once the first canonical BRep source exists, source-derived routing is authoritative again.
-
-Ordinary OpenSCAD creation remains unchanged and continues to select `build_parametric_model`.
-
-### 3G-C — product polish and shared Parametric-style workspace
-
-The accepted native BRep workspace now uses the shared `ConversationView` interaction model:
-
-- desktop resizable/collapsible Chat | Preview | Parameters;
-- mobile/tablet chat-first layout with shared model/parameter bottom sheet;
-- explicit Model action to reopen the mobile sheet;
-- Parametric-style right-panel typography/spacing;
-- `Project files` with canonical `project.brep.json` source inspection;
-- local live parameter preview with explicit **Save parameter revision**;
-- focus changes do not create revisions;
-- native evaluation is debounced/serialized so rapid parameter interaction does not compete for the accepted one-slot evaluator;
-- lifecycle-only source revisions stay in the authoritative tree but are hidden from visible AI chat;
-- compact latest-first revision history with internal scrolling;
-- select/restore revision;
-- safe Delete revision product tombstones while immutable ancestry is retained internally;
-- sticky Parametric-style export control;
-- native STEP and canonical BRep JSON/package export.
-
-Live browser acceptance on 2026-09-04 reported all agreed desktop/mobile checks green, including revision cleanup persistence, post-cleanup AI follow-up and native STEP export.
-
-## 3H — Browser/runtime and regression acceptance
-
-Status: **active**.
-
-Reproducible live runbook:
+Detailed runbook and live evidence:
 
 ```text
 docs/brep_phase3_3h_acceptance.md
+docs/brep_phase3_3h_live_checkpoint.md
 ```
 
-Runbook checkpoint:
+The complete local authenticated acceptance covered:
+
+1. explicit AI BRep creation;
+2. parameter-definition/default follow-up edit;
+3. feature-DAG edit;
+4. stable existing project/node/parameter IDs;
+5. structural change semantics;
+6. refresh/reopen persistence;
+7. restore -> branch lineage;
+8. browser stale/overlap protection;
+9. independent native STEP import/topology inspection;
+10. ordinary OpenSCAD creation regression;
+11. multi-file OpenSCAD + OpenCode follow-up regression;
+12. browser console/network review.
+
+The independent STEP inspection reported:
 
 ```text
-3444f9c1e14e58c8a0233cde2940e9753873949a
-Add Phase 3H acceptance runbook
+bounds_min = -70.0 -40.0 -5.0
+bounds_max =  70.0  40.0  5.0
+dimensions = 140.0 80.0 10.0
+analytic_cylindrical_faces = 1
+Phase 3H STEP topology inspection PASS
 ```
 
-Minimum acceptance from `docs/brep_phase3_execution.md` remains:
+A centered-hole AI semantic bug found by this pass was corrected by documenting the evaluator's centered local primitive coordinates across normal-provider/OpenCode/Codex BRep instructions and then live rechecked successfully.
 
-1. create a BRep project through AI;
-2. make a parameter-definition/default follow-up edit;
-3. make a feature-DAG follow-up edit adding or modifying a feature;
-4. verify unchanged project/node/parameter IDs remain stable;
-5. inspect structural diff/summary;
-6. refresh/reopen and verify persisted source;
-7. restore an earlier revision, branch with another AI edit and verify lineage;
-8. trigger an overlapping/stale edit scenario and verify newer active state wins;
-9. export native STEP from the AI-edited persisted state and independently inspect it;
-10. run an OpenSCAD AI creation and multi-file follow-up through normal provider/OpenCode paths;
-11. inspect browser console/network for new errors.
+A separate OpenCode model-preference bug was also found during 3H: large discovered catalogs could produce more hidden IDs than the visibility validator's old 1,024-item cap. The bounded limit was raised with regression coverage; OpenCode activation/persistence then completed successfully.
 
-Some individual behaviors were already exercised during 3D/3F/3G, but 3H remains the deliberate cross-layer acceptance pass. Reuse prior evidence only where it proves the identical criterion; do not silently waive missing acceptance items.
+Accepted implementation checkpoint at the end of 3H:
+
+```text
+bb09063211f4cceb102461b13f94bf8b3233d18a
+Cover large model visibility preference sets
+```
+
+## 3I — Phase 3 closeout
+
+Status: **active**.
+
+The branch comparison at 3I entry is:
+
+```text
+base/merge-base = 6e0ec92a439fb7e936a5d02001742df38a4c38d7
+branch          = feature/brep-ai-native-editing
+ahead           = 145
+behind          = 0
+```
+
+3I must not add new product functionality. It is limited to closeout verification, documentation coherence and PR preparation.
+
+Required final gate from `docs/brep_phase3_execution.md`:
+
+```bash
+scripts/brep/smoke-test.sh &&
+npm test &&
+npm run typecheck &&
+npm run lint &&
+npm run build &&
+git diff --check origin/master...HEAD &&
+git status --short &&
+git rev-parse HEAD
+```
+
+When the full gate is green:
+
+- record exact closeout evidence and final checkpoint;
+- review the branch diff against Phase 3 scope;
+- prepare a **draft PR** against `master`;
+- do not merge without explicit user approval.
 
 ## Separate Parametric/OpenSCAD request
 
-A separate requested feature is to make the OpenSCAD project entrypoint (`main.scad`) directly editable from `ProjectFilesEditor`, not only support modules.
+A separate requested feature remains queued after Phase 3 closeout: allow direct editing/saving of the OpenSCAD project entrypoint (`main.scad`) from Project files rather than only support modules.
 
-The current Parametric implementation deliberately keeps the entrypoint read-only in both `ProjectFilesEditor.tsx` and `EditorView.tsx`.
-
-This feature is feasible but is outside BRep Phase 3H. Handle it as a focused Parametric workspace change after the Phase 3 boundary is coherent, unless explicitly reprioritized.
-
-When implemented, preserve:
-
-- whole-project snapshot integrity;
-- support files/assets/`entrypointPath`;
-- parameter-write serialization;
-- `metadata.originalCode` parameter-default semantics;
-- active preview refresh and parameter reparse;
-- AI-streaming write exclusion.
+This is intentionally not part of BRep Phase 3. When implemented separately, preserve whole-project snapshot integrity, support files/assets/`entrypointPath`, parameter-write serialization, `metadata.originalCode` semantics, preview/parameter reparse and AI-streaming write exclusion.
 
 ## Current next action
 
-Execute the live flow in `docs/brep_phase3_3h_acceptance.md`, capture exact ID/diff/lineage/stale/STEP/OpenSCAD evidence, and fix only narrow regressions found by that pass.
-
-Do not start Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction as part of 3H.
+Run the full 3I closeout gate above. If green, record the final Phase 3 checkpoint and prepare the draft PR against `master`.
