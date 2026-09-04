@@ -57,6 +57,17 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /\bModel\b/);
   });
 
+  it('matches the Parametric sidebar hierarchy and exposes canonical BRep JSON', () => {
+    assert.match(brepEditorSource, /Project files/);
+    assert.match(brepEditorSource, /1 canonical source file/);
+    assert.match(brepEditorSource, /project\.brep\.json/);
+    assert.match(brepEditorSource, /Canonical BRep source for the active immutable revision/);
+    assert.match(brepEditorSource, /<ScrollArea className="flex-1 px-6 py-6">/);
+    assert.match(brepEditorSource, /select BRep download format/);
+    assert.match(brepEditorSource, /\.STEP/);
+    assert.match(brepEditorSource, /\.BREP JSON/);
+  });
+
   it('uses the shared parametric endpoint without client-side BRep tool execution', () => {
     assert.match(brepChatSource, /apiUrl\('parametric-chat'\)/);
     assert.match(brepChatSource, /sendAutomaticallyWhen:\s*\(\) => false/);
@@ -122,12 +133,12 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepEditorSource, /Save parameter revision/);
     assert.match(
       brepEditorSource,
-      /Changes update the native preview immediately/,
+      /Parameter changes update the native preview immediately/,
     );
   });
 
   it('keeps revision history compact and safely removable without deleting lineage nodes', () => {
-    assert.match(brepEditorSource, /Revision history · \{revisions\.length\}/);
+    assert.match(brepEditorSource, /Revision history/);
     assert.match(brepEditorSource, /max-h-\[220px\]/);
     assert.match(brepEditorSource, /\.\.\.revisions\]\.reverse\(\)/);
     assert.match(brepEditorSource, /Delete revision/);
