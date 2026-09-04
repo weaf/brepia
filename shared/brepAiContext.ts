@@ -86,6 +86,14 @@ export function resolveActiveBrepAiSource(
  * Product views must not assume that current_message_leaf_id is itself a source
  * revision: user prompts and failed/limitation assistant turns can legitimately
  * be leaves while the nearest preceding data-brep-project remains authoritative.
+ *
+ * The conversation row and message list are fetched through separate React
+ * Query snapshots in product views. A cached conversation can therefore name a
+ * leaf that is not present in the current message snapshot for one render while
+ * the authoritative conversation refetch catches up. Treat that specific
+ * top-level absence as "not resolved yet" rather than malformed ancestry. Once
+ * the selected leaf itself is present, every parent in its ancestry must still
+ * be present and valid or the resolver fails closed.
  */
 export function resolveActiveBrepAiSourceForLeaf(
   messages: readonly BrepAiTreeMessage[],
@@ -100,6 +108,10 @@ export function resolveActiveBrepAiSourceForLeaf(
       );
     }
     byId.set(message.id, message);
+  }
+
+  if (!byId.has(leafMessageId)) {
+    return undefined;
   }
 
   const reversedBranch: BrepAiBranchMessage[] = [];
