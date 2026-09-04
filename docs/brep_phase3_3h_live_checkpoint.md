@@ -16,7 +16,7 @@ docs/brep_phase3_3h_acceptance.md
 
 ## Status
 
-Phase 3H is **partially accepted through G**. OpenSCAD normal-provider/OpenCode regression, console/network closeout, one narrow centered-hole regression recheck, and the focused static checkpoint remain.
+Phase 3H is **partially accepted through G plus the centered-hole geometry regression recheck**. OpenSCAD normal-provider/OpenCode regression, console/network closeout, deterministic stale-race gate and the focused static checkpoint remain.
 
 ## A-C — canonical AI creation, parameter-definition edit and DAG edit
 
@@ -78,9 +78,9 @@ nodes:
   unchanged: plate
 ```
 
-### 3H geometry-intent finding
+### 3H geometry-intent finding and correction
 
-The C prompt requested a **centered** through-hole, but Revision 3 contained:
+The original C prompt requested a **centered** through-hole, but Revision 3 contained:
 
 ```text
 hole_transform.translate = [70, 40, 0]
@@ -96,21 +96,21 @@ Z =  -5 .. 5
 
 Therefore `[70,40,0]` is a plate corner, not its center. The persisted BRep snapshot was schema-valid and identity-stable, but the AI had inferred minimum-corner coordinate semantics instead of the evaluator's centered-origin primitive semantics.
 
-This is not a STEP/export error and does not invalidate the stable-ID/DAG contract exercised by A-C. It is nevertheless a real prompt/runtime semantic acceptance finding and must not be waived as intended geometry.
+This was not a STEP/export error and did not invalidate the stable-ID/DAG contract exercised by A-C. It was a real prompt/runtime semantic acceptance finding.
 
 The native BRep instructions were hardened after the finding:
 
-- `tool.build_brep_project` now states that box/cylinder primitives are centered at their local origin;
+- `tool.build_brep_project` states that box/cylinder primitives are centered at their local origin;
 - `transform.translate` is explicitly a displacement from that centered origin, not an absolute coordinate from a minimum corner;
 - a concentric cylinder in a centered box normally stays at `[0,0,0]`;
 - numeric half-dimension transforms must not be baked in when a relation is intended to stay parametric;
 - OpenCode and Codex BRep transport instructions carry the same rule;
 - instruction-catalog regression coverage asserts the rule remains present.
 
-A narrow live recheck of a centered-hole AI edit remains required after pulling this instruction hardening.
+The user then pulled the hardening and reran the centered-hole AI scenario. The hole was generated at the correct center and remained centered when dimensions were changed.
 
 A-C identity/DAG contract: **PASS**.
-Centered-hole geometric intent: **fix implemented; live recheck pending**.
+Centered-hole geometric intent after hardening: **PASS**.
 
 ## D — refresh/reopen persistence
 
@@ -130,7 +130,7 @@ E: **PASS**.
 
 The user reported the browser stale-overlap scenario green. A newer branch/source change won while an AI generation anchored to the older request leaf was still in flight. The late AI completion did not reactivate or overwrite the newer canonical source.
 
-This is the browser-level counterpart to the already accepted transactional `persist_brep_ai_revision(...)` compare-and-set contract.
+This is the browser-level counterpart to the accepted transactional `persist_brep_ai_revision(...)` compare-and-set contract.
 
 The deterministic database race script remains required during 3H/3I closeout:
 
@@ -165,14 +165,14 @@ did not affect STEP import or topology inspection.
 
 The dimensions exactly match the active canonical 140 x 80 x 10 mm source. The analytic cylindrical-face check proves native STEP retained analytic cylinder topology rather than exporting viewer tessellation as authority.
 
-The observed volume is also internally consistent with the persisted, mispositioned Revision 3 source. A full 140 x 80 x 10 plate has volume 112000 mm^3. With a radius-5 cylinder centered at the plate corner `(70,40)`, only one quarter of the cylinder intersects the plate, giving:
+The observed volume is also internally consistent with the original persisted, mispositioned Revision 3 source. A full 140 x 80 x 10 plate has volume 112000 mm^3. With a radius-5 cylinder centered at the plate corner `(70,40)`, only one quarter of the cylinder intersects the plate, giving:
 
 ```text
 112000 - (pi * 5^2 * 10 / 4)
 = 111803.650459...
 ```
 
-This agreement is useful evidence that STEP was derived from the actual active BRep snapshot rather than an older/expected visual state. The placement mistake is the AI coordinate-semantics finding recorded above, not an export discrepancy.
+This agreement is evidence that STEP was derived from the actual active BRep snapshot rather than an older/expected visual state. The placement mistake was the AI coordinate-semantics finding recorded above, not an export discrepancy.
 
 G: **PASS**.
 
@@ -180,11 +180,10 @@ G: **PASS**.
 
 Still required before 3H can be marked complete:
 
-1. pull the centered-origin instruction hardening and perform one narrow live AI recheck proving a requested centered hole is emitted at the local origin (normally `[0,0,0]`) rather than a half-dimension corner;
-2. create an ordinary OpenSCAD project through the normal Parametric/Generative path and confirm `/editor/$id` + `build_parametric_model` behavior;
-3. exercise a multi-file OpenSCAD follow-up through OpenCode while preserving entrypoint/support-file project state;
-4. perform final browser console/network review;
-5. run the deterministic `scripts/brep/test-brep-ai-atomic-race.sh` gate;
-6. run the focused 3H static gate from the real checkout.
+1. create an ordinary OpenSCAD project through the normal Parametric/Generative path and confirm `/editor/$id` + `build_parametric_model` behavior;
+2. exercise a multi-file OpenSCAD follow-up through OpenCode while preserving entrypoint/support-file project state;
+3. perform final browser console/network review;
+4. run the deterministic `scripts/brep/test-brep-ai-atomic-race.sh` gate;
+5. run the focused 3H static gate from the real checkout.
 
 Do not mix the separate requested direct `main.scad` Project-files editing feature into this acceptance checkpoint.
