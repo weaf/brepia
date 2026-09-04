@@ -3,7 +3,8 @@
 // Renders a searchable, filterable model visibility panel in SettingsView.
 // Users can show/hide individual models, bulk-edit the current result set,
 // group models by their effective runtime/provider, and restore defaults.
-// Changes persist to user_ai_preferences.hidden_model_ids.
+// Dynamically discovered OpenCode models are opt-in; other model sources keep
+// the existing hidden-model preference semantics.
 
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,16 @@ type ModelGroup = {
   models: CatalogEntry[];
 };
 
+interface AiPreferences {
+  hiddenModelIds: string[];
+  enabledOpenCodeModelIds: string[];
+}
+
+interface ModelVisibilityUpdate {
+  hiddenModelIds?: string[];
+  enabledOpenCodeModelIds?: string[];
+}
+
 const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
   { value: 'all', label: 'All sources' },
   { value: 'builtin', label: 'Built-in' },
@@ -64,6 +75,14 @@ function isCodexEntry(entry: CatalogEntry): boolean {
 
 function isOpenCodeEntry(entry: CatalogEntry): boolean {
   return entry.source === 'opencode' && !isCodexEntry(entry);
+}
+
+function isDynamicOpenCodeModelId(modelId: string): boolean {
+  return modelId.startsWith('agent/opencode/');
+}
+
+function isDynamicOpenCodeEntry(entry: CatalogEntry): boolean {
+  return isDynamicOpenCodeModelId(entry.id);
 }
 
 function entrySource(entry: CatalogEntry): Exclude<SourceFilter, 'all'> {
@@ -213,13 +232,12 @@ function modelOriginText(entry: CatalogEntry): string | undefined {
   return entry.provider || entry.description || undefined;
 }
 
-interface AiPreferences {
-  hiddenModelIds: string[];
-}
-
 async function fetchPreferences(): Promise<AiPreferences> {
-  const data = (await apiJson('ai-settings/preferences')) as AiPreferences;
-  return { hiddenModelIds: data.hiddenModelIds ?? [] };
+  const data = (await apiJson('ai-settings/preferences')) as Partial<AiPreferences>;
+  return {
+    hiddenModelIds: data.hiddenModelIds ?? [],
+    enabledOpenCodeModelIds: data.enabledOpenCodeModelIds ?? [],
+  };
 }
 
 function useAiPreferences() {
@@ -230,15 +248,15 @@ function useAiPreferences() {
   });
 }
 
-function useUpdateHiddenModels() {
+function useUpdateModelVisibility() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (hiddenModelIds: string[]) =>
+    mutationFn: async (update: ModelVisibilityUpdate) =>
       apiJson('ai-settings/preferences', {
         method: 'PUT',
-        body: JSON.stringify({ hiddenModelIds }),
+        body: JSON.stringify(update),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-preferences'] });
@@ -387,8 +405,29 @@ export function AiModelsSettings() {
     () => prefs?.hiddenModelIds ?? [],
     [prefs?.hiddenModelIds],
   );
-  const hiddenSet = useMemo(() => new Set(hiddenIds), [hiddenIds]);
-  const updateMutation = useUpdateHiddenModels();
+  const enabledOpenCodeIds = useMemo(
+    () => prefs?.enabledOpenCodeModelIds ?? [],
+    [prefs?.enabledOpenCodeModelIds],
+  );
+  const enabledOpenCodeSet = useMemo(
+    () => new Set(enabledOpenCodeIds),
+    [enabledOpenCodeIds],
+  );
+  const hiddenSet = useMemo(() => {
+    const effective = new Set(
+      hiddenIds.filter((modelId) => !isDynamicOpenCodeModelId(modelId)),
+    );
+    for (const entry of allEntries) {
+      if (
+        isDynamicOpenCodeEntry(entry) &&
+        !enabledOpenCodeSet.has(entry.id)
+      ) {
+        effective.add(entry.id);
+      }
+    }
+    return effective;
+  }, [allEntries, enabledOpenCodeSet, hiddenIds]);
+  const updateMutation = useUpdateModelVisibility();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [visibilityFilter, setVisibilityFilter] =
@@ -454,31 +493,67 @@ export function AiModelsSettings() {
   const hasResultFilter = Boolean(searchQuery.trim()) || activeFilterCount > 0;
 
   const handleToggle = useCallback(
-    (modelId: string) => {
-      const isCurrentlyHidden = hiddenIds.includes(modelId);
-      updateMutation.mutate(
-        isCurrentlyHidden
-          ? hiddenIds.filter((id) => id !== modelId)
-          : [...hiddenIds, modelId],
-      );
+    (entry: CatalogEntry) => {
+      if (isDynamicOpenCodeEntry(entry)) {
+        const isEnabled = enabledOpenCodeSet.has(entry.id);
+        updateMutation.mutate({
+          hiddenModelIds: hiddenIds.filter((id) => id !== entry.id),
+          enabledOpenCodeModelIds: isEnabled
+            ? enabledOpenCodeIds.filter((id) => id !== entry.id)
+            : [...new Set([...enabledOpenCodeIds, entry.id])],
+        });
+        return;
+      }
+
+      const isCurrentlyHidden = hiddenIds.includes(entry.id);
+      updateMutation.mutate({
+        hiddenModelIds: isCurrentlyHidden
+          ? hiddenIds.filter((id) => id !== entry.id)
+          : [...new Set([...hiddenIds, entry.id])],
+      });
     },
-    [hiddenIds, updateMutation],
+    [
+      enabledOpenCodeIds,
+      enabledOpenCodeSet,
+      hiddenIds,
+      updateMutation,
+    ],
   );
 
   const setEntriesVisible = useCallback(
     (entries: CatalogEntry[], visible: boolean) => {
-      const ids = new Set(entries.map((entry) => entry.id));
-      updateMutation.mutate(
-        visible
-          ? hiddenIds.filter((id) => !ids.has(id))
-          : [...new Set([...hiddenIds, ...ids])],
+      const openCodeIds = new Set(
+        entries.filter(isDynamicOpenCodeEntry).map((entry) => entry.id),
       );
+      const regularIds = new Set(
+        entries
+          .filter((entry) => !isDynamicOpenCodeEntry(entry))
+          .map((entry) => entry.id),
+      );
+
+      const cleanedHidden = hiddenIds.filter(
+        (id) => !isDynamicOpenCodeModelId(id),
+      );
+      const nextHidden = visible
+        ? cleanedHidden.filter((id) => !regularIds.has(id))
+        : [...new Set([...cleanedHidden, ...regularIds])];
+      const nextEnabledOpenCode = visible
+        ? [...new Set([...enabledOpenCodeIds, ...openCodeIds])]
+        : enabledOpenCodeIds.filter((id) => !openCodeIds.has(id));
+
+      updateMutation.mutate({
+        hiddenModelIds: nextHidden,
+        enabledOpenCodeModelIds: nextEnabledOpenCode,
+      });
     },
-    [hiddenIds, updateMutation],
+    [enabledOpenCodeIds, hiddenIds, updateMutation],
   );
 
   const handleRestoreDefaults = useCallback(() => {
-    updateMutation.mutate([]);
+    updateMutation.mutate({
+      hiddenModelIds: [],
+      enabledOpenCodeModelIds: [],
+    });
   }, [updateMutation]);
 
   const handleClearFilters = useCallback(() => {
@@ -524,8 +599,8 @@ export function AiModelsSettings() {
         <div>
           <h2 className="text-sm font-medium text-adam-neutral-50">Models</h2>
           <p className="mt-1 text-xs text-adam-neutral-400">
-            Choose which models appear in the model picker. Open one provider
-            group at a time to keep the list compact.
+            Choose which models appear in the model picker. Newly discovered
+            OpenCode models stay disabled until you enable them here.
           </p>
         </div>
         <span className="text-xs text-adam-neutral-300">
@@ -679,7 +754,10 @@ export function AiModelsSettings() {
           size="sm"
           variant="dark"
           onClick={handleRestoreDefaults}
-          disabled={updateMutation.isPending || hiddenIds.length === 0}
+          disabled={
+            updateMutation.isPending ||
+            (hiddenIds.length === 0 && enabledOpenCodeIds.length === 0)
+          }
           className="h-7 rounded-full px-2 text-xs"
         >
           <RotateCcw className="mr-1 h-3 w-3" />
@@ -780,7 +858,7 @@ export function AiModelsSettings() {
                         key={entry.id}
                         entry={entry}
                         isHidden={hiddenSet.has(entry.id)}
-                        onToggle={() => handleToggle(entry.id)}
+                        onToggle={() => handleToggle(entry)}
                         isUpdating={updateMutation.isPending}
                       />
                     ))}
