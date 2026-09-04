@@ -1,4 +1,4 @@
-# BRep Phase 3I handover
+# BRep Phase 3 handover
 
 ## Mission
 
@@ -8,15 +8,11 @@ Continue `weaf/brepia` on branch:
 feature/brep-ai-native-editing
 ```
 
-Phase 3A-3H are complete and accepted.
+Phase 3A-3I are **complete and accepted**.
 
-The only active Phase 3 step is:
+No Phase 3 implementation step remains active. The branch is in PR-review state only.
 
-```text
-3I — Phase 3 closeout
-```
-
-Do not start new product work during closeout. In particular, do not start Phase 4 graph UX, Rhino/3DM/GH interoperability, generic STEP reconstruction, arbitrary Python/build123d authoring, or the separate requested `main.scad` Project-files editing feature.
+Do not start new product work during the merge closeout. In particular, do not start Phase 4 graph UX, Rhino/3DM/GH interoperability, generic STEP reconstruction, arbitrary Python/build123d authoring, or the separate requested `main.scad` Project-files editing feature on this branch.
 
 Use small forward commits. Never amend/rebase/squash/force-push shared pushed history.
 
@@ -32,7 +28,7 @@ Use current branch implementation as source of truth and treat older phase/check
 
 ## Phase 3 accepted architecture
 
-Preserve these locks through closeout:
+Preserve these locks through PR review and merge:
 
 - `conversation.type = 'parametric'`; no separate BRep conversation type.
 - `shared/brepProject.ts` is the canonical native BRep authoring schema.
@@ -85,22 +81,18 @@ bb09063211f4cceb102461b13f94bf8b3233d18a
 Cover large model visibility preference sets
 ```
 
-## 3I branch state at entry
+## Phase 3I closeout evidence
 
-GitHub comparison against `master` at 3I entry:
+3I is complete and accepted. It added no new product functionality.
+
+The full local closeout chain was run on the real local checkout and reported green by the user at:
 
 ```text
-base/merge-base = 6e0ec92a439fb7e936a5d02001742df38a4c38d7
-branch          = feature/brep-ai-native-editing
-ahead           = 145
-behind          = 0
+87bd2fd55d61e1f4eb0c19a00b337a3e7a788cf1
+Advance Phase 3 handover to closeout
 ```
 
-No master reconciliation is currently required before closeout.
-
-## 3I required full gate
-
-Run from the real local checkout:
+Verified chain:
 
 ```bash
 scripts/brep/smoke-test.sh &&
@@ -113,25 +105,51 @@ git status --short &&
 git rev-parse HEAD
 ```
 
-The user prefers shell verification chains to continue with `&&`, including after `git diff --check`.
+The smoke run emitted:
 
-Do not claim a gate PASS unless the command actually ran successfully. Do not claim CI unless GitHub Actions actually ran.
+```text
+Fontconfig error: Cannot load default config file
+```
 
-## Closeout review after green gate
+This is recorded as a non-blocking headless/container warning because the same run continued successfully and returned:
 
-When the full local gate passes:
+```text
+{"result":"cut","triangles":732}
+```
 
-1. reconcile the full branch diff against the Phase 3 execution contract;
+Do not claim CI from this closeout run. The accepted evidence is the full local gate plus the already recorded authenticated browser/native acceptance.
+
+## Phase 3 branch/base
+
+Phase 3 was based on:
+
+```text
+6e0ec92a439fb7e936a5d02001742df38a4c38d7
+Merge pull request #20 from weaf/feature/brep-project-lifecycle
+```
+
+Working branch:
+
+```text
+feature/brep-ai-native-editing
+```
+
+At 3I entry the branch was 145 commits ahead and 0 behind `master`. Re-check the PR head/base before merge rather than relying on that historical count.
+
+## PR-review rules
+
+The only remaining work on this branch is review/merge administration:
+
+1. inspect the complete draft-PR changed-file set against `docs/brep_phase3_execution.md`;
 2. verify no accidental Phase 4+/Rhino/GH/generic reconstruction scope entered the branch;
-3. verify migrations/schemas/types are coherent;
-4. update `docs/brep_phase3_status.md` and this handover with exact final evidence/checkpoint;
-5. create or update a **draft PR** from `feature/brep-ai-native-editing` to `master`;
-6. inspect PR diff and GitHub quality gate when available;
-7. do **not** merge without explicit user approval.
+3. verify migrations/schemas/types remain coherent;
+4. inspect GitHub quality-gate results if/when they exist;
+5. fix only genuine Phase 3 regressions or closeout defects with small forward commits;
+6. do **not** merge without explicit user approval.
 
 ## Separate queued Parametric request
 
-After Phase 3 is closed, a separate requested ordinary Parametric/OpenSCAD feature is queued:
+After Phase 3 is merged, a separate requested ordinary Parametric/OpenSCAD feature is queued:
 
 > Allow direct editing and saving of the project entrypoint (`main.scad`) from Project files, not only support modules.
 
@@ -148,4 +166,4 @@ When implementing it later, preserve:
 
 ## Next action
 
-Run only the full 3I local closeout gate. If green, record final Phase 3 evidence and prepare the draft PR against `master`.
+Create or inspect the **draft PR** from `feature/brep-ai-native-editing` to `master`, review its complete changed-file set and any GitHub quality gate, and stop before merge unless the user explicitly approves it.
