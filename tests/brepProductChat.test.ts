@@ -10,12 +10,20 @@ const brepCreateSource = fs.readFileSync(
   new URL('../src/components/brep/BrepAiCreatePanel.tsx', import.meta.url),
   'utf8',
 );
+const brepEditorSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepProjectEditor.tsx', import.meta.url),
+  'utf8',
+);
 const brepIndexSource = fs.readFileSync(
   new URL('../src/routes/_layout/_auth/brep/index.tsx', import.meta.url),
   'utf8',
 );
 const brepPreviewSource = fs.readFileSync(
   new URL('../src/components/brep/BrepProjectPreview.tsx', import.meta.url),
+  'utf8',
+);
+const brepProjectServiceSource = fs.readFileSync(
+  new URL('../src/services/brepProjectService.ts', import.meta.url),
   'utf8',
 );
 const brepViewSource = fs.readFileSync(
@@ -28,6 +36,21 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /<BrepChatSession/);
     assert.match(brepViewSource, /resolveActiveBrepAiSourceForLeaf/);
     assert.match(brepViewSource, /persistBrepProjectParameterRevision/);
+  });
+
+  it('uses the shared Parametric conversation shell on desktop and mobile', () => {
+    assert.match(brepViewSource, /<ConversationView/);
+    assert.match(brepViewSource, /previewSlot={<BrepProjectViewerPanel \/>}/);
+    assert.match(
+      brepViewSource,
+      /parametersSlot={<BrepProjectParametersPanel \/>}/,
+    );
+    assert.match(
+      brepViewSource,
+      /mobilePreviewSlot={<BrepProjectViewerPanel isMobile \/>}/,
+    );
+    assert.match(brepViewSource, /mobileParametersSlot={<BrepProjectParametersPanel \/>}/);
+    assert.match(brepViewSource, />\s*Model\s*<\/Button>/);
   });
 
   it('uses the shared parametric endpoint without client-side BRep tool execution', () => {
@@ -86,6 +109,29 @@ describe('BRep product chat client boundary', () => {
       /Preview values are not yet saved as a source revision\./,
     );
     assert.doesNotMatch(brepPreviewSource, /onBlur=/);
+
+    assert.match(brepEditorSource, /browserBrepEditorEvaluationQueue/);
+    assert.match(brepEditorSource, /Save parameter revision/);
+    assert.match(brepEditorSource, /Changes update the native preview immediately/);
+  });
+
+  it('keeps revision history compact and safely removable without deleting lineage nodes', () => {
+    assert.match(brepEditorSource, /Revision history · \{revisions\.length\}/);
+    assert.match(brepEditorSource, /max-h-\[220px\]/);
+    assert.match(brepEditorSource, /\.\.\.revisions\]\.reverse\(\)/);
+    assert.match(brepEditorSource, /Delete revision/);
+    assert.match(brepEditorSource, /active \|\| !!revisionActionId/);
+    assert.match(brepViewSource, /hiddenBrepRevisionIds/);
+    assert.match(brepViewSource, /removeBrepProjectRevisionFromHistory/);
+    assert.match(brepProjectServiceSource, /brepHiddenRevisionIds/);
+    assert.match(
+      brepProjectServiceSource,
+      /not a physical message DELETE/,
+    );
+    assert.doesNotMatch(
+      brepProjectServiceSource,
+      /from\('messages'\)\s*\.delete\(/,
+    );
   });
 
   it('keeps OpenSCAD-only mesh assets out of native BRep follow-up turns', () => {
