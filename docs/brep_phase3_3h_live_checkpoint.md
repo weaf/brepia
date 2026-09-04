@@ -16,7 +16,7 @@ docs/brep_phase3_3h_acceptance.md
 
 ## Status
 
-Phase 3H is **partially accepted through A-F**. Native STEP independent inspection, OpenSCAD normal-provider/OpenCode regression, console/network closeout and the focused static checkpoint remain.
+Phase 3H is **partially accepted through G**. OpenSCAD normal-provider/OpenCode regression, console/network closeout, one narrow centered-hole regression recheck, and the focused static checkpoint remain.
 
 ## A-C — canonical AI creation, parameter-definition edit and DAG edit
 
@@ -46,7 +46,7 @@ step        = 5
 description = Overall plate width
 ```
 
-The later accepted DAG revision (Revision 3) preserved:
+The later DAG revision (Revision 3) preserved:
 
 ```text
 project.id       = mounting-plate
@@ -62,9 +62,7 @@ new nodes     = hole_cyl, hole_transform, hole_cut
 resultNodeId  = hole_cut
 ```
 
-The complete Revision 3 source retained Width 140 and added a centered cylindrical subtraction with Hole Radius default 5 mm. No whole-project ID churn occurred.
-
-The structural change therefore has the expected semantics:
+No whole-project ID churn occurred. The structural change therefore has the expected identity/diff semantics:
 
 ```text
 project:
@@ -80,9 +78,39 @@ nodes:
   unchanged: plate
 ```
 
-One schema-capability limitation was observed but is not a Phase 3 acceptance failure: the current v1 scalar grammar has parameter references but no arithmetic expression such as `width / 2`, so the AI represented the then-current center as literal transform coordinates `[70, 40, 0]`. Future derived-expression support can address dynamic re-centering after later width/depth changes.
+### 3H geometry-intent finding
 
-A-C: **PASS**.
+The C prompt requested a **centered** through-hole, but Revision 3 contained:
+
+```text
+hole_transform.translate = [70, 40, 0]
+```
+
+Independent STEP bounds later proved the plate occupies:
+
+```text
+X = -70 .. 70
+Y = -40 .. 40
+Z =  -5 .. 5
+```
+
+Therefore `[70,40,0]` is a plate corner, not its center. The persisted BRep snapshot was schema-valid and identity-stable, but the AI had inferred minimum-corner coordinate semantics instead of the evaluator's centered-origin primitive semantics.
+
+This is not a STEP/export error and does not invalidate the stable-ID/DAG contract exercised by A-C. It is nevertheless a real prompt/runtime semantic acceptance finding and must not be waived as intended geometry.
+
+The native BRep instructions were hardened after the finding:
+
+- `tool.build_brep_project` now states that box/cylinder primitives are centered at their local origin;
+- `transform.translate` is explicitly a displacement from that centered origin, not an absolute coordinate from a minimum corner;
+- a concentric cylinder in a centered box normally stays at `[0,0,0]`;
+- numeric half-dimension transforms must not be baked in when a relation is intended to stay parametric;
+- OpenCode and Codex BRep transport instructions carry the same rule;
+- instruction-catalog regression coverage asserts the rule remains present.
+
+A narrow live recheck of a centered-hole AI edit remains required after pulling this instruction hardening.
+
+A-C identity/DAG contract: **PASS**.
+Centered-hole geometric intent: **fix implemented; live recheck pending**.
 
 ## D — refresh/reopen persistence
 
@@ -112,16 +140,51 @@ scripts/brep/test-brep-ai-atomic-race.sh
 
 F browser stale race: **PASS**.
 
+## G — independent native STEP inspection
+
+Revision 3 was exported through the BRep product's native STEP path and then imported independently in the pinned `build123d-0.11.1` / OCCT container rather than inspected through the Brepia viewer.
+
+Independent inspection reported:
+
+```text
+bounds_min = -70.0 -40.0 -5.0
+bounds_max =  70.0  40.0  5.0
+dimensions = 140.0 80.0 10.0
+volume     = 111803.65045915058
+analytic_cylindrical_faces = 1
+Phase 3H STEP topology inspection PASS
+```
+
+The harmless headless container warning
+
+```text
+Fontconfig error: Cannot load default config file
+```
+
+did not affect STEP import or topology inspection.
+
+The dimensions exactly match the active canonical 140 x 80 x 10 mm source. The analytic cylindrical-face check proves native STEP retained analytic cylinder topology rather than exporting viewer tessellation as authority.
+
+The observed volume is also internally consistent with the persisted, mispositioned Revision 3 source. A full 140 x 80 x 10 plate has volume 112000 mm^3. With a radius-5 cylinder centered at the plate corner `(70,40)`, only one quarter of the cylinder intersects the plate, giving:
+
+```text
+112000 - (pi * 5^2 * 10 / 4)
+= 111803.650459...
+```
+
+This agreement is useful evidence that STEP was derived from the actual active BRep snapshot rather than an older/expected visual state. The placement mistake is the AI coordinate-semantics finding recorded above, not an export discrepancy.
+
+G: **PASS**.
+
 ## Remaining 3H acceptance
 
 Still required before 3H can be marked complete:
 
-1. select the known holed 140 x 80 x 10 mm Revision 3 source;
-2. export native STEP and independently import/inspect it through the pinned build123d/OCCT image;
-3. confirm bounds correspond to 140 x 80 x 10 mm and analytic cylindrical geometry is retained;
-4. create an ordinary OpenSCAD project through the normal Parametric/Generative path and confirm `/editor/$id` + `build_parametric_model` behavior;
-5. exercise a multi-file OpenSCAD follow-up through OpenCode while preserving entrypoint/support-file project state;
-6. perform final browser console/network review;
-7. run the focused 3H static gate from the real checkout.
+1. pull the centered-origin instruction hardening and perform one narrow live AI recheck proving a requested centered hole is emitted at the local origin (normally `[0,0,0]`) rather than a half-dimension corner;
+2. create an ordinary OpenSCAD project through the normal Parametric/Generative path and confirm `/editor/$id` + `build_parametric_model` behavior;
+3. exercise a multi-file OpenSCAD follow-up through OpenCode while preserving entrypoint/support-file project state;
+4. perform final browser console/network review;
+5. run the deterministic `scripts/brep/test-brep-ai-atomic-race.sh` gate;
+6. run the focused 3H static gate from the real checkout.
 
 Do not mix the separate requested direct `main.scad` Project-files editing feature into this acceptance checkpoint.
