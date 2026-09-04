@@ -229,10 +229,10 @@ export type AppUIMessage = UIMessage<
      * UI-only metadata: the complete project snapshot remains in the normal
      * build_parametric_model tool input and is not duplicated here. */
     artifactOrigin?: ImportedArtifactOrigin;
-    // The model's original OpenSCAD entrypoint for this message's artifact,
-    // captured lazily on the FIRST parameter edit. Parameter edits rewrite the
-    // entrypoint file in the project snapshot; this value anchors Reset / slider
-    // home / auto-range without duplicating every never-edited project.
+    // OpenSCAD entrypoint baseline used by parameter controls for Reset /
+    // slider-home / auto-range semantics. It is captured lazily before the
+    // first parameter-control edit and explicitly rebased whenever the user
+    // directly saves a new authored entrypoint source from Project files.
     originalCode?: string;
   },
   AppDataTypes,
