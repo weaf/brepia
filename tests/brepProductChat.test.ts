@@ -35,6 +35,23 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepChatSource, /submitInFlightRef\.current = false/);
   });
 
+  it('keeps persisted BRep leaf authority server-side while message caches synchronize', () => {
+    assert.match(brepViewSource, /leafPresentInMessages/);
+    assert.match(brepViewSource, /Synchronizing BRep conversation/);
+    assert.doesNotMatch(
+      brepViewSource,
+      /current_message_leaf_id:\s*userMessageId/,
+    );
+    assert.doesNotMatch(
+      brepViewSource,
+      /current_message_leaf_id:\s*newUserMessageId/,
+    );
+    assert.doesNotMatch(
+      brepChatSource,
+      /current_message_leaf_id:\s*message\.id/,
+    );
+  });
+
   it('keeps OpenSCAD-only mesh assets out of native BRep follow-up turns', () => {
     assert.match(brepChatSource, /part\.type === 'data-mesh-context'/);
     assert.match(brepChatSource, /STL attachments are OpenSCAD-only/);
