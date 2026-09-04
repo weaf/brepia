@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BrepAiContextError,
+  isBrepAiCreationRoute,
   resolveActiveBrepAiSource,
   resolveActiveBrepAiSourceForLeaf,
   serializeBrepAiProjectContext,
@@ -37,8 +38,12 @@ describe('native BRep AI source context', () => {
       { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'Make it taller.' }] },
     ]);
 
-    expect(source?.messageId).toBe('a1');
-    expect(source?.project.id).toBe(phaseOneCabinetProject.id);
+    expect(source && !isBrepAiCreationRoute(source) ? source.messageId : null).toBe(
+      'a1',
+    );
+    expect(source && !isBrepAiCreationRoute(source) ? source.project.id : null).toBe(
+      phaseOneCabinetProject.id,
+    );
   });
 
   it('uses the newest valid BRep source revision on the active branch', () => {
@@ -53,15 +58,92 @@ describe('native BRep AI source context', () => {
       { id: 'u3', role: 'user', parts: [{ type: 'text', text: 'Continue.' }] },
     ]);
 
-    expect(source?.messageId).toBe('a2');
-    expect(source?.project.name).toBe('Revised cabinet');
+    expect(source && !isBrepAiCreationRoute(source) ? source.messageId : null).toBe(
+      'a2',
+    );
+    expect(source && !isBrepAiCreationRoute(source) ? source.project.name : null).toBe(
+      'Revised cabinet',
+    );
   });
 
-  it('returns undefined for a branch with no native BRep source', () => {
+  it('returns undefined for an ordinary OpenSCAD-style branch with no native BRep source', () => {
     expect(
       resolveActiveBrepAiSource([
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Make a box.' }] },
       ]),
+    ).toBeUndefined();
+  });
+
+  it('does not infer BRep creation from prompt text', () => {
+    expect(
+      resolveActiveBrepAiSource([
+        {
+          id: 'u1',
+          role: 'user',
+          parts: [
+            {
+              type: 'text',
+              text: 'Create a native BRep cabinet, not an OpenSCAD model.',
+            },
+          ],
+          metadata: { model: 'test/model' },
+        },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('routes the first turn to BRep only from explicit persisted source intent', () => {
+    const route = resolveActiveBrepAiSource([
+      {
+        id: 'u1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Make a cabinet.' }],
+        metadata: {
+          model: 'test/model',
+          parametricSourceKind: 'brep',
+        },
+      },
+    ]);
+
+    expect(route).toMatchObject({ kind: 'creation', messageId: 'u1' });
+    expect(route && isBrepAiCreationRoute(route)).toBe(true);
+    expect(route?.project).toBeUndefined();
+  });
+
+  it('makes persisted canonical BRep source authoritative over creation intent', () => {
+    const route = resolveActiveBrepAiSource([
+      {
+        id: 'u1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Make a cabinet.' }],
+        metadata: { parametricSourceKind: 'brep' },
+      },
+      sourceMessage('a1'),
+      {
+        id: 'u2',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Make it taller.' }],
+      },
+    ]);
+
+    expect(route && isBrepAiCreationRoute(route)).toBe(false);
+    expect(route?.messageId).toBe('a1');
+  });
+
+  it('keeps product source resolution empty until canonical creation is persisted', () => {
+    expect(
+      resolveActiveBrepAiSourceForLeaf(
+        [
+          {
+            id: 'u1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'Make a cabinet.' }],
+            metadata: { parametricSourceKind: 'brep' },
+            parent_message_id: null,
+          },
+        ],
+        'u1',
+      ),
     ).toBeUndefined();
   });
 
