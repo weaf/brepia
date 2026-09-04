@@ -14,6 +14,10 @@ const brepIndexSource = fs.readFileSync(
   new URL('../src/routes/_layout/_auth/brep/index.tsx', import.meta.url),
   'utf8',
 );
+const brepPreviewSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepProjectPreview.tsx', import.meta.url),
+  'utf8',
+);
 const brepViewSource = fs.readFileSync(
   new URL('../src/views/BrepProjectView.tsx', import.meta.url),
   'utf8',
@@ -58,6 +62,23 @@ describe('BRep product chat client boundary', () => {
       brepChatSource,
       /current_message_leaf_id:\s*message\.id/,
     );
+  });
+
+  it('keeps immutable lifecycle-only BRep revisions out of the visible AI chat branch', () => {
+    assert.match(brepViewSource, /isLifecycleOnlyBrepRevision/);
+    assert.match(
+      brepViewSource,
+      /\.filter\(\(node\) => !isLifecycleOnlyBrepRevision\(node\)\)/,
+    );
+    assert.match(brepViewSource, /message\.parts\[0\]\?\.type === 'data-brep-project'/);
+  });
+
+  it('serializes rapid native evaluation and skips no-op parameter revisions', () => {
+    assert.match(brepPreviewSource, /BREP_EVALUATION_DEBOUNCE_MS/);
+    assert.match(brepPreviewSource, /evaluationQueueRef/);
+    assert.match(brepPreviewSource, /version !== evaluationVersionRef\.current/);
+    assert.match(brepPreviewSource, /parameterValuesEqual/);
+    assert.match(brepPreviewSource, /committedValuesRef/);
   });
 
   it('keeps OpenSCAD-only mesh assets out of native BRep follow-up turns', () => {
