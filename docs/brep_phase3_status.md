@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 3 — AI-native BRep editing — is in final closeout on:
+Phase 3 — AI-native BRep editing — is **complete and accepted** on:
 
 ```text
 feature/brep-ai-native-editing
@@ -33,7 +33,7 @@ Phase 1/2 execution/status files are historical evidence after merge.
 | 3F — OpenCode/Codex external-agent parity               | **complete and accepted** |
 | 3G — Product integration / creation UX                  | **complete and accepted** |
 | 3H — Browser/runtime and regression acceptance          | **complete and accepted** |
-| 3I — Phase 3 closeout                                   | **active**                |
+| 3I — Phase 3 closeout                                   | **complete and accepted** |
 
 ## Current architecture lock
 
@@ -186,9 +186,9 @@ Cover large model visibility preference sets
 
 ## 3I — Phase 3 closeout
 
-Status: **active**.
+Status: **complete and accepted**.
 
-The branch comparison at 3I entry is:
+The branch comparison at 3I entry was:
 
 ```text
 base/merge-base = 6e0ec92a439fb7e936a5d02001742df38a4c38d7
@@ -197,9 +197,16 @@ ahead           = 145
 behind          = 0
 ```
 
-3I must not add new product functionality. It is limited to closeout verification, documentation coherence and PR preparation.
+3I added no new product functionality. It was limited to closeout verification, documentation coherence and PR preparation.
 
-Required final gate from `docs/brep_phase3_execution.md`:
+The full local closeout chain from `docs/brep_phase3_execution.md` was run against the real local checkout and reported green by the user at:
+
+```text
+87bd2fd55d61e1f4eb0c19a00b337a3e7a788cf1
+Advance Phase 3 handover to closeout
+```
+
+Verified chain:
 
 ```bash
 scripts/brep/smoke-test.sh &&
@@ -212,12 +219,21 @@ git status --short &&
 git rev-parse HEAD
 ```
 
-When the full gate is green:
+The BRep smoke run emitted the headless/container warning:
 
-- record exact closeout evidence and final checkpoint;
-- review the branch diff against Phase 3 scope;
-- prepare a **draft PR** against `master`;
-- do not merge without explicit user approval.
+```text
+Fontconfig error: Cannot load default config file
+```
+
+This was non-blocking: the same run continued successfully and produced a valid native boolean/tessellation result:
+
+```text
+{"result":"cut","triangles":732}
+```
+
+No CI result is claimed by this closeout evidence; the final gate above is local verification plus the already recorded browser/native acceptance.
+
+Phase 3 is therefore ready for draft-PR review against `master`. Merge remains explicitly gated on user approval.
 
 ## Separate Parametric/OpenSCAD request
 
@@ -227,4 +243,4 @@ This is intentionally not part of BRep Phase 3. When implemented separately, pre
 
 ## Current next action
 
-Run the full 3I closeout gate above. If green, record the final Phase 3 checkpoint and prepare the draft PR against `master`.
+Prepare and inspect a **draft PR** from `feature/brep-ai-native-editing` to `master`. Do not merge without explicit user approval.
