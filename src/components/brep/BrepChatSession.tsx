@@ -2,7 +2,6 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { SuggestionPills } from '@/components/chat/SuggestionPills';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAuth } from '@/contexts/AuthContext';
 import {
   CONNECTION_INTERRUPTED_MESSAGE,
   userFacingChatError,
@@ -76,7 +75,6 @@ export function BrepChatSession({
   onChangeRating,
   onLoadingChange,
 }: BrepChatSessionProps) {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
