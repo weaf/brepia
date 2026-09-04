@@ -73,9 +73,9 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /message\.parts\[0\]\?\.type === 'data-brep-project'/);
   });
 
-  it('serializes rapid native evaluation and skips no-op parameter revisions', () => {
+  it('serializes rapid native evaluation across preview remounts and skips no-op parameter revisions', () => {
     assert.match(brepPreviewSource, /BREP_EVALUATION_DEBOUNCE_MS/);
-    assert.match(brepPreviewSource, /evaluationQueueRef/);
+    assert.match(brepPreviewSource, /browserBrepEvaluationQueue/);
     assert.match(brepPreviewSource, /version !== evaluationVersionRef\.current/);
     assert.match(brepPreviewSource, /parameterValuesEqual/);
     assert.match(brepPreviewSource, /committedValuesRef/);
