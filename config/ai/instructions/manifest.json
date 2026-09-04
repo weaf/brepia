@@ -26,6 +26,14 @@
       "supportsOverlay": true
     },
     {
+      "key": "tool.build_brep_project",
+      "label": "Build native BRep tool",
+      "description": "Instruction exposed to the model for complete canonical BRep project snapshots.",
+      "category": "tool",
+      "template": "tool-build-brep-project.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "tool.answer_user",
       "label": "Answer user tool",
       "description": "Instruction exposed to the model for answer_user.",
@@ -90,6 +98,14 @@
       "supportsOverlay": true
     },
     {
+      "key": "context.brep_project",
+      "label": "Native BRep project context",
+      "description": "Model-facing context containing the exact active canonical BRep source snapshot.",
+      "category": "context",
+      "template": "context-brep-project.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "context.creative_reference_mesh",
       "label": "Creative reference mesh context",
       "description": "Model-facing context injected for reference meshes in Creative conversations.",
@@ -127,6 +143,22 @@
       "description": "Behavioral instructions added when Generative requests run through Codex CLI.",
       "category": "transport",
       "template": "transport-codex.md",
+      "supportsOverlay": true
+    },
+    {
+      "key": "transport.opencode_brep",
+      "label": "OpenCode native BRep transport",
+      "description": "Behavioral instructions added when native BRep requests run through OpenCode.",
+      "category": "transport",
+      "template": "transport-opencode-brep.md",
+      "supportsOverlay": true
+    },
+    {
+      "key": "transport.codex_brep",
+      "label": "Codex native BRep transport",
+      "description": "Behavioral instructions added when native BRep requests run through Codex CLI.",
+      "category": "transport",
+      "template": "transport-codex-brep.md",
       "supportsOverlay": true
     },
     {

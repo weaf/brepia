@@ -37,11 +37,15 @@ describe('repository-driven AI instruction catalog', () => {
       'parametric',
       'creative',
       'tool.build_parametric_model',
+      'tool.build_brep_project',
       'vision.reference',
       'conversation.title',
       'context.parametric_attachment',
+      'context.brep_project',
       'transport.opencode',
       'transport.codex',
+      'transport.opencode_brep',
+      'transport.codex_brep',
     ]) {
       expect(keys.has(key)).toBe(true);
     }
