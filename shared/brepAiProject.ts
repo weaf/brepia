@@ -21,6 +21,10 @@ export type BrepProjectStructuralDiff = {
   summary: string;
 };
 
+export type BrepAiCreationValidation = {
+  project: BrepProject;
+};
+
 export type BrepAiFollowUpValidation = {
   project: BrepProject;
   diff: BrepProjectStructuralDiff;
@@ -59,6 +63,17 @@ export function normalizeBrepAiProjectCandidate(value: unknown): BrepProject {
         : 'AI BRep project candidate is invalid.',
     );
   }
+}
+
+/**
+ * Validate the first AI-authored native BRep source as standalone canonical
+ * creation. There is intentionally no previous project and therefore no
+ * continuity diff or fabricated identity anchor on this path.
+ */
+export function validateBrepAiCreation(
+  candidateInput: unknown,
+): BrepAiCreationValidation {
+  return { project: normalizeBrepAiProjectCandidate(candidateInput) };
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {
