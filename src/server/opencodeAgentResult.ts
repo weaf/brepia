@@ -4,21 +4,64 @@
  * This is the ONLY place that interprets a completed agent response into
  * Brepia's structured Parametric artifact and user-facing message. Both
  * transports call `parseAgentResult`, so CLI and Streaming emit identical
- * `build_parametric_model` tool-calls from the same output.
+ * Parametric tool-calls from the same output.
  */
 import crypto from 'node:crypto';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
+import { normalizeBrepAiProjectCandidate } from '@shared/brepAiProject';
+import type { BrepProject } from '@shared/brepProject';
 import {
   normalizeOpenScadProject,
   type OpenScadProject,
 } from '@shared/openScadProject';
 
+export type AgentParametricSourceKind = 'openscad' | 'brep';
+
+type AgentProject = OpenScadProject | BrepProject;
+
+export type AgentResult<TProject extends AgentProject = OpenScadProject> = {
+  project?: TProject;
+  message: string;
+};
+
 /**
  * Canonical machine-readable contract between external agents and Brepia.
  * Behavioral and environment instructions live in editable transport profiles;
  * this contract only defines the response protocol Brepia must be able to parse.
+ *
+ * OpenSCAD remains the default to preserve the historical external-agent
+ * protocol. Native BRep callers opt in explicitly.
  */
-export function buildAgentOutputContract(): string {
+export function buildAgentOutputContract(
+  sourceKind: AgentParametricSourceKind = 'openscad',
+): string {
+  if (sourceKind === 'brep') {
+    return [
+      'Final result format — return ONLY one valid JSON object.',
+      '',
+      'When returning a revised native BRep artifact:',
+      '  {"project":{"schemaVersion":1,"id":"stableProjectId","name":"...","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[],"nodes":[],"resultNodeId":"..."},"message":"short user-facing status"}',
+      '',
+      'When no CAD artifact is returned:',
+      '  {"message":"user-facing response"}',
+      '',
+      'The object must be valid JSON. Escape line breaks and other control',
+      'characters inside JSON strings rather than returning raw control characters.',
+      '',
+      'Brepia native BRep project protocol:',
+      '  - project is the COMPLETE canonical BRep project snapshot, not a patch.',
+      '  - Preserve the existing project id on follow-up edits.',
+      '  - Preserve every unchanged node id and published-parameter id.',
+      '  - Use only node/selector forms represented by the supplied BRep schema/context.',
+      '  - Never invent raw edge/face indices, OCCT identifiers, viewer triangle ids, or other topology shortcuts.',
+      '  - Never return build123d/Python source, STEP, tessellation, viewer meshes, or runtime geometry as editable source.',
+      '  - If <user_request> asks for a CAD change, project MUST be present.',
+      '',
+      'Brepia converts project into build_brep_project itself; do not wait for',
+      'a native Brepia tool call inside the external transport.',
+    ].join('\n');
+  }
+
   return [
     'Final result format — return ONLY one valid JSON object.',
     '',
@@ -47,11 +90,9 @@ export function buildAgentOutputContract(): string {
   ].join('\n');
 }
 
-export type AgentResult = { project?: OpenScadProject; message: string };
-
-type StructuredAgentResultMatch = {
+type StructuredAgentResultMatch<TProject extends AgentProject> = {
   end: number;
-  result: AgentResult;
+  result: AgentResult<TProject>;
   start: number;
 };
 
@@ -134,12 +175,17 @@ function parseStructuredEnvelope(
   }
 }
 
-function normalizeAgentProject(value: unknown): OpenScadProject | undefined {
+function normalizeAgentProject(
+  value: unknown,
+  sourceKind: AgentParametricSourceKind,
+): AgentProject | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   try {
-    return normalizeOpenScadProject(value as OpenScadProject);
+    return sourceKind === 'brep'
+      ? normalizeBrepAiProjectCandidate(value)
+      : normalizeOpenScadProject(value as OpenScadProject);
   } catch {
     return undefined;
   }
@@ -147,8 +193,9 @@ function normalizeAgentProject(value: unknown): OpenScadProject | undefined {
 
 function structuredAgentResultMatches(
   text: string,
-): StructuredAgentResultMatch[] {
-  const matches: StructuredAgentResultMatch[] = [];
+  sourceKind: AgentParametricSourceKind,
+): StructuredAgentResultMatch<AgentProject>[] {
+  const matches: StructuredAgentResultMatch<AgentProject>[] = [];
   const candidateStarts = [
     ...text.matchAll(/\{\s*"(?:project|message)"\s*:/g),
   ].flatMap((match) => (match.index === undefined ? [] : [match.index]));
@@ -193,7 +240,7 @@ function structuredAgentResultMatches(
         start,
         end: end + 1,
         result: {
-          project: normalizeAgentProject(parsed.project),
+          project: normalizeAgentProject(parsed.project, sourceKind),
           message: typeof parsed.message === 'string' ? parsed.message : '',
         },
       });
@@ -206,13 +253,31 @@ function structuredAgentResultMatches(
 
 export function parseStructuredAgentResult(
   text: string,
-): AgentResult | undefined {
-  return structuredAgentResultMatches(text).at(-1)?.result;
+): AgentResult<OpenScadProject> | undefined;
+export function parseStructuredAgentResult(
+  text: string,
+  sourceKind: 'openscad',
+): AgentResult<OpenScadProject> | undefined;
+export function parseStructuredAgentResult(
+  text: string,
+  sourceKind: 'brep',
+): AgentResult<BrepProject> | undefined;
+export function parseStructuredAgentResult(
+  text: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
+): AgentResult<AgentProject> | undefined {
+  return structuredAgentResultMatches(text, sourceKind).at(-1)?.result;
 }
 
-export function stripStructuredAgentResults(text: string): string {
+export function stripStructuredAgentResults(
+  text: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
+): string {
   let stripped = text;
-  for (const match of structuredAgentResultMatches(text).reverse()) {
+  for (const match of structuredAgentResultMatches(
+    text,
+    sourceKind,
+  ).reverse()) {
     stripped = stripped.slice(0, match.start) + stripped.slice(match.end);
   }
   return stripped.replace(/```(?:json)?\s*```/gi, '').trim();
@@ -221,52 +286,108 @@ export function stripStructuredAgentResults(text: string): string {
 export function resolveAgentResultChannels(
   text: string,
   reasoning: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): { reasoningText: string; resultText: string } {
-  const textResult = parseStructuredAgentResult(text);
-  const reasoningResult = parseStructuredAgentResult(reasoning);
+  const textResult = parseStructuredAgentResultForKind(text, sourceKind);
+  const reasoningResult = parseStructuredAgentResultForKind(
+    reasoning,
+    sourceKind,
+  );
   return {
     resultText: textResult ? text : reasoningResult ? reasoning : text,
-    reasoningText: stripStructuredAgentResults(reasoning),
+    reasoningText: stripStructuredAgentResults(reasoning, sourceKind),
   };
 }
 
-export function parseAgentResult(text: string): AgentResult {
-  const structured = parseStructuredAgentResult(text);
+function parseStructuredAgentResultForKind(
+  text: string,
+  sourceKind: AgentParametricSourceKind,
+): AgentResult<AgentProject> | undefined {
+  return structuredAgentResultMatches(text, sourceKind).at(-1)?.result;
+}
+
+export function parseAgentResult(text: string): AgentResult<OpenScadProject>;
+export function parseAgentResult(
+  text: string,
+  sourceKind: 'openscad',
+): AgentResult<OpenScadProject>;
+export function parseAgentResult(
+  text: string,
+  sourceKind: 'brep',
+): AgentResult<BrepProject>;
+export function parseAgentResult(
+  text: string,
+  sourceKind: AgentParametricSourceKind,
+): AgentResult<OpenScadProject | BrepProject>;
+export function parseAgentResult(
+  text: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
+): AgentResult<AgentProject> {
+  const structured = parseStructuredAgentResultForKind(text, sourceKind);
   if (structured) return structured;
   return { message: text.trim() };
 }
 
-export type ParametricBuildInput = {
+export type ParametricBuildInput<
+  TProject extends AgentProject = OpenScadProject,
+> = {
   title: string;
   version: string;
-  project: OpenScadProject;
-  message: string;
+  project: TProject;
+  message?: string;
 };
 
 export function parametricBuildInput(
   text: string,
-): ParametricBuildInput | undefined {
-  const result = parseAgentResult(text);
+): ParametricBuildInput<OpenScadProject> | undefined;
+export function parametricBuildInput(
+  text: string,
+  sourceKind: 'openscad',
+): ParametricBuildInput<OpenScadProject> | undefined;
+export function parametricBuildInput(
+  text: string,
+  sourceKind: 'brep',
+): ParametricBuildInput<BrepProject> | undefined;
+export function parametricBuildInput(
+  text: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
+): ParametricBuildInput<AgentProject> | undefined {
+  const result = parseAgentResultForKind(text, sourceKind);
   if (!result.project) return undefined;
   return {
-    title: 'Generated model',
+    title:
+      sourceKind === 'brep'
+        ? (result.project as BrepProject).name
+        : 'Generated model',
     version: 'v1',
     project: result.project,
-    message: result.message || 'Model generated.',
+    ...(sourceKind === 'openscad'
+      ? { message: result.message || 'Model generated.' }
+      : {}),
   };
+}
+
+function parseAgentResultForKind(
+  text: string,
+  sourceKind: AgentParametricSourceKind,
+): AgentResult<AgentProject> {
+  const structured = parseStructuredAgentResultForKind(text, sourceKind);
+  return structured ?? { message: text.trim() };
 }
 
 export function finishWithParametricToolCall(
   accumulated: string,
   finishPart: Extract<LanguageModelV3StreamPart, { type: 'finish' }>,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): LanguageModelV3StreamPart[] {
-  const input = parametricBuildInput(accumulated);
+  const input = parametricBuildInputForKind(accumulated, sourceKind);
   if (!input) return [finishPart];
   return [
     {
       type: 'tool-call',
       toolCallId: `stream-${crypto.randomUUID()}`,
-      toolName: 'build_parametric_model',
+      toolName:
+        sourceKind === 'brep' ? 'build_brep_project' : 'build_parametric_model',
       input: JSON.stringify(input),
     },
     {
@@ -274,4 +395,23 @@ export function finishWithParametricToolCall(
       finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
     },
   ];
+}
+
+function parametricBuildInputForKind(
+  text: string,
+  sourceKind: AgentParametricSourceKind,
+): ParametricBuildInput<AgentProject> | undefined {
+  const result = parseAgentResultForKind(text, sourceKind);
+  if (!result.project) return undefined;
+  return {
+    title:
+      sourceKind === 'brep'
+        ? (result.project as BrepProject).name
+        : 'Generated model',
+    version: 'v1',
+    project: result.project,
+    ...(sourceKind === 'openscad'
+      ? { message: result.message || 'Model generated.' }
+      : {}),
+  };
 }

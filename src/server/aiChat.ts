@@ -4,6 +4,11 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { chatTools, type AppUIMessage, type AppTools } from '@shared/chatAi';
 import {
+  resolveActiveBrepAiSource,
+  type BrepAiSourceRevision,
+} from '@shared/brepAiContext';
+import type { BrepAiBuildInput } from '@shared/brepAiTool';
+import {
   isAiInstructionProfileId,
   loadBundledInstruction,
   renderInstructionTemplate,
@@ -60,6 +65,16 @@ import {
   isDanglingToolPart,
   resolveDanglingToolParts,
 } from './chatToolPersistence';
+import { brepParametricTools } from './brepAiTools';
+import {
+  finalizeBrepAiAssistantParts,
+  parametricBuildToolName,
+  withBrepProjectSystemContext,
+} from './brepAiTurn';
+import {
+  persistBrepAiRevisionAtomically,
+  type BrepAiRpcClient,
+} from './brepAiPersistence';
 import { handleMeshRequest } from './mesh';
 import {
   cliAgentChatModel,
@@ -423,7 +438,9 @@ function dropTextFromParametricBuildMessage(
   parts: AppUIMessage['parts'],
 ): AppUIMessage['parts'] {
   const hasBuild = parts.some(
-    (part) => part.type === 'tool-build_parametric_model',
+    (part) =>
+      part.type === 'tool-build_parametric_model' ||
+      part.type === 'tool-build_brep_project',
   );
   if (!hasBuild) return parts;
 
@@ -910,9 +927,11 @@ export async function handleAiChatRequest(req: Request) {
   }
 
   let buildToolDescription: string;
+  let brepBuildToolDescription: string;
   let answerToolDescription: string;
   let createMeshDescription: string;
   let parametricAttachmentTemplate: string;
+  let brepProjectContextTemplate: string;
   let creativeReferenceTemplate: string;
   let meshPreferencesTemplate: string;
   let inspectionOutputTemplate: string;
@@ -921,12 +940,16 @@ export async function handleAiChatRequest(req: Request) {
   let creativeSuggestionsInstruction: string;
   let openCodeTransportInstruction: string;
   let codexTransportInstruction: string;
+  let openCodeBrepTransportInstruction: string;
+  let codexBrepTransportInstruction: string;
   try {
     [
       buildToolDescription,
+      brepBuildToolDescription,
       answerToolDescription,
       createMeshDescription,
       parametricAttachmentTemplate,
+      brepProjectContextTemplate,
       creativeReferenceTemplate,
       meshPreferencesTemplate,
       inspectionOutputTemplate,
@@ -935,11 +958,15 @@ export async function handleAiChatRequest(req: Request) {
       creativeSuggestionsInstruction,
       openCodeTransportInstruction,
       codexTransportInstruction,
+      openCodeBrepTransportInstruction,
+      codexBrepTransportInstruction,
     ] = await Promise.all([
       aiRuntime.instruction('tool.build_parametric_model'),
+      aiRuntime.instruction('tool.build_brep_project'),
       aiRuntime.instruction('tool.answer_user'),
       aiRuntime.instruction('tool.create_mesh'),
       aiRuntime.template('context.parametric_attachment'),
+      aiRuntime.template('context.brep_project'),
       aiRuntime.template('context.creative_reference_mesh'),
       aiRuntime.template('context.mesh_preferences'),
       aiRuntime.template('context.parametric_inspection_output'),
@@ -948,6 +975,8 @@ export async function handleAiChatRequest(req: Request) {
       aiRuntime.instruction('suggestions.creative'),
       aiRuntime.instruction('transport.opencode'),
       aiRuntime.instruction('transport.codex'),
+      aiRuntime.instruction('transport.opencode_brep'),
+      aiRuntime.instruction('transport.codex_brep'),
     ]);
   } catch (error) {
     logError(error, {
@@ -962,23 +991,6 @@ export async function handleAiChatRequest(req: Request) {
       500,
     );
   }
-
-  const tools =
-    conversation.type === 'creative'
-      ? creativeTools({
-          conversation,
-          req,
-          model: rawBody.model,
-          description: createMeshDescription,
-        })
-      : parametricTools({
-          supabaseClient,
-          buildDescription: buildToolDescription,
-          answerDescription: answerToolDescription,
-          inspectionOutputTemplate,
-          previewPathForToolCall: (toolCallId) =>
-            `${user.id}/${conversation.id}/inspection-preview-${toolCallId}`,
-        });
 
   let branchMessages: AppUIMessage[];
   let leafRole: 'user' | 'assistant';
@@ -1000,6 +1012,60 @@ export async function handleAiChatRequest(req: Request) {
     });
     return jsonResponse({ error: 'Failed to load conversation branch' }, 500);
   }
+
+  let activeBrepSource: BrepAiSourceRevision | undefined;
+  if (conversation.type === 'parametric') {
+    try {
+      activeBrepSource = resolveActiveBrepAiSource(branchMessages);
+    } catch (error) {
+      logError(error, {
+        functionName: 'ai-chat',
+        statusCode: 400,
+        userId: user.id,
+        conversationId: conversation.id,
+        additionalContext: { operation: 'resolve_active_brep_source' },
+      });
+      return jsonResponse(
+        { error: 'Active native BRep source is invalid' },
+        400,
+      );
+    }
+  }
+
+  resolvedSystemPrompt = withBrepProjectSystemContext({
+    systemPrompt: resolvedSystemPrompt,
+    contextTemplate: brepProjectContextTemplate,
+    activeBrepSource,
+  });
+
+  let acceptedBrepBuildInput: BrepAiBuildInput | undefined;
+
+  const tools =
+    conversation.type === 'creative'
+      ? creativeTools({
+          conversation,
+          req,
+          model: rawBody.model,
+          description: createMeshDescription,
+        })
+      : activeBrepSource
+        ? brepParametricTools({
+            activeBrepSource,
+            buildDescription: brepBuildToolDescription,
+            answerDescription: answerToolDescription,
+            onAcceptedBuild: (input) => {
+              acceptedBrepBuildInput = input;
+            },
+          })
+        : parametricTools({
+            supabaseClient,
+            buildDescription: buildToolDescription,
+            answerDescription: answerToolDescription,
+            inspectionOutputTemplate,
+            previewPathForToolCall: (toolCallId) =>
+              `${user.id}/${conversation.id}/inspection-preview-${toolCallId}`,
+          });
+  const buildToolName = parametricBuildToolName(activeBrepSource);
 
   const leafMessageId = conversation.current_message_leaf_id;
   const authoritativeOpenScadAssets =
@@ -1073,6 +1139,13 @@ export async function handleAiChatRequest(req: Request) {
     {
       tools,
       convertDataPart: (part) => {
+        if (
+          activeBrepSource &&
+          (part.type === 'data-mesh-context' ||
+            part.type === 'data-mesh-preferences')
+        ) {
+          return undefined;
+        }
         if (part.type === 'data-mesh-context') {
           const { meshId, fileType, filename, boundingBox } = part.data;
           if (conversation.type === 'parametric' && filename) {
@@ -1197,12 +1270,16 @@ export async function handleAiChatRequest(req: Request) {
         : 'chat.creativeMaxOutputTokens',
   );
   const openCodeRuntime: OpenCodeRuntimeOptions = {
-    transportInstruction: openCodeTransportInstruction,
+    transportInstruction: activeBrepSource
+      ? openCodeBrepTransportInstruction
+      : openCodeTransportInstruction,
     timeoutMs: aiRuntime.number('transport.openCodeTimeoutMs'),
     validationAttempts: aiRuntime.number(
       'transport.openCodeValidationAttempts',
     ),
-    authoritativeAssets: authoritativeOpenScadAssets,
+    authoritativeAssets: activeBrepSource ? [] : authoritativeOpenScadAssets,
+    sourceKind: activeBrepSource ? 'brep' : 'openscad',
+    currentBrepProject: activeBrepSource?.project,
   };
   const cliTimeoutMs = aiRuntime.number('transport.cliTimeoutMs');
 
@@ -1240,10 +1317,18 @@ export async function handleAiChatRequest(req: Request) {
     } else if (transport.kind === 'cli-agent') {
       chatLanguageModel = cliAgentChatModel(actualModelId, {
         transportInstruction: actualModelId.startsWith('agent/codex/')
-          ? codexTransportInstruction
-          : openCodeTransportInstruction,
+          ? activeBrepSource
+            ? codexBrepTransportInstruction
+            : codexTransportInstruction
+          : activeBrepSource
+            ? openCodeBrepTransportInstruction
+            : openCodeTransportInstruction,
         timeoutMs: cliTimeoutMs,
-        authoritativeAssets: authoritativeOpenScadAssets,
+        authoritativeAssets: activeBrepSource
+          ? []
+          : authoritativeOpenScadAssets,
+        sourceKind: activeBrepSource ? 'brep' : 'openscad',
+        currentBrepProject: activeBrepSource?.project,
       });
       chatProviderOptions = undefined;
     } else if (isCustomProviderModel(actualModelId)) {
@@ -1358,12 +1443,12 @@ export async function handleAiChatRequest(req: Request) {
         stepNumber === 0
       ) {
         return {
-          activeTools: ['build_parametric_model' as never],
+          activeTools: [buildToolName as never],
           ...(forceBuildToolChoice
             ? {
                 toolChoice: {
                   type: 'tool' as const,
-                  toolName: 'build_parametric_model' as never,
+                  toolName: buildToolName as never,
                 },
                 ...(disableThinkingForBuildStep
                   ? {
@@ -1378,9 +1463,14 @@ export async function handleAiChatRequest(req: Request) {
       }
       return {};
     },
-    stopWhen: streamingOpenCode
-      ? hasToolCall('build_parametric_model')
-      : stepCountIs(maxSteps),
+    stopWhen:
+      activeBrepSource && transport.kind !== 'normal'
+        ? hasToolCall('build_brep_project')
+        : streamingOpenCode
+          ? hasToolCall('build_parametric_model')
+          : activeBrepSource
+            ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
+            : stepCountIs(maxSteps),
     maxOutputTokens,
     abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
@@ -1403,14 +1493,12 @@ export async function handleAiChatRequest(req: Request) {
       activeGeneration.finish();
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
-        step.toolCalls?.some(
-          (call) => call.toolName === 'build_parametric_model',
-        ),
+        step.toolCalls?.some((call) => call.toolName === buildToolName),
       );
       if (!calledBuildTool) {
         logError(
           new Error(
-            'Parametric turn finished without calling build_parametric_model under auto tool-choice fallback',
+            `Parametric turn finished without calling ${buildToolName} under auto tool-choice fallback`,
           ),
           {
             functionName: 'ai-chat',
@@ -1473,12 +1561,18 @@ export async function handleAiChatRequest(req: Request) {
                 : {}),
             };
 
-            const finalizedParts =
+            const baseFinalizedParts =
               conversation.type === 'parametric'
                 ? dropTextFromParametricBuildMessage(
                     finalizeStreamingParts(responseMessage.parts),
                   )
                 : finalizeStreamingParts(responseMessage.parts);
+            const brepFinalized = finalizeBrepAiAssistantParts({
+              parts: baseFinalizedParts,
+              activeBrepSource,
+              acceptedBuildInput: acceptedBrepBuildInput,
+            });
+            const finalizedParts = brepFinalized.parts;
 
             const serializedMessage = {
               metadata: JSON.parse(JSON.stringify(metadata)),
@@ -1492,19 +1586,46 @@ export async function handleAiChatRequest(req: Request) {
             });
             let error: { message: string } | null = null;
             if (persistAction === 'update') {
-              ({ error } = await supabaseClient
-                .from('messages')
-                .update(serializedMessage)
-                .eq('id', responseMessage.id)
-                .eq('conversation_id', conversation.id));
+              if (activeBrepSource) {
+                error = {
+                  message:
+                    'Native BRep AI attempted to update an immutable assistant revision in place.',
+                };
+              } else {
+                ({ error } = await supabaseClient
+                  .from('messages')
+                  .update(serializedMessage)
+                  .eq('id', responseMessage.id)
+                  .eq('conversation_id', conversation.id));
+              }
             } else if (persistAction === 'insert') {
-              ({ error } = await supabaseClient.from('messages').insert({
-                id: responseMessage.id,
-                conversation_id: conversation.id,
-                role: responseMessage.role,
-                ...serializedMessage,
-                parent_message_id: leafMessageId,
-              }));
+              if (activeBrepSource) {
+                try {
+                  await persistBrepAiRevisionAtomically({
+                    client: supabaseClient as unknown as BrepAiRpcClient,
+                    conversationId: conversation.id,
+                    expectedLeafId: leafMessageId,
+                    messageId: responseMessage.id,
+                    parts: serializedMessage.parts,
+                    metadata: serializedMessage.metadata,
+                  });
+                } catch (persistError) {
+                  error = {
+                    message:
+                      persistError instanceof Error
+                        ? persistError.message
+                        : 'BRep AI revision persistence failed',
+                  };
+                }
+              } else {
+                ({ error } = await supabaseClient.from('messages').insert({
+                  id: responseMessage.id,
+                  conversation_id: conversation.id,
+                  role: responseMessage.role,
+                  ...serializedMessage,
+                  parent_message_id: leafMessageId,
+                }));
+              }
             } else {
               ({ error } = await supabaseClient
                 .from('messages')
@@ -1523,7 +1644,7 @@ export async function handleAiChatRequest(req: Request) {
               });
             }
 
-            if (!hasPendingToolCall && anthropicAuxiliaryAvailable) {
+            if (!error && !hasPendingToolCall && anthropicAuxiliaryAvailable) {
               await emitConversationSuggestions({
                 writer,
                 anthropic: providers.anthropic(),

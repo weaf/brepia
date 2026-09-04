@@ -32,6 +32,7 @@ import {
   type OpenScadProject,
   type OpenScadProjectAsset,
 } from '@shared/openScadProject';
+import type { BrepProject } from '@shared/brepProject';
 import {
   reconcileOpenScadProjectAssetManifest,
   resolveOpenScadAttachmentAssets,
@@ -39,6 +40,7 @@ import {
 import {
   buildAgentOutputContract,
   parseAgentResult,
+  type AgentParametricSourceKind,
   type AgentResult,
 } from './opencodeAgentResult';
 import { logWarning } from './serverLog';
@@ -106,6 +108,7 @@ export function selectChatTransport(
   modelId: string,
   executionMode: 'cli' | 'streaming',
 ): ChatTransport {
+  if (modelId.startsWith('agent/codex/')) return { kind: 'cli-agent' };
   const underlying = opencodeAgentUnderlyingModelId(modelId);
   if (underlying === undefined) return { kind: 'normal' };
   if (executionMode === 'streaming') {
@@ -383,7 +386,10 @@ function toolOutputText(value: unknown): string {
   return '';
 }
 
-function latestBuildResult(prompt: LanguageModelV3Prompt): string {
+function latestBuildResult(
+  prompt: LanguageModelV3Prompt,
+  sourceKind: AgentParametricSourceKind,
+): string {
   for (
     let messageIndex = prompt.length - 1;
     messageIndex >= 0;
@@ -399,7 +405,10 @@ function latestBuildResult(prompt: LanguageModelV3Prompt): string {
       const record = part as unknown as Record<string, unknown>;
       if (
         record['type'] !== 'tool-result' ||
-        record['toolName'] !== 'build_parametric_model'
+        record['toolName'] !==
+          (sourceKind === 'brep'
+            ? 'build_brep_project'
+            : 'build_parametric_model')
       ) {
         continue;
       }
@@ -430,8 +439,13 @@ export function buildPersistentCliAgentPrompt(
   prompt: LanguageModelV3Prompt,
   sessionExists: boolean,
   transportInstruction = '',
+  context: {
+    sourceKind?: AgentParametricSourceKind;
+    currentBrepProject?: BrepProject;
+  } = {},
 ): string {
   const lines: string[] = [];
+  const sourceKind = context.sourceKind ?? 'openscad';
 
   if (transportInstruction.trim()) {
     lines.push(
@@ -446,7 +460,8 @@ export function buildPersistentCliAgentPrompt(
     }
   }
 
-  const artifact = currentArtifact(prompt);
+  const artifact =
+    sourceKind === 'openscad' ? currentArtifact(prompt) : undefined;
   if (artifact) {
     lines.push(
       [
@@ -460,9 +475,14 @@ export function buildPersistentCliAgentPrompt(
       ].join('\n'),
     );
   }
+  if (sourceKind === 'brep' && context.currentBrepProject) {
+    lines.push(
+      `<current_brep_project>\n${JSON.stringify(context.currentBrepProject)}\n</current_brep_project>`,
+    );
+  }
 
   const userText = latestUserText(prompt);
-  const buildResult = latestBuildResult(prompt);
+  const buildResult = latestBuildResult(prompt, sourceKind);
   const isBuildContinuation =
     prompt[prompt.length - 1]?.role === 'tool' && Boolean(buildResult);
 
@@ -573,8 +593,9 @@ export function buildCliAgentArgs(
 export function buildCliAgentInstruction(
   _agent: AgentKind,
   prompt: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): string {
-  return `${prompt}\n\n${buildAgentOutputContract()}`;
+  return `${prompt}\n\n${buildAgentOutputContract(sourceKind)}`;
 }
 
 function isMissingSessionError(error: unknown): boolean {
@@ -585,7 +606,7 @@ function isMissingSessionError(error: unknown): boolean {
 }
 
 type AgentInvocation = {
-  result: AgentResult;
+  result: AgentResult<OpenScadProject | BrepProject>;
   sessionId?: string;
   reused: boolean;
 };
@@ -597,10 +618,11 @@ async function invokeAgent(
   timeoutMs: number,
   existingSessionId?: string,
   signal?: AbortSignal,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): Promise<AgentInvocation> {
   const dir =
     agent === 'opencode' ? OPEN_CODE_WORKDIR : await ensureCliAgentWorkdir();
-  const instruction = buildCliAgentInstruction(agent, prompt);
+  const instruction = buildCliAgentInstruction(agent, prompt, sourceKind);
 
   const runOnce = async (sessionId?: string) => {
     const cliResult = await runCli(
@@ -652,7 +674,7 @@ async function invokeAgent(
   });
 
   return {
-    result: parseAgentResult(parsed.text),
+    result: parseAgentResult(parsed.text, sourceKind),
     sessionId,
     reused,
   };
@@ -664,6 +686,8 @@ export function cliAgentChatModel(
     transportInstruction?: string;
     timeoutMs?: number;
     authoritativeAssets?: readonly OpenScadProjectAsset[];
+    sourceKind?: AgentParametricSourceKind;
+    currentBrepProject?: BrepProject;
   } = {},
 ): LanguageModelV3 {
   const { agent, model } = parseModelId(appModelId);
@@ -673,6 +697,7 @@ export function cliAgentChatModel(
       agent === 'opencode' ? 'transport.opencode' : 'transport.codex',
     );
   const timeoutMs = options.timeoutMs ?? bundledCliTimeoutMs();
+  const sourceKind = options.sourceKind ?? 'openscad';
 
   return {
     specificationVersion: 'v3',
@@ -691,13 +716,15 @@ export function cliAgentChatModel(
           optionsForCall.prompt,
           Boolean(existingSessionId),
           transportInstruction,
+          { sourceKind, currentBrepProject: options.currentBrepProject },
         ),
         timeoutMs,
         existingSessionId,
         optionsForCall.abortSignal,
+        sourceKind,
       );
       let result = invocation.result;
-      if (result.project) {
+      if (sourceKind === 'openscad' && result.project) {
         const currentAssets =
           currentArtifact(optionsForCall.prompt)?.project.assets ?? [];
         const authoritativeAssets = [
@@ -705,15 +732,15 @@ export function cliAgentChatModel(
           ...(options.authoritativeAssets ?? []),
         ];
         const attachmentAssets = resolveOpenScadAttachmentAssets(
-          result.project,
+          result.project as OpenScadProject,
           authoritativeAssets,
         );
         result = {
           ...result,
-          project: reconcileOpenScadProjectAssetManifest(result.project, [
-            ...authoritativeAssets,
-            ...attachmentAssets,
-          ]),
+          project: reconcileOpenScadProjectAssetManifest(
+            result.project as OpenScadProject,
+            [...authoritativeAssets, ...attachmentAssets],
+          ),
         };
       }
 
@@ -727,12 +754,20 @@ export function cliAgentChatModel(
             agent,
             invocation.sessionId,
           ),
-          toolName: 'build_parametric_model',
+          toolName:
+            sourceKind === 'brep'
+              ? 'build_brep_project'
+              : 'build_parametric_model',
           input: JSON.stringify({
-            title: 'Generated model',
+            title:
+              sourceKind === 'brep'
+                ? (result.project as BrepProject).name
+                : 'Generated model',
             version: 'v1',
             project: result.project,
-            message: result.message || 'Model generated.',
+            ...(sourceKind === 'openscad'
+              ? { message: result.message || 'Model generated.' }
+              : {}),
           }),
         });
       } else if (result.message) {

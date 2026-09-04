@@ -596,6 +596,7 @@ export type Database = {
           default_instruction_profile_id: string;
           default_parametric_model_id: string | null;
           default_prompt_profile_id: string | null;
+          enabled_opencode_model_ids: string[];
           hidden_model_ids: string[];
           instruction_profile_defaults: Json;
           model_routing: Json;
@@ -612,6 +613,7 @@ export type Database = {
           default_instruction_profile_id?: string;
           default_parametric_model_id?: string | null;
           default_prompt_profile_id?: string | null;
+          enabled_opencode_model_ids?: string[];
           hidden_model_ids?: string[];
           instruction_profile_defaults?: Json;
           model_routing?: Json;
@@ -628,6 +630,7 @@ export type Database = {
           default_instruction_profile_id?: string;
           default_parametric_model_id?: string | null;
           default_prompt_profile_id?: string | null;
+          enabled_opencode_model_ids?: string[];
           hidden_model_ids?: string[];
           instruction_profile_defaults?: Json;
           model_routing?: Json;
@@ -644,6 +647,16 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      persist_brep_ai_revision: {
+        Args: {
+          p_conversation_id: string;
+          p_expected_leaf_id: string;
+          p_message_id: string;
+          p_metadata?: Json;
+          p_parts: Json;
+        };
+        Returns: Json;
+      };
       set_conversation_suggestions: {
         Args: { p_conversation_id: string; p_suggestions: Json };
         Returns: undefined;

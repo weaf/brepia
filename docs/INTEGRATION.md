@@ -34,7 +34,7 @@ The transport selection implementation is in `src/server/cliAgents.ts`; request 
 
 `src/routes/api/parametric-chat.ts` is the TanStack server route for Parametric chat requests. It delegates chat processing to `src/server/aiChat.ts` and wraps normal requests with the conversation-workspace lifecycle.
 
-The OpenCode adapters implement the AI SDK language-model contract expected by the chat pipeline. Their final Parametric result is converted into the existing `build_parametric_model` tool-call path rather than bypassing Brepia's normal model persistence/validation flow.
+The OpenCode adapters implement the AI SDK language-model contract expected by the chat pipeline. Their final Parametric result is converted into Brepia's normal tool-call path rather than bypassing persistence/validation: OpenSCAD uses `build_parametric_model`; native BRep uses `build_brep_project`.
 
 `build_parametric_model` is project-native: its artifact carries a complete normalized `OpenScadProject` snapshot with `schemaVersion`, `entrypointPath`, every required `.scad` source file and any Brepia-authoritative explicit asset descriptors. New external-agent results do not use the legacy top-level `code` artifact shape.
 
@@ -84,11 +84,13 @@ Brepia still persists authoritative conversation/message/model state in its own 
 
 Both OpenCode execution paths preserve continuity without blindly resending an unbounded transcript.
 
-For continuation turns, the adapters provide the latest complete Parametric project artifact, the latest user request and relevant build feedback. The project snapshot is authoritative for the current model: agents must preserve unchanged support files, may edit the entrypoint and/or support files as required, and should keep `entrypointPath` stable unless restructuring is genuinely necessary.
+For OpenSCAD continuation turns, the adapters provide the latest complete Parametric project artifact, the latest user request and relevant build feedback. The project snapshot is authoritative for the current model: agents must preserve unchanged support files, may edit the entrypoint and/or support files as required, and should keep `entrypointPath` stable unless restructuring is genuinely necessary.
 
 Explicit asset descriptors are Brepia-managed authority. External agents may preserve or remove them according to the returned source references, but must not invent or mutate `storagePath`, `mediaType`, `byteLength` or `sha256` metadata.
 
 This keeps the agent grounded in the current OpenSCAD revision while Brepia retains authoritative conversation history, private asset storage and model revisions.
+
+For native BRep continuation turns, the chat server resolves the exact active canonical `BrepProject` and supplies it on every external-agent turn in `<current_brep_project>`. BRep agents return a complete BRep snapshot through the separate `build_brep_project` contract. This path does not use OpenSCAD artifact extraction, asset reconciliation, compiler validation, or repair prompts; BRep snapshot/identity validation and immutable persistence remain server-side.
 
 Do not replace this with a "fresh session per request" assumption or a single-entrypoint-source contract. Persistent-session and project-result behavior are covered by regression tests.
 
