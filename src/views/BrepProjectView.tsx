@@ -33,6 +33,27 @@ import { useParams } from '@tanstack/react-router';
 import { useCallback, useMemo, useState } from 'react';
 import type { MessageItem } from '../types/misc.ts';
 
+function hasEmptyMetadata(metadata: unknown): boolean {
+  return (
+    metadata === undefined ||
+    metadata === null ||
+    (typeof metadata === 'object' &&
+      !Array.isArray(metadata) &&
+      Object.keys(metadata).length === 0)
+  );
+}
+
+function isLifecycleOnlyBrepRevision(
+  message: Pick<ChatMessage, 'role' | 'parts' | 'metadata'>,
+): boolean {
+  return (
+    message.role === 'assistant' &&
+    message.parts.length === 1 &&
+    message.parts[0]?.type === 'data-brep-project' &&
+    hasEmptyMetadata(message.metadata)
+  );
+}
+
 export default function BrepProjectView() {
   const { id } = useParams({ from: '/_layout/_auth/brep/$id' });
   const { user } = useAuth();
@@ -154,12 +175,19 @@ function BrepProjectWorkspace() {
   const dbTree = useMemo(() => new Tree(chatMessages), [chatMessages]);
   const branchForLeaf = useCallback(
     (leafId: string): AppUIMessage[] =>
-      dbTree.getPath(leafId).map((node) => ({
-        id: node.id,
-        role: node.role,
-        parts: node.parts,
-        metadata: node.metadata,
-      })),
+      dbTree
+        .getPath(leafId)
+        // Parameter changes and source restores are immutable lifecycle nodes,
+        // not AI-authored chat turns. Keep them in the authoritative DB tree
+        // for source resolution/branching while omitting them from the cached
+        // chat branch so parameter commits cannot churn the AI client runtime.
+        .filter((node) => !isLifecycleOnlyBrepRevision(node))
+        .map((node) => ({
+          id: node.id,
+          role: node.role,
+          parts: node.parts,
+          metadata: node.metadata,
+        })),
     [dbTree],
   );
   const leafId =
