@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { createBrepProjectArtifact } from '../shared/brepProjectArtifact';
 import { phaseOneCabinetProject } from '../shared/brepSamples';
 import type { AppUIMessage } from '../shared/chatAi';
-import type { BrepAiSourceRevision } from '../shared/brepAiContext';
+import type {
+  BrepAiPersistedSourceRevision,
+  BrepAiSourceRevision,
+} from '../shared/brepAiContext';
 import type { BrepAiBuildInput } from '../shared/brepAiTool';
 import {
   executeBrepAiBuild,
@@ -11,17 +14,22 @@ import {
   withBrepProjectSystemContext,
 } from '../src/server/brepAiTurn';
 
-function activeSource(): BrepAiSourceRevision {
+function activeSource(): BrepAiPersistedSourceRevision {
   const artifact = createBrepProjectArtifact({
     title: phaseOneCabinetProject.name,
     version: 'v1',
     source: { kind: 'brep', source: phaseOneCabinetProject },
   });
   return {
+    kind: 'source',
     messageId: 'source-a1',
     artifact,
     project: phaseOneCabinetProject,
   };
+}
+
+function creationRoute(): BrepAiSourceRevision {
+  return { kind: 'creation', messageId: 'user-u1' };
 }
 
 function successfulBuildPart(
@@ -45,8 +53,9 @@ function successfulBuildPart(
 }
 
 describe('BRep AI turn routing and context', () => {
-  it('selects the BRep build tool only when an active native BRep source exists', () => {
+  it('selects the BRep build tool for persisted BRep source and explicit creation route', () => {
     expect(parametricBuildToolName(activeSource())).toBe('build_brep_project');
+    expect(parametricBuildToolName(creationRoute())).toBe('build_brep_project');
     expect(parametricBuildToolName(undefined)).toBe('build_parametric_model');
   });
 
@@ -61,10 +70,24 @@ describe('BRep AI turn routing and context', () => {
     expect(system).toContain(phaseOneCabinetProject.id);
     expect(system).not.toContain('source-a1');
   });
+
+  it('does not fabricate previous-project context for explicit creation', () => {
+    const system = withBrepProjectSystemContext({
+      systemPrompt: 'Base prompt',
+      contextTemplate: '<brep>{{projectJson}}</brep>',
+      creationContext: 'Create a canonical native BRep project.',
+      activeBrepSource: creationRoute(),
+    });
+
+    expect(system).toContain('Base prompt');
+    expect(system).toContain('Create a canonical native BRep project.');
+    expect(system).not.toContain('<brep>');
+    expect(system).not.toContain(phaseOneCabinetProject.id);
+  });
 });
 
 describe('BRep AI build execution and finalization', () => {
-  it('returns a machine-derived structural diff summary and captures the validated candidate', () => {
+  it('returns a machine-derived structural diff summary and captures the validated follow-up candidate', () => {
     const revised = {
       ...phaseOneCabinetProject,
       name: 'AI revised cabinet',
@@ -87,7 +110,33 @@ describe('BRep AI build execution and finalization', () => {
     expect(accepted?.project.name).toBe('AI revised cabinet');
   });
 
-  it('rejects project identity replacement without capturing a candidate', () => {
+  it('validates first BRep result as standalone canonical creation', () => {
+    const created = {
+      ...phaseOneCabinetProject,
+      id: 'aiCreatedCabinet',
+      name: 'AI created cabinet',
+    };
+    let accepted: BrepAiBuildInput | undefined;
+    const output = executeBrepAiBuild({
+      activeBrepSource: creationRoute(),
+      input: {
+        title: created.name,
+        version: 'v1',
+        project: created,
+      },
+      onAcceptedInput: (input) => {
+        accepted = input;
+      },
+    });
+
+    expect(output).toMatchObject({
+      status: 'success',
+      message: 'Created canonical native BRep project.',
+    });
+    expect(accepted?.project.id).toBe('aiCreatedCabinet');
+  });
+
+  it('rejects project identity replacement on follow-up without capturing a candidate', () => {
     let captured = false;
     expect(() =>
       executeBrepAiBuild({
@@ -105,7 +154,7 @@ describe('BRep AI build execution and finalization', () => {
     expect(captured).toBe(false);
   });
 
-  it('persists only the final successful build candidate as canonical source', () => {
+  it('persists only the final successful follow-up candidate as canonical source', () => {
     const first = {
       ...phaseOneCabinetProject,
       name: 'First candidate',
@@ -131,6 +180,24 @@ describe('BRep AI build execution and finalization', () => {
     expect(sourceParts).toHaveLength(1);
     expect(result.artifact?.source.source.name).toBe('Final candidate');
     expect(result.diff?.summary).toContain('project field');
+  });
+
+  it('persists first successful creation candidate without a previous-project diff', () => {
+    const created = {
+      ...phaseOneCabinetProject,
+      id: 'freshProject',
+      name: 'Fresh native project',
+    };
+    const result = finalizeBrepAiAssistantParts({
+      parts: [successfulBuildPart(created)],
+      activeBrepSource: creationRoute(),
+    });
+
+    expect(result.artifact?.source.source.id).toBe('freshProject');
+    expect(result.diff).toBeUndefined();
+    expect(
+      result.parts.filter((part) => part.type === 'data-brep-project'),
+    ).toHaveLength(1);
   });
 
   it('uses the request-local accepted candidate even when the UI message omits the build part', () => {
