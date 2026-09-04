@@ -2,11 +2,11 @@
 
 ## Scope
 
-This checkpoint records live 3F-D acceptance evidence for external OpenCode **Streaming** and **CLI** BRep editing on `feature/brep-ai-native-editing`.
+This checkpoint records final 3F-D live acceptance evidence for external OpenCode **Streaming** and **CLI** BRep editing on `feature/brep-ai-native-editing`.
 
-The transport/result/persistence portion of 3F-D is now live-accepted for both OpenCode execution modes. Do not expand into 3G until the remaining native viewer confirmation is recorded.
+Phase 3F is complete and accepted. The next planned Phase 3 step is 3G; unrelated defects should be handled separately rather than mixed into the BRep AI transport scope.
 
-## Implementation checkpoint
+## Implementation checkpoints
 
 The live fixes are contained in:
 
@@ -56,7 +56,7 @@ Root cause: the external adapter included an OpenSCAD-era `message` property ins
 
 Fix: the external agent result may still contain a user-facing `message`, but BRep tool-call input no longer includes that property. OpenSCAD keeps its existing message-bearing build input unchanged.
 
-A regression test now parses the emitted external BRep tool input through the real strict `brepAiBuildInputSchema`.
+A regression test parses emitted external BRep tool input through the real strict `brepAiBuildInputSchema`.
 
 ## Accepted Streaming evidence
 
@@ -71,7 +71,7 @@ output_status     = success
 candidate_radius  = 75
 ```
 
-This demonstrates the Streaming path reached the shared native BRep tool, passed validation, attached one canonical `data-brep-project` source snapshot and activated the revision through the existing atomic persistence path.
+This proves the Streaming path reached the shared native BRep tool, passed validation, attached one canonical `data-brep-project` source snapshot and activated the revision through the existing atomic persistence path.
 
 ## Accepted CLI evidence
 
@@ -101,29 +101,27 @@ output_status     = success
 candidate_radius  = 85
 ```
 
+The active radius-85 revision was then refreshed/reopened in the native BRep view and confirmed to evaluate/render correctly without a new browser/server error.
+
 This proves the CLI path also:
 
 - received and returned a complete native BRep snapshot;
 - emitted one successful `build_brep_project` part;
 - attached exactly one canonical `data-brep-project` source part;
 - activated the new immutable revision;
-- preserved the existing conversation/source lifecycle rather than falling back to OpenSCAD semantics.
+- preserved the existing conversation/source lifecycle rather than falling back to OpenSCAD semantics;
+- remained usable through the accepted native evaluator/viewer after refresh.
 
 Historical failed rows remain intentionally retained as regression evidence.
 
 ## Codex parity decision
 
-A separate live Codex CLI run is not required for 3F acceptance at this checkpoint. Codex and OpenCode CLI share the same source-aware `buildPersistentCliAgentPrompt`/BRep result path; focused tests already cover Codex routing, resumable session-ID parsing and native resume syntax while the shared BRep continuation test proves the CLI prompt receives the exact current `BrepProject` and no OpenSCAD artifact wrapper.
+A separate live Codex CLI run is not required for 3F acceptance. Codex and OpenCode CLI share the same source-aware `buildPersistentCliAgentPrompt`/BRep result path; focused tests cover Codex routing, resumable session-ID parsing and native resume syntax while the shared BRep continuation test proves the CLI prompt receives the exact current `BrepProject` and no OpenSCAD artifact wrapper.
 
 A future Codex live run may still be useful as an operator smoke test, but it is not necessary to duplicate the same BRep semantic acceptance merely to close 3F.
 
-## Remaining 3F-D acceptance
+## Final decision
 
-Only record the native evaluator/viewer confirmation for the active radius-85 revision. Expected evidence:
+**Phase 3F — OpenCode/Codex external-agent parity: complete and accepted.**
 
-- refresh/reopen resolves the new active BRep source;
-- native BRep evaluation succeeds;
-- rendered geometry corresponds to the radius-85 source;
-- no new browser/server error appears.
-
-Once that is confirmed, 3F can be marked complete and accepted and the next active step becomes 3G.
+The next BRep Phase 3 step is 3G — Product integration / creation UX.
