@@ -25,6 +25,10 @@ import {
   UpdateModelRoutingSchema,
   UpdateVisionModelsSchema,
 } from '@shared/aiSettings';
+import {
+  isDiscoveredOpenCodeModelId,
+  UpdateModelVisibilitySchema,
+} from '@shared/modelVisibility';
 import { CreativeRuntimeModelRoutingSchema } from '@shared/modelRouting';
 
 function preferenceResponse(data: Record<string, unknown>) {
@@ -34,6 +38,7 @@ function preferenceResponse(data: Record<string, unknown>) {
   return {
     userId: data.user_id,
     hiddenModelIds: data.hidden_model_ids ?? [],
+    enabledOpenCodeModelIds: data.enabled_opencode_model_ids ?? [],
     defaultInstructionProfileId: instructionProfile.success
       ? instructionProfile.data
       : DEFAULT_INSTRUCTION_PROFILE_ID,
@@ -90,8 +95,35 @@ export const Route = createFileRoute('/api/ai-settings/preferences')({
           const prefs = await getPreferences(user);
           const updates: Record<string, unknown> = {};
 
-          if (body.hiddenModelIds !== undefined) {
-            updates.hidden_model_ids = body.hiddenModelIds;
+          if (
+            body.hiddenModelIds !== undefined ||
+            body.enabledOpenCodeModelIds !== undefined
+          ) {
+            const parsed = UpdateModelVisibilitySchema.safeParse({
+              ...(body.hiddenModelIds !== undefined
+                ? { hiddenModelIds: body.hiddenModelIds }
+                : {}),
+              ...(body.enabledOpenCodeModelIds !== undefined
+                ? { enabledOpenCodeModelIds: body.enabledOpenCodeModelIds }
+                : {}),
+            });
+            if (!parsed.success) {
+              return json({ error: 'invalid_model_visibility_settings' }, 400);
+            }
+            if (
+              parsed.data.enabledOpenCodeModelIds?.some(
+                (modelId) => !isDiscoveredOpenCodeModelId(modelId),
+              )
+            ) {
+              return json({ error: 'invalid_opencode_model_allowlist' }, 400);
+            }
+            if (parsed.data.hiddenModelIds !== undefined) {
+              updates.hidden_model_ids = parsed.data.hiddenModelIds;
+            }
+            if (parsed.data.enabledOpenCodeModelIds !== undefined) {
+              updates.enabled_opencode_model_ids =
+                parsed.data.enabledOpenCodeModelIds;
+            }
           }
 
           if (body.defaultInstructionProfileId !== undefined) {
