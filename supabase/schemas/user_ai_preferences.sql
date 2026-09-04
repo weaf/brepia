@@ -6,6 +6,7 @@
 CREATE TABLE IF NOT EXISTS "public"."user_ai_preferences" (
     "user_id" "uuid" NOT NULL,
     "hidden_model_ids" "text"[] NOT NULL DEFAULT '{}',
+    "enabled_opencode_model_ids" "text"[] NOT NULL DEFAULT '{}',
     "default_prompt_profile_id" "uuid" NULL,
     "default_parametric_model_id" "text" NULL,
     "default_creative_model_id" "text" NULL,
@@ -20,6 +21,8 @@ CREATE TABLE IF NOT EXISTS "public"."user_ai_preferences" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
+COMMENT ON COLUMN "public"."user_ai_preferences"."enabled_opencode_model_ids" IS
+    'Explicit allowlist for dynamically discovered agent/opencode models. Newly discovered OpenCode models remain disabled until the user enables them.';
 COMMENT ON COLUMN "public"."user_ai_preferences"."default_parametric_model_id" IS
     'Model catalog id preselected for new Parametric conversations.';
 COMMENT ON COLUMN "public"."user_ai_preferences"."default_creative_model_id" IS
