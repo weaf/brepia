@@ -79,6 +79,18 @@ export type GenerationStatus = Database['public']['Enums']['generation-status'];
 export type ConversationSettings = {
   model?: Model;
   /**
+   * Explicit product/source intent used only to arm first-turn native BRep
+   * creation before a canonical data-brep-project source exists. Once a source
+   * snapshot exists, source-derived routing is authoritative again.
+   */
+  parametricSourceKind?: 'brep';
+  /**
+   * Product-level cleanup for the BRep revision picker. Hidden revisions remain
+   * intact in the immutable message lineage so historical branches, retries and
+   * source ancestry cannot be corrupted by presentation-only cleanup.
+   */
+  brepHiddenRevisionIds?: string[];
+  /**
    * Repository-backed AI instruction package pinned when the conversation is
    * created. Model selection remains independent. Old conversations without
    * this field fall back to the user's current package for compatibility.
