@@ -234,7 +234,20 @@ Live browser acceptance on 2026-09-04 reported all agreed desktop/mobile checks 
 
 Status: **active**.
 
-Minimum acceptance from `docs/brep_phase3_execution.md`:
+Reproducible live runbook:
+
+```text
+docs/brep_phase3_3h_acceptance.md
+```
+
+Runbook checkpoint:
+
+```text
+3444f9c1e14e58c8a0233cde2940e9753873949a
+Add Phase 3H acceptance runbook
+```
+
+Minimum acceptance from `docs/brep_phase3_execution.md` remains:
 
 1. create a BRep project through AI;
 2. make a parameter-definition/default follow-up edit;
@@ -269,6 +282,6 @@ When implemented, preserve:
 
 ## Current next action
 
-Continue only with **3H — browser/runtime and regression acceptance** using `docs/brep_phase3_codex_handover.md` as the active handover.
+Execute the live flow in `docs/brep_phase3_3h_acceptance.md`, capture exact ID/diff/lineage/stale/STEP/OpenSCAD evidence, and fix only narrow regressions found by that pass.
 
 Do not start Phase 4 graph UX, Rhino/3DM/GH interoperability or generic STEP reconstruction as part of 3H.
