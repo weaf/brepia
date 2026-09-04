@@ -312,15 +312,22 @@ export async function buildCatalog(
 export function filterSelectableCatalog(
   catalog: CatalogEntry[],
   hiddenIds: Set<string>,
-  enabledOpenCodeIds: Set<string> = new Set(),
+  enabledOpenCodeIds?: Set<string>,
 ): CatalogEntry[] {
   return catalog.filter((entry) => {
-    if (
-      !isModelVisibleByPreference(entry, {
-        hiddenModelIds: hiddenIds,
-        enabledOpenCodeModelIds: enabledOpenCodeIds,
-      })
-    ) {
+    if (enabledOpenCodeIds) {
+      if (
+        !isModelVisibleByPreference(entry, {
+          hiddenModelIds: hiddenIds,
+          enabledOpenCodeModelIds: enabledOpenCodeIds,
+        })
+      ) {
+        return false;
+      }
+    } else if (hiddenIds.has(entry.id)) {
+      // Keep the low-level helper backwards compatible for callers that do not
+      // yet provide the explicit OpenCode allowlist. User-facing catalog paths
+      // always pass the third argument and therefore use opt-in semantics.
       return false;
     }
     if (!entry.enabled) return false;
