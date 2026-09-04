@@ -26,6 +26,15 @@ describe('BRep product chat client boundary', () => {
     assert.doesNotMatch(brepChatSource, /build_parametric_model/);
   });
 
+  it('isolates native BRep chat state from the OpenSCAD editor cache and guards duplicate submits', () => {
+    assert.match(brepChatSource, /const chatCacheId = `brep:\$\{conversation\.id\}`/);
+    assert.match(brepChatSource, /id:\s*chatCacheId/);
+    assert.match(brepChatSource, /const submitInFlightRef = useRef\(false\)/);
+    assert.match(brepChatSource, /if \(submitInFlightRef\.current\) return/);
+    assert.match(brepChatSource, /submitInFlightRef\.current = true/);
+    assert.match(brepChatSource, /submitInFlightRef\.current = false/);
+  });
+
   it('keeps OpenSCAD-only mesh assets out of native BRep follow-up turns', () => {
     assert.match(brepChatSource, /part\.type === 'data-mesh-context'/);
     assert.match(brepChatSource, /STL attachments are OpenSCAD-only/);
