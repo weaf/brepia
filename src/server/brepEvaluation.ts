@@ -22,6 +22,7 @@ export const BREP_EVALUATION_TIMEOUT_MS = 45_000;
 export const BREP_EVALUATION_OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024;
 export const BREP_EVALUATION_DEFAULT_MAX_CONCURRENT = 1;
 const BREP_EVALUATION_MAX_CONCURRENT_LIMIT = 4;
+const THREEDM_HEADER_PREFIX = '3D Geometry File Format ';
 let activeEvaluations = 0;
 
 export class BrepEvaluationError extends Error {
@@ -221,6 +222,7 @@ function validSuccess(
 export type BrepEvaluationArtifact = {
   result: BrepEvaluationResult;
   stepBytes?: Uint8Array;
+  threeDmBytes?: Uint8Array;
 };
 
 export async function evaluateBrepProject(
@@ -256,6 +258,25 @@ export async function exportBrepProjectToStep(
   return artifact.stepBytes;
 }
 
+/**
+ * Return the Rhino/openNURBS interoperability artifact emitted by the same
+ * isolated evaluator. The 3DM contains tessellated project-object geometry and
+ * semantic data; exact primary CAD fidelity remains the embedded STEP payload.
+ */
+export async function exportBrepProjectTo3dm(
+  project: BrepProject,
+  parameterValues?: BrepParameterValues,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  const artifact = await evaluateBrepProject(project, parameterValues, signal);
+  if (artifact.result.status !== 'success' || !artifact.threeDmBytes)
+    throw new BrepEvaluationError(
+      'output_invalid',
+      'BRep sandbox did not produce a valid 3DM interoperability artifact.',
+    );
+  return artifact.threeDmBytes;
+}
+
 export async function evaluateNormalizedBrepProject(
   request: NormalizedBrepEvaluationRequest,
   signal?: AbortSignal,
@@ -272,6 +293,7 @@ export async function evaluateNormalizedBrepProject(
     const outputDir = path.join(workspace, 'output');
     const resultPath = path.join(outputDir, 'result.json');
     const stepPath = path.join(outputDir, 'model.step');
+    const threeDmPath = path.join(outputDir, 'model.3dm');
 
     await writeFile(inputPath, JSON.stringify(request), 'utf8');
     throwIfEvaluationAborted(signal);
@@ -342,18 +364,53 @@ export async function evaluateNormalizedBrepProject(
         'output_invalid',
         'BRep sandbox produced an invalid result contract.',
       );
+
     const stepStat = await lstat(stepPath).catch(() => undefined);
     let stepBytes: Uint8Array | undefined;
-    if (
-      stepStat?.isFile() &&
-      !stepStat.isSymbolicLink() &&
-      stepStat.size <= BREP_EVALUATION_OUTPUT_LIMIT_BYTES
-    ) {
+    if (stepStat?.isFile() && !stepStat.isSymbolicLink()) {
+      if (stepStat.size > BREP_EVALUATION_OUTPUT_LIMIT_BYTES)
+        throw new BrepEvaluationError(
+          'output_too_large',
+          'BRep sandbox STEP artifact exceeds the output limit.',
+        );
       const bytes = await readFile(stepPath);
       if (bytes.subarray(0, 128).toString('ascii').includes('ISO-10303-21'))
         stepBytes = new Uint8Array(bytes);
+      else
+        throw new BrepEvaluationError(
+          'output_invalid',
+          'BRep sandbox produced an invalid STEP artifact.',
+        );
     }
-    return { result: parsed, ...(stepBytes ? { stepBytes } : {}) };
+
+    const threeDmStat = await lstat(threeDmPath).catch(() => undefined);
+    let threeDmBytes: Uint8Array | undefined;
+    if (threeDmStat?.isFile() && !threeDmStat.isSymbolicLink()) {
+      if (threeDmStat.size > BREP_EVALUATION_OUTPUT_LIMIT_BYTES)
+        throw new BrepEvaluationError(
+          'output_too_large',
+          'BRep sandbox 3DM artifact exceeds the output limit.',
+        );
+      const bytes = await readFile(threeDmPath);
+      if (
+        bytes
+          .subarray(0, Math.max(64, THREEDM_HEADER_PREFIX.length))
+          .toString('ascii')
+          .startsWith(THREEDM_HEADER_PREFIX)
+      )
+        threeDmBytes = new Uint8Array(bytes);
+      else
+        throw new BrepEvaluationError(
+          'output_invalid',
+          'BRep sandbox produced an invalid 3DM artifact.',
+        );
+    }
+
+    return {
+      result: parsed,
+      ...(stepBytes ? { stepBytes } : {}),
+      ...(threeDmBytes ? { threeDmBytes } : {}),
+    };
   } finally {
     release();
     if (workspace) {
