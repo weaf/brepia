@@ -36,12 +36,14 @@ describe('BRep graph/editor UI boundary', () => {
     );
   });
 
-  it('uses a bounded single-column graph on mobile instead of clipping desktop topology', () => {
-    assert.match(graphSource, /useIsMobile\(\)/);
-    assert.match(graphSource, /layoutGraph\(graph, isMobile\)/);
-    assert.match(graphSource, /MOBILE_NODE_WIDTH/);
-    assert.match(graphSource, /orderedNodes/);
-    assert.match(graphSource, /overflow-x-hidden overflow-y-auto/);
-    assert.match(graphSource, /marginInline: 'auto'/);
+  it('adapts topology to the graph container width instead of the device viewport', () => {
+    assert.match(graphSource, /graphViewportRef/);
+    assert.match(graphSource, /graphViewportWidth/);
+    assert.match(graphSource, /ResizeObserver/);
+    assert.match(graphSource, /layoutGraph\(graph, graphViewportWidth\)/);
+    assert.match(graphSource, /MIN_FITTED_NODE_WIDTH/);
+    assert.match(graphSource, /COMPACT_COLUMN_GAP/);
+    assert.match(graphSource, /layoutSingleColumn/);
+    assert.doesNotMatch(graphSource, /useIsMobile/);
   });
 });
