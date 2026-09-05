@@ -2,56 +2,63 @@
 
 ## Status
 
-Phase 4 — Brepia graph/editor UX — is active on current `master`.
+Phase 4 — Brepia graph/editor UX — is complete.
 
-Accepted Phase 4C checkpoint:
+Accepted Phase 4 checkpoints:
 
 ```text
+Phase 4A
+PR #26 — Phase 4A: direct BRep feature editing
+
+Phase 4B
+1f71a34367fbb923d829a5be61fc2acfe3eb0d44
+Merge pull request #27 from weaf/feature/brep-graph-visualization
+Phase 4B: BRep dependency graph navigation
+
+Phase 4C
 bb5ac6e29d8361074cfb78881e1b4a0ab7575c82
 Merge pull request #28 from weaf/feature/brep-structural-dag-authoring
 Phase 4C: structural BRep DAG authoring
+
+Phase 4D
+PR #29 — Phase 4D: BRep project definition editing
 ```
 
-Active Phase 4D branch:
+PR #29 is the Phase 4 closeout vehicle. Its merge commit on `master` is the final Phase 4 master checkpoint.
 
-```text
-feature/brep-project-definition-editing
-```
+The current implementation is the source of truth. Historical BRep phase documents are evidence only unless explicitly selected for a later task.
 
-The current implementation is the source of truth. Historical BRep phase documents are evidence only unless this contract explicitly carries a boundary forward.
+## Completed Phase 4 product surface
 
-## Reconciled starting point
-
-The accepted BRep stack already provides:
+The accepted BRep stack now provides:
 
 - canonical, kernel-neutral `BrepProject` snapshots in `shared/brepProject.ts`;
-- stable project, parameter and node IDs;
-- validated acyclic node references;
+- stable project, published-parameter and feature/node IDs;
+- validated acyclic feature references;
 - current node types `box`, `cylinder`, `transform`, `subtract`, and `fillet`;
 - immutable assistant `data-brep-project` source revisions selected by `current_message_leaf_id`;
 - direct published-parameter value editing with native preview and explicit immutable parameter revision save;
 - direct structured editing of every existing feature type from Phase 4A;
 - dependency graph visualization, synchronized selection and Inputs / Used by navigation from Phase 4B;
 - validated node creation/deletion, dependency rewiring and explicit result-node selection from Phase 4C;
+- direct project-definition editing for project name, published numeric parameter definitions, placement plane and metadata from Phase 4D;
 - complete-project normalization and compare-and-set persistence for direct source saves;
 - AI creation/editing through complete validated canonical snapshots;
 - restore, branch, retry and stale-write protection;
 - read-only canonical `project.brep.json` inspection;
 - isolated build123d/OCCT evaluation and exact native STEP export.
 
-The remaining Phase 4 gap is direct editing of the reusable project definition itself: published parameter definitions, component placement contract and project metadata.
-
-## Phase 4 architecture locks
+## Phase 4 architecture locks carried forward
 
 1. `BrepProject` remains the only canonical BRep authoring model.
 2. Graph/editor/project-definition UI is a view and editor over that model, never a second runtime or second source of truth.
-3. Existing immutable revision lineage remains authoritative. Direct editor saves create complete normalized source snapshots rather than mutating historical revisions.
-4. Direct source persistence must use compare-and-set activation against the expected active leaf so overlapping AI/parameter/editor writes cannot reactivate stale source.
+3. Immutable revision lineage remains authoritative. Direct editor saves create complete normalized source snapshots rather than mutating historical revisions.
+4. Direct source persistence uses compare-and-set activation against the expected active leaf so overlapping AI/parameter/editor writes cannot reactivate stale source.
 5. Native evaluation remains the existing isolated build123d/OCCT path.
 6. `conversation.type` remains `parametric`.
 7. Existing project/node/parameter IDs remain stable. New semantic objects receive stable IDs at creation.
-8. OpenSCAD behavior, source routing and project editing remain out of scope for Phase 4.
-9. Rhino/Grasshopper, 3DM and project-object export contracts remain later roadmap phases.
+8. OpenSCAD behavior, source routing and project editing remain separate from the BRep graph/editor contract.
+9. Rhino/Grasshopper, 3DM and project-object interoperability remain later roadmap phases.
 
 ## 4A — Existing feature inspector/editor — complete
 
@@ -63,47 +70,44 @@ Phase 4B provides deterministic presentation-only graph derivation, result visua
 
 ## 4C — Structural DAG authoring — complete
 
-Phase 4C provides validated creation of all current node types, explicit stable IDs, existing structured dependency rewiring, explicit result-node selection, confirmed non-cascading safe deletion and immutable source revisions. Desktop/mobile browser acceptance confirmed the intended semantics, including that newly created detached features do not become the rendered result until **Set result** is explicitly chosen.
+Phase 4C provides validated creation of all current node types, explicit stable IDs, structured dependency rewiring, explicit result-node selection, confirmed non-cascading safe deletion and immutable source revisions.
 
-## 4D — Project definition editing and Phase 4 closeout — active
+Newly created detached features intentionally do not become the rendered result until **Set result** is explicitly chosen. The native viewer renders the canonical `resultNodeId`; this is model semantics rather than a rendering defect. A future UX pass may make that behavior more pedagogical without changing the canonical contract.
 
-### Product behavior
+## 4D — Project definition editing — complete
 
-Add a compact **Project definition** surface inside the existing Parameters scroll flow. It remains collapsed by default so normal parameter and feature authoring retain vertical priority, especially on mobile.
+Phase 4D adds a compact, collapsed-by-default **Project definition** surface inside the existing Parameters scroll flow. The editor covers:
 
-The editor covers four canonical definition areas:
-
-1. project identity display and editable project name;
+1. stable project identity display and editable project name;
 2. published numeric parameter definitions;
 3. reusable component placement plane;
-4. object metadata and custom properties.
+4. bounded object metadata and custom properties.
 
-All definition edits are draft UI state until the user explicitly chooses **Save project definition**. A successful save creates one complete immutable BRep source revision through the existing guarded `saveProjectSource` / `onProjectSourceCommit` compare-and-set path.
+All definition edits remain draft UI state until **Save project definition**. A successful save creates one complete immutable BRep source revision through the existing guarded `saveProjectSource` / `onProjectSourceCommit` compare-and-set path.
 
 ### Project identity
 
 - `project.id` is stable and read-only.
-- `project.name` is directly editable and canonical validation remains authoritative for text bounds.
+- `project.name` is directly editable.
 - Schema version and unit system are not exposed as editable fields.
 
 ### Published parameter definitions
 
-The existing **Dimensions** section continues to edit the current values/default-backed preview controls. 4D separately edits the reusable published parameter contract.
+The **Dimensions** section edits current parameter values/default-backed preview controls. **Project definition** edits the reusable published parameter contract.
 
 For numeric published parameters:
 
-- add a new parameter with an explicit stable ID;
-- edit label, default, optional min/max/step and description;
-- choose unit `mm`, `deg`, or `none` for new or currently unreferenced parameters;
+- new parameters receive explicit stable IDs;
+- label, default, optional min/max/step and description are editable;
+- unit may be `mm`, `deg`, or `none`;
 - existing parameter IDs are read-only;
-- existing numeric parameter type remains `number`;
-- duplicate/invalid IDs and invalid numeric bounds are rejected by canonical normalization;
+- duplicate/invalid IDs and invalid numeric bounds fail canonical validation;
 - referenced parameters cannot be deleted;
-- a referenced existing parameter cannot change unit until its references have been rewired;
-- parameter usage detection covers both feature scalars/vectors and the placement plane;
-- removing an unreferenced parameter is explicit draft state and becomes historical only when the definition revision is saved.
+- a referenced existing parameter cannot change unit until its references are rewired;
+- usage detection covers feature scalars/vectors and the placement plane;
+- removing an unreferenced parameter creates historical change only when the definition revision is saved.
 
-4D does not add string/boolean/enum parameter types.
+Phase 4 does not add string/boolean/enum parameter types.
 
 ### Placement plane
 
@@ -115,72 +119,71 @@ xAxis: unitless vector
 yAxis: unitless vector
 ```
 
-Each scalar may remain a literal or reference a compatible published parameter.
+Each scalar may be a literal or compatible published-parameter reference.
 
-Placement semantics are deliberately explicit:
+Placement is the reusable component placement contract intended for future Grasshopper/project composition. It is not a hidden transform applied to current local OCCT/build123d component geometry, so editing placement does not promise that the native local preview visibly moves.
 
-- it is the reusable component placement contract intended for future Grasshopper/project composition;
-- it is **not** a hidden transform applied to the current local OCCT/build123d component geometry;
-- editing placement therefore does not promise that the native local preview visibly moves;
-- the candidate definition is canonicalized and its default parameter values must resolve to non-zero, non-collinear placement axes before persistence.
-
-Dynamic parameter overrides continue to pass through the existing evaluation-time placement validation.
+The candidate definition is canonicalized and default parameter values must resolve to non-zero, non-collinear placement axes before persistence. Dynamic parameter overrides continue through the existing evaluation-time placement validation.
 
 ### Metadata
 
-Directly edit the bounded canonical metadata already supported by `BrepProject`:
+Phase 4D directly edits the bounded metadata already carried by `BrepProject`:
 
 - optional `objectType`;
 - optional `classification`;
 - bounded custom string properties.
 
-Property keys remain canonical BRep IDs and values remain bounded text. Empty/duplicate/invalid property keys fail before source persistence.
+Property keys remain canonical BRep IDs and values remain bounded text.
 
-### Concurrency / dirty-state behavior
+## Concurrency and revision semantics
 
-Project-definition writes use the same source-authoring guard as Phase 4C and are disabled while:
+Feature, structural and project-definition source writes share the same source-authoring guard and are blocked while:
 
 - an AI turn is streaming;
-- there are unsaved parameter preview values;
+- unsaved parameter preview values exist;
 - a parameter revision save is active;
 - another source save is active;
 - a revision action is active;
 - an export action that already blocks source editing is active.
 
-Read-only project files, graph navigation and ordinary viewing remain available according to the existing accepted behavior.
+Read-only project files, graph navigation and ordinary viewing remain available according to the accepted editor behavior.
 
-### Explicit 4D non-goals
+Every accepted authoring operation persists a complete canonical source snapshot and preserves historical revisions. Restore/revision selection can therefore move between pre/post feature, structural and definition states without mutating history.
 
-Do not add in this slice:
+## Explicit Phase 4 non-goals
+
+Phase 4 intentionally does not add:
 
 - editing `project.id`, schema version or unit system;
-- renaming existing parameter IDs;
-- new parameter value types beyond numeric;
-- hidden cascade deletion of parameter references;
+- renaming existing node or parameter IDs;
+- node-type conversion for existing nodes;
+- parameter value types beyond numeric;
+- implicit cascading node or parameter-reference deletion;
+- graph drag/drop rewiring or persisted graph coordinates;
+- freeform canvas authoring;
 - applying the placement plane as a new native geometry transform;
-- editable graph coordinates/freeform canvas behavior;
-- new BRep node types;
+- new BRep node types beyond the accepted five;
 - browser-side geometry execution;
 - Grasshopper/Rhino/3DM export or runtime integration;
 - broader OpenSCAD UX changes.
 
-## 4D acceptance and Phase 4 closeout
+## Phase 4 acceptance closeout
 
-Phase 4 closes only when all of the following hold:
+Phase 4A–4C were browser/native accepted and merged before 4D began.
 
-1. **Project definition** is compact/collapsible in desktop and mobile Parameters views and opens a usable responsive editor dialog.
-2. Project name can be changed and survives refresh/reopen while stable project ID remains unchanged/read-only.
-3. A new numeric published parameter can be added with a stable ID and appears in **Dimensions** after the new source revision activates.
-4. Parameter label/default/min/max/step/description edits survive refresh/reopen and continue to drive the existing parameter controls/native preview correctly.
-5. Duplicate/invalid parameter IDs and invalid min/max/default/step combinations are rejected before active source replacement.
-6. Referenced parameters cannot be deleted and their unit cannot be changed until references are rewired; the UI identifies the canonical usage fields.
-7. An unreferenced parameter can be removed and remains present in older immutable revisions.
-8. Placement origin/xAxis/yAxis literals and compatible parameter references can be edited; zero/collinear default axes are rejected before persistence.
-9. Placement copy clearly explains that it is a component/project-composition contract and does not claim to move local native preview geometry.
-10. Metadata object type, classification and custom properties can be added/edited/removed and survive refresh/reopen; invalid property keys fail closed.
-11. Definition saves create one immutable source revision and restore/revision selection moves correctly between pre/post-definition snapshots.
-12. Unsaved parameter preview and AI streaming block definition writes without breaking existing read-only/navigation behavior.
-13. Exact STEP and canonical project-package export remain derived from the selected saved source; ordinary OpenSCAD workflows remain unchanged.
-14. Repository tests/typecheck/lint/build/diff checks are green and focused desktop/mobile browser acceptance is recorded before merge.
+Phase 4D browser acceptance was recorded on 2026-09-05. The accepted checks covered:
 
-After acceptance, this document should be updated in the same branch to record the final Phase 4 checkpoint and mark Phase 4 complete before merge.
+- responsive Project definition UI on desktop/mobile;
+- project-name persistence with stable project ID;
+- published parameter creation/editing/removal and validation;
+- referenced-parameter delete/unit protection;
+- placement editing and non-zero/non-collinear validation;
+- metadata editing and validation;
+- immutable revision selection/restore across definition changes;
+- regression of ordinary parameter/feature editing;
+- canonical project-package and exact STEP export behavior;
+- unsaved-parameter/source-write coordination.
+
+Quality Gate #365 passed tests, typecheck, lint, build and diff check on the accepted Phase 4D implementation before closeout.
+
+With PR #29 merged, BRep Phase 4 is complete. Later work should start from current `master` and treat this document as completed-phase evidence rather than an active task queue.
