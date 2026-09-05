@@ -4,6 +4,8 @@ import {
   type BrepParameterUnit,
   type BrepProject,
   type BrepProjectMetadata,
+  type BrepProjectObjectDefinition,
+  type BrepProjectObjectPointKind,
   type BrepProjectPlacement,
   type BrepPublishedNumberParameter,
   type BrepScalar,
@@ -67,6 +69,20 @@ export function suggestBrepParameterId(project: BrepProject): string {
     if (!existing.has(candidate)) return candidate;
   }
   throw new Error('Could not suggest a unique BRep published parameter ID.');
+}
+
+export function suggestBrepProjectObjectPointId(
+  project: BrepProject,
+  kind: BrepProjectObjectPointKind = 'connection',
+): string {
+  const points = project.projectObject?.points ?? [];
+  const existing = new Set(points.map((point) => point.id));
+  if (!existing.has(kind)) return kind;
+  for (let index = 2; index <= points.length + 2; index += 1) {
+    const candidate = `${kind}${index}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  throw new Error(`Could not suggest a unique BRep ${kind} point ID.`);
 }
 
 function scalarReferencesParameter(
@@ -207,6 +223,22 @@ export function replaceBrepProjectDefinition(
   );
   resolveBrepProjectPlacement(nextProject.placement, defaultValues);
   return nextProject;
+}
+
+/**
+ * Replace only semantic project-object outputs while preserving project
+ * identity, feature DAG, result authority, placement, metadata and published
+ * parameter definitions. The canonical normalizer validates every role and
+ * scalar reference and removes an empty projectObject block.
+ */
+export function replaceBrepProjectObjectDefinition(
+  project: BrepProject,
+  projectObject?: BrepProjectObjectDefinition,
+): BrepProject {
+  return normalizeBrepProject({
+    ...project,
+    projectObject,
+  });
 }
 
 export function brepParameterUnitIsReferenced(
