@@ -204,10 +204,7 @@ describe('isolated BRep evaluation boundary', () => {
 
   it('rejects invalid 3DM artifact headers before exposing bytes', async () => {
     process.env.PCAD_BREP_RUNNER = await fakeRunner(
-      validRunnerBody.replace(
-        "printf '3D Geometry File Format 80\\n' > \"$OUTPUT/model.3dm\"",
-        "printf 'not-a-3dm' > \"$OUTPUT/model.3dm\"",
-      ),
+      validRunnerBody.replace('3D Geometry File Format 80', 'not-a-3dm'),
     );
     await expectBrepError(
       () => exportBrepProjectTo3dm(project(), { width: 20 }),
