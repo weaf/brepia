@@ -96,7 +96,7 @@ function finiteVector(value: unknown): value is [number, number, number] {
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true;
+  if (left === right) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
     return (
       Array.isArray(left) &&
