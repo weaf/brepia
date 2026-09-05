@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ChevronDown, Plus, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +33,11 @@ const NONE_NODE = '__none__';
 const LITERAL_VALUE = '__literal__';
 const fieldClass =
   'h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue-dark disabled:cursor-not-allowed disabled:opacity-60';
+
+type PointDraftRow = {
+  key: string;
+  existing: boolean;
+};
 
 function cloneProjectObject(project: BrepProject): BrepProjectObjectDefinition {
   return JSON.parse(
@@ -343,11 +348,9 @@ export function BrepProjectObjectEditor({
   const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<BrepProjectObjectDefinition | null>(null);
+  const [pointRows, setPointRows] = useState<PointDraftRow[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
-  const existingPointIds = useMemo(
-    () => new Set((project.projectObject?.points ?? []).map((point) => point.id)),
-    [project.projectObject?.points],
-  );
+  const nextPointRowKey = useRef(0);
   const roleCount = [
     project.projectObject?.footprintNodeId,
     project.projectObject?.clearanceEnvelopeNodeId,
@@ -357,7 +360,15 @@ export function BrepProjectObjectEditor({
 
   const openEditor = () => {
     if (disabled || saving) return;
-    setDraft(cloneProjectObject(project));
+    const nextDraft = cloneProjectObject(project);
+    nextPointRowKey.current = 0;
+    setDraft(nextDraft);
+    setPointRows(
+      (nextDraft.points ?? []).map((point) => ({
+        key: `existing:${point.id}`,
+        existing: true,
+      })),
+    );
     setLocalError(null);
     setDialogOpen(true);
   };
@@ -378,6 +389,8 @@ export function BrepProjectObjectEditor({
         draftProject(project, draft),
         'connection',
       );
+      const key = `new:${nextPointRowKey.current}`;
+      nextPointRowKey.current += 1;
       setDraft({
         ...draft,
         points: [
@@ -389,6 +402,7 @@ export function BrepProjectObjectEditor({
           },
         ],
       });
+      setPointRows([...pointRows, { key, existing: false }]);
       setLocalError(null);
     } catch (reason) {
       setLocalError(
@@ -407,6 +421,16 @@ export function BrepProjectObjectEditor({
         (_, candidate) => candidate !== index,
       ),
     });
+    setPointRows(
+      pointRows.filter((_, candidate) => candidate !== index),
+    );
+    setLocalError(null);
+  };
+
+  const closeEditor = () => {
+    setDialogOpen(false);
+    setDraft(null);
+    setPointRows([]);
     setLocalError(null);
   };
 
@@ -416,8 +440,7 @@ export function BrepProjectObjectEditor({
     try {
       const nextProject = replaceBrepProjectObjectDefinition(project, draft);
       await onSaveProject(nextProject);
-      setDialogOpen(false);
-      setDraft(null);
+      closeEditor();
     } catch (reason) {
       setLocalError(
         reason instanceof Error
@@ -472,7 +495,14 @@ export function BrepProjectObjectEditor({
         </CollapsibleContent>
       </Collapsible>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(nextOpen) => {
+          if (saving) return;
+          if (nextOpen) setDialogOpen(true);
+          else closeEditor();
+        }}
+      >
         <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-4xl flex-col gap-4 bg-adam-bg-secondary-dark p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-adam-text-primary">
@@ -560,17 +590,20 @@ export function BrepProjectObjectEditor({
 
                 {(draft.points ?? []).length > 0 ? (
                   <div className="grid gap-3">
-                    {(draft.points ?? []).map((point, index) => (
-                      <PointRow
-                        key={index}
-                        point={point}
-                        existing={existingPointIds.has(point.id)}
-                        parameters={project.parameters}
-                        disabled={saving}
-                        onChange={(nextPoint) => updatePoint(index, nextPoint)}
-                        onRemove={() => removePoint(index)}
-                      />
-                    ))}
+                    {(draft.points ?? []).map((point, index) => {
+                      const row = pointRows[index];
+                      return (
+                        <PointRow
+                          key={row?.key ?? `fallback:${index}`}
+                          point={point}
+                          existing={row?.existing ?? true}
+                          parameters={project.parameters}
+                          disabled={saving}
+                          onChange={(nextPoint) => updatePoint(index, nextPoint)}
+                          onRemove={() => removePoint(index)}
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-adam-neutral-700 p-4 text-xs text-adam-neutral-500">
@@ -592,7 +625,7 @@ export function BrepProjectObjectEditor({
               type="button"
               variant="ghost"
               disabled={saving}
-              onClick={() => setDialogOpen(false)}
+              onClick={closeEditor}
             >
               Cancel
             </Button>
