@@ -25,12 +25,14 @@ import {
 import {
   hiddenBrepRevisionIds,
   persistBrepProjectParameterRevision,
+  persistBrepProjectSourceRevision,
   removeBrepProjectRevisionFromHistory,
   restoreBrepProjectRevision,
   selectBrepProjectRevision,
 } from '@/services/brepProjectService';
 import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import { resolveActiveBrepAiSourceForLeaf } from '@shared/brepAiContext';
+import type { BrepProject } from '@shared/brepProject';
 import type { BrepParameterValues } from '@shared/brepProvider';
 import type { AppUIMessage } from '@shared/chatAi';
 import Tree from '@shared/Tree';
@@ -38,7 +40,7 @@ import type { Conversation, Message, Model } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Box } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MessageItem } from '../types/misc.ts';
 import { ConversationView } from './ConversationView';
 
@@ -174,7 +176,13 @@ function BrepProjectWorkspace() {
     conversation.settings?.openCodeExecutionMode ?? 'cli',
   );
   const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const isChatStreamingRef = useRef(false);
   const [mobilePreviewVersion, setMobilePreviewVersion] = useState(0);
+
+  const handleChatLoadingChange = useCallback((loading: boolean) => {
+    isChatStreamingRef.current = loading;
+    setIsChatStreaming(loading);
+  }, []);
 
   const { data: dbMessages = [], isFetched: areMessagesFetched } =
     useMessagesQuery();
@@ -442,6 +450,7 @@ function BrepProjectWorkspace() {
       packageTitle={activeSource.artifact.title}
       activeRevisionId={activeSource.messageId}
       revisions={editorRevisions}
+      sourceEditingDisabled={isChatStreaming}
       onParameterValuesCommit={async (
         parameterValues: BrepParameterValues,
       ) => {
@@ -450,6 +459,20 @@ function BrepProjectWorkspace() {
           parentMessageId: leafId,
           artifact: activeSource.artifact,
           parameterValues,
+        });
+        await refreshWorkspace();
+      }}
+      onProjectSourceCommit={async (project: BrepProject) => {
+        if (isChatStreamingRef.current) {
+          throw new Error(
+            'BRep feature editing is disabled while the current AI turn is streaming.',
+          );
+        }
+        await persistBrepProjectSourceRevision({
+          conversationId: conversation.id,
+          parentMessageId: leafId,
+          artifact: activeSource.artifact,
+          project,
         });
         await refreshWorkspace();
       }}
@@ -519,7 +542,7 @@ function BrepProjectWorkspace() {
               onSelectLeaf={handleSelectLeaf}
               branchForLeaf={branchForLeaf}
               onChangeRating={handleChangeRating}
-              onLoadingChange={setIsChatStreaming}
+              onLoadingChange={handleChatLoadingChange}
             />
           </>
         }
