@@ -12,11 +12,13 @@ Merge pull request #30 from weaf/feature/brep-project-object-contract
 Phase 5A: BRep project-object contract
 ```
 
-Active Phase 5B branch:
+Phase 5B — native project-object evaluation — is complete on:
 
 ```text
 feature/brep-project-object-evaluation
 ```
+
+PR #31 is the Phase 5B merge vehicle. After it is merged, Phase 5C — project-object authoring and AI product integration — is the next active slice.
 
 The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence.
 
@@ -31,10 +33,10 @@ The accepted BRep stack provides the canonical project-object concepts:
 
 Before 5B, the native evaluator:
 
-- evaluates only the canonical `resultNodeId`;
-- returns one primary body with bounds/viewer mesh;
-- exports exact STEP for that primary result;
-- does not yet evaluate semantic auxiliary geometry outputs or return resolved project-object semantics.
+- evaluated only the canonical `resultNodeId`;
+- returned one primary body with bounds/viewer mesh;
+- exported exact STEP for that primary result;
+- did not yet evaluate semantic auxiliary geometry outputs or return resolved project-object semantics.
 
 No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime dependency exists in the application today.
 
@@ -87,11 +89,11 @@ Each point has stable ID, kind `connection | mounting | cable`, local mm positio
 
 5A also protects referenced parameters and role-assigned nodes from destructive Phase 4 authoring operations without hidden cascading rewrites.
 
-## 5B — Native project-object evaluation — active
+## 5B — Native project-object evaluation — complete
 
 ### Result contract
 
-A successful native evaluation gains one required kernel-neutral `projectObject` result alongside the existing primary result fields:
+A successful native evaluation has one required kernel-neutral `projectObject` result alongside the existing primary result fields:
 
 ```text
 status / provider / projectId / resultNodeId
@@ -162,7 +164,7 @@ The repository-native build123d/OCCT driver increments its provider version from
 
 ### 5B non-goals
 
-Do not add in 5B:
+5B intentionally does not add:
 
 - direct project-object authoring UI;
 - browser rendering/toggling of auxiliary geometry;
@@ -173,7 +175,7 @@ Do not add in 5B:
 - Grasshopper component/runtime work;
 - application of the placement plane as a local native-preview transform.
 
-## 5C — Project-object authoring and AI product integration
+## 5C — Project-object authoring and AI product integration — next
 
 Add direct project-object output authoring over the same canonical source revision lifecycle:
 
@@ -203,19 +205,19 @@ Do not broaden 5D into a Grasshopper component/runtime; that is Phase 6+ work.
 
 Phase 5A was accepted and merged through PR #30. Quality Gates #367 and #368 passed; the slice had no new browser/native-execution product surface and therefore used contract/regression acceptance.
 
-## Phase 5B acceptance
+## Phase 5B acceptance closeout
 
-5B is complete only when all of the following hold:
+Phase 5B is accepted on the implementation branch with the following evidence:
 
-1. A legacy BRep project with no declared semantic roles/points still evaluates successfully and returns primary `bodies`/`bounds` plus an empty project-object geometry/points envelope.
-2. Declared footprint, clearance-envelope and maintenance-envelope nodes are evaluated into bounded bodies carrying their exact stable Brepia node IDs.
+1. Legacy projects without declared semantic roles/points remain covered by provider/server regression tests and receive primary result semantics plus the stable empty project-object envelope.
+2. Declared footprint, clearance-envelope and maintenance-envelope nodes are evaluated as bounded bodies with their exact stable Brepia node IDs.
 3. Semantic points resolve literals and published-parameter references under the exact current evaluation values.
-4. Resolved placement includes the same origin/xAxis/yAxis and derived zAxis already validated by the shared provider contract; metadata is preserved exactly.
-5. Top-level primary `bodies`, `bounds`, `resultNodeId` and existing browser viewer semantics remain unchanged when auxiliary roles are present.
-6. The exact STEP artifact remains derived only from `resultNodeId` and imports independently as before.
-7. A sandbox result with wrong project/result identity, undeclared/wrong role node, invalid auxiliary mesh, or tampered placement/metadata/point data fails closed as `output_invalid`.
-8. Auxiliary evaluation reuses the existing shape/body caches and remains inside the accepted sandbox output/time/resource limits.
-9. The repository-native smoke test proves primary geometry, semantic role bodies, resolved point data and exact STEP in one real build123d/OCCT sandbox run.
-10. Ordinary BRep projects still preview/export normally in the browser and OpenSCAD behavior remains unchanged.
-11. Repository tests/typecheck/lint/build/diff checks are green.
-12. Focused native/browser acceptance is recorded before merge.
+4. Resolved placement uses the same validated provider basis and metadata remains canonical/kernel-neutral.
+5. Top-level primary `bodies`, `bounds`, `resultNodeId` and browser viewer semantics remain unchanged when auxiliary roles are present.
+6. Exact STEP remains derived only from `resultNodeId`; the real native smoke verified an ISO STEP artifact and the browser STEP regression was green. Independent STEP-import behavior remains covered by the previously accepted unchanged export path rather than being re-run specifically for 5B.
+7. Fake-runner regression tests reject wrong project/result identity, wrong/undeclared roles and tampered resolved semantic output as `output_invalid`.
+8. Auxiliary evaluation reuses the existing shape cache plus a stable-node body/tessellation cache and remains under the existing sandbox resource/output limits.
+9. Quality Gate #369 passed tests, typecheck, lint, build and diff check on implementation head `b297a4f5036969e1543589464b1b7c70bea1e5a3`.
+10. Real rootless-Podman build123d/OCCT smoke passed with primary result `cut`, 732 triangles, all three semantic roles (`footprint`, `clearanceEnvelope`, `maintenanceEnvelope`) and resolved cable point `cableEntry` at `[50,10,0]` with direction `[0,0,1]`.
+11. Focused browser regression was accepted: existing BRep preview remained normal, a Dimension change updated native preview, and STEP export continued to work.
+12. No auxiliary geometry appeared in the browser during 5B, as intended; auxiliary browser rendering remains outside this slice.
