@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import type { BrepProject } from '@shared/brepProject';
 import {
   buildBrepDependencyGraph,
@@ -19,9 +20,11 @@ import {
 } from '@shared/brepProjectGraph';
 
 const NODE_WIDTH = 148;
+const MOBILE_NODE_WIDTH = 220;
 const NODE_HEIGHT = 66;
 const COLUMN_GAP = 20;
 const ROW_GAP = 54;
+const MOBILE_ROW_GAP = 32;
 const GRAPH_PADDING = 16;
 const MIN_GRAPH_WIDTH = 304;
 
@@ -33,6 +36,7 @@ type PositionedNode = BrepDependencyGraphNode & {
 type GraphLayout = {
   width: number;
   height: number;
+  nodeWidth: number;
   nodes: PositionedNode[];
   nodeById: Map<string, PositionedNode>;
 };
@@ -59,12 +63,41 @@ function projectObjectRoles(
   return roles;
 }
 
-function layoutGraph(graph: BrepDependencyGraph): GraphLayout {
+function layoutGraph(
+  graph: BrepDependencyGraph,
+  singleColumn = false,
+): GraphLayout {
   const levels = new Map<number, BrepDependencyGraphNode[]>();
   for (const node of graph.nodes) {
     const level = levels.get(node.depth) ?? [];
     level.push(node);
     levels.set(node.depth, level);
+  }
+
+  if (singleColumn) {
+    const orderedNodes: BrepDependencyGraphNode[] = [];
+    for (let depth = 0; depth <= graph.maxDepth; depth += 1) {
+      orderedNodes.push(...(levels.get(depth) ?? []));
+    }
+    const width = MOBILE_NODE_WIDTH + GRAPH_PADDING * 2;
+    const height = Math.max(
+      122,
+      GRAPH_PADDING * 2 +
+        orderedNodes.length * NODE_HEIGHT +
+        Math.max(0, orderedNodes.length - 1) * MOBILE_ROW_GAP,
+    );
+    const nodes = orderedNodes.map((node, index) => ({
+      ...node,
+      x: GRAPH_PADDING,
+      y: GRAPH_PADDING + index * (NODE_HEIGHT + MOBILE_ROW_GAP),
+    }));
+    return {
+      width,
+      height,
+      nodeWidth: MOBILE_NODE_WIDTH,
+      nodes,
+      nodeById: new Map(nodes.map((node) => [node.id, node])),
+    };
   }
 
   const maxNodesInLevel = Math.max(
@@ -99,6 +132,7 @@ function layoutGraph(graph: BrepDependencyGraph): GraphLayout {
   return {
     width,
     height,
+    nodeWidth: NODE_WIDTH,
     nodes,
     nodeById: new Map(nodes.map((node) => [node.id, node])),
   };
@@ -155,8 +189,9 @@ export function BrepDependencyGraph({
   onSetResultNode: (nodeId: string) => void | Promise<void>;
   onDeleteNode: (nodeId: string) => void | Promise<void>;
 }) {
+  const isMobile = useIsMobile();
   const graph = useMemo(() => buildBrepDependencyGraph(project), [project]);
-  const layout = useMemo(() => layoutGraph(graph), [graph]);
+  const layout = useMemo(() => layoutGraph(graph, isMobile), [graph, isMobile]);
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedRoles = selectedNode
@@ -186,11 +221,17 @@ export function BrepDependencyGraph({
     <div className="grid gap-3">
       <div
         aria-label="BRep dependency graph"
-        className="max-h-[420px] overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/45 overscroll-contain"
+        className={`max-h-[420px] rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/45 overscroll-contain ${
+          isMobile ? 'overflow-x-hidden overflow-y-auto' : 'overflow-auto'
+        }`}
       >
         <div
           className="relative"
-          style={{ width: layout.width, height: layout.height }}
+          style={{
+            width: layout.width,
+            height: layout.height,
+            ...(isMobile ? { marginInline: 'auto' } : {}),
+          }}
         >
           <svg
             aria-hidden="true"
@@ -204,9 +245,9 @@ export function BrepDependencyGraph({
               const target = layout.nodeById.get(edge.target);
               if (!source || !target) return null;
 
-              const sourceX = source.x + NODE_WIDTH / 2;
+              const sourceX = source.x + layout.nodeWidth / 2;
               const sourceY = source.y + NODE_HEIGHT;
-              const targetX = target.x + NODE_WIDTH / 2;
+              const targetX = target.x + layout.nodeWidth / 2;
               const targetY = target.y;
               const controlOffset = Math.max(22, (targetY - sourceY) / 2);
               const active =
@@ -260,7 +301,7 @@ export function BrepDependencyGraph({
                 style={{
                   left: node.x,
                   top: node.y,
-                  width: NODE_WIDTH,
+                  width: layout.nodeWidth,
                   height: NODE_HEIGHT,
                 }}
               >
