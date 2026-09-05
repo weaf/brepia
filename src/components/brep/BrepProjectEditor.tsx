@@ -50,6 +50,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
 import { exportBrepStep } from '@/services/brepStepExport';
@@ -547,33 +548,53 @@ export function BrepProjectViewerPanel({
 
 function BrepProjectFilesPanel() {
   const { project, dirty } = useBrepProjectEditor();
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(!isMobile);
   const [dialogOpen, setDialogOpen] = useState(false);
   const sourceJson = useMemo(() => JSON.stringify(project, null, 2), [project]);
 
-  return (
-    <div className="border-b border-adam-neutral-700 bg-adam-bg-secondary-dark px-4 py-3">
-      <div className="mb-2 min-w-0">
-        <div className="text-xs font-semibold text-adam-text-primary">
-          Project files
-        </div>
-        <div className="text-[10px] text-adam-neutral-400">
-          1 canonical source file
-        </div>
-      </div>
+  useEffect(() => {
+    setOpen(!isMobile);
+  }, [isMobile]);
 
-      <button
-        type="button"
-        onClick={() => setDialogOpen(true)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-adam-neutral-300 transition-colors hover:bg-adam-neutral-800 hover:text-adam-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-adam-neutral-500"
+  return (
+    <>
+      <Collapsible
+        open={open}
+        onOpenChange={setOpen}
+        className="border-b border-adam-neutral-700/60 pb-4"
       >
-        <FileCode2 className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate font-mono">
-          project.brep.json
-        </span>
-        <span className="shrink-0 rounded-full border border-adam-neutral-600 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-adam-neutral-300">
-          Canonical
-        </span>
-      </button>
+        <CollapsibleTrigger
+          aria-label={`${open ? 'Collapse' : 'Expand'} BRep project files`}
+          className="group flex w-full items-center justify-between gap-2 rounded-md py-1 text-xs font-semibold text-adam-text-primary transition-colors focus:outline-none"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <span>Project files</span>
+            <span className="text-[10px] text-adam-neutral-400">1</span>
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-adam-neutral-400 transition-all duration-200 group-hover:text-adam-text-primary ${open ? 'rotate-180' : ''}`}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <p className="mt-2 text-[10px] text-adam-neutral-400">
+            1 canonical source file
+          </p>
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-adam-neutral-300 transition-colors hover:bg-adam-neutral-800 hover:text-adam-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-adam-neutral-500"
+          >
+            <FileCode2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate font-mono">
+              project.brep.json
+            </span>
+            <span className="shrink-0 rounded-full border border-adam-neutral-600 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-adam-neutral-300">
+              Canonical
+            </span>
+          </button>
+        </CollapsibleContent>
+      </Collapsible>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-4xl flex-col gap-4 bg-adam-bg-secondary-dark p-4 sm:p-6">
@@ -600,7 +621,7 @@ function BrepProjectFilesPanel() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
@@ -746,14 +767,14 @@ function BrepExportBar() {
   };
 
   return (
-    <div className="flex flex-col gap-4 border-t border-adam-neutral-700 px-6 py-6">
+    <div className="flex flex-col gap-3 border-t border-adam-neutral-700 px-4 py-4 lg:gap-4 lg:px-6 lg:py-6">
       <div className="flex">
         <Button
           type="button"
           onClick={handleDownload}
           disabled={!selectedAvailable}
           aria-label={`download ${selectedFormat.toUpperCase()} file`}
-          className="h-12 flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900"
+          className="h-11 flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900 lg:h-12"
         >
           <Download className="mr-2 h-4 w-4" />
           {exporting && selectedFormat === 'step'
@@ -765,7 +786,7 @@ function BrepExportBar() {
             <Button
               type="button"
               aria-label="select BRep download format"
-              className="h-12 w-12 rounded-l-none border-l border-adam-neutral-300 bg-adam-neutral-50 p-0 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900"
+              className="h-11 w-11 rounded-l-none border-l border-adam-neutral-300 bg-adam-neutral-50 p-0 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900 lg:h-12 lg:w-12"
             >
               <ChevronUp className="h-4 w-4" />
             </Button>
@@ -835,10 +856,8 @@ export function BrepProjectParametersPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
-      <BrepProjectFilesPanel />
-
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-adam-neutral-700 bg-gradient-to-r from-adam-bg-secondary-dark to-adam-bg-secondary-dark/95 px-6 py-6">
-        <span className="text-lg font-semibold tracking-tight text-adam-text-primary">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-adam-neutral-700 bg-gradient-to-r from-adam-bg-secondary-dark to-adam-bg-secondary-dark/95 px-4 py-3 lg:h-14 lg:px-6 lg:py-6">
+        <span className="text-base font-semibold tracking-tight text-adam-text-primary lg:text-lg">
           Parameters
         </span>
         <Button
@@ -855,7 +874,11 @@ export function BrepProjectParametersPanel() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden">
-        <ScrollArea className="flex-1 px-6 py-6">
+        <ScrollArea className="flex-1 px-4 py-4 lg:px-6 lg:py-6">
+          <div className="mb-4 lg:mb-6">
+            <BrepProjectFilesPanel />
+          </div>
+
           <Collapsible open={parametersOpen} onOpenChange={setParametersOpen}>
             <CollapsibleTrigger
               aria-label={`${parametersOpen ? 'Collapse' : 'Expand'} BRep parameters`}
@@ -905,7 +928,7 @@ export function BrepProjectParametersPanel() {
             </CollapsibleContent>
           </Collapsible>
 
-          <div className="mt-6">
+          <div className="mt-4 lg:mt-6">
             <Button
               type="button"
               className="w-full"
@@ -924,7 +947,7 @@ export function BrepProjectParametersPanel() {
             </p>
           </div>
 
-          <div className="mt-6 border-t border-adam-neutral-700/60 pt-4">
+          <div className="mt-4 border-t border-adam-neutral-700/60 pt-4 lg:mt-6">
             <BrepFeatureEditor
               key={activeRevisionId ?? project.id}
               project={project}
@@ -940,7 +963,7 @@ export function BrepProjectParametersPanel() {
             ) : null}
           </div>
 
-          <div className="mt-6">
+          <div className="mt-4 lg:mt-6">
             <RevisionHistory />
           </div>
 
