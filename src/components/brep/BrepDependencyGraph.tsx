@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Flag, GitBranch, Pencil, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
@@ -11,7 +11,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useIsMobile } from '@/hooks/useIsMobile';
 import type { BrepProject } from '@shared/brepProject';
 import {
   buildBrepDependencyGraph,
@@ -20,11 +19,13 @@ import {
 } from '@shared/brepProjectGraph';
 
 const NODE_WIDTH = 148;
-const MOBILE_NODE_WIDTH = 220;
+const MIN_FITTED_NODE_WIDTH = 124;
+const SINGLE_COLUMN_NODE_WIDTH = 220;
 const NODE_HEIGHT = 66;
 const COLUMN_GAP = 20;
+const COMPACT_COLUMN_GAP = 12;
 const ROW_GAP = 54;
-const MOBILE_ROW_GAP = 32;
+const SINGLE_COLUMN_ROW_GAP = 32;
 const GRAPH_PADDING = 16;
 const MIN_GRAPH_WIDTH = 304;
 
@@ -63,9 +64,53 @@ function projectObjectRoles(
   return roles;
 }
 
+function layoutSingleColumn(
+  graph: BrepDependencyGraph,
+  levels: ReadonlyMap<number, BrepDependencyGraphNode[]>,
+  availableWidth: number,
+): GraphLayout {
+  const orderedNodes: BrepDependencyGraphNode[] = [];
+  for (let depth = 0; depth <= graph.maxDepth; depth += 1) {
+    orderedNodes.push(...(levels.get(depth) ?? []));
+  }
+
+  const boundedWidth =
+    availableWidth > 0
+      ? Math.max(0, availableWidth - GRAPH_PADDING * 2)
+      : SINGLE_COLUMN_NODE_WIDTH;
+  const nodeWidth = Math.max(
+    MIN_FITTED_NODE_WIDTH,
+    Math.min(SINGLE_COLUMN_NODE_WIDTH, boundedWidth),
+  );
+  const width =
+    availableWidth > 0
+      ? Math.max(nodeWidth + GRAPH_PADDING * 2, availableWidth)
+      : nodeWidth + GRAPH_PADDING * 2;
+  const startX = (width - nodeWidth) / 2;
+  const height = Math.max(
+    122,
+    GRAPH_PADDING * 2 +
+      orderedNodes.length * NODE_HEIGHT +
+      Math.max(0, orderedNodes.length - 1) * SINGLE_COLUMN_ROW_GAP,
+  );
+  const nodes = orderedNodes.map((node, index) => ({
+    ...node,
+    x: startX,
+    y: GRAPH_PADDING + index * (NODE_HEIGHT + SINGLE_COLUMN_ROW_GAP),
+  }));
+
+  return {
+    width,
+    height,
+    nodeWidth,
+    nodes,
+    nodeById: new Map(nodes.map((node) => [node.id, node])),
+  };
+}
+
 function layoutGraph(
   graph: BrepDependencyGraph,
-  singleColumn = false,
+  availableWidth = 0,
 ): GraphLayout {
   const levels = new Map<number, BrepDependencyGraphNode[]>();
   for (const node of graph.nodes) {
@@ -74,39 +119,50 @@ function layoutGraph(
     levels.set(node.depth, level);
   }
 
-  if (singleColumn) {
-    const orderedNodes: BrepDependencyGraphNode[] = [];
-    for (let depth = 0; depth <= graph.maxDepth; depth += 1) {
-      orderedNodes.push(...(levels.get(depth) ?? []));
-    }
-    const width = MOBILE_NODE_WIDTH + GRAPH_PADDING * 2;
-    const height = Math.max(
-      122,
-      GRAPH_PADDING * 2 +
-        orderedNodes.length * NODE_HEIGHT +
-        Math.max(0, orderedNodes.length - 1) * MOBILE_ROW_GAP,
-    );
-    const nodes = orderedNodes.map((node, index) => ({
-      ...node,
-      x: GRAPH_PADDING,
-      y: GRAPH_PADDING + index * (NODE_HEIGHT + MOBILE_ROW_GAP),
-    }));
-    return {
-      width,
-      height,
-      nodeWidth: MOBILE_NODE_WIDTH,
-      nodes,
-      nodeById: new Map(nodes.map((node) => [node.id, node])),
-    };
-  }
-
   const maxNodesInLevel = Math.max(
     1,
     ...[...levels.values()].map((nodes) => nodes.length),
   );
-  const contentWidth =
+  const availableContentWidth =
+    availableWidth > 0
+      ? Math.max(0, availableWidth - GRAPH_PADDING * 2)
+      : Number.POSITIVE_INFINITY;
+  const naturalContentWidth =
     maxNodesInLevel * NODE_WIDTH + (maxNodesInLevel - 1) * COLUMN_GAP;
-  const width = Math.max(MIN_GRAPH_WIDTH, contentWidth + GRAPH_PADDING * 2);
+
+  let nodeWidth = NODE_WIDTH;
+  let columnGap = COLUMN_GAP;
+
+  if (naturalContentWidth > availableContentWidth) {
+    const minimumCompactWidth =
+      maxNodesInLevel * MIN_FITTED_NODE_WIDTH +
+      (maxNodesInLevel - 1) * COMPACT_COLUMN_GAP;
+
+    if (minimumCompactWidth <= availableContentWidth) {
+      columnGap = COMPACT_COLUMN_GAP;
+      nodeWidth = Math.min(
+        NODE_WIDTH,
+        Math.floor(
+          (availableContentWidth -
+            (maxNodesInLevel - 1) * COMPACT_COLUMN_GAP) /
+            maxNodesInLevel,
+        ),
+      );
+    } else {
+      return layoutSingleColumn(graph, levels, availableWidth);
+    }
+  }
+
+  const contentWidth =
+    maxNodesInLevel * nodeWidth + (maxNodesInLevel - 1) * columnGap;
+  const naturalWidth = Math.max(
+    MIN_GRAPH_WIDTH,
+    contentWidth + GRAPH_PADDING * 2,
+  );
+  const width =
+    availableWidth > 0 && naturalWidth <= availableWidth
+      ? availableWidth
+      : naturalWidth;
   const height = Math.max(
     122,
     GRAPH_PADDING * 2 +
@@ -118,12 +174,12 @@ function layoutGraph(
   for (let depth = 0; depth <= graph.maxDepth; depth += 1) {
     const level = levels.get(depth) ?? [];
     const levelWidth =
-      level.length * NODE_WIDTH + Math.max(0, level.length - 1) * COLUMN_GAP;
+      level.length * nodeWidth + Math.max(0, level.length - 1) * columnGap;
     const startX = (width - levelWidth) / 2;
     level.forEach((node, index) => {
       nodes.push({
         ...node,
-        x: startX + index * (NODE_WIDTH + COLUMN_GAP),
+        x: startX + index * (nodeWidth + columnGap),
         y: GRAPH_PADDING + depth * (NODE_HEIGHT + ROW_GAP),
       });
     });
@@ -132,7 +188,7 @@ function layoutGraph(
   return {
     width,
     height,
-    nodeWidth: NODE_WIDTH,
+    nodeWidth,
     nodes,
     nodeById: new Map(nodes.map((node) => [node.id, node])),
   };
@@ -189,9 +245,13 @@ export function BrepDependencyGraph({
   onSetResultNode: (nodeId: string) => void | Promise<void>;
   onDeleteNode: (nodeId: string) => void | Promise<void>;
 }) {
-  const isMobile = useIsMobile();
+  const graphViewportRef = useRef<HTMLDivElement>(null);
+  const [graphViewportWidth, setGraphViewportWidth] = useState(0);
   const graph = useMemo(() => buildBrepDependencyGraph(project), [project]);
-  const layout = useMemo(() => layoutGraph(graph, isMobile), [graph, isMobile]);
+  const layout = useMemo(
+    () => layoutGraph(graph, graphViewportWidth),
+    [graph, graphViewportWidth],
+  );
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedRoles = selectedNode
@@ -205,6 +265,26 @@ export function BrepDependencyGraph({
       ]),
     [selectedNode],
   );
+
+  useEffect(() => {
+    const viewport = graphViewportRef.current;
+    if (!viewport) return;
+
+    const updateWidth = () => {
+      setGraphViewportWidth(Math.floor(viewport.clientWidth));
+    };
+    updateWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
   const deleteBlockedReason = selectedNode
     ? selectedRoles.length > 0
       ? `Clear its project-object role${selectedRoles.length === 1 ? '' : 's'} (${selectedRoles.map((role) => role.label).join(', ')}) before deleting this feature.`
@@ -220,18 +300,13 @@ export function BrepDependencyGraph({
   return (
     <div className="grid gap-3">
       <div
+        ref={graphViewportRef}
         aria-label="BRep dependency graph"
-        className={`max-h-[420px] rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/45 overscroll-contain ${
-          isMobile ? 'overflow-x-hidden overflow-y-auto' : 'overflow-auto'
-        }`}
+        className="max-h-[420px] overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/45 overscroll-contain"
       >
         <div
           className="relative"
-          style={{
-            width: layout.width,
-            height: layout.height,
-            ...(isMobile ? { marginInline: 'auto' } : {}),
-          }}
+          style={{ width: layout.width, height: layout.height }}
         >
           <svg
             aria-hidden="true"
