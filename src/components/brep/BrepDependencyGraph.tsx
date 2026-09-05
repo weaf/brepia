@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { Flag, GitBranch, Pencil, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
@@ -19,13 +19,9 @@ import {
 } from '@shared/brepProjectGraph';
 
 const NODE_WIDTH = 148;
-const MIN_FITTED_NODE_WIDTH = 124;
-const SINGLE_COLUMN_NODE_WIDTH = 220;
 const NODE_HEIGHT = 66;
 const COLUMN_GAP = 20;
-const COMPACT_COLUMN_GAP = 12;
 const ROW_GAP = 54;
-const SINGLE_COLUMN_ROW_GAP = 32;
 const GRAPH_PADDING = 16;
 const MIN_GRAPH_WIDTH = 304;
 
@@ -37,7 +33,6 @@ type PositionedNode = BrepDependencyGraphNode & {
 type GraphLayout = {
   width: number;
   height: number;
-  nodeWidth: number;
   nodes: PositionedNode[];
   nodeById: Map<string, PositionedNode>;
 };
@@ -64,54 +59,7 @@ function projectObjectRoles(
   return roles;
 }
 
-function layoutSingleColumn(
-  graph: BrepDependencyGraph,
-  levels: ReadonlyMap<number, BrepDependencyGraphNode[]>,
-  availableWidth: number,
-): GraphLayout {
-  const orderedNodes: BrepDependencyGraphNode[] = [];
-  for (let depth = 0; depth <= graph.maxDepth; depth += 1) {
-    orderedNodes.push(...(levels.get(depth) ?? []));
-  }
-
-  const boundedWidth =
-    availableWidth > 0
-      ? Math.max(0, availableWidth - GRAPH_PADDING * 2)
-      : SINGLE_COLUMN_NODE_WIDTH;
-  const nodeWidth = Math.max(
-    MIN_FITTED_NODE_WIDTH,
-    Math.min(SINGLE_COLUMN_NODE_WIDTH, boundedWidth),
-  );
-  const width =
-    availableWidth > 0
-      ? Math.max(nodeWidth + GRAPH_PADDING * 2, availableWidth)
-      : nodeWidth + GRAPH_PADDING * 2;
-  const startX = (width - nodeWidth) / 2;
-  const height = Math.max(
-    122,
-    GRAPH_PADDING * 2 +
-      orderedNodes.length * NODE_HEIGHT +
-      Math.max(0, orderedNodes.length - 1) * SINGLE_COLUMN_ROW_GAP,
-  );
-  const nodes = orderedNodes.map((node, index) => ({
-    ...node,
-    x: startX,
-    y: GRAPH_PADDING + index * (NODE_HEIGHT + SINGLE_COLUMN_ROW_GAP),
-  }));
-
-  return {
-    width,
-    height,
-    nodeWidth,
-    nodes,
-    nodeById: new Map(nodes.map((node) => [node.id, node])),
-  };
-}
-
-function layoutGraph(
-  graph: BrepDependencyGraph,
-  availableWidth = 0,
-): GraphLayout {
+function layoutGraph(graph: BrepDependencyGraph): GraphLayout {
   const levels = new Map<number, BrepDependencyGraphNode[]>();
   for (const node of graph.nodes) {
     const level = levels.get(node.depth) ?? [];
@@ -123,46 +71,9 @@ function layoutGraph(
     1,
     ...[...levels.values()].map((nodes) => nodes.length),
   );
-  const availableContentWidth =
-    availableWidth > 0
-      ? Math.max(0, availableWidth - GRAPH_PADDING * 2)
-      : Number.POSITIVE_INFINITY;
-  const naturalContentWidth =
-    maxNodesInLevel * NODE_WIDTH + (maxNodesInLevel - 1) * COLUMN_GAP;
-
-  let nodeWidth = NODE_WIDTH;
-  let columnGap = COLUMN_GAP;
-
-  if (naturalContentWidth > availableContentWidth) {
-    const minimumCompactWidth =
-      maxNodesInLevel * MIN_FITTED_NODE_WIDTH +
-      (maxNodesInLevel - 1) * COMPACT_COLUMN_GAP;
-
-    if (minimumCompactWidth <= availableContentWidth) {
-      columnGap = COMPACT_COLUMN_GAP;
-      nodeWidth = Math.min(
-        NODE_WIDTH,
-        Math.floor(
-          (availableContentWidth -
-            (maxNodesInLevel - 1) * COMPACT_COLUMN_GAP) /
-            maxNodesInLevel,
-        ),
-      );
-    } else {
-      return layoutSingleColumn(graph, levels, availableWidth);
-    }
-  }
-
   const contentWidth =
-    maxNodesInLevel * nodeWidth + (maxNodesInLevel - 1) * columnGap;
-  const naturalWidth = Math.max(
-    MIN_GRAPH_WIDTH,
-    contentWidth + GRAPH_PADDING * 2,
-  );
-  const width =
-    availableWidth > 0 && naturalWidth <= availableWidth
-      ? availableWidth
-      : naturalWidth;
+    maxNodesInLevel * NODE_WIDTH + (maxNodesInLevel - 1) * COLUMN_GAP;
+  const width = Math.max(MIN_GRAPH_WIDTH, contentWidth + GRAPH_PADDING * 2);
   const height = Math.max(
     122,
     GRAPH_PADDING * 2 +
@@ -174,12 +85,12 @@ function layoutGraph(
   for (let depth = 0; depth <= graph.maxDepth; depth += 1) {
     const level = levels.get(depth) ?? [];
     const levelWidth =
-      level.length * nodeWidth + Math.max(0, level.length - 1) * columnGap;
+      level.length * NODE_WIDTH + Math.max(0, level.length - 1) * COLUMN_GAP;
     const startX = (width - levelWidth) / 2;
     level.forEach((node, index) => {
       nodes.push({
         ...node,
-        x: startX + index * (nodeWidth + columnGap),
+        x: startX + index * (NODE_WIDTH + COLUMN_GAP),
         y: GRAPH_PADDING + depth * (NODE_HEIGHT + ROW_GAP),
       });
     });
@@ -188,7 +99,6 @@ function layoutGraph(
   return {
     width,
     height,
-    nodeWidth,
     nodes,
     nodeById: new Map(nodes.map((node) => [node.id, node])),
   };
@@ -232,6 +142,7 @@ export function BrepDependencyGraph({
   project,
   selectedNodeId,
   editingDisabled,
+  fillAvailable = false,
   onSelectNode,
   onEditNode,
   onSetResultNode,
@@ -240,18 +151,14 @@ export function BrepDependencyGraph({
   project: BrepProject;
   selectedNodeId: string | null;
   editingDisabled: boolean;
+  fillAvailable?: boolean;
   onSelectNode: (nodeId: string) => void;
   onEditNode: (nodeId: string) => void;
   onSetResultNode: (nodeId: string) => void | Promise<void>;
   onDeleteNode: (nodeId: string) => void | Promise<void>;
 }) {
-  const graphViewportRef = useRef<HTMLDivElement>(null);
-  const [graphViewportWidth, setGraphViewportWidth] = useState(0);
   const graph = useMemo(() => buildBrepDependencyGraph(project), [project]);
-  const layout = useMemo(
-    () => layoutGraph(graph, graphViewportWidth),
-    [graph, graphViewportWidth],
-  );
+  const layout = useMemo(() => layoutGraph(graph), [graph]);
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedRoles = selectedNode
@@ -265,26 +172,6 @@ export function BrepDependencyGraph({
       ]),
     [selectedNode],
   );
-
-  useEffect(() => {
-    const viewport = graphViewportRef.current;
-    if (!viewport) return;
-
-    const updateWidth = () => {
-      setGraphViewportWidth(Math.floor(viewport.clientWidth));
-    };
-    updateWidth();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateWidth);
-      return () => window.removeEventListener('resize', updateWidth);
-    }
-
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, []);
-
   const deleteBlockedReason = selectedNode
     ? selectedRoles.length > 0
       ? `Clear its project-object role${selectedRoles.length === 1 ? '' : 's'} (${selectedRoles.map((role) => role.label).join(', ')}) before deleting this feature.`
@@ -298,11 +185,18 @@ export function BrepDependencyGraph({
     : null;
 
   return (
-    <div className="grid gap-3">
+    <div
+      className={
+        fillAvailable
+          ? 'flex h-full min-h-0 flex-col gap-3'
+          : 'grid gap-3'
+      }
+    >
       <div
-        ref={graphViewportRef}
         aria-label="BRep dependency graph"
-        className="max-h-[420px] overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/45 overscroll-contain"
+        className={`${
+          fillAvailable ? 'min-h-[180px] flex-1' : 'max-h-[420px]'
+        } overflow-auto rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/45 overscroll-contain`}
       >
         <div
           className="relative"
@@ -320,9 +214,9 @@ export function BrepDependencyGraph({
               const target = layout.nodeById.get(edge.target);
               if (!source || !target) return null;
 
-              const sourceX = source.x + layout.nodeWidth / 2;
+              const sourceX = source.x + NODE_WIDTH / 2;
               const sourceY = source.y + NODE_HEIGHT;
-              const targetX = target.x + layout.nodeWidth / 2;
+              const targetX = target.x + NODE_WIDTH / 2;
               const targetY = target.y;
               const controlOffset = Math.max(22, (targetY - sourceY) / 2);
               const active =
@@ -376,7 +270,7 @@ export function BrepDependencyGraph({
                 style={{
                   left: node.x,
                   top: node.y,
-                  width: layout.nodeWidth,
+                  width: NODE_WIDTH,
                   height: NODE_HEIGHT,
                 }}
               >
@@ -412,7 +306,7 @@ export function BrepDependencyGraph({
       </div>
 
       {selectedNode ? (
-        <div className="grid gap-2 rounded-lg border border-adam-neutral-800 bg-adam-neutral-900/35 p-2.5">
+        <div className="grid shrink-0 gap-2 rounded-lg border border-adam-neutral-800 bg-adam-neutral-900/35 p-2.5">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="min-w-[120px] flex-1 truncate font-mono text-[11px] text-adam-text-primary">
               {selectedNode.id}
