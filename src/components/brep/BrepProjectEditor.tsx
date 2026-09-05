@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { BrepFeatureEditor } from '@/components/brep/BrepFeatureEditor';
+import { BrepProjectDefinitionEditor } from '@/components/brep/BrepProjectDefinitionEditor';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import {
@@ -923,6 +924,16 @@ export function BrepProjectParametersPanel() {
         <ScrollArea className="flex-1 px-4 py-4 lg:px-6 lg:py-6">
           <div className="mb-4 lg:mb-6">
             <BrepProjectFilesPanel />
+          </div>
+
+          <div className="mb-4 border-b border-adam-neutral-700/60 pb-4 lg:mb-6">
+            <BrepProjectDefinitionEditor
+              key={`definition:${activeRevisionId ?? project.id}`}
+              project={project}
+              disabled={featureEditingDisabled}
+              saving={sourceSaving}
+              onSaveProject={saveProjectSource}
+            />
           </div>
 
           <Collapsible open={parametersOpen} onOpenChange={setParametersOpen}>
