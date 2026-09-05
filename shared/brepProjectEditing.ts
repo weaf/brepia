@@ -33,6 +33,19 @@ export function brepNodeConsumers(
     .map((node) => node.id);
 }
 
+export function brepProjectObjectNodeRoles(
+  project: BrepProject,
+  nodeId: string,
+): string[] {
+  const roles: string[] = [];
+  if (project.projectObject?.footprintNodeId === nodeId) roles.push('footprint');
+  if (project.projectObject?.clearanceEnvelopeNodeId === nodeId)
+    roles.push('clearance envelope');
+  if (project.projectObject?.maintenanceEnvelopeNodeId === nodeId)
+    roles.push('maintenance envelope');
+  return roles;
+}
+
 export function suggestBrepNodeId(
   project: BrepProject,
   type: BrepNode['type'],
@@ -79,8 +92,9 @@ function appendVectorParameterUsages(
 
 /**
  * Return human-readable canonical fields that currently reference a published
- * parameter. Phase 4D uses this to make parameter deletion explicit rather
- * than relying on a later missing-reference validation error.
+ * parameter. Project definition and later project-object authoring use this to
+ * make destructive changes explicit rather than relying on missing-reference
+ * validation after the fact.
  */
 export function brepProjectParameterUsages(
   project: BrepProject,
@@ -106,6 +120,21 @@ export function brepProjectParameterUsages(
     parameterId,
     'placement.yAxis',
   );
+
+  for (const point of project.projectObject?.points ?? []) {
+    appendVectorParameterUsages(
+      usages,
+      point.position,
+      parameterId,
+      `projectObject.points.${point.id}.position`,
+    );
+    appendVectorParameterUsages(
+      usages,
+      point.direction,
+      parameterId,
+      `projectObject.points.${point.id}.direction`,
+    );
+  }
 
   for (const node of project.nodes) {
     switch (node.type) {
@@ -251,9 +280,9 @@ export function setBrepProjectResultNode(
 }
 
 /**
- * Delete exactly one unreferenced, non-result node. Phase 4C intentionally
- * performs no implicit cascading rewrites; consumers/result authority must be
- * changed explicitly before a destructive delete is permitted.
+ * Delete exactly one unreferenced, non-result node. Structural authoring never
+ * performs implicit cascading rewrites; consumers, project-object roles and
+ * result authority must be changed explicitly before deletion is permitted.
  */
 export function deleteBrepProjectNode(
   project: BrepProject,
@@ -261,6 +290,12 @@ export function deleteBrepProjectNode(
 ): BrepProject {
   if (!project.nodes.some((node) => node.id === nodeId)) {
     throw new Error(`BRep node ${nodeId} does not exist in the current project.`);
+  }
+  const objectRoles = brepProjectObjectNodeRoles(project, nodeId);
+  if (objectRoles.length > 0) {
+    throw new Error(
+      `BRep node ${nodeId} is assigned to the project-object ${objectRoles.join(', ')} role${objectRoles.length === 1 ? '' : 's'}. Clear the project-object role before deleting it.`,
+    );
   }
   if (project.resultNodeId === nodeId) {
     throw new Error(
