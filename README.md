@@ -13,7 +13,7 @@
 
 </div>
 
-Brepia is an open-source browser-based workspace for parametric and Creative 3D design. It combines editable OpenSCAD projects, a live 3D viewer, model history, import/export tools and optional AI-assisted workflows in one application.
+Brepia is an open-source browser-based workspace for parametric and Creative 3D design. It combines editable OpenSCAD projects, constrained native BRep projects, a live 3D viewer, model history, import/export tools and optional AI-assisted workflows in one application.
 
 ## Features
 
@@ -22,6 +22,11 @@ Brepia is an open-source browser-based workspace for parametric and Creative 3D 
 - Import standalone `.scad` files, local OpenSCAD project folders and bounded same-repository OpenSCAD projects from GitHub.
 - Preserve project-local `.scad` dependencies and explicitly supported relative assets referenced by `import()` / `surface()`.
 - Inspect and directly edit project `.scad` source files, including the declared entrypoint and non-entrypoint support files, from the existing Parametric editor.
+- Create, import, export and revise canonical native BRep projects without exposing arbitrary Python as project source.
+- Edit native BRep published parameters, feature DAG nodes, dependencies, result selection, placement and object metadata through immutable project revisions.
+- Inspect BRep dependency graphs and directly author project-object semantics such as footprint, clearance/maintenance roles and stable local connection, mounting and cable points.
+- Evaluate native BRep geometry in an isolated build123d/OCCT sandbox and export exact primary-result STEP directly from that native path.
+- Use complete canonical BRep snapshots in supported AI, OpenCode and Codex editing workflows while preserving stable project/node/parameter/object identities.
 - Inspect models in a live browser-based 3D viewer.
 - Use text or reference images in Creative 3D workflows.
 - Work with local or hosted model providers, including OpenAI-compatible endpoints.
@@ -38,7 +43,7 @@ Brepia is an open-source browser-based workspace for parametric and Creative 3D 
 | **DXF**  | 2D CAD exchange                |
 | **STEP** | 3D CAD exchange                |
 
-Creative workflows can also provide GLB output when supported by the selected backend.
+Creative workflows can also provide GLB output when supported by the selected backend. Native BRep projects can additionally export their canonical Brepia project package for lossless Brepia round trips.
 
 ## Requirements
 
@@ -69,6 +74,20 @@ For local database setup and migration details, see [`docs/local_supabase_lifecy
 
 ## Optional local services
 
+### Native BRep
+
+Build the pinned build123d/OCCT evaluation sandbox with:
+
+```bash
+./scripts/brep/build-image.sh
+```
+
+Then configure the native BRep runner as documented in `.env.local.template`. The repository smoke test is:
+
+```bash
+./scripts/brep/smoke-test.sh
+```
+
 ### Creative 3D
 
 Install the supported local Creative runtime with:
@@ -81,7 +100,7 @@ See [`docs/local_creative_mesh_backends.md`](docs/local_creative_mesh_backends.m
 
 ### STEP export
 
-Build the STEP export sandbox with:
+Build the OpenSCAD/scad123d STEP export sandbox with:
 
 ```bash
 ./scripts/step-export/build-image.sh
