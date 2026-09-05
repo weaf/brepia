@@ -7,6 +7,7 @@ import {
   BREP_PROJECT_MAX_NAME_CHARS,
   BREP_PROJECT_MAX_NODE_INPUTS,
   BREP_PROJECT_MAX_NODES,
+  BREP_PROJECT_MAX_OBJECT_POINTS,
   BREP_PROJECT_MAX_PARAMETERS,
   BREP_PROJECT_SCHEMA_VERSION,
   type BrepProject,
@@ -64,6 +65,28 @@ const brepMetadataSchema = z
         (value) => Object.keys(value).length <= BREP_PROJECT_MAX_METADATA_PROPERTIES,
         `BRep metadata may contain at most ${BREP_PROJECT_MAX_METADATA_PROPERTIES} properties.`,
       )
+      .optional(),
+  })
+  .strict();
+
+const brepProjectObjectPointSchema = z
+  .object({
+    id: brepIdSchema,
+    kind: z.enum(['connection', 'mounting', 'cable']),
+    position: brepVector3Schema,
+    direction: brepVector3Schema.optional(),
+    label: z.string().min(1).max(BREP_PROJECT_MAX_NAME_CHARS).optional(),
+  })
+  .strict();
+
+const brepProjectObjectSchema = z
+  .object({
+    footprintNodeId: brepIdSchema.optional(),
+    clearanceEnvelopeNodeId: brepIdSchema.optional(),
+    maintenanceEnvelopeNodeId: brepIdSchema.optional(),
+    points: z
+      .array(brepProjectObjectPointSchema)
+      .max(BREP_PROJECT_MAX_OBJECT_POINTS)
       .optional(),
   })
   .strict();
@@ -162,6 +185,7 @@ export const brepAiProjectSchema = z
     units: z.literal('mm'),
     placement: brepPlacementSchema,
     metadata: brepMetadataSchema.optional(),
+    projectObject: brepProjectObjectSchema.optional(),
     parameters: z
       .array(brepPublishedNumberParameterSchema)
       .max(BREP_PROJECT_MAX_PARAMETERS),
