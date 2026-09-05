@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, GitBranch, Pencil } from 'lucide-react';
+import { BrepDependencyGraph } from '@/components/brep/BrepDependencyGraph';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -91,10 +92,7 @@ function ScalarField({
         >
           <option value={LITERAL_VALUE}>Literal value</option>
           {compatibleParameters.map((parameter) => (
-            <option
-              key={parameter.id}
-              value={`parameter:${parameter.id}`}
-            >
+            <option key={parameter.id} value={`parameter:${parameter.id}`}>
               {parameter.label} · {parameter.id}
             </option>
           ))}
@@ -428,12 +426,31 @@ export function BrepFeatureEditor({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<BrepNode | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
+    project.resultNodeId || project.nodes[0]?.id || null,
+  );
+
+  useEffect(() => {
+    if (
+      selectedNodeId &&
+      project.nodes.some((node) => node.id === selectedNodeId)
+    ) {
+      return;
+    }
+    setSelectedNodeId(project.resultNodeId || project.nodes[0]?.id || null);
+  }, [project.nodes, project.resultNodeId, selectedNodeId]);
 
   const editNode = (node: BrepNode) => {
+    setSelectedNodeId(node.id);
     if (disabled || saving) return;
     setDraft(cloneNode(node));
     setLocalError(null);
     setDialogOpen(true);
+  };
+
+  const editNodeById = (nodeId: string) => {
+    const node = project.nodes.find((candidate) => candidate.id === nodeId);
+    if (node) editNode(node);
   };
 
   const save = async () => {
@@ -441,6 +458,7 @@ export function BrepFeatureEditor({
     setLocalError(null);
     try {
       await onSaveNode(draft);
+      setSelectedNodeId(draft.id);
       setDialogOpen(false);
       setDraft(null);
     } catch (reason) {
@@ -470,17 +488,32 @@ export function BrepFeatureEditor({
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-3">
+            <BrepDependencyGraph
+              project={project}
+              selectedNodeId={selectedNodeId}
+              editingDisabled={disabled || saving}
+              onSelectNode={setSelectedNodeId}
+              onEditNode={editNodeById}
+            />
+          </div>
+
+          <div className="mt-3 space-y-1.5 border-t border-adam-neutral-800 pt-3">
             {project.nodes.map((node, index) => {
               const dependencies = brepNodeDependencies(node);
               const isResult = project.resultNodeId === node.id;
+              const selected = selectedNodeId === node.id;
               return (
                 <button
                   key={node.id}
                   type="button"
-                  disabled={disabled || saving}
+                  aria-pressed={selected}
                   onClick={() => editNode(node)}
-                  className="flex w-full items-start gap-2 rounded-lg border border-adam-neutral-800 bg-adam-neutral-900/40 px-3 py-2 text-left transition-colors hover:border-adam-neutral-700 hover:bg-adam-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-adam-blue-dark ${
+                    selected
+                      ? 'border-adam-blue-dark/70 bg-adam-blue-dark/10'
+                      : 'border-adam-neutral-800 bg-adam-neutral-900/40 hover:border-adam-neutral-700 hover:bg-adam-neutral-900'
+                  } ${disabled || saving ? 'cursor-default' : ''}`}
                 >
                   <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-adam-neutral-500" />
                   <span className="min-w-0 flex-1">
@@ -503,14 +536,21 @@ export function BrepFeatureEditor({
                         : `Primitive · node ${index + 1}`}
                     </span>
                   </span>
-                  <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-adam-neutral-500" />
+                  <Pencil
+                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                      disabled || saving
+                        ? 'text-adam-neutral-700'
+                        : 'text-adam-neutral-500'
+                    }`}
+                  />
                 </button>
               );
             })}
           </div>
           {disabled ? (
             <p className="mt-2 text-[10px] text-adam-neutral-500">
-              Save or discard competing edits before changing a feature.
+              Dependency navigation remains available. Save or discard competing
+              edits before changing a feature.
             </p>
           ) : null}
         </CollapsibleContent>
@@ -542,8 +582,8 @@ export function BrepFeatureEditor({
                 </DialogTitle>
                 <DialogDescription className="text-adam-neutral-400">
                   Edit this existing canonical feature. Node ID and type stay
-                  stable in Phase 4A; Save validates the complete BRep project
-                  and creates a new immutable source revision.
+                  stable; Save validates the complete BRep project and creates a
+                  new immutable source revision.
                 </DialogDescription>
               </DialogHeader>
 

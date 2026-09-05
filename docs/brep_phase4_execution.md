@@ -2,18 +2,20 @@
 
 ## Status
 
-Phase 4 — Brepia graph/editor UX — starts from current `master`:
+Phase 4 — Brepia graph/editor UX — is active on current `master`.
+
+Accepted Phase 4A checkpoint:
 
 ```text
-0e08ddbfe6e8821716a361d3d8c0bcec33803c58
-Merge pull request #25 from weaf/docs/openscad-entrypoint-readme
-Refresh OpenSCAD entrypoint editing documentation
+8b13e2307e011da7df4a809a302e6f6104b01170
+Merge pull request #26 from weaf/feature/brep-graph-editor
+Phase 4A: direct BRep feature editing
 ```
 
-Branch:
+Active Phase 4B branch:
 
 ```text
-feature/brep-graph-editor
+feature/brep-graph-visualization
 ```
 
 The current implementation is the source of truth. Historical BRep phase documents are evidence only unless this contract explicitly carries a boundary forward.
@@ -28,12 +30,14 @@ The accepted BRep stack already provides:
 - current node types `box`, `cylinder`, `transform`, `subtract`, and `fillet`;
 - immutable assistant `data-brep-project` source revisions selected by `current_message_leaf_id`;
 - direct published-parameter editing with native preview and explicit immutable parameter revision save;
+- direct structured editing of every existing feature type from Phase 4A;
+- complete-project normalization and compare-and-set persistence for direct feature saves;
 - AI creation/editing through complete validated canonical snapshots;
 - restore, branch, retry and stale-write protection;
 - read-only canonical `project.brep.json` inspection;
 - isolated build123d/OCCT evaluation and exact native STEP export.
 
-What is still missing is direct human editing of the feature DAG. Today node/DAG changes require AI or external package/import workflows.
+Phase 4A intentionally did not add a graph layout or structural DAG authoring. The next gap is dependency visualization and navigation over the already-authoritative canonical graph.
 
 ## Phase 4 architecture locks
 
@@ -47,60 +51,62 @@ What is still missing is direct human editing of the feature DAG. Today node/DAG
 8. OpenSCAD behavior, source routing and project editing are out of scope for Phase 4.
 9. Rhino/Grasshopper, 3DM and project-object contracts remain later roadmap phases.
 
-## 4A — Existing feature inspector/editor
+## 4A — Existing feature inspector/editor — complete
 
-Active scope for the first vertical slice.
+Phase 4A is accepted and merged. It provides:
+
+- a structured **Features** inspector over every canonical node;
+- editing for `box`, `cylinder`, `transform`, `subtract`, and `fillet`;
+- literal and compatible published-parameter scalar semantics;
+- complete-project validation through `normalizeBrepProject`;
+- immutable source revisions with expected-leaf compare-and-set activation;
+- coordination with parameter drafts/saves, revision actions, exports and AI streaming;
+- browser/runtime acceptance of feature editing, persistence, revision behavior and exact STEP authority.
+
+The 4A restrictions on node identity/type and structural authoring continue into 4B.
+
+## 4B — Graph visualization and dependency navigation — active
 
 ### Product behavior
 
-- Add a structured **Features** section to the BRep editor.
-- List every canonical node in project order and show node ID, type, dependency summary and result-node status.
-- Selecting a node opens a structured editor for that existing node.
-- Node ID and node type are read-only in 4A.
-- Support editing all fields of the five existing node types:
-  - `box`: width, depth, height;
-  - `cylinder`: radius, height;
-  - `transform`: input, translate, rotateDeg;
-  - `subtract`: base and tools;
-  - `fillet`: input, radius and parallel-axis selector.
-- Scalar fields can remain literal values or reference compatible published parameters.
-- Node-reference fields use existing canonical node IDs.
-- A save validates the complete candidate through `normalizeBrepProject` before persistence.
-- Successful save creates one immutable lifecycle revision and activates it only if the expected source leaf is still current.
-- The refreshed active source drives the existing native preview, revision history, AI continuation and exports.
+- Visualize the canonical BRep feature DAG inside the existing Features inspector.
+- Derive all graph nodes and edges from the current `BrepProject`; persist no graph layout state.
+- Direct edges from dependency/input nodes toward their consumers/result flow.
+- Use deterministic topological depth so primitives appear upstream and the result flow progresses toward the result node.
+- Clearly identify the canonical `resultNodeId`.
+- Keep one ephemeral selected-node state synchronized between graph nodes and the existing feature list.
+- Selecting a graph node must not itself mutate the project or force an edit operation.
+- For the selected node, expose direct **Inputs** and **Used by** navigation links.
+- Highlight the selected node, its direct inputs/consumers and incident edges sufficiently to follow local dependency flow.
+- Preserve Phase 4A editing: an eligible selected node can still open the existing structured feature editor and saves use the unchanged canonical persistence path.
+- Dependency navigation remains usable while feature writes are disabled by AI streaming, parameter drafts or another source action.
+- The graph must remain usable in the narrow desktop Parameters panel and the mobile Parameters view through bounded scrolling rather than changing application layout.
 
-### Concurrency / dirty-state behavior
+### Graph-model behavior
 
-4A must not silently reconcile competing local authoring surfaces.
+- Dependency semantics come from the same canonical node-reference interpretation used by Phase 4A.
+- Derived graph metadata may include depth, consumers and presentation edges, but it is not part of `BrepProject` and is never serialized.
+- Graph derivation must not reorder or mutate `project.nodes`.
+- Although canonical projects already reject missing references and cycles, the presentation boundary must fail closed if handed an unexpected invalid snapshot.
+- Repeated semantic references may be deduplicated for presentation so one dependency pair produces one visual edge.
 
-Feature editing is disabled while:
-
-- an AI turn is streaming;
-- a parameter revision save is active;
-- a revision action is active;
-- there are unsaved parameter preview values.
-
-If the active source changes while a feature editor is open, the editor must fail closed rather than saving against stale source.
-
-### Explicit 4A non-goals
+### Explicit 4B non-goals
 
 Do not add in this slice:
 
 - node creation or deletion;
 - node-ID renaming;
 - node-type conversion;
+- dependency rewiring through graph gestures;
 - result-node reassignment;
-- drag/drop graph layout or edge wiring;
+- drag/drop persistence or saved graph coordinates;
+- freeform canvas authoring;
 - project placement/metadata editing;
 - published-parameter definition creation/deletion;
 - browser-side geometry execution;
 - Rhino/Grasshopper/3DM integration.
 
 ## Later Phase 4 slices
-
-### 4B — Graph visualization and dependency navigation
-
-Visualize the canonical DAG, keep node selection synchronized with the inspector, and make dependencies/result flow easy to follow. The graph remains presentation/editor state only.
 
 ### 4C — Structural DAG authoring
 
@@ -110,19 +116,20 @@ Add validated node creation/deletion, dependency rewiring and result-node select
 
 Add the remaining direct project-definition surfaces that prove useful (published parameter definitions, placement and metadata), then run browser/runtime/regression acceptance and close Phase 4.
 
-## 4A acceptance
+## 4B acceptance
 
-4A is complete only when all of the following hold:
+4B is complete only when all of the following hold:
 
-1. Existing nodes are discoverable and selectable in the BRep editor.
-2. Structured edits work for each currently supported node type.
-3. Literal/parameter scalar semantics are preserved and invalid unit references fail validation.
-4. Invalid/missing node references and cycles fail closed before active source replacement.
-5. A valid feature save creates a new immutable canonical revision.
-6. Refresh/reopen shows the saved feature source and native geometry.
-7. Restore/branch continues to operate on the same message-tree lineage.
-8. A stale feature save cannot overwrite a newer AI, parameter or revision change.
-9. Unsaved parameter drafts and AI streaming block direct feature writes.
-10. Exact STEP derives from the selected saved BRep source after feature editing.
-11. Ordinary OpenSCAD workflows remain unchanged.
-12. Repository quality gates are green and the focused browser acceptance is recorded before merge.
+1. Every canonical BRep node appears in the dependency graph and the result node is visibly identifiable.
+2. Dependency edges follow the canonical node references and point from input/dependency toward consumer.
+3. A branched project such as the cabinet sample has deterministic topological levels independent of feature-list selection.
+4. Clicking a graph node updates the selected state shown by the feature inspector without changing canonical project data.
+5. Clicking an inspector node keeps graph selection synchronized and preserves the existing 4A edit affordance when editing is allowed.
+6. Inputs and consumers of the selected node can be navigated directly.
+7. Selected-node local flow is visually distinguishable from unrelated graph branches.
+8. Graph navigation remains available while source editing is blocked by AI streaming or unsaved parameter state; actual feature editing remains blocked.
+9. Refresh/revision changes rebuild the graph solely from the newly selected canonical source.
+10. No graph position/selection data is persisted into `BrepProject`, messages or project packages.
+11. Existing feature save, native preview, revision history, AI continuation and STEP export behavior remain unchanged.
+12. The graph is practically scrollable/touch-usable in desktop and mobile Parameters views.
+13. Repository quality gates are green and focused browser acceptance is recorded before merge.
