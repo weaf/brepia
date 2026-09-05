@@ -1,22 +1,8 @@
+import { type ReactNode, useMemo, useState } from 'react';
 import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useMemo,
-  useState,
-} from 'react';
-
-export const BREP_GRAPH_WORKSPACE_TARGET_ID = 'brep-graph-workspace-target';
-
-export type BrepWorkspaceView = 'model' | 'graph';
-
-type BrepFeatureWorkspaceContextValue = {
-  view: BrepWorkspaceView;
-  setView: (view: BrepWorkspaceView) => void;
-};
-
-const BrepFeatureWorkspaceContext =
-  createContext<BrepFeatureWorkspaceContextValue | null>(null);
+  BrepFeatureWorkspaceContext,
+  type BrepWorkspaceView,
+} from '@/components/brep/brepFeatureWorkspaceContext';
 
 export function BrepFeatureWorkspaceProvider({
   children,
@@ -31,14 +17,4 @@ export function BrepFeatureWorkspaceProvider({
       {children}
     </BrepFeatureWorkspaceContext.Provider>
   );
-}
-
-export function useBrepFeatureWorkspace(): BrepFeatureWorkspaceContextValue {
-  const value = useContext(BrepFeatureWorkspaceContext);
-  if (!value) {
-    throw new Error(
-      'BRep feature workspace controls require BrepFeatureWorkspaceProvider.',
-    );
-  }
-  return value;
 }
