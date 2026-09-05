@@ -12,4 +12,5 @@ JSON
 
 "$RUNNER" --input "$WORKSPACE/request.json" --output "$WORKSPACE/output"
 grep -q 'ISO-10303-21' "$WORKSPACE/output/model.step"
-node -e "const r=require('$WORKSPACE/output/result.json'); const p=r.projectObject; if(r.status!=='success'||r.resultNodeId!=='cut'||r.bodies?.length!==1||!r.bodies[0]?.viewerMesh?.indices?.length||p?.geometry?.footprint?.id!=='body'||p?.geometry?.clearanceEnvelope?.id!=='finished'||p?.geometry?.maintenanceEnvelope?.id!=='body'||p?.points?.[0]?.position?.[0]!==50||p?.placement?.zAxis?.[2]!==1) process.exit(1); console.log(JSON.stringify({result:r.resultNodeId,triangles:r.bodies[0].viewerMesh.indices.length/3,roles:Object.keys(p.geometry),point:p.points[0]}));"
+grep -a -q '^3D Geometry File Format ' "$WORKSPACE/output/model.3dm"
+node -e "const r=require('$WORKSPACE/output/result.json'); const p=r.projectObject; if(r.status!=='success'||r.resultNodeId!=='cut'||r.bodies?.length!==1||!r.bodies[0]?.viewerMesh?.indices?.length||p?.geometry?.footprint?.id!=='body'||p?.geometry?.clearanceEnvelope?.id!=='finished'||p?.geometry?.maintenanceEnvelope?.id!=='body'||p?.points?.[0]?.position?.[0]!==50||p?.placement?.zAxis?.[2]!==1) process.exit(1); console.log(JSON.stringify({result:r.resultNodeId,triangles:r.bodies[0].viewerMesh.indices.length/3,roles:Object.keys(p.geometry),point:p.points[0],artifacts:['model.step','model.3dm']}));"

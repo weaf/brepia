@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   evaluateBrepProject,
   BrepEvaluationError,
+  exportBrepProjectTo3dm,
   exportBrepProjectToStep,
 } from '@/server/brepEvaluation';
 import {
@@ -96,14 +97,16 @@ const emptyProjectObject =
   '{"placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0],"zAxis":[0,0,1]},"geometry":{},"points":[]}';
 
 const validRunnerBody = `cat > "$OUTPUT/result.json" <<'JSON'
-{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.2.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":true}}
+{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.3.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":true}}
 JSON
-printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"`;
+printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"
+printf '3D Geometry File Format 80\n' > "$OUTPUT/model.3dm"`;
 
 const projectObjectRunnerBody = `cat > "$OUTPUT/result.json" <<'JSON'
-{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.2.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":{"placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0],"zAxis":[0,0,1]},"metadata":{"objectType":"cabinet","classification":"equipment"},"geometry":{"footprint":${primaryBody},"clearanceEnvelope":{"id":"clearance","bounds":{"min":[0,0,0],"max":[30,15,10]},"viewerMesh":{"bodyId":"clearance","positions":[0,0,0,30,0,0,0,15,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}},"points":[{"id":"cableEntry","kind":"cable","position":[20,2,0],"direction":[0,0,1],"label":"Cable entry"}]},"warnings":[],"exactExport":{"format":"step","available":true}}
+{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.3.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":{"placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0],"zAxis":[0,0,1]},"metadata":{"objectType":"cabinet","classification":"equipment"},"geometry":{"footprint":${primaryBody},"clearanceEnvelope":{"id":"clearance","bounds":{"min":[0,0,0],"max":[30,15,10]},"viewerMesh":{"bodyId":"clearance","positions":[0,0,0,30,0,0,0,15,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}},"points":[{"id":"cableEntry","kind":"cable","position":[20,2,0],"direction":[0,0,1],"label":"Cable entry"}]},"warnings":[],"exactExport":{"format":"step","available":true}}
 JSON
-printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"`;
+printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"
+printf '3D Geometry File Format 80\n' > "$OUTPUT/model.3dm"`;
 
 function expectBrepError(
   action: () => Promise<unknown>,
@@ -124,7 +127,7 @@ describe('isolated BRep evaluation boundary', () => {
     );
   });
 
-  it('accepts only a bounded valid sandbox result and preserves STEP as a separate artifact', async () => {
+  it('accepts only bounded valid sandbox artifacts', async () => {
     process.env.PCAD_BREP_RUNNER = await fakeRunner(validRunnerBody);
     const artifact = await evaluateBrepProject(project(), { width: 20 });
     expect(artifact.result.status).toBe('success');
@@ -140,6 +143,7 @@ describe('isolated BRep evaluation boundary', () => {
       points: [],
     });
     expect(artifact.stepBytes).toBeInstanceOf(Uint8Array);
+    expect(artifact.threeDmBytes).toBeInstanceOf(Uint8Array);
   });
 
   it('accepts bounded auxiliary geometry and resolved project-object semantics', async () => {
@@ -188,12 +192,27 @@ describe('isolated BRep evaluation boundary', () => {
     );
   });
 
-  it('exports only an exact primary STEP artifact from the same isolated evaluator', async () => {
+  it('exports exact primary STEP and 3DM interoperability artifacts from the isolated evaluator', async () => {
     process.env.PCAD_BREP_RUNNER = await fakeRunner(validRunnerBody);
     await expect(
       exportBrepProjectToStep(project(), { width: 20 }),
     ).resolves.toEqual(expect.any(Uint8Array));
+    await expect(
+      exportBrepProjectTo3dm(project(), { width: 20 }),
+    ).resolves.toEqual(expect.any(Uint8Array));
+  });
 
+  it('rejects invalid 3DM artifact headers before exposing bytes', async () => {
+    process.env.PCAD_BREP_RUNNER = await fakeRunner(
+      validRunnerBody.replace('3D Geometry File Format 80', 'not-a-3dm'),
+    );
+    await expectBrepError(
+      () => exportBrepProjectTo3dm(project(), { width: 20 }),
+      'output_invalid',
+    );
+  });
+
+  it('requires exact STEP availability for STEP export', async () => {
     process.env.PCAD_BREP_RUNNER = await fakeRunner(
       `cat > "$OUTPUT/result.json" <<'JSON'
 {"status":"success","provider":{},"projectId":"box","resultNodeId":"body","bodies":[{"id":"body","bounds":{"min":[0,0,0],"max":[1,1,1]}}],"bounds":{"min":[0,0,0],"max":[1,1,1]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":false}}
