@@ -57,12 +57,23 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /\bModel\b/);
   });
 
-  it('matches the Parametric sidebar hierarchy and exposes canonical BRep JSON', () => {
+  it('matches the responsive Parametric sidebar hierarchy and exposes canonical BRep JSON', () => {
     assert.match(brepEditorSource, /Project files/);
     assert.match(brepEditorSource, /1 canonical source file/);
     assert.match(brepEditorSource, /project\.brep\.json/);
-    assert.match(brepEditorSource, /Canonical BRep source for the active immutable revision/);
-    assert.match(brepEditorSource, /<ScrollArea className="flex-1 px-6 py-6">/);
+    assert.match(
+      brepEditorSource,
+      /Canonical BRep source for the active immutable revision/,
+    );
+    assert.match(brepEditorSource, /useIsMobile/);
+    assert.match(brepEditorSource, /useState\(!isMobile\)/);
+    assert.match(brepEditorSource, /setOpen\(!isMobile\)/);
+    assert.match(brepEditorSource, /BRep project files/);
+    assert.match(
+      brepEditorSource,
+      /<ScrollArea className="flex-1 px-4 py-4 lg:px-6 lg:py-6">/,
+    );
+    assert.match(brepEditorSource, /<BrepProjectFilesPanel \/>/);
     assert.match(brepEditorSource, /select BRep download format/);
     assert.match(brepEditorSource, /\.STEP/);
     assert.match(brepEditorSource, /\.BREP JSON/);
@@ -77,7 +88,10 @@ describe('BRep product chat client boundary', () => {
   });
 
   it('isolates native BRep chat state from the OpenSCAD editor cache and guards duplicate submits', () => {
-    assert.match(brepChatSource, /const chatCacheId = `brep:\$\{conversation\.id\}`/);
+    assert.match(
+      brepChatSource,
+      /const chatCacheId = `brep:\$\{conversation\.id\}`/,
+    );
     assert.match(brepChatSource, /id:\s*chatCacheId/);
     assert.match(brepChatSource, /const submitInFlightRef = useRef\(false\)/);
     assert.match(brepChatSource, /if \(submitInFlightRef\.current\) return/);
@@ -117,7 +131,10 @@ describe('BRep product chat client boundary', () => {
   it('serializes rapid native evaluation and persists parameters only through explicit save', () => {
     assert.match(brepPreviewSource, /BREP_EVALUATION_DEBOUNCE_MS/);
     assert.match(brepPreviewSource, /browserBrepEvaluationQueue/);
-    assert.match(brepPreviewSource, /version !== evaluationVersionRef\.current/);
+    assert.match(
+      brepPreviewSource,
+      /version !== evaluationVersionRef\.current/,
+    );
     assert.match(brepPreviewSource, /parameterValuesEqual/);
     assert.match(brepPreviewSource, /committedValuesRef/);
     assert.match(brepPreviewSource, /hasUnsavedParameterChanges/);
