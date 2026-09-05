@@ -6,7 +6,7 @@
 
 <div align="center">
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat)](https://github.com/weaf/brepia/blob/master/LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%2B%20%7C%2022.12%2B-green.svg?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat)](https://react.dev/)
 [![OpenSCAD](https://img.shields.io/badge/OpenSCAD-Parametric-F9D64F.svg?style=flat)](https://openscad.org/)
