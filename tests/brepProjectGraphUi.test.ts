@@ -35,4 +35,13 @@ describe('BRep graph/editor UI boundary', () => {
       /Dependency navigation remains available\. Save or discard competing/,
     );
   });
+
+  it('uses a bounded single-column graph on mobile instead of clipping desktop topology', () => {
+    assert.match(graphSource, /useIsMobile\(\)/);
+    assert.match(graphSource, /layoutGraph\(graph, isMobile\)/);
+    assert.match(graphSource, /MOBILE_NODE_WIDTH/);
+    assert.match(graphSource, /orderedNodes/);
+    assert.match(graphSource, /overflow-x-hidden overflow-y-auto/);
+    assert.match(graphSource, /marginInline: 'auto'/);
+  });
 });
