@@ -20,11 +20,7 @@ Merge pull request #31 from weaf/feature/brep-project-object-evaluation
 Phase 5B: native BRep project-object evaluation
 ```
 
-Active Phase 5C branch:
-
-```text
-feature/brep-project-object-authoring
-```
+Phase 5C is complete on PR #32 and accepted for merge. The final `master` checkpoint is defined by the PR merge commit rather than a pre-merge branch SHA.
 
 The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence.
 
@@ -40,7 +36,8 @@ The accepted BRep stack now provides:
 - resolved placement/metadata/semantic points in the native evaluation result;
 - exact STEP export from the primary `resultNodeId` only;
 - immutable project source revisions with compare-and-set activation;
-- complete canonical BRep snapshots for built-in AI, OpenCode and Codex editing paths.
+- complete canonical BRep snapshots for built-in AI, OpenCode and Codex editing paths;
+- a shared `Model | Graph` BRep workspace where the 3D viewer and dependency graph are peer views over the same canonical project rather than forcing the graph into the narrow Parameters inspector.
 
 No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime dependency exists in the application today.
 
@@ -58,6 +55,7 @@ No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime depe
 10. Native auxiliary outputs must remain bounded and deterministic.
 11. Direct UI project-object writes must use the accepted full-project source-save guard and immutable CAS persistence path; no second history model is allowed.
 12. Graph visualization remains presentation-only and never becomes source authority.
+13. `Model` and `Graph` are presentation/workspace modes only; switching views must not create revisions, mutate project source or change primary-result semantics.
 
 ## Additive v1 source compatibility
 
@@ -122,7 +120,7 @@ Key invariants:
 - exact STEP remains derived only from `resultNodeId`;
 - auxiliary geometry is intentionally not added to the ordinary browser preview.
 
-## 5C — Project-object authoring and AI product integration — active
+## 5C — Project-object authoring and AI product integration — complete
 
 ### Direct authoring surface
 
@@ -147,7 +145,7 @@ New point IDs are explicit editable drafts before first save and receive determi
 
 ### Result versus project-object roles
 
-The UI must make this distinction explicit:
+The UI makes this distinction explicit:
 
 - **Result** is the canonical primary body used by the ordinary 3D preview and exact primary STEP export.
 - **Footprint / Clearance / Maintenance** are semantic auxiliary outputs evaluated separately by the native runtime.
@@ -175,17 +173,26 @@ The existing source-write guards therefore continue to block project-object writ
 
 Read-only graph navigation remains available under those conditions.
 
-### Graph product integration
+### Graph product integration and workspace
 
-The dependency graph remains presentation-only but identifies nodes carrying semantic project-object roles:
+The dependency graph remains presentation-only and identifies nodes carrying semantic project-object roles:
 
 - `FP` — Footprint;
 - `CL` — Clearance envelope;
 - `MT` — Maintenance envelope.
 
-The selected-node details expose full role names.
+The selected-node details expose full role names. Safe delete is surfaced before mutation: a role-assigned node cannot be deleted until all project-object roles referencing it are explicitly cleared. There is no hidden role rewrite or cascading delete.
 
-Safe delete is surfaced before mutation: a role-assigned node cannot be deleted until all project-object roles referencing it are explicitly cleared. There is no hidden role rewrite or cascading delete.
+The accepted 5C workspace uses **Model | Graph** as peer modes in the main BRep workspace:
+
+- `Model` renders the existing primary-result native 3D viewer;
+- `Graph` renders the dependency graph in the main workspace rather than constraining it to the Parameters-panel width;
+- the Parameters-side Features section remains a compact navigator/inspector and exposes a Graph shortcut;
+- the main Graph view and Features inspector share the same feature selection and the same Edit / Set result / Delete callbacks;
+- view switching is ephemeral UI state and does not write project source or revision history;
+- the same workspace modes are available inside the existing mobile/tablet workspace sheet.
+
+This replaces the interim attempt to make the full dependency graph fit every possible Parameters-panel width. The graph no longer depends on device-viewport heuristics to decide its primary workspace layout.
 
 ### AI product integration
 
@@ -210,7 +217,7 @@ No separate AI project-object tool or patch protocol is introduced.
 
 ### 5C non-goals
 
-Do not add in 5C:
+5C does not add:
 
 - auxiliary geometry overlay/toggling in the ordinary 3D viewer;
 - multi-output STEP;
@@ -222,9 +229,9 @@ Do not add in 5C:
 - a second project-object persistence/history system;
 - placement transformation of local native preview geometry.
 
-## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout — later
+## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout — next
 
-After 5C is accepted, add only the minimum 3DM/rhino3dm capability needed to prove the later Grasshopper path.
+After the accepted 5C merge, add only the minimum 3DM/rhino3dm capability needed to prove the later Grasshopper path.
 
 Before adding a dependency, verify and record:
 
@@ -252,23 +259,21 @@ Evidence:
 - focused browser regression confirmed ordinary BRep preview, Dimension-driven native re-evaluation and STEP export remained green;
 - primary-result viewer/STEP behavior remained unchanged.
 
-## Phase 5C acceptance
+## Phase 5C acceptance closeout
 
-5C is complete only when all of the following hold:
+Phase 5C is browser/product accepted on PR #32.
 
-1. Project object is collapsed by default and remains usable on desktop and mobile.
-2. Footprint, clearance and maintenance roles can each be assigned and cleared through existing canonical feature IDs.
-3. Assigning a role creates an immutable source revision, survives reload and produces the expected `FP`/`CL`/`MT` graph marker without changing `resultNodeId`.
-4. One feature may intentionally carry multiple semantic roles and the graph communicates all assigned roles.
-5. A new semantic point can be created with an explicit stable ID, kind, label and literal local position; it survives reload and appears in canonical `project.brep.json`.
-6. A semantic point position can reference a compatible `mm` published parameter and optional direction can reference a compatible `none` parameter; incompatible units fail before persistence.
-7. Existing semantic point IDs are read-only while label/kind/position/direction remain editable.
-8. Removing points and clearing roles is explicit; clearing the final role/point canonicalizes an empty `projectObject` away.
-9. Graph Delete is blocked for a role-assigned node with an actionable clear-role explanation. After roles are cleared, normal result/consumer/last-node delete guards remain authoritative.
-10. Dirty parameter preview and AI streaming block project-object writes while graph navigation remains available.
-11. Revision selection/restore reproduces pre/post project-object snapshots and the correct role markers/semantic points.
-12. A normal AI BRep follow-up that edits unrelated geometry preserves existing project-object roles and semantic point IDs.
-13. An AI BRep follow-up can intentionally assign/clear a role or add/edit/remove a semantic point through the complete canonical snapshot contract without unintended node/parameter identity churn.
-14. Existing ordinary native preview remains primary-result-only and STEP still exports the primary Result.
-15. OpenSCAD behavior remains unchanged.
-16. Repository tests, typecheck, lint, build and diff checks are green before merge.
+Evidence:
+
+- direct Project object authoring for footprint, clearance, maintenance and semantic points was accepted on desktop/mobile;
+- role assignment/clearing, stable semantic-point identity, parameter-backed point scalars, validation, immutable revision persistence, reload/restore and role-aware safe-delete behavior were accepted;
+- built-in/local BRep AI preservation and intentional project-object editing flows were accepted without unintended canonical identity churn;
+- ordinary primary-result preview and STEP behavior remained unchanged;
+- graph role markers and project-object interactions were accepted;
+- the initial narrow Parameters-panel graph UX was replaced with the accepted `Model | Graph` main-workspace design after browser feedback;
+- the final focused browser check accepted Model/Graph switching and the larger graph workspace as the preferred permanent BRep interaction model;
+- Quality Gate #371 passed the original 5C implementation;
+- Quality Gate #387 passed the final accepted workspace head with 623/623 tests plus typecheck, lint, build and diff check green;
+- the final closeout head must also pass the repository Quality Gate before PR #32 is merged.
+
+5C is therefore complete once that final closeout-head gate is green and PR #32 is merged.
