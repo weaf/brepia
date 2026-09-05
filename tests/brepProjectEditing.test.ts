@@ -8,25 +8,26 @@ import {
 
 describe('BRep existing-node editing', () => {
   it('replaces one existing node while preserving stable project structure', () => {
-    const current = phaseOneCabinetProject.nodes.find(
+    const canonicalBaseline = normalizeBrepProject(phaseOneCabinetProject);
+    const current = canonicalBaseline.nodes.find(
       (node) => node.id === 'cabinetBody',
     );
     expect(current?.type).toBe('box');
     if (!current || current.type !== 'box') throw new Error('Missing box node');
 
     const next = replaceExistingBrepProjectNode(
-      phaseOneCabinetProject,
+      canonicalBaseline,
       current.id,
       { ...current, depth: 700 },
     );
 
-    expect(next.id).toBe(phaseOneCabinetProject.id);
-    expect(next.resultNodeId).toBe(phaseOneCabinetProject.resultNodeId);
-    expect(next.placement).toEqual(phaseOneCabinetProject.placement);
-    expect(next.metadata).toEqual(phaseOneCabinetProject.metadata);
-    expect(next.parameters).toEqual(phaseOneCabinetProject.parameters);
+    expect(next.id).toBe(canonicalBaseline.id);
+    expect(next.resultNodeId).toBe(canonicalBaseline.resultNodeId);
+    expect(next.placement).toEqual(canonicalBaseline.placement);
+    expect(next.metadata).toEqual(canonicalBaseline.metadata);
+    expect(next.parameters).toEqual(canonicalBaseline.parameters);
     expect(next.nodes.map((node) => node.id)).toEqual(
-      phaseOneCabinetProject.nodes.map((node) => node.id),
+      canonicalBaseline.nodes.map((node) => node.id),
     );
     expect(next.nodes.find((node) => node.id === current.id)).toMatchObject({
       id: current.id,
