@@ -60,11 +60,7 @@ export function BrepProjectWorkspacePanel({
           <div
             id={BREP_GRAPH_WORKSPACE_TARGET_ID}
             className="h-full min-h-0 w-full overflow-hidden bg-adam-neutral-900 p-3 sm:p-4"
-          >
-            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-adam-neutral-700 text-xs text-adam-neutral-500">
-              Loading dependency graph…
-            </div>
-          </div>
+          />
         )}
       </div>
     </div>
