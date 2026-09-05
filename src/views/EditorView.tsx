@@ -227,9 +227,17 @@ function ConversationEditor() {
   const [mobilePreviewVersion, setMobilePreviewVersion] = useState(0);
   // Streaming flag surfaced from <ChatSession>. While true, the preview
   // pane swaps to the bouncing loader instead of mounting OpenSCAD —
-  // matches the legacy ParametricPreviewSection behavior.
+  // matches the legacy ParametricPreviewSection behavior. Keep a ref in
+  // parallel so async file writes can re-check the live value after awaiting
+  // queued parameter persistence instead of relying on a captured render.
   const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const isChatStreamingRef = useRef(false);
   const baseCodeRef = useRef<string | null>(null);
+
+  const handleChatLoadingChange = useCallback((loading: boolean) => {
+    isChatStreamingRef.current = loading;
+    setIsChatStreaming(loading);
+  }, []);
 
   // `dxfExporter` is itself a function, so we MUST use the lazy-set form
   // when OpenSCADPreview hands us a new exporter — `setDxfExporter(fn)`
@@ -460,11 +468,10 @@ function ConversationEditor() {
       baseCodeRef.current = code;
       // Parameters are derived from the OpenSCAD source — same code always
       // yields the same `<ParameterSection>`, no matter which model wrote
-      // it. The current values come from the (possibly edited) artifact
-      // code; the `defaultValue` (Reset target / slider home / auto range)
-      // comes from `metadata.originalCode` — the model's first-authored
-      // source — so an in-place parameter edit doesn't redefine the default
-      // on the next reload. Read from the cache to keep this callback stable.
+      // it. Current values come from the live artifact code; `defaultValue`
+      // comes from the parameter baseline stored in `metadata.originalCode`.
+      // Direct entrypoint saves deliberately rebase that metadata to the
+      // newly authored source, while parameter-control edits preserve it.
       const originalCode = queryClient
         .getQueryData<Message[]>(['messages', conversation.id])
         ?.find((row) => row.id === messageId)?.metadata?.originalCode;
@@ -509,15 +516,10 @@ function ConversationEditor() {
       const row = dbMessages.find((message) => message.id === messageId);
       if (!row) return;
       const nextParts = replaceBuildParametricModelOutput(row.parts, artifact);
-      // Lazily capture the model's original source the first time a parameter
-      // is edited. Before this feature edits never persisted, so a message
-      // lacking `originalCode` still holds the model's original in its stored
-      // code — the pre-edit code, captured at enqueue time in
-      // `changeParameters`. Pinning it there (rather than reading `baseCodeRef`
-      // here) keeps an in-flight write from grabbing a *different* artifact's
-      // code after the user switches previews mid-drain. Anchors the derived
-      // `defaultValue` (Reset / slider home / range) with no migration or
-      // duplicate copy on never-edited artifacts.
+      // Lazily capture the current authored baseline the first time a
+      // parameter control edits it. Direct source saves rebase originalCode
+      // explicitly, so subsequent slider/input edits keep Reset / slider home /
+      // auto-range anchored to the latest manually authored entrypoint.
       const nextMetadata =
         originalCode && !row.metadata?.originalCode
           ? { ...row.metadata, originalCode }
@@ -597,10 +599,10 @@ function ConversationEditor() {
       // `handleToolOutput` owns the row's parts during a stream and would
       // clobber (or be clobbered by) a concurrent parameter write. The live
       // preview above still updates regardless.
-      if (!isChatStreaming) {
-        // Pin the original code at enqueue time — `baseCodeRef` is mutated by
-        // `handleViewArtifact` on preview switch, and an in-flight drain must
-        // not read a later artifact's code for this message's `originalCode`.
+      if (!isChatStreamingRef.current) {
+        // Pin the baseline code at enqueue time — `baseCodeRef` is mutated by
+        // direct entrypoint saves and preview switches, and an in-flight drain
+        // must not read a later artifact's code for this message.
         pendingWritesRef.current.set(activePreview.messageId, {
           artifact: updatedArtifact,
           originalCode: baseCodeRef.current,
@@ -608,7 +610,7 @@ function ConversationEditor() {
         void drainParameterWrites();
       }
     },
-    [activePreview, isChatStreaming, drainParameterWrites],
+    [activePreview, drainParameterWrites],
   );
 
   const waitForParameterWrites = useCallback(async () => {
@@ -627,12 +629,25 @@ function ConversationEditor() {
       if (activePreview?.type !== 'artifact') {
         throw new Error('No OpenSCAD project is active.');
       }
-      if (path === activePreview.artifact.project.entrypointPath) {
-        throw new Error('The project entrypoint is read-only in the file editor.');
+      if (isChatStreamingRef.current) {
+        throw new Error(
+          'Project file editing is disabled while the current AI turn is streaming.',
+        );
       }
 
       await waitForParameterWrites();
 
+      // A stream can start while queued parameter writes are draining. Re-check
+      // the live ref before touching the assistant row so tool-output persistence
+      // and direct project-file persistence can never race each other.
+      if (isChatStreamingRef.current) {
+        throw new Error(
+          'Project file editing is disabled while the current AI turn is streaming.',
+        );
+      }
+
+      const isEntrypoint =
+        path === activePreview.artifact.project.entrypointPath;
       const updatedArtifact: ParametricArtifact = {
         ...activePreview.artifact,
         project: replaceOpenScadProjectFileContent(
@@ -652,17 +667,29 @@ function ConversationEditor() {
         row.parts,
         updatedArtifact,
       );
+      // A direct entrypoint edit is an authored source change, not a parameter
+      // control mutation. Rebase the parameter-default anchor to exactly the
+      // saved source. Support-file saves remain parts-only and therefore leave
+      // message metadata untouched.
+      const nextMetadata = isEntrypoint
+        ? { ...row.metadata, originalCode: content }
+        : undefined;
       await persistAssistantParts({
         conversationId: conversation.id,
         messageId: activePreview.messageId,
         parts: nextParts,
+        metadata: nextMetadata,
       });
       queryClient.setQueryData(
         ['messages', conversation.id],
         (old: Message[] | undefined): Message[] =>
           (old ?? []).map((message) =>
             message.id === activePreview.messageId
-              ? { ...message, parts: nextParts }
+              ? {
+                  ...message,
+                  parts: nextParts,
+                  ...(nextMetadata ? { metadata: nextMetadata } : {}),
+                }
               : message,
           ),
       );
@@ -672,6 +699,12 @@ function ConversationEditor() {
           ? { ...current, artifact: updatedArtifact }
           : current,
       );
+      if (isEntrypoint) {
+        // Parameter controls must build future edits from the newly authored
+        // source, never from the pre-save entrypoint held by baseCodeRef.
+        baseCodeRef.current = content;
+        setParameters(parseParameters(content));
+      }
       setCurrentOutput(undefined);
       setDxfExporter(() => null);
     },
@@ -814,7 +847,7 @@ function ConversationEditor() {
             onChangeRating={handleChangeRating}
             onViewArtifact={handleViewArtifact}
             onViewMesh={handleViewMesh}
-            onLoadingChange={setIsChatStreaming}
+            onLoadingChange={handleChatLoadingChange}
           />
         </>
       }
@@ -930,15 +963,13 @@ function ConversationEditor() {
 
 /**
  * Derive the parameter list from the live artifact code, but anchor each
- * parameter's `defaultValue` to the model's original source when we have it.
+ * parameter's `defaultValue` to the current authored baseline when present.
  *
- * Without this, a parameter edit (which rewrites `name = value;` in the live
- * code) would also become the parsed `defaultValue` on the next reload —
- * making "Reset all parameters" a no-op and letting auto-computed slider
- * ranges drift. `originalCode` is the model's first-authored OpenSCAD, stored
- * in message metadata; values still track the edited code, defaults track the
- * original. Falls back to the live code (legacy behavior) for older messages
- * that predate the stash.
+ * Parameter-control edits rewrite `name = value;` in the live code without
+ * redefining Reset / slider-home / auto-range defaults. Direct entrypoint
+ * source saves deliberately rebase `metadata.originalCode` to the newly
+ * authored source, so their declarations become the new defaults. Falls back
+ * to the live code for messages that do not yet have a baseline snapshot.
  */
 function mergeParameterDefaults(
   code: string,
