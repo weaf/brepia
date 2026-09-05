@@ -3,8 +3,9 @@ import { BrepChatSession } from '@/components/brep/BrepChatSession';
 import {
   BrepProjectEditorProvider,
   BrepProjectParametersPanel,
-  BrepProjectViewerPanel,
 } from '@/components/brep/BrepProjectEditor';
+import { BrepFeatureWorkspaceProvider } from '@/components/brep/BrepFeatureWorkspace';
+import { BrepProjectWorkspacePanel } from '@/components/brep/BrepProjectWorkspacePanel';
 import { ActivityIndicator } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { ConversationContext, useConversation } from '@/contexts/ConversationContext';
@@ -195,10 +196,6 @@ function BrepProjectWorkspace() {
     (leafId: string): AppUIMessage[] =>
       dbTree
         .getPath(leafId)
-        // Parameter changes and source restores are immutable lifecycle nodes,
-        // not AI-authored chat turns. Keep them in the authoritative DB tree
-        // for source resolution/branching while omitting them from the cached
-        // chat branch so parameter commits cannot churn the AI client runtime.
         .filter((node) => !isLifecycleOnlyBrepRevision(node))
         .map((node) => ({
           id: node.id,
@@ -499,58 +496,60 @@ function BrepProjectWorkspace() {
         await refreshWorkspace();
       }}
     >
-      <ConversationView
-        hasParameters
-        mobilePreviewKey={`brep:${activeSource.messageId}`}
-        mobilePreviewVersion={mobilePreviewVersion}
-        chatPanelSlot={
-          <>
-            <div className="flex w-full items-center justify-between gap-3 border-b border-adam-neutral-700 px-4 py-3 md:pl-12">
-              <div className="min-w-0 flex-1">
-                <ChatTitle />
+      <BrepFeatureWorkspaceProvider>
+        <ConversationView
+          hasParameters
+          mobilePreviewKey={`brep:${activeSource.messageId}`}
+          mobilePreviewVersion={mobilePreviewVersion}
+          chatPanelSlot={
+            <>
+              <div className="flex w-full items-center justify-between gap-3 border-b border-adam-neutral-700 px-4 py-3 md:pl-12">
+                <div className="min-w-0 flex-1">
+                  <ChatTitle />
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="[@media(min-width:1025px)]:hidden"
+                    onClick={() =>
+                      setMobilePreviewVersion((current) => current + 1)
+                    }
+                  >
+                    <Box className="mr-1 h-4 w-4" />
+                    Workspace
+                  </Button>
+                  <span className="hidden text-xs text-adam-text-tertiary sm:inline">
+                    {isChatStreaming ? 'AI editing…' : 'Native BRep'}
+                  </span>
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="[@media(min-width:1025px)]:hidden"
-                  onClick={() =>
-                    setMobilePreviewVersion((current) => current + 1)
-                  }
-                >
-                  <Box className="mr-1 h-4 w-4" />
-                  Model
-                </Button>
-                <span className="hidden text-xs text-adam-text-tertiary sm:inline">
-                  {isChatStreaming ? 'AI editing…' : 'Native BRep'}
-                </span>
-              </div>
-            </div>
-            <BrepChatSession
-              conversation={conversation}
-              dbMessages={dbMessages}
-              initialBranch={initialBranch}
-              model={model}
-              setModel={updateSelectedModel}
-              executionMode={executionMode}
-              onExecutionModeChange={handleExecutionModeChange}
-              onSendParts={handleSendParts}
-              onRetry={handleRetry}
-              onEdit={handleEdit}
-              onRestore={handleRestore}
-              onSelectLeaf={handleSelectLeaf}
-              branchForLeaf={branchForLeaf}
-              onChangeRating={handleChangeRating}
-              onLoadingChange={handleChatLoadingChange}
-            />
-          </>
-        }
-        previewSlot={<BrepProjectViewerPanel />}
-        parametersSlot={<BrepProjectParametersPanel />}
-        mobilePreviewSlot={<BrepProjectViewerPanel isMobile />}
-        mobileParametersSlot={<BrepProjectParametersPanel />}
-      />
+              <BrepChatSession
+                conversation={conversation}
+                dbMessages={dbMessages}
+                initialBranch={initialBranch}
+                model={model}
+                setModel={updateSelectedModel}
+                executionMode={executionMode}
+                onExecutionModeChange={handleExecutionModeChange}
+                onSendParts={handleSendParts}
+                onRetry={handleRetry}
+                onEdit={handleEdit}
+                onRestore={handleRestore}
+                onSelectLeaf={handleSelectLeaf}
+                branchForLeaf={branchForLeaf}
+                onChangeRating={handleChangeRating}
+                onLoadingChange={handleChatLoadingChange}
+              />
+            </>
+          }
+          previewSlot={<BrepProjectWorkspacePanel />}
+          parametersSlot={<BrepProjectParametersPanel />}
+          mobilePreviewSlot={<BrepProjectWorkspacePanel isMobile />}
+          mobileParametersSlot={<BrepProjectParametersPanel />}
+        />
+      </BrepFeatureWorkspaceProvider>
     </BrepProjectEditorProvider>
   );
 }
