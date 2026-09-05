@@ -10,11 +10,13 @@ Merge pull request #29 from weaf/feature/brep-project-definition-editing
 Phase 4D: BRep project definition editing
 ```
 
-Active Phase 5A branch:
+Phase 5A — canonical project-object contract — is complete on:
 
 ```text
 feature/brep-project-object-contract
 ```
+
+PR #30 is the Phase 5A merge vehicle. After it is merged, Phase 5B — native project-object evaluation — is the next active slice.
 
 The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence.
 
@@ -35,13 +37,7 @@ The current native evaluator:
 
 No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime dependency exists in the application today.
 
-The missing Phase 5 project-object concepts are therefore:
-
-- footprint geometry role;
-- clearance-envelope geometry role;
-- maintenance/access-envelope geometry role;
-- stable connection/mounting/cable points;
-- a neutral evaluated project-object result suitable for later 3DM and Grasshopper mapping.
+The missing Phase 5 project-object concepts after 5A are native auxiliary-output evaluation and the later Rhino/3DM interoperability proof.
 
 ## Phase 5 architecture locks
 
@@ -66,11 +62,11 @@ This is deliberately additive:
 - no existing field changes meaning;
 - no existing ID is regenerated;
 - canonical package import/export continues to transport the complete normalized project snapshot;
-- AI complete-snapshot schemas must accept and preserve the optional field before projects begin using it.
+- AI complete-snapshot schemas accept and preserve the optional field before projects begin using it.
 
 A future breaking source-format change may introduce a new schema version, but optional Phase 5 semantic output declarations do not require one.
 
-## 5A — Canonical project-object contract — active
+## 5A — Canonical project-object contract — complete
 
 ### Canonical role mapping
 
@@ -108,32 +104,30 @@ Points are local component data. Future Rhino/Grasshopper mapping applies the pr
 
 ### Validation and normalization
 
-5A must:
+5A provides:
 
-- bound the number of semantic points;
-- reject duplicate/invalid point IDs;
-- reject unknown auxiliary node references;
-- validate point position parameter references as `mm`;
-- validate point direction parameter references as `none`;
-- normalize points deterministically by stable ID;
-- omit an empty `projectObject` block from canonical output;
-- preserve all accepted Phase 1–4 validation behavior.
+- a maximum of 128 semantic points;
+- duplicate/invalid point-ID rejection;
+- unknown auxiliary-node-reference rejection;
+- `mm` unit validation for point positions;
+- `none` unit validation for point directions;
+- deterministic point ordering by stable ID;
+- omission of an empty `projectObject` block from canonical output;
+- preservation of accepted Phase 1–4 validation behavior.
 
 ### AI compatibility
 
-Because BRep AI operates on complete canonical snapshots, the provider-visible BRep project schema must accept the optional project-object definition in the same 5A slice.
+The provider-visible complete BRep project schema accepts the optional project-object definition. AI structural diffing includes project-object changes as project-level source changes. No separate AI patch format is introduced.
 
-AI structural diffing must include project-object changes as project-level source changes. No separate AI patch format is introduced.
+### Phase 4 authoring compatibility
 
-### Phase 4 definition-editing compatibility
+Published-parameter usage detection includes project-object point position/direction references, preserving Phase 4D's rule that referenced parameters cannot be deleted or have their unit changed while still referenced.
 
-Published-parameter usage detection must include project-object point position/direction references before any project uses them. This preserves Phase 4D's rule that a referenced parameter cannot be deleted or have its unit changed while still referenced.
-
-Node deletion must also respect semantic project-object geometry references before 5A is accepted. A node assigned as footprint/clearance/maintenance cannot be deleted until the role is changed or cleared; no hidden role rewrite is permitted.
+Node deletion also respects semantic project-object geometry references. A node assigned as footprint/clearance/maintenance cannot be deleted until the role is changed or cleared; no hidden role rewrite is permitted.
 
 ### 5A non-goals
 
-Do not add in 5A:
+5A intentionally does not add:
 
 - native evaluation of auxiliary outputs;
 - 3DM export/import;
@@ -145,7 +139,7 @@ Do not add in 5A:
 - Grasshopper schema/component generation;
 - placement transformation of local native preview geometry.
 
-## 5B — Native project-object evaluation
+## 5B — Native project-object evaluation — next
 
 Extend the existing isolated evaluator/result contract so one evaluation can provide:
 
@@ -182,19 +176,21 @@ Target Phase 5 interoperability acceptance should prove that a representative BR
 
 Do not broaden 5D into a Grasshopper component/runtime; that is Phase 6+ work.
 
-## Phase 5A acceptance
+## Phase 5A acceptance closeout
 
-5A is complete only when all of the following hold:
+Phase 5A is accepted on the contract branch with the following evidence:
 
 1. Existing schema-v1 BRep projects without `projectObject` normalize identically to their Phase 4 representation.
-2. A project may reference existing nodes as footprint, clearance and maintenance semantic outputs.
-3. Unknown semantic-output node references are rejected before persistence/native execution.
+2. Existing nodes can be referenced as footprint, clearance and maintenance semantic outputs.
+3. Unknown semantic-output node references fail canonical validation before persistence/native execution.
 4. Semantic points have stable bounded IDs, supported kinds and deterministic ordering.
 5. Point position scalars accept literals or `mm` published parameters and reject incompatible units/missing parameters.
 6. Optional point direction accepts literals or unitless published parameters and rejects incompatible units/missing parameters.
 7. Duplicate semantic point IDs and excessive point counts fail closed.
 8. Phase 4D parameter usage protection includes semantic-point references.
-9. Phase 4C safe node deletion blocks nodes currently assigned to a semantic project-object geometry role, with actionable explanation and no implicit role rewrite.
-10. Provider-visible AI BRep schemas accept/preserve the complete optional project-object definition and project diffs surface project-object changes.
-11. Existing native evaluation, viewer, STEP export, immutable revisions, canonical packages and ordinary OpenSCAD workflows remain unchanged.
-12. Repository tests/typecheck/lint/build/diff checks are green before 5A merge.
+9. Phase 4C safe node deletion blocks nodes assigned to semantic project-object geometry roles with actionable explanation and no implicit role rewrite.
+10. Provider-visible AI BRep schemas accept the optional project-object definition and project diffs surface project-object changes.
+11. Existing native evaluation, viewer, STEP export, immutable revisions, canonical packages and ordinary OpenSCAD paths are unchanged by the 5A implementation.
+12. Quality Gate #367 passed tests, typecheck, lint, build and diff check on the accepted implementation head.
+
+5A has no new browser or native-execution product surface, so its acceptance is intentionally contract/regression based rather than a manual browser checklist.
