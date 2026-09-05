@@ -17,6 +17,7 @@ import {
   RefreshCcw,
   Trash2,
 } from 'lucide-react';
+import { BrepFeatureEditor } from '@/components/brep/BrepFeatureEditor';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,7 +54,8 @@ import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
 import { exportBrepStep } from '@/services/brepStepExport';
 import { downloadSTEPFile } from '@/utils/downloadUtils';
-import type { BrepProject } from '@shared/brepProject';
+import type { BrepNode, BrepProject } from '@shared/brepProject';
+import { replaceExistingBrepProjectNode } from '@shared/brepProjectEditing';
 import {
   createBrepProjectPackage,
   serializeBrepProjectPackage,
@@ -86,9 +88,12 @@ type BrepProjectEditorContextValue = {
   error: string | null;
   dirty: boolean;
   saving: boolean;
+  sourceSaving: boolean;
+  sourceEditingDisabled: boolean;
   exporting: boolean;
   reEvaluate: () => void;
   saveParameters: () => Promise<void>;
+  saveFeatureNode: (node: BrepNode) => Promise<void>;
   exportStep: () => Promise<void>;
   exportProjectPackage: () => void;
   revisions: BrepEditorRevision[];
@@ -151,7 +156,9 @@ export function BrepProjectEditorProvider({
   packageTitle,
   revisions,
   activeRevisionId,
+  sourceEditingDisabled = false,
   onParameterValuesCommit,
+  onProjectSourceCommit,
   onSelectRevision,
   onRestoreRevision,
   onDeleteRevision,
@@ -161,7 +168,9 @@ export function BrepProjectEditorProvider({
   packageTitle?: string;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
+  sourceEditingDisabled?: boolean;
   onParameterValuesCommit: (values: BrepParameterValues) => Promise<void>;
+  onProjectSourceCommit: (project: BrepProject) => Promise<void>;
   onSelectRevision: (id: string) => Promise<void>;
   onRestoreRevision: (id: string) => Promise<void>;
   onDeleteRevision: (id: string) => Promise<void>;
@@ -178,6 +187,7 @@ export function BrepProjectEditorProvider({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sourceSaving, setSourceSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [evaluationNonce, setEvaluationNonce] = useState(0);
   const [revisionActionId, setRevisionActionId] = useState<string | null>(null);
@@ -208,9 +218,13 @@ export function BrepProjectEditorProvider({
     setError(null);
   }, [activeRevisionId, project]);
 
-  const setParameterValue = useCallback((id: string, value: number) => {
-    setValues((current) => ({ ...current, [id]: value }));
-  }, []);
+  const setParameterValue = useCallback(
+    (id: string, value: number) => {
+      if (sourceSaving) return;
+      setValues((current) => ({ ...current, [id]: value }));
+    },
+    [sourceSaving],
+  );
 
   const dirty = useMemo(
     () => !parameterValuesEqual(values, savedValues),
@@ -301,7 +315,7 @@ export function BrepProjectEditorProvider({
   }, []);
 
   const saveParameters = useCallback(async () => {
-    if (!dirty || saving) return;
+    if (!dirty || saving || sourceSaving) return;
     const nextValues = { ...values };
     setSaving(true);
     setError(null);
@@ -319,10 +333,58 @@ export function BrepProjectEditorProvider({
     } finally {
       if (mountedRef.current) setSaving(false);
     }
-  }, [dirty, onParameterValuesCommit, saving, values]);
+  }, [dirty, onParameterValuesCommit, saving, sourceSaving, values]);
+
+  const saveFeatureNode = useCallback(
+    async (nextNode: BrepNode) => {
+      if (sourceEditingDisabled) {
+        throw new Error(
+          'BRep feature editing is disabled while the current AI turn is streaming.',
+        );
+      }
+      if (dirty) {
+        throw new Error(
+          'Save or discard the parameter preview before editing a BRep feature.',
+        );
+      }
+      if (saving || sourceSaving || exporting || revisionActionId) {
+        throw new Error('Another BRep project update is already in progress.');
+      }
+
+      const nextProject = replaceExistingBrepProjectNode(
+        project,
+        nextNode.id,
+        nextNode,
+      );
+      setSourceSaving(true);
+      setError(null);
+      try {
+        await onProjectSourceCommit(nextProject);
+      } catch (reason) {
+        const message =
+          reason instanceof Error
+            ? reason.message
+            : 'Could not persist BRep feature revision.';
+        if (mountedRef.current) setError(message);
+        throw reason instanceof Error ? reason : new Error(message);
+      } finally {
+        if (mountedRef.current) setSourceSaving(false);
+      }
+    },
+    [
+      dirty,
+      exporting,
+      onProjectSourceCommit,
+      project,
+      revisionActionId,
+      saving,
+      sourceEditingDisabled,
+      sourceSaving,
+    ],
+  );
 
   const exportStep = useCallback(async () => {
-    if (exporting || loading || saving) return;
+    if (exporting || loading || saving || sourceSaving) return;
     setExporting(true);
     setError(null);
     try {
@@ -337,7 +399,7 @@ export function BrepProjectEditorProvider({
     } finally {
       if (mountedRef.current) setExporting(false);
     }
-  }, [exporting, loading, project, saving, values]);
+  }, [exporting, loading, project, saving, sourceSaving, values]);
 
   const exportProjectPackage = useCallback(() => {
     const title = packageTitle ?? project.name;
@@ -359,7 +421,7 @@ export function BrepProjectEditorProvider({
 
   const runRevisionAction = useCallback(
     async (id: string, action: (id: string) => Promise<void>) => {
-      if (revisionActionId) return;
+      if (revisionActionId || sourceSaving) return;
       setRevisionActionId(id);
       setError(null);
       try {
@@ -376,7 +438,7 @@ export function BrepProjectEditorProvider({
         if (mountedRef.current) setRevisionActionId(null);
       }
     },
-    [revisionActionId],
+    [revisionActionId, sourceSaving],
   );
 
   const value = useMemo<BrepProjectEditorContextValue>(
@@ -390,9 +452,12 @@ export function BrepProjectEditorProvider({
       error,
       dirty,
       saving,
+      sourceSaving,
+      sourceEditingDisabled,
       exporting,
       reEvaluate,
       saveParameters,
+      saveFeatureNode,
       exportStep,
       exportProjectPackage,
       revisions,
@@ -420,9 +485,12 @@ export function BrepProjectEditorProvider({
       revisionActionId,
       revisions,
       runRevisionAction,
+      saveFeatureNode,
       saveParameters,
       saving,
       setParameterValue,
+      sourceEditingDisabled,
+      sourceSaving,
       values,
     ],
   );
@@ -541,6 +609,7 @@ function RevisionHistory() {
     revisions,
     activeRevisionId,
     revisionActionId,
+    sourceSaving,
     selectRevision,
     restoreRevision,
     deleteRevision,
@@ -587,7 +656,7 @@ function RevisionHistory() {
                   variant="ghost"
                   size="sm"
                   className="min-w-0 flex-1 justify-start px-2 text-xs"
-                  disabled={active || !!revisionActionId}
+                  disabled={active || !!revisionActionId || sourceSaving}
                   onClick={() => void selectRevision(revision.id)}
                 >
                   <span className="truncate">
@@ -600,7 +669,7 @@ function RevisionHistory() {
                   variant="ghost"
                   size="sm"
                   className="text-xs"
-                  disabled={!!revisionActionId}
+                  disabled={!!revisionActionId || sourceSaving}
                   onClick={() => void restoreRevision(revision.id)}
                 >
                   {busy ? 'Working…' : 'Restore'}
@@ -613,7 +682,7 @@ function RevisionHistory() {
                       size="icon"
                       className="h-8 w-8 text-adam-text-tertiary hover:text-destructive"
                       aria-label={`Delete ${revision.label}`}
-                      disabled={active || !!revisionActionId}
+                      disabled={active || !!revisionActionId || sourceSaving}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -654,6 +723,7 @@ function BrepExportBar() {
   const {
     dirty,
     saving,
+    sourceSaving,
     loading,
     exporting,
     exportStep,
@@ -662,8 +732,8 @@ function BrepExportBar() {
   const [selectedFormat, setSelectedFormat] =
     useState<BrepDownloadFormat>('step');
 
-  const stepAvailable = !saving && !loading && !exporting;
-  const brepAvailable = !dirty && !saving;
+  const stepAvailable = !saving && !sourceSaving && !loading && !exporting;
+  const brepAvailable = !dirty && !saving && !sourceSaving;
   const selectedAvailable =
     selectedFormat === 'step' ? stepAvailable : brepAvailable;
 
@@ -745,11 +815,23 @@ export function BrepProjectParametersPanel() {
     error,
     dirty,
     saving,
+    sourceSaving,
+    sourceEditingDisabled,
     exporting,
+    activeRevisionId,
+    revisionActionId,
     reEvaluate,
     saveParameters,
+    saveFeatureNode,
   } = useBrepProjectEditor();
   const [parametersOpen, setParametersOpen] = useState(true);
+  const featureEditingDisabled =
+    sourceEditingDisabled ||
+    dirty ||
+    saving ||
+    sourceSaving ||
+    exporting ||
+    Boolean(revisionActionId);
 
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
@@ -766,7 +848,7 @@ export function BrepProjectParametersPanel() {
           aria-label="Re-evaluate native BRep preview"
           className="h-8 w-8 rounded-full p-0 text-adam-text-primary transition-colors [@media(hover:hover)]:hover:bg-adam-neutral-950 [@media(hover:hover)]:hover:text-adam-neutral-10"
           onClick={reEvaluate}
-          disabled={saving || exporting}
+          disabled={saving || sourceSaving || exporting}
         >
           <RefreshCcw className="h-4 w-4" />
         </Button>
@@ -806,7 +888,7 @@ export function BrepProjectParametersPanel() {
                       max={parameter.max}
                       step={parameter.step}
                       value={values[parameter.id]}
-                      disabled={saving || exporting}
+                      disabled={saving || sourceSaving || exporting}
                       onChange={(event) =>
                         setParameterValue(
                           parameter.id,
@@ -827,7 +909,7 @@ export function BrepProjectParametersPanel() {
             <Button
               type="button"
               className="w-full"
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || sourceSaving}
               onClick={() => void saveParameters()}
             >
               {saving
@@ -840,6 +922,22 @@ export function BrepProjectParametersPanel() {
               Parameter changes update the native preview immediately. Save only
               when you want a new immutable source revision.
             </p>
+          </div>
+
+          <div className="mt-6 border-t border-adam-neutral-700/60 pt-4">
+            <BrepFeatureEditor
+              key={activeRevisionId ?? project.id}
+              project={project}
+              disabled={featureEditingDisabled}
+              saving={sourceSaving}
+              onSaveNode={saveFeatureNode}
+            />
+            {sourceEditingDisabled ? (
+              <p className="mt-2 text-[10px] text-adam-neutral-500">
+                Feature editing is disabled while the current AI turn is
+                streaming.
+              </p>
+            ) : null}
           </div>
 
           <div className="mt-6">
