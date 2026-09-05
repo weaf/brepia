@@ -7,6 +7,7 @@ export const BREP_PROJECT_MAX_NAME_CHARS = 120;
 export const BREP_PROJECT_MAX_DESCRIPTION_CHARS = 500;
 export const BREP_PROJECT_MAX_ABS_SCALAR = 1_000_000_000;
 export const BREP_PROJECT_MAX_METADATA_PROPERTIES = 64;
+export const BREP_PROJECT_MAX_OBJECT_POINTS = 128;
 
 export type BrepProjectUnitSystem = 'mm';
 export type BrepParameterUnit = 'mm' | 'deg' | 'none';
@@ -34,6 +35,29 @@ export type BrepProjectMetadata = {
   objectType?: string;
   classification?: string;
   properties?: Record<string, string>;
+};
+
+export type BrepProjectObjectPointKind = 'connection' | 'mounting' | 'cable';
+
+/** Stable local semantic point for future project/Rhino/Grasshopper composition. */
+export type BrepProjectObjectPoint = {
+  id: string;
+  kind: BrepProjectObjectPointKind;
+  position: BrepVector3;
+  direction?: BrepVector3;
+  label?: string;
+};
+
+/**
+ * Optional semantic outputs beyond the primary resultNodeId. Geometry roles
+ * reference ordinary canonical feature nodes rather than introducing a second
+ * modeling graph or kernel-specific topology identity.
+ */
+export type BrepProjectObjectDefinition = {
+  footprintNodeId?: string;
+  clearanceEnvelopeNodeId?: string;
+  maintenanceEnvelopeNodeId?: string;
+  points?: BrepProjectObjectPoint[];
 };
 
 export type BrepPublishedNumberParameter = {
@@ -105,6 +129,7 @@ export type BrepProject = {
   units: BrepProjectUnitSystem;
   placement: BrepProjectPlacement;
   metadata?: BrepProjectMetadata;
+  projectObject?: BrepProjectObjectDefinition;
   parameters: BrepPublishedNumberParameter[];
   nodes: BrepNode[];
   resultNodeId: string;
@@ -115,6 +140,7 @@ export type BrepProjectErrorCode =
   | 'invalid_id'
   | 'invalid_parameter'
   | 'invalid_metadata'
+  | 'invalid_project_object'
   | 'too_many_parameters'
   | 'duplicate_parameter'
   | 'invalid_node'
@@ -137,6 +163,11 @@ export class BrepProjectError extends Error {
 const ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const AXES = new Set<BrepAxis>(['x', 'y', 'z']);
 const PARAMETER_UNITS = new Set<BrepParameterUnit>(['mm', 'deg', 'none']);
+const PROJECT_OBJECT_POINT_KINDS = new Set<BrepProjectObjectPointKind>([
+  'connection',
+  'mounting',
+  'cable',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -461,6 +492,141 @@ function normalizeMetadata(value: unknown): BrepProjectMetadata | undefined {
   };
 }
 
+function normalizeProjectObject(
+  value: unknown,
+  parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+  nodeIds: ReadonlySet<string>,
+): BrepProjectObjectDefinition | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) {
+    throw new BrepProjectError(
+      'invalid_project_object',
+      'BRep projectObject must be an object.',
+    );
+  }
+
+  const normalizeRoleNode = (
+    rawValue: unknown,
+    field: keyof Pick<
+      BrepProjectObjectDefinition,
+      | 'footprintNodeId'
+      | 'clearanceEnvelopeNodeId'
+      | 'maintenanceEnvelopeNodeId'
+    >,
+  ): string | undefined => {
+    if (rawValue == null) return undefined;
+    const nodeId = normalizeId(rawValue, `BRep project-object ${field}`);
+    if (!nodeIds.has(nodeId)) {
+      throw new BrepProjectError(
+        'invalid_reference',
+        `BRep project-object ${field} references unknown node ${nodeId}.`,
+      );
+    }
+    return nodeId;
+  };
+
+  const footprintNodeId = normalizeRoleNode(
+    value.footprintNodeId,
+    'footprintNodeId',
+  );
+  const clearanceEnvelopeNodeId = normalizeRoleNode(
+    value.clearanceEnvelopeNodeId,
+    'clearanceEnvelopeNodeId',
+  );
+  const maintenanceEnvelopeNodeId = normalizeRoleNode(
+    value.maintenanceEnvelopeNodeId,
+    'maintenanceEnvelopeNodeId',
+  );
+
+  let points: BrepProjectObjectPoint[] | undefined;
+  if (value.points != null) {
+    if (!Array.isArray(value.points)) {
+      throw new BrepProjectError(
+        'invalid_project_object',
+        'BRep project-object points must be an array.',
+      );
+    }
+    if (value.points.length > BREP_PROJECT_MAX_OBJECT_POINTS) {
+      throw new BrepProjectError(
+        'invalid_project_object',
+        `BRep project-object points exceed ${BREP_PROJECT_MAX_OBJECT_POINTS}.`,
+      );
+    }
+
+    const pointIds = new Set<string>();
+    points = value.points.map((point, index) => {
+      if (!isRecord(point)) {
+        throw new BrepProjectError(
+          'invalid_project_object',
+          `BRep project-object points[${index}] must be an object.`,
+        );
+      }
+      const pointId = normalizeId(point.id, 'BRep project-object point');
+      if (pointIds.has(pointId)) {
+        throw new BrepProjectError(
+          'invalid_project_object',
+          `Duplicate BRep project-object point id: ${pointId}.`,
+        );
+      }
+      pointIds.add(pointId);
+
+      if (
+        typeof point.kind !== 'string' ||
+        !PROJECT_OBJECT_POINT_KINDS.has(
+          point.kind as BrepProjectObjectPointKind,
+        )
+      ) {
+        throw new BrepProjectError(
+          'invalid_project_object',
+          `BRep project-object point ${pointId} kind must be connection, mounting, or cable.`,
+        );
+      }
+
+      const label = normalizeText(
+        point.label,
+        `BRep project-object point ${pointId} label`,
+        BREP_PROJECT_MAX_NAME_CHARS,
+        false,
+      );
+
+      return {
+        id: pointId,
+        kind: point.kind as BrepProjectObjectPointKind,
+        position: normalizeVector3(
+          point.position,
+          `BRep project-object point ${pointId} position`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        ...(point.direction != null
+          ? {
+              direction: normalizeVector3(
+                point.direction,
+                `BRep project-object point ${pointId} direction`,
+                parameterIds,
+                parameterUnits,
+                ['none'],
+              ),
+            }
+          : {}),
+        ...(label ? { label } : {}),
+      };
+    });
+    points.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
+    if (points.length === 0) points = undefined;
+  }
+
+  const normalized: BrepProjectObjectDefinition = {
+    ...(footprintNodeId ? { footprintNodeId } : {}),
+    ...(clearanceEnvelopeNodeId ? { clearanceEnvelopeNodeId } : {}),
+    ...(maintenanceEnvelopeNodeId ? { maintenanceEnvelopeNodeId } : {}),
+    ...(points ? { points } : {}),
+  };
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function normalizeNodeReference(value: unknown, field: string): string {
   return normalizeId(value, field);
 }
@@ -764,6 +930,13 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     );
   }
 
+  const projectObject = normalizeProjectObject(
+    project.projectObject,
+    parameterIds,
+    parameterUnits,
+    nodeIds,
+  );
+
   parameters.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
   nodes.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
 
@@ -774,6 +947,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     units: 'mm',
     placement,
     ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
+    ...(projectObject ? { projectObject } : {}),
     parameters,
     nodes,
     resultNodeId,
