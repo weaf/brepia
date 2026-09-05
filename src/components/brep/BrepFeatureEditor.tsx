@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, GitBranch, Pencil } from 'lucide-react';
+import { ChevronDown, GitBranch, Pencil, Plus } from 'lucide-react';
 import { BrepDependencyGraph } from '@/components/brep/BrepDependencyGraph';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,11 +21,24 @@ import type {
   BrepScalar,
   BrepVector3,
 } from '@shared/brepProject';
-import { brepNodeDependencies } from '@shared/brepProjectEditing';
+import {
+  addBrepProjectNode,
+  brepNodeDependencies,
+  deleteBrepProjectNode,
+  setBrepProjectResultNode,
+  suggestBrepNodeId,
+} from '@shared/brepProjectEditing';
 
 const LITERAL_VALUE = '__literal__';
 const fieldClass =
   'h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue-dark disabled:cursor-not-allowed disabled:opacity-60';
+const NODE_TYPES: BrepNode['type'][] = [
+  'box',
+  'cylinder',
+  'transform',
+  'subtract',
+  'fillet',
+];
 
 function cloneNode(node: BrepNode): BrepNode {
   return JSON.parse(JSON.stringify(node)) as BrepNode;
@@ -43,6 +56,58 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Subtract';
     case 'fillet':
       return 'Fillet';
+  }
+}
+
+function preferredInputNodeId(
+  project: BrepProject,
+  selectedNodeId: string | null,
+): string {
+  if (
+    selectedNodeId &&
+    project.nodes.some((node) => node.id === selectedNodeId)
+  ) {
+    return selectedNodeId;
+  }
+  if (project.nodes.some((node) => node.id === project.resultNodeId)) {
+    return project.resultNodeId;
+  }
+  const first = project.nodes[0]?.id;
+  if (!first) throw new Error('A BRep project must contain an existing feature.');
+  return first;
+}
+
+function createNodeDraft(
+  project: BrepProject,
+  type: BrepNode['type'],
+  id: string,
+  selectedNodeId: string | null,
+): BrepNode {
+  const input = preferredInputNodeId(project, selectedNodeId);
+  switch (type) {
+    case 'box':
+      return { id, type, width: 100, depth: 100, height: 100 };
+    case 'cylinder':
+      return { id, type, radius: 25, height: 100 };
+    case 'transform':
+      return { id, type, input, translate: [0, 0, 0] };
+    case 'fillet':
+      return {
+        id,
+        type,
+        input,
+        radius: 5,
+        selector: { kind: 'parallelToAxis', axis: 'z' },
+      };
+    case 'subtract': {
+      const tool = project.nodes.find((node) => node.id !== input)?.id;
+      if (!tool) {
+        throw new Error(
+          'Subtract creation requires at least two existing BRep features.',
+        );
+      }
+      return { id, type, base: input, tools: [tool] };
+    }
   }
 }
 
@@ -416,16 +481,22 @@ export function BrepFeatureEditor({
   disabled,
   saving,
   onSaveNode,
+  onSaveProject,
 }: {
   project: BrepProject;
   disabled: boolean;
   saving: boolean;
   onSaveNode: (node: BrepNode) => Promise<void>;
+  onSaveProject: (project: BrepProject) => Promise<void>;
 }) {
   const [open, setOpen] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<BrepNode | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<BrepNode | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [structuralError, setStructuralError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     project.resultNodeId || project.nodes[0]?.id || null,
   );
@@ -470,23 +541,113 @@ export function BrepFeatureEditor({
     }
   };
 
+  const openCreateDialog = () => {
+    if (disabled || saving) return;
+    try {
+      const type: BrepNode['type'] = 'box';
+      const id = suggestBrepNodeId(project, type);
+      setCreateDraft(createNodeDraft(project, type, id, selectedNodeId));
+      setCreateError(null);
+      setCreateDialogOpen(true);
+    } catch (reason) {
+      setStructuralError(
+        reason instanceof Error ? reason.message : 'Could not create a feature draft.',
+      );
+    }
+  };
+
+  const changeCreateType = (type: BrepNode['type']) => {
+    if (!createDraft) return;
+    try {
+      setCreateDraft(
+        createNodeDraft(project, type, createDraft.id, selectedNodeId),
+      );
+      setCreateError(null);
+    } catch (reason) {
+      setCreateError(
+        reason instanceof Error ? reason.message : 'Could not change feature type.',
+      );
+    }
+  };
+
+  const createFeature = async () => {
+    if (!createDraft || saving) return;
+    setCreateError(null);
+    try {
+      const nextProject = addBrepProjectNode(project, createDraft);
+      await onSaveProject(nextProject);
+      setSelectedNodeId(createDraft.id);
+      setCreateDialogOpen(false);
+      setCreateDraft(null);
+    } catch (reason) {
+      setCreateError(
+        reason instanceof Error
+          ? reason.message
+          : 'Could not save the new BRep feature.',
+      );
+    }
+  };
+
+  const setResultNode = async (nodeId: string) => {
+    if (disabled || saving) return;
+    setStructuralError(null);
+    try {
+      await onSaveProject(setBrepProjectResultNode(project, nodeId));
+      setSelectedNodeId(nodeId);
+    } catch (reason) {
+      setStructuralError(
+        reason instanceof Error
+          ? reason.message
+          : 'Could not change the BRep result node.',
+      );
+    }
+  };
+
+  const deleteNode = async (nodeId: string) => {
+    if (disabled || saving) return;
+    setStructuralError(null);
+    try {
+      await onSaveProject(deleteBrepProjectNode(project, nodeId));
+    } catch (reason) {
+      setStructuralError(
+        reason instanceof Error
+          ? reason.message
+          : 'Could not delete the BRep feature.',
+      );
+    }
+  };
+
   return (
     <>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger
-          aria-label={`${open ? 'Collapse' : 'Expand'} BRep features`}
-          className="group flex w-full items-center justify-between gap-2 rounded-md py-1 text-xs font-semibold text-adam-text-primary transition-colors focus:outline-none"
-        >
-          <span className="flex items-center gap-2">
-            Features
-            <span className="text-[10px] text-adam-neutral-400">
-              {project.nodes.length}
+        <div className="flex items-center gap-2">
+          <CollapsibleTrigger
+            aria-label={`${open ? 'Collapse' : 'Expand'} BRep features`}
+            className="group flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md py-1 text-xs font-semibold text-adam-text-primary transition-colors focus:outline-none"
+          >
+            <span className="flex items-center gap-2">
+              Features
+              <span className="text-[10px] text-adam-neutral-400">
+                {project.nodes.length}
+              </span>
             </span>
-          </span>
-          <ChevronDown
-            className={`h-3.5 w-3.5 text-adam-neutral-400 transition-all duration-200 group-hover:text-adam-text-primary ${open ? 'rotate-180' : ''}`}
-          />
-        </CollapsibleTrigger>
+            <ChevronDown
+              className={`h-3.5 w-3.5 text-adam-neutral-400 transition-all duration-200 group-hover:text-adam-text-primary ${open ? 'rotate-180' : ''}`}
+            />
+          </CollapsibleTrigger>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled || saving}
+            onClick={openCreateDialog}
+            aria-label="Add BRep feature"
+            className="h-7 shrink-0 px-2 text-[10px]"
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Add
+          </Button>
+        </div>
         <CollapsibleContent>
           <div className="mt-3">
             <BrepDependencyGraph
@@ -495,8 +656,16 @@ export function BrepFeatureEditor({
               editingDisabled={disabled || saving}
               onSelectNode={setSelectedNodeId}
               onEditNode={editNodeById}
+              onSetResultNode={setResultNode}
+              onDeleteNode={deleteNode}
             />
           </div>
+
+          {structuralError ? (
+            <div className="mt-3 rounded-lg border border-destructive p-2.5 text-xs text-destructive">
+              {structuralError}
+            </div>
+          ) : null}
 
           <div className="mt-3 space-y-1.5 border-t border-adam-neutral-800 pt-3">
             {project.nodes.map((node, index) => {
@@ -550,11 +719,109 @@ export function BrepFeatureEditor({
           {disabled ? (
             <p className="mt-2 text-[10px] text-adam-neutral-500">
               Dependency navigation remains available. Save or discard competing
-              edits before changing a feature.
+              edits before changing project structure.
             </p>
           ) : null}
         </CollapsibleContent>
       </Collapsible>
+
+      <Dialog
+        open={createDialogOpen}
+        onOpenChange={(nextOpen) => {
+          if (saving) return;
+          setCreateDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setCreateDraft(null);
+            setCreateError(null);
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-4 overflow-hidden bg-adam-bg-secondary-dark p-4 sm:p-6">
+          {createDraft ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-adam-text-primary">
+                  <Plus className="h-4 w-4" />
+                  Add BRep feature
+                </DialogTitle>
+                <DialogDescription className="text-adam-neutral-400">
+                  Choose a stable ID and feature type. Save validates the complete
+                  canonical project and creates one immutable source revision. The
+                  current result node is preserved until you explicitly change it.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="mb-5 grid gap-4 sm:grid-cols-2">
+                  <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+                    <span>Stable node ID</span>
+                    <input
+                      className={fieldClass}
+                      value={createDraft.id}
+                      disabled={saving}
+                      onChange={(event) =>
+                        setCreateDraft({ ...createDraft, id: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+                    <span>Feature type</span>
+                    <select
+                      className={fieldClass}
+                      value={createDraft.type}
+                      disabled={saving}
+                      onChange={(event) =>
+                        changeCreateType(event.target.value as BrepNode['type'])
+                      }
+                    >
+                      {NODE_TYPES.map((type) => (
+                        <option
+                          key={type}
+                          value={type}
+                          disabled={type === 'subtract' && project.nodes.length < 2}
+                        >
+                          {nodeTypeLabel(type)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <NodeEditorFields
+                  node={createDraft}
+                  project={project}
+                  disabled={saving}
+                  onChange={setCreateDraft}
+                />
+
+                {createError ? (
+                  <div className="mt-4 rounded-lg border border-destructive p-3 text-sm text-destructive">
+                    {createError}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex shrink-0 justify-end gap-2 border-t border-adam-neutral-800 pt-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={saving}
+                  onClick={() => setCreateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void createFeature()}
+                >
+                  {saving ? 'Saving feature…' : 'Create feature revision'}
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={dialogOpen}
@@ -582,8 +849,9 @@ export function BrepFeatureEditor({
                 </DialogTitle>
                 <DialogDescription className="text-adam-neutral-400">
                   Edit this existing canonical feature. Node ID and type stay
-                  stable; Save validates the complete BRep project and creates a
-                  new immutable source revision.
+                  stable. Dependency fields rewire the canonical DAG; Save
+                  validates the complete project and creates a new immutable
+                  source revision.
                 </DialogDescription>
               </DialogHeader>
 

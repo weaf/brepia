@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import { normalizeBrepProject } from '@shared/brepProject';
 import {
+  addBrepProjectNode,
+  brepNodeConsumers,
   brepNodeDependencies,
+  deleteBrepProjectNode,
   replaceExistingBrepProjectNode,
+  setBrepProjectResultNode,
+  suggestBrepNodeId,
 } from '@shared/brepProjectEditing';
 
 describe('BRep existing-node editing', () => {
@@ -36,7 +41,7 @@ describe('BRep existing-node editing', () => {
     });
   });
 
-  it('keeps stable IDs and node types locked in the Phase 4A helper', () => {
+  it('keeps stable IDs and node types locked for existing nodes', () => {
     const current = phaseOneCabinetProject.nodes[0];
 
     expect(() =>
@@ -44,7 +49,7 @@ describe('BRep existing-node editing', () => {
         ...current,
         id: 'renamedNode',
       }),
-    ).toThrow(/cannot rename stable BRep node IDs/i);
+    ).toThrow(/stable.*cannot be renamed/i);
 
     expect(() =>
       replaceExistingBrepProjectNode(phaseOneCabinetProject, current.id, {
@@ -53,7 +58,7 @@ describe('BRep existing-node editing', () => {
         radius: 10,
         height: 20,
       }),
-    ).toThrow(/cannot change BRep node type/i);
+    ).toThrow(/types cannot be changed/i);
   });
 
   it('reuses canonical DAG validation and rejects a cyclic edit', () => {
@@ -99,7 +104,7 @@ describe('BRep existing-node editing', () => {
     ).toThrow(/unit mm/i);
   });
 
-  it('summarizes dependencies from the same canonical node semantics', () => {
+  it('summarizes dependencies and consumers from canonical node semantics', () => {
     expect(
       brepNodeDependencies(
         phaseOneCabinetProject.nodes.find(
@@ -107,5 +112,110 @@ describe('BRep existing-node editing', () => {
         )!,
       ),
     ).toEqual(['cabinetBody', 'positionedHole']);
+    expect(brepNodeConsumers(phaseOneCabinetProject, 'cableHole')).toEqual([
+      'positionedHole',
+    ]);
+  });
+});
+
+describe('BRep structural DAG authoring', () => {
+  it('suggests a deterministic fresh ID without mutating the project', () => {
+    const project = normalizeBrepProject({
+      ...phaseOneCabinetProject,
+      nodes: [
+        ...phaseOneCabinetProject.nodes,
+        { id: 'box', type: 'box', width: 10, depth: 10, height: 10 },
+        { id: 'box2', type: 'box', width: 20, depth: 20, height: 20 },
+      ],
+    });
+    const before = JSON.stringify(project);
+
+    expect(suggestBrepNodeId(project, 'box')).toBe('box3');
+    expect(JSON.stringify(project)).toBe(before);
+  });
+
+  it('adds a new stable node while preserving the explicit current result', () => {
+    const next = addBrepProjectNode(phaseOneCabinetProject, {
+      id: 'inspectionBoss',
+      type: 'cylinder',
+      radius: 15,
+      height: 20,
+    });
+
+    expect(next.resultNodeId).toBe(phaseOneCabinetProject.resultNodeId);
+    expect(next.nodes.find((node) => node.id === 'inspectionBoss')).toEqual({
+      id: 'inspectionBoss',
+      type: 'cylinder',
+      radius: 15,
+      height: 20,
+    });
+    expect(() =>
+      addBrepProjectNode(next, {
+        id: 'inspectionBoss',
+        type: 'box',
+        width: 10,
+        depth: 10,
+        height: 10,
+      }),
+    ).toThrow(/already exists/i);
+  });
+
+  it('adds referenced nodes through the same canonical dependency validation', () => {
+    const next = addBrepProjectNode(phaseOneCabinetProject, {
+      id: 'raisedCabinet',
+      type: 'transform',
+      input: 'cabinetWithCableHole',
+      translate: [0, 0, 100],
+    });
+
+    expect(
+      next.nodes.find((node) => node.id === 'raisedCabinet'),
+    ).toMatchObject({
+      type: 'transform',
+      input: 'cabinetWithCableHole',
+    });
+    expect(() =>
+      addBrepProjectNode(phaseOneCabinetProject, {
+        id: 'badTransform',
+        type: 'transform',
+        input: 'missingNode',
+        translate: [0, 0, 10],
+      }),
+    ).toThrow(/unknown node missingNode/i);
+  });
+
+  it('changes only the explicit result authority when selecting a result node', () => {
+    const canonical = normalizeBrepProject(phaseOneCabinetProject);
+    const next = setBrepProjectResultNode(canonical, 'cableHole');
+
+    expect(next.resultNodeId).toBe('cableHole');
+    expect(next.nodes).toEqual(canonical.nodes);
+    expect(() => setBrepProjectResultNode(canonical, 'missingNode')).toThrow(
+      /does not exist/i,
+    );
+  });
+
+  it('deletes only unreferenced non-result nodes and never cascades implicitly', () => {
+    const withDetachedNode = addBrepProjectNode(phaseOneCabinetProject, {
+      id: 'detachedBox',
+      type: 'box',
+      width: 10,
+      depth: 20,
+      height: 30,
+    });
+    const deleted = deleteBrepProjectNode(withDetachedNode, 'detachedBox');
+
+    expect(deleted.nodes.some((node) => node.id === 'detachedBox')).toBe(false);
+    expect(deleted.resultNodeId).toBe(phaseOneCabinetProject.resultNodeId);
+
+    expect(() =>
+      deleteBrepProjectNode(
+        phaseOneCabinetProject,
+        phaseOneCabinetProject.resultNodeId,
+      ),
+    ).toThrow(/current result.*another result/i);
+    expect(() =>
+      deleteBrepProjectNode(phaseOneCabinetProject, 'cableHole'),
+    ).toThrow(/used by positionedHole.*rewire/i);
   });
 });

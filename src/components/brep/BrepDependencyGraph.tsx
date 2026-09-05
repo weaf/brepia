@@ -1,5 +1,16 @@
 import { useMemo } from 'react';
-import { GitBranch, Pencil } from 'lucide-react';
+import { Flag, GitBranch, Pencil, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import type { BrepProject } from '@shared/brepProject';
 import {
   buildBrepDependencyGraph,
@@ -40,10 +51,7 @@ function layoutGraph(graph: BrepDependencyGraph): GraphLayout {
   );
   const contentWidth =
     maxNodesInLevel * NODE_WIDTH + (maxNodesInLevel - 1) * COLUMN_GAP;
-  const width = Math.max(
-    MIN_GRAPH_WIDTH,
-    contentWidth + GRAPH_PADDING * 2,
-  );
+  const width = Math.max(MIN_GRAPH_WIDTH, contentWidth + GRAPH_PADDING * 2);
   const height = Math.max(
     122,
     GRAPH_PADDING * 2 +
@@ -114,16 +122,21 @@ export function BrepDependencyGraph({
   editingDisabled,
   onSelectNode,
   onEditNode,
+  onSetResultNode,
+  onDeleteNode,
 }: {
   project: BrepProject;
   selectedNodeId: string | null;
   editingDisabled: boolean;
   onSelectNode: (nodeId: string) => void;
   onEditNode: (nodeId: string) => void;
+  onSetResultNode: (nodeId: string) => void | Promise<void>;
+  onDeleteNode: (nodeId: string) => void | Promise<void>;
 }) {
   const graph = useMemo(() => buildBrepDependencyGraph(project), [project]);
   const layout = useMemo(() => layoutGraph(graph), [graph]);
-  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedNode =
+    graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const relatedIds = useMemo(
     () =>
       new Set([
@@ -132,6 +145,15 @@ export function BrepDependencyGraph({
       ]),
     [selectedNode],
   );
+  const deleteBlockedReason = selectedNode
+    ? selectedNode.isResult
+      ? 'Select another result before deleting this feature.'
+      : selectedNode.consumers.length > 0
+        ? `Rewire ${selectedNode.consumers.join(', ')} before deleting this feature.`
+        : project.nodes.length <= 1
+          ? 'A BRep project must keep at least one feature.'
+          : null
+    : null;
 
   return (
     <div className="grid gap-3">
@@ -238,8 +260,8 @@ export function BrepDependencyGraph({
 
       {selectedNode ? (
         <div className="grid gap-2 rounded-lg border border-adam-neutral-800 bg-adam-neutral-900/35 p-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-adam-text-primary">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="min-w-[120px] flex-1 truncate font-mono text-[11px] text-adam-text-primary">
               {selectedNode.id}
             </span>
             <span className="shrink-0 text-[9px] uppercase tracking-wide text-adam-neutral-500">
@@ -254,6 +276,49 @@ export function BrepDependencyGraph({
               <Pencil className="h-3 w-3" />
               Edit
             </button>
+            <button
+              type="button"
+              disabled={editingDisabled || selectedNode.isResult}
+              onClick={() => void onSetResultNode(selectedNode.id)}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-adam-neutral-700 px-2 text-[10px] text-adam-neutral-300 transition-colors hover:border-adam-blue-dark/60 hover:text-adam-text-primary disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Flag className="h-3 w-3" />
+              {selectedNode.isResult ? 'Result' : 'Set result'}
+            </button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  disabled={editingDisabled || Boolean(deleteBlockedReason)}
+                  title={deleteBlockedReason ?? 'Delete feature'}
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-adam-neutral-700 px-2 text-[10px] text-adam-neutral-300 transition-colors hover:border-destructive/70 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Delete
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Delete feature {selectedNode.id}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This creates a new immutable BRep source revision without this
+                    feature. Older revisions keep the feature and can still be
+                    restored. No dependent features are deleted automatically.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => void onDeleteNode(selectedNode.id)}
+                  >
+                    Delete feature
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
           <NavigationLinks
             label="Inputs"
@@ -267,6 +332,11 @@ export function BrepDependencyGraph({
             emptyLabel={selectedNode.isResult ? 'Final result' : 'No consumers'}
             onSelectNode={onSelectNode}
           />
+          {deleteBlockedReason ? (
+            <p className="text-[10px] text-adam-neutral-500">
+              {deleteBlockedReason}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
