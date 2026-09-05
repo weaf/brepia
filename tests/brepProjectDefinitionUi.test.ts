@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import { describe, it } from 'vitest';
 
 const definitionSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepProjectDefinitionEditor.tsx', import.meta.url),
+  new URL(
+    '../src/components/brep/BrepProjectDefinitionFieldsEditor.tsx',
+    import.meta.url,
+  ),
   'utf8',
 );
 const projectEditorSource = fs.readFileSync(
