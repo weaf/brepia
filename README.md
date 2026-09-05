@@ -6,7 +6,7 @@
 
 <div align="center">
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%2B%20%7C%2022.12%2B-green.svg?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat)](https://react.dev/)
 [![OpenSCAD](https://img.shields.io/badge/OpenSCAD-Parametric-F9D64F.svg?style=flat)](https://openscad.org/)
@@ -21,7 +21,7 @@ Brepia is an open-source browser-based workspace for parametric and Creative 3D 
 - Edit dimensions, colours and other model parameters.
 - Import standalone `.scad` files, local OpenSCAD project folders and bounded same-repository OpenSCAD projects from GitHub.
 - Preserve project-local `.scad` dependencies and explicitly supported relative assets referenced by `import()` / `surface()`.
-- Inspect project source files and directly edit non-entrypoint support `.scad` files from the existing Parametric editor.
+- Inspect and directly edit project `.scad` source files, including the declared entrypoint and non-entrypoint support files, from the existing Parametric editor.
 - Inspect models in a live browser-based 3D viewer.
 - Use text or reference images in Creative 3D workflows.
 - Work with local or hosted model providers, including OpenAI-compatible endpoints.
