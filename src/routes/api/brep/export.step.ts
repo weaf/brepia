@@ -10,8 +10,20 @@ import {
   brepEvaluationErrorResponse,
   readBoundedBrepJson,
 } from '@/routes/api/brep/evaluate';
-import { exportBrepProjectToStep } from '@/server/brepEvaluation';
+import {
+  exportBrepProjectTo3dm,
+  exportBrepProjectToStep,
+} from '@/server/brepEvaluation';
 import { normalizeBrepEvaluationRequest } from '@shared/brepProvider';
+
+const THREEDM_MEDIA_TYPE = 'model/vnd.3dm';
+
+function wantsThreeDm(request: Request): boolean {
+  return (request.headers.get('accept') ?? '')
+    .toLowerCase()
+    .split(',')
+    .some((value) => value.trim().split(';', 1)[0] === THREEDM_MEDIA_TYPE);
+}
 
 export const Route = createFileRoute('/api/brep/export/step')({
   server: {
@@ -31,22 +43,33 @@ export const Route = createFileRoute('/api/brep/export/step')({
               { status: 400, headers: corsHeaders },
             );
           const normalized = normalizeBrepEvaluationRequest(body);
-          const stepBytes = await exportBrepProjectToStep(
-            normalized.project,
-            normalized.parameterValues,
-            request.signal,
-          );
-          const responseBytes = new Uint8Array(stepBytes.byteLength);
-          responseBytes.set(stepBytes);
+          const threeDm = wantsThreeDm(request);
+          const bytes = threeDm
+            ? await exportBrepProjectTo3dm(
+                normalized.project,
+                normalized.parameterValues,
+                request.signal,
+              )
+            : await exportBrepProjectToStep(
+                normalized.project,
+                normalized.parameterValues,
+                request.signal,
+              );
+          const responseBytes = new Uint8Array(bytes.byteLength);
+          responseBytes.set(bytes);
           return new Response(responseBytes.buffer, {
             status: 200,
             headers: {
               ...corsHeaders,
               'Cache-Control': 'private, no-store',
-              'Content-Type': 'model/step',
-              'Content-Disposition': 'attachment; filename="brepia-model.step"',
+              'Content-Type': threeDm ? THREEDM_MEDIA_TYPE : 'model/step',
+              'Content-Disposition': threeDm
+                ? 'attachment; filename="brepia-model.3dm"'
+                : 'attachment; filename="brepia-model.step"',
               'X-Content-Type-Options': 'nosniff',
-              'X-PCAD-Step-Provider': 'build123d-occt',
+              ...(threeDm
+                ? { 'X-PCAD-3DM-Provider': 'rhino3dm' }
+                : { 'X-PCAD-Step-Provider': 'build123d-occt' }),
             },
           });
         } catch (error) {
