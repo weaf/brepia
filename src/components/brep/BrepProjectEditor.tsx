@@ -95,6 +95,7 @@ type BrepProjectEditorContextValue = {
   reEvaluate: () => void;
   saveParameters: () => Promise<void>;
   saveFeatureNode: (node: BrepNode) => Promise<void>;
+  saveProjectSource: (project: BrepProject) => Promise<void>;
   exportStep: () => Promise<void>;
   exportProjectPackage: () => void;
   revisions: BrepEditorRevision[];
@@ -384,6 +385,48 @@ export function BrepProjectEditorProvider({
     ],
   );
 
+  const saveProjectSource = useCallback(
+    async (nextProject: BrepProject) => {
+      if (sourceEditingDisabled) {
+        throw new Error(
+          'BRep structural editing is disabled while the current AI turn is streaming.',
+        );
+      }
+      if (dirty) {
+        throw new Error(
+          'Save or discard the parameter preview before changing BRep project structure.',
+        );
+      }
+      if (saving || sourceSaving || exporting || revisionActionId) {
+        throw new Error('Another BRep project update is already in progress.');
+      }
+
+      setSourceSaving(true);
+      setError(null);
+      try {
+        await onProjectSourceCommit(nextProject);
+      } catch (reason) {
+        const message =
+          reason instanceof Error
+            ? reason.message
+            : 'Could not persist BRep structural revision.';
+        if (mountedRef.current) setError(message);
+        throw reason instanceof Error ? reason : new Error(message);
+      } finally {
+        if (mountedRef.current) setSourceSaving(false);
+      }
+    },
+    [
+      dirty,
+      exporting,
+      onProjectSourceCommit,
+      revisionActionId,
+      saving,
+      sourceEditingDisabled,
+      sourceSaving,
+    ],
+  );
+
   const exportStep = useCallback(async () => {
     if (exporting || loading || saving || sourceSaving) return;
     setExporting(true);
@@ -459,6 +502,7 @@ export function BrepProjectEditorProvider({
       reEvaluate,
       saveParameters,
       saveFeatureNode,
+      saveProjectSource,
       exportStep,
       exportProjectPackage,
       revisions,
@@ -488,6 +532,7 @@ export function BrepProjectEditorProvider({
       runRevisionAction,
       saveFeatureNode,
       saveParameters,
+      saveProjectSource,
       saving,
       setParameterValue,
       sourceEditingDisabled,
@@ -844,6 +889,7 @@ export function BrepProjectParametersPanel() {
     reEvaluate,
     saveParameters,
     saveFeatureNode,
+    saveProjectSource,
   } = useBrepProjectEditor();
   const [parametersOpen, setParametersOpen] = useState(true);
   const featureEditingDisabled =
@@ -954,6 +1000,7 @@ export function BrepProjectParametersPanel() {
               disabled={featureEditingDisabled}
               saving={sourceSaving}
               onSaveNode={saveFeatureNode}
+              onSaveProject={saveProjectSource}
             />
             {sourceEditingDisabled ? (
               <p className="mt-2 text-[10px] text-adam-neutral-500">
