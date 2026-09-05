@@ -137,3 +137,23 @@ export function downloadSTEPFile(
     mimeType: 'model/step',
   });
 }
+
+/**
+ * Downloads the Rhino/openNURBS interoperability artifact emitted by the
+ * isolated native BRep evaluator.
+ */
+export function download3DMFile(
+  output: Blob,
+  currentMessage?: Message | null,
+): void {
+  const filename = generateDownloadFilename({
+    currentMessage,
+    extension: '3dm',
+  });
+
+  downloadFile({
+    content: output,
+    filename,
+    mimeType: 'model/vnd.3dm',
+  });
+}
