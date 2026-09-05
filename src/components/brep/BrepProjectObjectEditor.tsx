@@ -35,7 +35,9 @@ const fieldClass =
   'h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue-dark disabled:cursor-not-allowed disabled:opacity-60';
 
 function cloneProjectObject(project: BrepProject): BrepProjectObjectDefinition {
-  return JSON.parse(JSON.stringify(project.projectObject ?? {})) as BrepProjectObjectDefinition;
+  return JSON.parse(
+    JSON.stringify(project.projectObject ?? {}),
+  ) as BrepProjectObjectDefinition;
 }
 
 function draftProject(
@@ -43,6 +45,17 @@ function draftProject(
   projectObject: BrepProjectObjectDefinition,
 ): BrepProject {
   return { ...project, projectObject };
+}
+
+function withoutDirection(
+  point: BrepProjectObjectPoint,
+): BrepProjectObjectPoint {
+  return {
+    id: point.id,
+    kind: point.kind,
+    position: point.position,
+    ...(point.label ? { label: point.label } : {}),
+  };
 }
 
 function RoleField({
@@ -288,10 +301,7 @@ function PointRow({
             size="sm"
             className="justify-self-start text-xs"
             disabled={disabled}
-            onClick={() => {
-              const { direction: _direction, ...withoutDirection } = point;
-              onChange(withoutDirection);
-            }}
+            onClick={() => onChange(withoutDirection(point))}
           >
             Remove direction
           </Button>
@@ -382,7 +392,9 @@ export function BrepProjectObjectEditor({
       setLocalError(null);
     } catch (reason) {
       setLocalError(
-        reason instanceof Error ? reason.message : 'Could not add a semantic point.',
+        reason instanceof Error
+          ? reason.message
+          : 'Could not add a semantic point.',
       );
     }
   };
@@ -391,7 +403,9 @@ export function BrepProjectObjectEditor({
     if (!draft) return;
     setDraft({
       ...draft,
-      points: (draft.points ?? []).filter((_, candidate) => candidate !== index),
+      points: (draft.points ?? []).filter(
+        (_, candidate) => candidate !== index,
+      ),
     });
     setLocalError(null);
   };
@@ -548,7 +562,7 @@ export function BrepProjectObjectEditor({
                   <div className="grid gap-3">
                     {(draft.points ?? []).map((point, index) => (
                       <PointRow
-                        key={`${point.id}:${index}`}
+                        key={index}
                         point={point}
                         existing={existingPointIds.has(point.id)}
                         parameters={project.parameters}
