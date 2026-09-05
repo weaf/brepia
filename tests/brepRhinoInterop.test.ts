@@ -22,6 +22,10 @@ const service = fs.readFileSync(
   new URL('../src/services/brepStepExport.ts', import.meta.url),
   'utf8',
 );
+const editor = fs.readFileSync(
+  new URL('../src/components/brep/BrepProjectEditor.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('BRep Rhino/openNURBS interoperability contract', () => {
   it('pins rhino3dm inside the isolated Python 3.12 native sandbox', () => {
@@ -54,5 +58,17 @@ describe('BRep Rhino/openNURBS interoperability contract', () => {
     assert.match(route, /X-PCAD-3DM-Provider/);
     assert.match(service, /Accept: format === '3dm'/);
     assert.match(service, /exportBrep3dm/);
+  });
+
+  it('exposes 3DM beside STEP and canonical project JSON using current preview values', () => {
+    assert.match(editor, /type BrepDownloadFormat = 'step' \| '3dm' \| 'brep'/);
+    assert.match(editor, /exportBrep3dm\(project, values\)/);
+    assert.match(editor, /download3DMFile\(threeDm\)/);
+    assert.match(editor, />\.3DM</);
+    assert.match(editor, /Rhino interoperability/);
+    assert.match(
+      editor,
+      /STEP and 3DM can still export the current preview values/,
+    );
   });
 });
