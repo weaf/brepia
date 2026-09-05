@@ -10,6 +10,14 @@ const featureEditorSource = fs.readFileSync(
   new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
   'utf8',
 );
+const workspaceSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
+  'utf8',
+);
+const projectViewSource = fs.readFileSync(
+  new URL('../src/views/BrepProjectView.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('BRep graph/editor UI boundary', () => {
   it('renders a presentation-only dependency graph with explicit result flow navigation', () => {
@@ -34,5 +42,24 @@ describe('BRep graph/editor UI boundary', () => {
       featureEditorSource,
       /Dependency navigation remains available\. Save or discard competing/,
     );
+  });
+
+  it('moves the graph into the main Model Graph workspace instead of constraining it to the Parameters panel', () => {
+    assert.match(workspaceSource, />\s*Model\s*</);
+    assert.match(workspaceSource, />\s*Graph\s*</);
+    assert.match(workspaceSource, /BREP_GRAPH_WORKSPACE_TARGET_ID/);
+    assert.match(projectViewSource, /<BrepFeatureWorkspaceProvider>/);
+    assert.match(projectViewSource, /previewSlot=\{<BrepProjectWorkspacePanel \/>\}/);
+    assert.match(
+      projectViewSource,
+      /mobilePreviewSlot=\{<BrepProjectWorkspacePanel isMobile \/>\}/,
+    );
+
+    assert.match(featureEditorSource, /createPortal\(graph, graphTarget\)/);
+    assert.match(featureEditorSource, /Open BRep dependency graph/);
+    assert.match(featureEditorSource, /not constrained by the Parameters panel width/);
+    assert.match(graphSource, /fillAvailable/);
+    assert.doesNotMatch(graphSource, /ResizeObserver/);
+    assert.doesNotMatch(graphSource, /useIsMobile/);
   });
 });

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, GitBranch, Pencil, Plus } from 'lucide-react';
 import { BrepDependencyGraph } from '@/components/brep/BrepDependencyGraph';
+import {
+  BREP_GRAPH_WORKSPACE_TARGET_ID,
+  useBrepFeatureWorkspace,
+} from '@/components/brep/BrepFeatureWorkspace';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -489,6 +494,7 @@ export function BrepFeatureEditor({
   onSaveNode: (node: BrepNode) => Promise<void>;
   onSaveProject: (project: BrepProject) => Promise<void>;
 }) {
+  const { view, setView } = useBrepFeatureWorkspace();
   const [open, setOpen] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<BrepNode | null>(null);
@@ -497,6 +503,7 @@ export function BrepFeatureEditor({
   const [createDraft, setCreateDraft] = useState<BrepNode | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [structuralError, setStructuralError] = useState<string | null>(null);
+  const [graphTarget, setGraphTarget] = useState<HTMLElement | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     project.resultNodeId || project.nodes[0]?.id || null,
   );
@@ -510,6 +517,25 @@ export function BrepFeatureEditor({
     }
     setSelectedNodeId(project.resultNodeId || project.nodes[0]?.id || null);
   }, [project.nodes, project.resultNodeId, selectedNodeId]);
+
+  useEffect(() => {
+    if (view !== 'graph') {
+      setGraphTarget(null);
+      return;
+    }
+
+    let frame = 0;
+    const resolveTarget = () => {
+      const target = document.getElementById(BREP_GRAPH_WORKSPACE_TARGET_ID);
+      if (target) {
+        setGraphTarget(target);
+        return;
+      }
+      frame = window.requestAnimationFrame(resolveTarget);
+    };
+    resolveTarget();
+    return () => window.cancelAnimationFrame(frame);
+  }, [view]);
 
   const editNode = (node: BrepNode) => {
     setSelectedNodeId(node.id);
@@ -617,6 +643,19 @@ export function BrepFeatureEditor({
     }
   };
 
+  const graph = (
+    <BrepDependencyGraph
+      project={project}
+      selectedNodeId={selectedNodeId}
+      editingDisabled={disabled || saving}
+      fillAvailable
+      onSelectNode={setSelectedNodeId}
+      onEditNode={editNodeById}
+      onSetResultNode={setResultNode}
+      onDeleteNode={deleteNode}
+    />
+  );
+
   return (
     <>
       <Collapsible open={open} onOpenChange={setOpen}>
@@ -639,6 +678,17 @@ export function BrepFeatureEditor({
             type="button"
             variant="ghost"
             size="sm"
+            onClick={() => setView('graph')}
+            aria-label="Open BRep dependency graph"
+            className="h-7 shrink-0 px-2 text-[10px]"
+          >
+            <GitBranch className="mr-1 h-3 w-3" />
+            Graph
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             disabled={disabled || saving}
             onClick={openCreateDialog}
             aria-label="Add BRep feature"
@@ -649,16 +699,24 @@ export function BrepFeatureEditor({
           </Button>
         </div>
         <CollapsibleContent>
-          <div className="mt-3">
-            <BrepDependencyGraph
-              project={project}
-              selectedNodeId={selectedNodeId}
-              editingDisabled={disabled || saving}
-              onSelectNode={setSelectedNodeId}
-              onEditNode={editNodeById}
-              onSetResultNode={setResultNode}
-              onDeleteNode={deleteNode}
-            />
+          <div className="mt-3 rounded-lg border border-adam-neutral-800 bg-adam-neutral-900/30 p-2.5">
+            <button
+              type="button"
+              onClick={() => setView('graph')}
+              className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs text-adam-neutral-300 transition-colors hover:bg-adam-neutral-800 hover:text-adam-text-primary"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Dependency graph</span>
+              </span>
+              <span className="shrink-0 text-[10px] text-adam-neutral-500">
+                {view === 'graph' ? 'Open' : 'Show'}
+              </span>
+            </button>
+            <p className="mt-1 px-2 text-[10px] leading-4 text-adam-neutral-500">
+              Graph opens beside Chat in the main workspace so feature topology is
+              not constrained by the Parameters panel width.
+            </p>
           </div>
 
           {structuralError ? (
@@ -724,6 +782,8 @@ export function BrepFeatureEditor({
           ) : null}
         </CollapsibleContent>
       </Collapsible>
+
+      {view === 'graph' && graphTarget ? createPortal(graph, graphTarget) : null}
 
       <Dialog
         open={createDialogOpen}

@@ -40,21 +40,25 @@ describe('BRep product chat client boundary', () => {
 
   it('uses the shared Parametric conversation shell on desktop and mobile', () => {
     assert.match(brepViewSource, /<ConversationView/);
-    assert.match(brepViewSource, /previewSlot={<BrepProjectViewerPanel \/>}/);
+    assert.match(
+      brepViewSource,
+      /previewSlot={<BrepProjectWorkspacePanel \/>}/,
+    );
     assert.match(
       brepViewSource,
       /parametersSlot={<BrepProjectParametersPanel \/>}/,
     );
     assert.match(
       brepViewSource,
-      /mobilePreviewSlot={<BrepProjectViewerPanel isMobile \/>}/,
+      /mobilePreviewSlot={<BrepProjectWorkspacePanel isMobile \/>}/,
     );
     assert.match(
       brepViewSource,
       /mobileParametersSlot={<BrepProjectParametersPanel \/>}/,
     );
+    assert.match(brepViewSource, /<BrepFeatureWorkspaceProvider>/);
     assert.match(brepViewSource, /setMobilePreviewVersion/);
-    assert.match(brepViewSource, /\bModel\b/);
+    assert.match(brepViewSource, /\bWorkspace\b/);
   });
 
   it('matches the responsive Parametric sidebar hierarchy and exposes canonical BRep JSON', () => {

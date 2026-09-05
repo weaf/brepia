@@ -12,31 +12,32 @@ Merge pull request #30 from weaf/feature/brep-project-object-contract
 Phase 5A: BRep project-object contract
 ```
 
-Phase 5B — native project-object evaluation — is complete on:
+Accepted Phase 5B checkpoint:
 
 ```text
-feature/brep-project-object-evaluation
+2fbef6649701bd33f51d971104a303a69ac32c38
+Merge pull request #31 from weaf/feature/brep-project-object-evaluation
+Phase 5B: native BRep project-object evaluation
 ```
 
-PR #31 is the Phase 5B merge vehicle. After it is merged, Phase 5C — project-object authoring and AI product integration — is the next active slice.
+Phase 5C is complete on PR #32 and accepted for merge. The final `master` checkpoint is defined by the PR merge commit rather than a pre-merge branch SHA.
 
 The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence.
 
-## Reconciled Phase 5 starting point
+## Reconciled Phase 5 architecture
 
-The accepted BRep stack provides the canonical project-object concepts:
+The accepted BRep stack now provides:
 
-- `resultNodeId` is the canonical primary BRep feature;
-- `placement` is the kernel-neutral local/insertion coordinate system intended to map to a future Grasshopper Plane;
-- `metadata` carries explicit object type, classification and bounded custom string properties;
-- optional `projectObject` declares footprint, clearance-envelope and maintenance-envelope feature roles plus stable local connection/mounting/cable points.
-
-Before 5B, the native evaluator:
-
-- evaluated only the canonical `resultNodeId`;
-- returned one primary body with bounds/viewer mesh;
-- exported exact STEP for that primary result;
-- did not yet evaluate semantic auxiliary geometry outputs or return resolved project-object semantics.
+- `resultNodeId` as the canonical primary BRep feature;
+- `placement` as the kernel-neutral local/insertion coordinate system intended to map to a future Grasshopper Plane;
+- `metadata` for explicit object type, classification and bounded custom properties;
+- optional canonical `projectObject` source semantics for footprint, clearance-envelope and maintenance-envelope feature roles plus stable local connection/mounting/cable points;
+- isolated build123d/OCCT evaluation of the primary result and declared project-object auxiliary geometry;
+- resolved placement/metadata/semantic points in the native evaluation result;
+- exact STEP export from the primary `resultNodeId` only;
+- immutable project source revisions with compare-and-set activation;
+- complete canonical BRep snapshots for built-in AI, OpenCode and Codex editing paths;
+- a shared `Model | Graph` BRep workspace where the 3D viewer and dependency graph are peer views over the same canonical project rather than forcing the graph into the narrow Parameters inspector.
 
 No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime dependency exists in the application today.
 
@@ -45,31 +46,33 @@ No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime depe
 1. `BrepProject` remains Brepia's only canonical editable BRep source model.
 2. Rhino/3DM/Grasshopper artifacts are interoperability outputs, never a second source of truth.
 3. The existing isolated build123d/OCCT runtime remains authoritative for native BRep evaluation.
-4. `resultNodeId` remains the primary BRep authority; Phase 5 must not invent a competing primary-result field.
+4. `resultNodeId` remains the primary BRep authority; project-object geometry roles are auxiliary semantics and never a competing primary-result field.
 5. Existing `placement` remains the local/insertion coordinate contract and must not silently become a local-preview transform.
-6. Existing project/node/parameter identities remain stable.
+6. Existing project/node/parameter identities remain stable. Existing semantic point IDs are also stable while the same point continues to exist.
 7. Existing OpenSCAD workflows remain independent and unchanged.
 8. Phase 5 must not require Rhino to author, edit, evaluate or STEP-export ordinary BRep projects.
-9. Rhino.Compute and Grasshopper runtime/component work remain later phases unless explicitly pulled forward by a proven Phase 5 interoperability requirement.
+9. Rhino.Compute and Grasshopper runtime/component work remain later phases unless explicitly pulled forward by a proven interoperability requirement.
 10. Native auxiliary outputs must remain bounded and deterministic.
+11. Direct UI project-object writes must use the accepted full-project source-save guard and immutable CAS persistence path; no second history model is allowed.
+12. Graph visualization remains presentation-only and never becomes source authority.
+13. `Model` and `Graph` are presentation/workspace modes only; switching views must not create revisions, mutate project source or change primary-result semantics.
 
 ## Additive v1 source compatibility
 
-Phase 5A added an optional project-object output definition to the existing schema-version-1 project contract.
+Phase 5A added optional `projectObject` data to schema version 1. This remains additive:
 
-This remains deliberately additive:
-
-- existing valid v1 projects without project-object outputs remain valid and normalize exactly as before;
-- no existing field changes meaning;
+- valid existing v1 projects without `projectObject` remain valid;
+- no existing source field changes meaning;
 - no existing ID is regenerated;
 - canonical package import/export transports the complete normalized project snapshot;
-- AI complete-snapshot schemas accept and preserve the optional field.
+- AI complete-snapshot schemas accept and preserve project-object data;
+- an empty project-object definition canonicalizes back to no `projectObject` field.
 
-A future breaking source-format change may introduce a new schema version, but optional Phase 5 semantic output declarations do not require one.
+A future breaking source-format change may introduce a new schema version, but these optional semantic outputs do not require one.
 
 ## 5A — Canonical project-object contract — complete
 
-### Canonical role mapping
+Canonical project-object mapping:
 
 ```text
 primary BRep               -> resultNodeId
@@ -85,15 +88,13 @@ auxiliary semantic outputs -> projectObject
 - `maintenanceEnvelopeNodeId`;
 - bounded stable semantic local `points`.
 
-Each point has stable ID, kind `connection | mounting | cable`, local mm position, optional unitless direction and optional label. Compatible published-parameter references are supported. The geometry roles are semantic node roles rather than kernel-topology IDs.
+Each point has a stable ID, kind `connection | mounting | cable`, local mm position, optional unitless direction and optional label. Compatible published-parameter references are supported. Geometry roles reference canonical feature node IDs rather than kernel-topology IDs.
 
 5A also protects referenced parameters and role-assigned nodes from destructive Phase 4 authoring operations without hidden cascading rewrites.
 
 ## 5B — Native project-object evaluation — complete
 
-### Result contract
-
-A successful native evaluation has one required kernel-neutral `projectObject` result alongside the existing primary result fields:
+A successful native evaluation includes a kernel-neutral `projectObject` result alongside the accepted primary result fields:
 
 ```text
 status / provider / projectId / resultNodeId
@@ -109,95 +110,137 @@ projectObject
 warnings / exactExport
 ```
 
-The separation is intentional:
+Key invariants:
 
-- `bodies` and top-level `bounds` retain their accepted Phase 1–4 meaning for the primary `resultNodeId`;
-- auxiliary role geometry does not get appended to `bodies` and therefore cannot silently change the current browser viewer;
-- exact STEP remains the primary `resultNodeId` shape only;
-- future 3DM/Grasshopper interoperability consumes `projectObject` explicitly.
+- top-level `bodies`/`bounds` remain primary-result-only;
+- auxiliary role geometry uses the same build123d/OCCT DAG cache and stable node IDs;
+- semantic scalars resolve under the exact current parameter values;
+- host validation treats sandbox result JSON as untrusted and verifies role IDs and resolved semantic data against the normalized request;
+- provider result-contract version is `0.2.0`;
+- exact STEP remains derived only from `resultNodeId`;
+- auxiliary geometry is intentionally not added to the ordinary browser preview.
 
-### Resolved semantic data
+## 5C — Project-object authoring and AI product integration — complete
 
-`projectObject.placement` contains resolved numeric `origin`, `xAxis`, `yAxis` and derived `zAxis` under the exact parameter values used for the geometry evaluation.
+### Direct authoring surface
 
-Semantic point positions/directions are resolved under the same parameter-value map. Metadata is the canonical source metadata and remains kernel neutral.
+5C adds a compact, collapsed-by-default **Project object** section beside the accepted Phase 4D project-definition editor.
 
-A project without any declared `projectObject` roles/points still receives a project-object evaluation envelope containing resolved placement, optional metadata, empty `geometry`, and empty `points`. This gives downstream interoperability one stable result shape without changing the source schema.
+The editor supports:
 
-### Native auxiliary geometry
+- assigning or clearing Footprint;
+- assigning or clearing Clearance envelope;
+- assigning or clearing Maintenance envelope;
+- assigning the same feature node to multiple roles when intentionally desired;
+- adding, editing and removing semantic points;
+- stable point IDs;
+- point kind `connection`, `mounting` or `cable`;
+- optional point label;
+- local mm position with literal or compatible `mm` published-parameter scalars;
+- optional unitless direction with literal or compatible `none` published-parameter scalars.
 
-The build123d/OCCT driver evaluates declared geometry-role node IDs through the same existing recursive `evaluate_node` DAG cache used for the primary result.
+Existing semantic point IDs are read-only in the direct editor. Changing a point's label, kind, position or direction preserves identity. If the semantic identity genuinely changes, the user removes the old point and creates a new one.
 
-A second cache stores tessellated evaluated-body payloads by stable node ID so a node used by the primary result or multiple semantic roles is tessellated at most once per sandbox evaluation.
+New point IDs are explicit editable drafts before first save and receive deterministic current-snapshot suggestions such as `connection`, `connection2`, and so on.
 
-The geometry-role body contract reuses `BrepEvaluatedBody`:
+### Result versus project-object roles
 
-- stable Brepia node ID;
-- native bounds;
-- bounded viewer mesh.
+The UI makes this distinction explicit:
 
-The result JSON may contain the same body payload under more than one semantic role when the source intentionally assigns one node to multiple roles. Overall sandbox output remains bounded by the existing output-size limit.
+- **Result** is the canonical primary body used by the ordinary 3D preview and exact primary STEP export.
+- **Footprint / Clearance / Maintenance** are semantic auxiliary outputs evaluated separately by the native runtime.
 
-### Sandbox trust boundary
+Assigning a project-object role does not implicitly change Result, and Set result does not implicitly rewrite project-object roles.
 
-Native output remains untrusted until validated by the host.
+5C does not add auxiliary-geometry overlay/toggling to the ordinary browser viewer. That can be added later as a presentation/UX capability without changing canonical source semantics.
 
-5B validation requires:
+### Canonical write path
 
-- returned `projectId` and `resultNodeId` to match the normalized request;
-- the first primary body ID to remain the requested `resultNodeId`;
-- every primary and auxiliary body to satisfy the existing bounds/mesh limits;
-- each returned semantic geometry role to match exactly the node ID declared for that role;
-- no undeclared geometry role to appear;
-- resolved placement, metadata and semantic points to equal the deterministic host-side resolution of the normalized source and parameter values;
-- no unknown project-object result keys or geometry-role keys.
+Project-object UI writes:
 
-A mismatch is `output_invalid`; no untrusted project-object result reaches the API response.
+1. construct a complete next `BrepProject` through `replaceBrepProjectObjectDefinition(...)`;
+2. canonical-normalize all role/point/reference/unit rules before persistence;
+3. call the existing `saveProjectSource(...)` guard;
+4. persist through the accepted `onProjectSourceCommit(...)` immutable source-revision/CAS path.
 
-### Provider/runtime versioning
+No project-object-specific database tables, patch API or history model are introduced.
 
-The repository-native build123d/OCCT driver increments its provider version from `0.1.0` to `0.2.0` for the expanded result contract. The pinned build123d/OCCT image and security posture are otherwise unchanged; the driver continues to be mounted read-only into the sandbox.
+The existing source-write guards therefore continue to block project-object writes while:
 
-### Exact STEP invariant
+- a parameter preview is dirty;
+- another source/parameter/revision/export write is active;
+- the current AI turn is streaming.
 
-`model.step` continues to be exported from the shape returned for `resultNodeId`. Auxiliary-role evaluation does not alter the exported shape or create implicit multi-output STEP behavior.
+Read-only graph navigation remains available under those conditions.
 
-### 5B non-goals
+### Graph product integration and workspace
 
-5B intentionally does not add:
+The dependency graph remains presentation-only and identifies nodes carrying semantic project-object roles:
 
-- direct project-object authoring UI;
-- browser rendering/toggling of auxiliary geometry;
-- multi-output STEP or new export formats;
+- `FP` — Footprint;
+- `CL` — Clearance envelope;
+- `MT` — Maintenance envelope.
+
+The selected-node details expose full role names. Safe delete is surfaced before mutation: a role-assigned node cannot be deleted until all project-object roles referencing it are explicitly cleared. There is no hidden role rewrite or cascading delete.
+
+The accepted 5C workspace uses **Model | Graph** as peer modes in the main BRep workspace:
+
+- `Model` renders the existing primary-result native 3D viewer;
+- `Graph` renders the dependency graph in the main workspace rather than constraining it to the Parameters-panel width;
+- the Parameters-side Features section remains a compact navigator/inspector and exposes a Graph shortcut;
+- the main Graph view and Features inspector share the same feature selection and the same Edit / Set result / Delete callbacks;
+- view switching is ephemeral UI state and does not write project source or revision history;
+- the same workspace modes are available inside the existing mobile/tablet workspace sheet.
+
+This replaces the interim attempt to make the full dependency graph fit every possible Parameters-panel width. The graph no longer depends on device-viewport heuristics to decide its primary workspace layout.
+
+### AI product integration
+
+The provider-visible structured BRep schema already accepted `projectObject` in 5A. 5C completes model-facing behavior by making project-object semantics explicit across:
+
+- `tool.build_brep_project`;
+- injected `context.brep_project`;
+- OpenCode native BRep transport;
+- Codex native BRep transport.
+
+All four paths instruct the model/agent to:
+
+- return complete project snapshots, never patches;
+- preserve unchanged project/node/parameter identities;
+- preserve unchanged project-object role assignments;
+- preserve existing semantic point IDs while editing the same semantic point;
+- keep `resultNodeId` distinct from auxiliary project-object roles;
+- use only schema-supported role and semantic-point fields;
+- respect mm versus unitless scalar compatibility.
+
+No separate AI project-object tool or patch protocol is introduced.
+
+### 5C non-goals
+
+5C does not add:
+
+- auxiliary geometry overlay/toggling in the ordinary 3D viewer;
+- multi-output STEP;
 - 3DM/rhino3dm;
-- new BRep geometry node types;
 - Rhino.Compute;
-- Grasshopper component/runtime work;
-- application of the placement plane as a local native-preview transform.
+- Grasshopper component/runtime generation;
+- new BRep feature node types;
+- kernel-topology IDs;
+- a second project-object persistence/history system;
+- placement transformation of local native preview geometry.
 
-## 5C — Project-object authoring and AI product integration — next
+## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout — next
 
-Add direct project-object output authoring over the same canonical source revision lifecycle:
-
-- assign/clear footprint, clearance and maintenance role nodes;
-- add/edit/remove stable semantic points;
-- use existing source-write guards and immutable CAS persistence;
-- expose the complete project-object definition to AI snapshot editing without a second history model.
-
-Graph/navigation UX may identify nodes that carry semantic output roles, but graph layout remains presentation-only.
-
-## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout
-
-After the neutral contract and native outputs are accepted, add only the minimum 3DM/rhino3dm capability needed to prove the later Grasshopper path.
+After the accepted 5C merge, add only the minimum 3DM/rhino3dm capability needed to prove the later Grasshopper path.
 
 Before adding a dependency, verify and record:
 
 - exact rhino3dm/openNURBS package/version;
 - Linux/headless support in the selected implementation path;
 - licensing/distribution terms;
-- what exact BRep/geometry conversion is possible from the existing OCCT result without introducing Rhino as the authoritative kernel.
+- exact geometry conversion capability from the existing OCCT result without making Rhino the authoritative kernel.
 
-Target Phase 5 interoperability acceptance should prove that a representative BRep project object can produce a 3DM-compatible artifact carrying useful geometry plus placement/object metadata/semantic project outputs where the selected library supports them.
+Target interoperability acceptance should prove that a representative BRep project object can produce a useful 3DM-compatible artifact carrying geometry plus placement/object metadata/project-object semantics where the selected library supports them.
 
 Do not broaden 5D into a Grasshopper component/runtime; that is Phase 6+ work.
 
@@ -207,17 +250,30 @@ Phase 5A was accepted and merged through PR #30. Quality Gates #367 and #368 pas
 
 ## Phase 5B acceptance closeout
 
-Phase 5B is accepted on the implementation branch with the following evidence:
+Phase 5B was accepted and merged through PR #31 at `2fbef6649701bd33f51d971104a303a69ac32c38`.
 
-1. Legacy projects without declared semantic roles/points remain covered by provider/server regression tests and receive primary result semantics plus the stable empty project-object envelope.
-2. Declared footprint, clearance-envelope and maintenance-envelope nodes are evaluated as bounded bodies with their exact stable Brepia node IDs.
-3. Semantic points resolve literals and published-parameter references under the exact current evaluation values.
-4. Resolved placement uses the same validated provider basis and metadata remains canonical/kernel-neutral.
-5. Top-level primary `bodies`, `bounds`, `resultNodeId` and browser viewer semantics remain unchanged when auxiliary roles are present.
-6. Exact STEP remains derived only from `resultNodeId`; the real native smoke verified an ISO STEP artifact and the browser STEP regression was green. Independent STEP-import behavior remains covered by the previously accepted unchanged export path rather than being re-run specifically for 5B.
-7. Fake-runner regression tests reject wrong project/result identity, wrong/undeclared roles and tampered resolved semantic output as `output_invalid`.
-8. Auxiliary evaluation reuses the existing shape cache plus a stable-node body/tessellation cache and remains under the existing sandbox resource/output limits.
-9. Quality Gate #369 passed tests, typecheck, lint, build and diff check on implementation head `b297a4f5036969e1543589464b1b7c70bea1e5a3`.
-10. Real rootless-Podman build123d/OCCT smoke passed with primary result `cut`, 732 triangles, all three semantic roles (`footprint`, `clearanceEnvelope`, `maintenanceEnvelope`) and resolved cable point `cableEntry` at `[50,10,0]` with direction `[0,0,1]`.
-11. Focused browser regression was accepted: existing BRep preview remained normal, a Dimension change updated native preview, and STEP export continued to work.
-12. No auxiliary geometry appeared in the browser during 5B, as intended; auxiliary browser rendering remains outside this slice.
+Evidence:
+
+- Quality Gates #369 and #370 passed;
+- real rootless-Podman build123d/OCCT smoke passed with primary result `cut`, 732 triangles, all three semantic roles and `cableEntry` resolved to `[50,10,0]` with direction `[0,0,1]`;
+- focused browser regression confirmed ordinary BRep preview, Dimension-driven native re-evaluation and STEP export remained green;
+- primary-result viewer/STEP behavior remained unchanged.
+
+## Phase 5C acceptance closeout
+
+Phase 5C is browser/product accepted on PR #32.
+
+Evidence:
+
+- direct Project object authoring for footprint, clearance, maintenance and semantic points was accepted on desktop/mobile;
+- role assignment/clearing, stable semantic-point identity, parameter-backed point scalars, validation, immutable revision persistence, reload/restore and role-aware safe-delete behavior were accepted;
+- built-in/local BRep AI preservation and intentional project-object editing flows were accepted without unintended canonical identity churn;
+- ordinary primary-result preview and STEP behavior remained unchanged;
+- graph role markers and project-object interactions were accepted;
+- the initial narrow Parameters-panel graph UX was replaced with the accepted `Model | Graph` main-workspace design after browser feedback;
+- the final focused browser check accepted Model/Graph switching and the larger graph workspace as the preferred permanent BRep interaction model;
+- Quality Gate #371 passed the original 5C implementation;
+- Quality Gate #387 passed the final accepted workspace head with 623/623 tests plus typecheck, lint, build and diff check green;
+- the final closeout head must also pass the repository Quality Gate before PR #32 is merged.
+
+5C is therefore complete once that final closeout-head gate is green and PR #32 is merged.
