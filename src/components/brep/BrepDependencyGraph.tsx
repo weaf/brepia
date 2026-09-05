@@ -19,7 +19,7 @@ import {
 } from '@shared/brepProjectGraph';
 
 const NODE_WIDTH = 148;
-const NODE_HEIGHT = 58;
+const NODE_HEIGHT = 66;
 const COLUMN_GAP = 20;
 const ROW_GAP = 54;
 const GRAPH_PADDING = 16;
@@ -36,6 +36,28 @@ type GraphLayout = {
   nodes: PositionedNode[];
   nodeById: Map<string, PositionedNode>;
 };
+
+type ProjectObjectRole = {
+  code: 'FP' | 'CL' | 'MT';
+  label: string;
+};
+
+function projectObjectRoles(
+  project: BrepProject,
+  nodeId: string,
+): ProjectObjectRole[] {
+  const roles: ProjectObjectRole[] = [];
+  if (project.projectObject?.footprintNodeId === nodeId) {
+    roles.push({ code: 'FP', label: 'Footprint' });
+  }
+  if (project.projectObject?.clearanceEnvelopeNodeId === nodeId) {
+    roles.push({ code: 'CL', label: 'Clearance envelope' });
+  }
+  if (project.projectObject?.maintenanceEnvelopeNodeId === nodeId) {
+    roles.push({ code: 'MT', label: 'Maintenance envelope' });
+  }
+  return roles;
+}
 
 function layoutGraph(graph: BrepDependencyGraph): GraphLayout {
   const levels = new Map<number, BrepDependencyGraphNode[]>();
@@ -137,6 +159,9 @@ export function BrepDependencyGraph({
   const layout = useMemo(() => layoutGraph(graph), [graph]);
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedRoles = selectedNode
+    ? projectObjectRoles(project, selectedNode.id)
+    : [];
   const relatedIds = useMemo(
     () =>
       new Set([
@@ -146,13 +171,15 @@ export function BrepDependencyGraph({
     [selectedNode],
   );
   const deleteBlockedReason = selectedNode
-    ? selectedNode.isResult
-      ? 'Select another result before deleting this feature.'
-      : selectedNode.consumers.length > 0
-        ? `Rewire ${selectedNode.consumers.join(', ')} before deleting this feature.`
-        : project.nodes.length <= 1
-          ? 'A BRep project must keep at least one feature.'
-          : null
+    ? selectedRoles.length > 0
+      ? `Clear its project-object role${selectedRoles.length === 1 ? '' : 's'} (${selectedRoles.map((role) => role.label).join(', ')}) before deleting this feature.`
+      : selectedNode.isResult
+        ? 'Select another result before deleting this feature.'
+        : selectedNode.consumers.length > 0
+          ? `Rewire ${selectedNode.consumers.join(', ')} before deleting this feature.`
+          : project.nodes.length <= 1
+            ? 'A BRep project must keep at least one feature.'
+            : null
     : null;
 
   return (
@@ -214,12 +241,14 @@ export function BrepDependencyGraph({
           {layout.nodes.map((node) => {
             const selected = node.id === selectedNodeId;
             const related = relatedIds.has(node.id);
+            const roles = projectObjectRoles(project, node.id);
+            const roleLabels = roles.map((role) => role.label).join(', ');
             return (
               <button
                 key={node.id}
                 type="button"
                 aria-pressed={selected}
-                aria-label={`${node.id}, ${node.type}${node.isResult ? ', result node' : ''}`}
+                aria-label={`${node.id}, ${node.type}${node.isResult ? ', result node' : ''}${roles.length > 0 ? `, project-object roles ${roleLabels}` : ''}`}
                 onClick={() => onSelectNode(node.id)}
                 className={`absolute flex flex-col justify-center rounded-lg border px-2.5 py-2 text-left shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-adam-blue-dark ${
                   selected
@@ -252,6 +281,14 @@ export function BrepDependencyGraph({
                     in {node.dependencies.length} · out {node.consumers.length}
                   </span>
                 </span>
+                {roles.length > 0 ? (
+                  <span
+                    className="mt-0.5 truncate text-[8px] font-medium uppercase tracking-wide text-adam-blue-light"
+                    title={`Project object: ${roleLabels}`}
+                  >
+                    Object · {roles.map((role) => role.code).join(' · ')}
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -320,6 +357,21 @@ export function BrepDependencyGraph({
               </AlertDialogContent>
             </AlertDialog>
           </div>
+          {selectedRoles.length > 0 ? (
+            <div className="grid grid-cols-[64px_minmax(0,1fr)] items-start gap-2 text-[10px]">
+              <span className="pt-1 text-adam-neutral-500">Roles</span>
+              <div className="flex flex-wrap gap-1">
+                {selectedRoles.map((role) => (
+                  <span
+                    key={role.code}
+                    className="rounded-md border border-adam-blue-dark/45 bg-adam-blue-dark/10 px-1.5 py-1 text-adam-blue-light"
+                  >
+                    {role.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <NavigationLinks
             label="Inputs"
             ids={selectedNode.dependencies}
