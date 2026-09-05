@@ -166,6 +166,7 @@ function diffProjectFields(previous: BrepProject, next: BrepProject): string[] {
     units: previous.units,
     placement: previous.placement,
     metadata: previous.metadata,
+    projectObject: previous.projectObject,
     resultNodeId: previous.resultNodeId,
   };
   const nextProjectFields = {
@@ -175,6 +176,7 @@ function diffProjectFields(previous: BrepProject, next: BrepProject): string[] {
     units: next.units,
     placement: next.placement,
     metadata: next.metadata,
+    projectObject: next.projectObject,
     resultNodeId: next.resultNodeId,
   };
   return changedPaths(previousProjectFields, nextProjectFields, 'project');
