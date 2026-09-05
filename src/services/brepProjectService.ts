@@ -81,6 +81,82 @@ export async function importBrepProjectConversation({
   });
 }
 
+async function persistNormalizedBrepProjectRevision({
+  conversationId,
+  parentMessageId,
+  artifact,
+  staleLabel,
+}: {
+  conversationId: string;
+  parentMessageId: string;
+  artifact: BrepProjectArtifactData;
+  staleLabel: string;
+}): Promise<{ messageId: string; artifact: BrepProjectArtifactData }> {
+  const messageId = crypto.randomUUID();
+  const { error: messageError } = await supabase.from('messages').insert({
+    id: messageId,
+    conversation_id: conversationId,
+    role: 'assistant',
+    parent_message_id: parentMessageId,
+    parts: JSON.parse(
+      JSON.stringify([{ type: 'data-brep-project', data: artifact }]),
+    ),
+    metadata: {},
+  });
+  if (messageError) throw messageError;
+
+  // Do not let an older tab/async commit replace a newer active source. The
+  // orphaned immutable message is valid branch evidence and can be selected.
+  const { data, error: leafError } = await supabase
+    .from('conversations')
+    .update({ current_message_leaf_id: messageId })
+    .eq('id', conversationId)
+    .eq('current_message_leaf_id', parentMessageId)
+    .select('id');
+  if (leafError) throw leafError;
+  if (data?.length) return { messageId, artifact };
+
+  // Some local Supabase RLS configurations perform the update but do not
+  // return its selected row. Confirm the exact active leaf before reporting a
+  // lost CAS race; accepting an empty update response directly would make the
+  // UI reject a revision that is already the persisted active source.
+  const { data: confirmed, error: confirmationError } = await supabase
+    .from('conversations')
+    .select('current_message_leaf_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (confirmationError) throw confirmationError;
+  if (confirmed?.current_message_leaf_id !== messageId) {
+    throw new Error(
+      `BRep project changed before this ${staleLabel} revision could be activated.`,
+    );
+  }
+  return { messageId, artifact };
+}
+
+export async function persistBrepProjectSourceRevision({
+  conversationId,
+  parentMessageId,
+  artifact,
+  project,
+}: {
+  conversationId: string;
+  parentMessageId: string;
+  artifact: BrepProjectArtifactData;
+  project: BrepProject;
+}): Promise<{ messageId: string; artifact: BrepProjectArtifactData }> {
+  const nextArtifact = createBrepProjectArtifact({
+    ...artifact,
+    source: { kind: 'brep', source: project },
+  });
+  return persistNormalizedBrepProjectRevision({
+    conversationId,
+    parentMessageId,
+    artifact: nextArtifact,
+    staleLabel: 'feature',
+  });
+}
+
 export async function persistBrepProjectParameterRevision({
   conversationId,
   parentMessageId,
@@ -102,46 +178,12 @@ export async function persistBrepProjectParameterRevision({
       ),
     },
   });
-  const messageId = crypto.randomUUID();
-  const { error: messageError } = await supabase.from('messages').insert({
-    id: messageId,
-    conversation_id: conversationId,
-    role: 'assistant',
-    parent_message_id: parentMessageId,
-    parts: JSON.parse(
-      JSON.stringify([{ type: 'data-brep-project', data: nextArtifact }]),
-    ),
-    metadata: {},
+  return persistNormalizedBrepProjectRevision({
+    conversationId,
+    parentMessageId,
+    artifact: nextArtifact,
+    staleLabel: 'parameter',
   });
-  if (messageError) throw messageError;
-
-  // Do not let an older tab/async commit replace a newer active source. The
-  // orphaned immutable message is valid branch evidence and can be selected.
-  const { data, error: leafError } = await supabase
-    .from('conversations')
-    .update({ current_message_leaf_id: messageId })
-    .eq('id', conversationId)
-    .eq('current_message_leaf_id', parentMessageId)
-    .select('id');
-  if (leafError) throw leafError;
-  if (data?.length) return { messageId, artifact: nextArtifact };
-
-  // Some local Supabase RLS configurations perform the update but do not
-  // return its selected row. Confirm the exact active leaf before reporting a
-  // lost CAS race; accepting an empty update response directly would make the
-  // UI reject a revision that is already the persisted active source.
-  const { data: confirmed, error: confirmationError } = await supabase
-    .from('conversations')
-    .select('current_message_leaf_id')
-    .eq('id', conversationId)
-    .maybeSingle();
-  if (confirmationError) throw confirmationError;
-  if (confirmed?.current_message_leaf_id !== messageId) {
-    throw new Error(
-      'BRep project changed before this parameter revision could be activated.',
-    );
-  }
-  return { messageId, artifact: nextArtifact };
 }
 
 export async function selectBrepProjectRevision({
