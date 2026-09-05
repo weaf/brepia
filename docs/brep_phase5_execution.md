@@ -20,9 +20,21 @@ Merge pull request #31 from weaf/feature/brep-project-object-evaluation
 Phase 5B: native BRep project-object evaluation
 ```
 
-Phase 5C is complete on PR #32 and accepted for merge. The final `master` checkpoint is defined by the PR merge commit rather than a pre-merge branch SHA.
+Accepted Phase 5C checkpoint:
 
-The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence.
+```text
+e7b679cfa0b89478f0ce8d016dc374ab60d423ab
+Merge pull request #32 — Phase 5C: BRep project-object authoring
+Phase 5C: BRep project-object authoring
+```
+
+Active Phase 5D branch:
+
+```text
+feature/brep-rhino3dm-interoperability
+```
+
+The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence. The detailed 5D dependency/fidelity contract is recorded in `docs/brep_phase5_5d_interop.md`.
 
 ## Reconciled Phase 5 architecture
 
@@ -39,7 +51,7 @@ The accepted BRep stack now provides:
 - complete canonical BRep snapshots for built-in AI, OpenCode and Codex editing paths;
 - a shared `Model | Graph` BRep workspace where the 3D viewer and dependency graph are peer views over the same canonical project rather than forcing the graph into the narrow Parameters inspector.
 
-No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime dependency exists in the application today.
+Phase 5D adds `rhino3dm` only inside the existing isolated native sandbox as a headless 3DM interoperability/document dependency. It does not introduce RhinoCommon, Rhino desktop, Rhino.Compute or a Grasshopper runtime into the application.
 
 ## Phase 5 architecture locks
 
@@ -56,6 +68,8 @@ No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime depe
 11. Direct UI project-object writes must use the accepted full-project source-save guard and immutable CAS persistence path; no second history model is allowed.
 12. Graph visualization remains presentation-only and never becomes source authority.
 13. `Model` and `Graph` are presentation/workspace modes only; switching views must not create revisions, mutate project source or change primary-result semantics.
+14. 3DM tessellation must never be described as exact OCCT-to-Rhino BRep conversion. Exact primary CAD fidelity remains the native STEP artifact.
+15. 3DM geometry remains in Brepia's local component coordinates; `placement` travels as semantic insertion-plane data and is not implicitly applied as a transform.
 
 ## Additive v1 source compatibility
 
@@ -116,7 +130,7 @@ Key invariants:
 - auxiliary role geometry uses the same build123d/OCCT DAG cache and stable node IDs;
 - semantic scalars resolve under the exact current parameter values;
 - host validation treats sandbox result JSON as untrusted and verifies role IDs and resolved semantic data against the normalized request;
-- provider result-contract version is `0.2.0`;
+- provider result-contract version is `0.2.0` for the accepted 5B checkpoint;
 - exact STEP remains derived only from `resultNodeId`;
 - auxiliary geometry is intentionally not added to the ordinary browser preview.
 
@@ -229,20 +243,40 @@ No separate AI project-object tool or patch protocol is introduced.
 - a second project-object persistence/history system;
 - placement transformation of local native preview geometry.
 
-## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout — next
+## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout — active
 
-After the accepted 5C merge, add only the minimum 3DM/rhino3dm capability needed to prove the later Grasshopper path.
+5D pins `rhino3dm==8.32.1` inside the existing Python 3.12 rootless/headless native sandbox. build123d/OCCT remains authoritative for evaluation and exact primary STEP.
 
-Before adding a dependency, verify and record:
+The 3DM interoperability artifact is intentionally dual-representation:
 
-- exact rhino3dm/openNURBS package/version;
-- Linux/headless support in the selected implementation path;
-- licensing/distribution terms;
-- exact geometry conversion capability from the existing OCCT result without making Rhino the authoritative kernel.
+- native Rhino Mesh objects represent the current tessellated Result and declared project-object geometry for direct 3DM visibility/interoperability;
+- real Rhino point objects represent resolved connection/mounting/cable points;
+- document/object user strings preserve project identity, node identity, semantic roles, resolved placement, metadata and project-object semantics;
+- the exact primary OCCT STEP is embedded as `brepia-primary.step` so CAD fidelity is preserved without claiming that a tessellated mesh is an exact Rhino Brep.
 
-Target interoperability acceptance should prove that a representative BRep project object can produce a useful 3DM-compatible artifact carrying geometry plus placement/object metadata/project-object semantics where the selected library supports them.
+One unique canonical node is emitted once even if it carries multiple roles. Its object metadata records every role.
 
-Do not broaden 5D into a Grasshopper component/runtime; that is Phase 6+ work.
+The driver re-opens its own generated 3DM before success and verifies millimetre units, project/placement identity and extraction/signature of the embedded STEP. The host separately bounds the regular-file artifact and verifies the 3DM header before bytes are exposed.
+
+The existing authenticated `/api/brep/export/step` transport remains backward-compatible for STEP and negotiates 3DM when the client sends `Accept: model/vnd.3dm`. The existing BRep download selector exposes `.STEP`, `.3DM` and `.BREP JSON`; STEP and 3DM operate on current preview parameter values while the canonical package continues to require saved source state.
+
+Provider capability version is `0.3.0` in 5D because the native runner now emits a 3DM sibling artifact in addition to the accepted result/STEP outputs. The canonical source schema remains version 1 and is unchanged.
+
+### 5D non-goals
+
+5D does not add:
+
+- Rhino desktop/RhinoCommon;
+- Rhino.Compute;
+- Grasshopper runtime/component generation or `.gh` files;
+- 3DM as canonical/editable project source;
+- 3DM import or authoring round trips;
+- mesh-derived geometry advertised as exact BRep/NURBS;
+- placement transformation of local native geometry;
+- multi-result STEP;
+- OpenSCAD changes.
+
+Detailed dependency/fidelity/acceptance evidence is maintained in `docs/brep_phase5_5d_interop.md`.
 
 ## Phase 5A acceptance closeout
 
@@ -261,7 +295,7 @@ Evidence:
 
 ## Phase 5C acceptance closeout
 
-Phase 5C is browser/product accepted on PR #32.
+Phase 5C was accepted and merged through PR #32 at `e7b679cfa0b89478f0ce8d016dc374ab60d423ab`.
 
 Evidence:
 
@@ -272,8 +306,22 @@ Evidence:
 - graph role markers and project-object interactions were accepted;
 - the initial narrow Parameters-panel graph UX was replaced with the accepted `Model | Graph` main-workspace design after browser feedback;
 - the final focused browser check accepted Model/Graph switching and the larger graph workspace as the preferred permanent BRep interaction model;
-- Quality Gate #371 passed the original 5C implementation;
-- Quality Gate #387 passed the final accepted workspace head with 623/623 tests plus typecheck, lint, build and diff check green;
-- the final closeout head must also pass the repository Quality Gate before PR #32 is merged.
+- Quality Gates #371 and #387 passed during implementation;
+- Quality Gate #388 passed the final closeout head with tests, typecheck, lint, build and diff check green;
+- GitHub verified the PR #32 merge commit and `master` advanced exactly to the accepted merge checkpoint above.
 
-5C is therefore complete once that final closeout-head gate is green and PR #32 is merged.
+## Phase 5D acceptance
+
+5D and Phase 5 are complete only after all of the following hold:
+
+1. the pinned native image builds with build123d/OCCT plus `rhino3dm==8.32.1`;
+2. real rootless-Podman smoke emits valid `result.json`, exact `model.step` and `model.3dm`;
+3. the driver re-opens the 3DM headlessly and verifies millimetre units, project/placement identity and embedded exact STEP extraction;
+4. a representative project preserves primary Result, FP/CL/MT roles and semantic points in the 3DM contract without duplicate meshes for one multi-role node;
+5. host validation rejects malformed/oversized 3DM artifacts before bytes are exposed;
+6. authenticated STEP export remains unchanged and 3DM export returns the negotiated media type/artifact;
+7. the BRep download selector exposes `.3DM`, including current unsaved preview parameter values just like STEP;
+8. ordinary Model/Graph, parameter evaluation, immutable revisions, STEP and BRep JSON regressions remain green;
+9. OpenSCAD behavior remains unchanged;
+10. repository tests, typecheck, lint, build and diff checks are green;
+11. Phase 5 execution documentation is reconciled and Phase 5 is marked complete only after the acceptance evidence above is recorded.
