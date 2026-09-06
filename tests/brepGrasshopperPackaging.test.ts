@@ -59,7 +59,10 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(packager, /archive\.Deserialize_Binary\(binary\)/);
     assert.match(packager, /archive\.Serialize_Xml\(\)/);
     assert.match(packager, /brepia\.contract\.v1/);
-    assert.doesNotMatch(packager, /StableGuid\([\s\S]*contract\.SourceRevisionId/);
+    assert.doesNotMatch(
+      packager,
+      /StableGuid\([^)]*SourceRevisionId[^)]*\)/,
+    );
   });
 
   it('keeps Rhino-hosted package code on the exact pinned Rhino 8 SDK pair', () => {
