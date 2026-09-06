@@ -21,7 +21,7 @@ A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, 
 - AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update;
 - Brepia is not a general Grasshopper automation product: broader scripting/logic may remain in Grasshopper, ChatGPT, Python or MCP-based workflows.
 
-Repository-level 8E and 8F are complete. The next active implementation slice is 8G. Installed Rhino/Grasshopper runtime acceptance remains explicitly deferred to 8H.
+Repository-level 8E, 8F and 8G are complete. The only remaining Phase 8 acceptance slice is 8H against an installed Rhino 8/Grasshopper runtime.
 
 ## Target loop
 
@@ -151,13 +151,13 @@ Exact-head evidence:
 - package build on `windows-latest` — PASS;
 - package build on `ubuntu-latest` — PASS.
 
-The concepts remain useful, but the final import path must be generalized from the custom `BrepiaProjectComponent` assumption to the GHX-native identity/compatibility contract described in `docs/grasshopper_roundtrip_architecture.md`.
+The concepts remain useful, but the final import path is generalized from the custom `BrepiaProjectComponent` assumption to the GHX-native identity/compatibility contract described in `docs/grasshopper_roundtrip_architecture.md`.
 
 ## Characterized runtime boundary
 
 Earlier probes established that compile success against Rhino/Grasshopper SDK packages does not imply a supported standalone Grasshopper runtime. Full standalone package execution and GH_IO serialization paths pulled Rhino/desktop/runtime dependencies in ordinary CI.
 
-Those negative probes remain useful evidence, but GHX-native generation changes their product significance: Brepia should not require a Rhino-owned runtime merely to create its primary Grasshopper document artifact.
+Those negative probes remain useful evidence, but GHX-native generation changes their product significance: Brepia does not require a Rhino-owned runtime merely to create its primary Grasshopper document artifact.
 
 Do not add fake Rhino hosts, private binary `.gh` reverse engineering or compatibility shim chains merely to force standalone `.gh` generation.
 
@@ -267,33 +267,54 @@ Exact-head evidence:
 
 The current product integration deliberately does not claim GHX support for canonical node types outside the 8E-proven single-box subset. Those models remain fully usable in Brepia/native BRep preview and STEP/3DM export, while GHX export fails explicitly instead of silently changing geometry semantics.
 
-### 8G — strict v1 GHX round-trip — next
+### 8G — strict v1 GHX round-trip — repository complete
 
-Implement the first deliberately narrow import contract in the product lifecycle.
+The first deliberately narrow returned-GHX lifecycle is implemented and remains fail closed.
 
-Supported v1 behavior:
+Implemented:
 
-- recognize Brepia project and provenance;
-- recognize expected Brepia-owned generated structure/code/template identity;
-- recover explicitly supported published parameter values;
-- validate values against canonical constraints;
-- allow harmless presentation/layout differences only where proven non-semantic;
-- update canonical Brepia state only after deterministic compatibility validation passes;
-- continue normal Brepia AI editing and preview after successful import.
+- `src/services/brepGrasshopperImport.ts`
+  - validates returned GHX against the exact canonical project plus immutable `sourceRevisionId` used to generate it;
+  - delegates graph/script/runtime identity checks to the strict executable-GHX validator;
+  - recovers every published numeric parameter deterministically and rejects missing/non-finite values;
+  - reports changed parameter IDs relative to the saved canonical revision;
+  - preserves machine-readable validator diagnostics for unsupported returned files;
+  - rejects browser files larger than the shared 4 MiB GHX limit **before** calling `File.text()`, while the parser independently rechecks encoded byte length.
+- `src/services/brepGrasshopperImportPersistence.ts`
+  - converts only already-validated parameter state into a normalized canonical BRep artifact;
+  - persists the result as an immutable assistant revision parented to the exact source revision;
+  - deliberately does **not** update `current_message_leaf_id` during import.
+- `src/components/brep/BrepGrasshopperImportButton.tsx`
+  - adds `Import GHX` to the BRep workspace;
+  - unchanged supported GHX creates no revision;
+  - changed supported GHX creates one immutable branch revision and refreshes Revision history;
+  - the imported revision must be activated explicitly from Revision history, which avoids silently discarding any unsaved browser preview state;
+  - unsupported graph, rewiring, plugin/script/runtime mutation surfaces the deterministic validation error and creates no canonical revision.
+- lifecycle tests cover bounded pre-read rejection, exact-revision provenance, supported parameter recovery, unchanged-file behavior, immutable branch persistence and the no-hidden-active-leaf rule.
 
-Unsupported v1 behavior:
+Accepted repository checkpoint:
 
-- arbitrary native GH nodes that alter model semantics;
-- unknown rewiring of Brepia-owned inputs;
-- unrecognized edits to embedded bridge/script logic;
-- arbitrary plugin components;
-- generic GH graph -> canonical `BrepProject` reconstruction.
+```text
+08bd0b69c961baa08fc2f95072b125366a61d0e5
+Test Phase 8G import lifecycle boundary
+```
 
-If unsupported content is detected, retain the last valid canonical Brepia revision and tell the user that the returned Grasshopper model cannot currently be reused with guaranteed results.
+Exact-head evidence:
 
-AI may interpret the unsupported graph, explain likely changes and help recreate them in Brepia, but such interpretation remains advisory until the supported-import gate proves that canonical state can be updated safely.
+- Quality Gate #529 / run `34055006299` — PASS;
+- Grasshopper Build #105 / run `34055006300` — PASS;
+- portable tests — PASS;
+- TypeScript typecheck — PASS;
+- lint — PASS;
+- production build — PASS;
+- `git diff --check` — PASS;
+- Rhino/Grasshopper SDK plugin build — PASS;
+- package build on `ubuntu-latest` — PASS;
+- package build on `windows-latest` — PASS.
 
-### 8H — installed Rhino/Grasshopper end-to-end acceptance
+This is repository-level import evidence only. The returned-GHX validator is tested against deterministic generated fixtures, but no claim is made yet that Rhino 8 itself has opened, solved, modified and re-saved the GHX in a real installed runtime. That is the remaining 8H acceptance boundary.
+
+### 8H — installed Rhino/Grasshopper end-to-end acceptance — remaining
 
 When Rhino 8 is available, verify the zero-install baseline end-to-end with no Brepia GHA installed:
 
@@ -304,8 +325,9 @@ When Rhino 8 is available, verify the zero-install baseline end-to-end with no B
 5. save/reopen and preserve Brepia identity and supported state;
 6. re-import the parameter-modified GHX into Brepia;
 7. verify deterministic compatibility classification and recovered parameter values;
-8. continue editing the model with Brepia AI and native Brepia preview;
-9. regenerate a fresh GHX and reopen it successfully.
+8. explicitly activate the imported immutable revision and verify native Brepia preview/state;
+9. continue editing the model with Brepia AI;
+10. regenerate a fresh GHX and reopen it successfully.
 
 Only after this evidence may the roadmap claim the zero-install GHX round trip operational in real Rhino/Grasshopper.
 
