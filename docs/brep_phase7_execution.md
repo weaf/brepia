@@ -9,55 +9,38 @@ a56e73fdc5966a2fec3319ee5d204479790bf2ac
 Merge pull request #34 — Phase 6: Grasshopper export contract
 ```
 
-Current implementation is authoritative. `docs/brep_kernel_plan.md` is historical roadmap context under `AGENTS.md`; this execution document records the current Phase 7 interpretation and product boundary.
+Current implementation is authoritative. `docs/brep_kernel_plan.md` remains roadmap context; completed Phase 1–6 execution/status documents are evidence, not independent source authority.
 
-Phase 7A is repository-complete at:
+Phase 7A–7C are repository-complete. Phase 7D real Rhino/Grasshopper runtime acceptance remains before the PR can leave draft.
 
-```text
-25a12e28440499a1801ed7bafd151ec0849f088a
-```
+## Product boundary
 
-Quality Gate #415 / run `34024621886` passed on that exact head. Real local native smoke remains part of runtime acceptance and must not be replaced by repository CI.
+Brepia is the AI-native parametric CAD orchestration layer for this workflow. It is not intended to replace Rhino, Grasshopper or OpenSCAD as their full manual authoring environments.
 
-## Product invariant
-
-Brepia is an **AI-native parametric CAD orchestration layer**, not a replacement CAD application.
-
-OpenSCAD, Rhino and Grasshopper are first-class external authoring/runtime environments. Brepia should create, understand, validate, preview and parametrically modify models with AI, allow continued work in the native CAD environment, and later read/reconcile that work so the user can continue with AI.
-
-The intended long-term loop is:
+The core product loop is:
 
 ```text
-Brepia AI
-   |
-   v
-canonical validated project
-   |
-   +--> parameter controls + preview + optional advanced inspection/editing
-   |
-   v
-OpenSCAD / Rhino / Grasshopper
-   |
-   v
-continued native CAD work
-   |
-   v
-Brepia import / identity recovery / reconcile
-   |
-   v
-validation + AI-assisted continuation
+AI-assisted Brepia authoring
+        |
+        v
+canonical BrepProject + validation/revisions
+        |
+        +--> Brepia preview / published parameters
+        |
+        +--> exact interoperability to Rhino / Grasshopper
+                    |
+                    v
+          project-level composition and manual work
+                    |
+                    v
+          later identity-aware reconciliation back to Brepia
 ```
 
-Consequences:
+Existing Brepia BRep graph, feature editing and project-definition editing remain useful expert/inspection/manual-correction surfaces because they operate on the same canonical `BrepProject`. They should not be discarded merely because AI is the primary authoring path. They must, however, remain views/editors over the canonical model rather than becoming a second CAD runtime or an attempt to clone Grasshopper in the browser.
 
-- AI-assisted creation and modification are the primary authoring path in Brepia;
-- validation, preview, parameters, revisions and interoperability are core product capabilities;
-- direct BRep feature/project editing and the BRep graph may remain as useful advanced inspection, debugging and manual-correction surfaces because they operate on the same canonical model;
-- those advanced surfaces must not become a second geometry runtime or drive a goal of reproducing Rhino/Grasshopper in the browser;
-- functionality already implemented should be retained when it does not compromise this boundary and may be positioned as an optional/advanced capability rather than removed;
-- Rhino/Grasshopper interoperability is eventually bidirectional: export is the first boundary, round-trip identity/reconciliation is the follow-on goal.
+Round-trip work in later phases must distinguish Brepia-owned identity from external project additions. Brepia project/revision/parameter/node/semantic identities should survive export where possible. Geometry or Grasshopper logic created outside Brepia remains external/opaque until an explicit mapping or reconciliation rule exists; Phase 7 does not claim generic lossless conversion of arbitrary Rhino/Grasshopper work into a `BrepProject`.
 
-## Phase 7 goal
+## Goal
 
 Provide the reusable Grasshopper-side component/runtime that consumes the versioned Phase 6 `brepia-grasshopper-contract` while keeping canonical `BrepProject` state authoritative in Brepia.
 
@@ -85,39 +68,11 @@ exact STEP role artifacts + semantic result data
 RhinoCommon exact Breps + transformed project outputs
 ```
 
-The Grasshopper component is a bridge into the normal Rhino/Grasshopper workflow. It is not a second source of truth and not a translation of the Brepia feature DAG into an editable clone of the Grasshopper graph.
-
-## Round-trip direction
-
-Phase 7 establishes the identity-preserving smart-component boundary required for later Rhino/Grasshopper round-trip work.
-
-A Brepia-authored component must retain stable project, revision, parameter and semantic-role identity so a later `.gh`/`.3dm` import can identify the Brepia-owned portion of the model.
-
-Later round-trip work should distinguish two cases:
-
-1. **Brepia-native round trip** — a Brepia-generated component/model returns with its stable identity and can be re-associated with its canonical Brepia project with high confidence.
-2. **External Rhino/GH additions** — arbitrary native Rhino geometry or Grasshopper nodes added around the Brepia object are analyzed and preserved as external/opaque interoperability content until a deliberate mapping exists. Brepia must not claim a generic lossless arbitrary-GH-graph -> `BrepProject` conversion.
-
-Phase 7 does not implement that general re-import/reconciliation pipeline, but it must not make later round trip impossible by discarding identity.
-
-## Reconciled current product surfaces
-
-A drift audit of the current BRep implementation found no feature that needs removal:
-
-- `BrepProjectView` keeps the AI conversation as the primary authoring surface and composes preview/workspace and parameter panels around it;
-- parameter changes evaluate the same canonical project and persist immutable revisions, which is directly aligned with the product invariant;
-- `BrepProjectWorkspacePanel` exposes Model preview and a feature dependency Graph. The graph is acceptable as an advanced inspection/editing surface because it does not own a separate runtime or persisted model;
-- direct feature editing and project-definition/project-object editing persist new canonical `BrepProject` revisions and remain useful expert/manual-correction tools;
-- STEP, 3DM, Brepia project and Grasshopper contract exports are aligned interoperability surfaces;
-- the browser viewer remains presentation geometry, not authoritative exact geometry.
-
-Therefore Phase 7 should not delete or rewrite these surfaces. Future UI work may reduce the prominence of expert graph/direct-edit controls if product usability benefits, but that is presentation scope rather than an architectural correction.
-
-Features that would conflict with the invariant if introduced as core product direction include a browser Grasshopper clone, a second graph runtime, generic lossless arbitrary GH graph conversion claims, or browser-authoritative exact CAD that duplicates Rhino without a concrete interoperability need.
+The Grasshopper component is an interoperability consumer, not a second source of truth and not a translation of the Brepia feature DAG into editable native Grasshopper nodes.
 
 ## Reconciled Phase 6 contract
 
-Phase 7 consumes the existing contract without widening it:
+Phase 7 consumes the existing contract without widening its canonical authority:
 
 - `kind = brepia-grasshopper-contract`;
 - `schemaVersion = 1`;
@@ -130,47 +85,93 @@ Phase 7 consumes the existing contract without widening it:
 
 No Phase 7 implementation may silently return tessellated mesh on an output contractually typed as Rhino Brep.
 
-## Exact-geometry transport — Phase 7A
+## Exact-geometry handoff
 
-Phase 7A closed the exact optional-role transport gap without changing accepted user downloads.
+Phase 7A extends the accepted Phase 5 3DM interoperability document without changing its visible-object truthfulness:
 
-The native evaluator now creates a deterministic exact-artifact manifest:
+- 3DM visible project-object geometry remains explicitly tagged `tessellated-mesh` for viewer/interoperability use;
+- the document embeds deterministic exact STEP artifacts for every configured Brep role;
+- `result` always maps to `brepia-primary.step`;
+- optional configured roles map to `brepia-footprint.step`, `brepia-clearance-envelope.step` and `brepia-maintenance-envelope.step`;
+- `brepia.exactBrepArtifacts` records canonical role/node/file identity;
+- `brepia.placement`, `brepia.projectObject`, optional `brepia.metadata` and `brepia.warnings` carry evaluated semantic data;
+- the native sandbox reopens the produced 3DM, extracts every expected embedded STEP and revalidates the STEP header before returning the document.
 
-- `result` -> `brepia-primary.step`;
-- `footprint` -> `brepia-footprint.step` when configured;
-- `clearanceEnvelope` -> `brepia-clearance-envelope.step` when configured;
-- `maintenanceEnvelope` -> `brepia-maintenance-envelope.step` when configured.
+The Grasshopper runtime fails closed if an expected exact artifact is missing, duplicated, malformed or identity-mismatched. It never promotes the tessellated 3DM viewer meshes to Brep output.
 
-Each emitted role is exported as exact STEP, embedded in the 3DM hand-off document, declared in `brepia.exactBrepArtifacts`, extracted again after 3DM write and independently revalidated as STEP. The visible 3DM document objects remain intentionally tessellated preview/interoperability meshes and remain labelled as such. There is no mesh-to-Brep fallback.
-
-This allows the existing authenticated `POST /api/brep/export/step` endpoint with `Accept: model/vnd.3dm` to serve as the first smart-component hand-off without creating a second evaluator API.
+The existing accepted STEP and 3DM download behavior remains available; the additional document strings/embedded exact role artifacts are additive interoperability data.
 
 ## Component ownership and persistence
 
-The first component is one reusable `Brepia Project` Grasshopper component.
+The component is one reusable `Brepia Project` Grasshopper component.
 
 The component persists an embedded normalized Phase 6 contract in its Grasshopper component state. Loading/replacing a contract is an explicit component action; an external file path is not canonical runtime state.
 
+Phase 7C uses Grasshopper-native custom component attributes so double-clicking the component opens Rhino's cross-platform `OpenFileDialog` to load or replace a `*.brepia-grasshopper.json` contract. This avoids a `System.Windows.Forms` dependency and keeps the plugin on plain .NET 8 rather than forcing a Windows-only target.
+
 From the embedded contract the component reconstructs:
 
-- one item input per published numeric parameter, preserving stable parameter ID separately from mutable label;
-- unit/default/min/max/step metadata where Grasshopper supports it;
-- the standard item `Plane` input;
+- one `Param_Number` item input per published numeric parameter;
+- stable Brepia parameter IDs persisted separately from mutable labels;
+- published unit/default/min/max/step information in the parameter description/runtime contract;
+- the standard optional item `Plane` input with stable ID `placement`;
 - the fixed v1 output port order.
+
+When replacing a contract, compatible existing input parameters are reused by stable Brepia ID so their Grasshopper wire sources can survive ordinary label/contract refreshes. Removed/incompatible ports are isolated normally rather than silently rebound to another identity.
+
+The component persists only canonical contract/input identity. Evaluator URL/token configuration is process configuration and is never written into the Grasshopper document.
 
 Phase 8 may generate `.gh` files that instantiate this component with an embedded contract. `.gh` generation is not part of Phase 7.
 
 ## Evaluator boundary
 
-The component must not reimplement the Brepia feature DAG in C#.
+The component does not reimplement the Brepia feature DAG in C#.
 
-For each solve it sends the canonical contract source plus validated current parameter values to a Brepia-compatible evaluator boundary. The evaluator remains responsible for constrained OCCT/build123d evaluation and exact artifact generation.
+For each solve it sends the canonical contract source plus validated current parameter values to the existing Brepia evaluator boundary:
 
-The first implementation may reuse the accepted authenticated 3DM export endpoint because its 3DM response now embeds the exact role artifacts plus identity/semantic document strings.
+```text
+POST /api/brep/export/step
+Accept: model/vnd.3dm
+```
 
-Initial connection configuration may be explicit/local-development configuration. A durable account/API-token distribution flow is a separate product/security concern unless it becomes necessary for Phase 7 acceptance.
+The evaluator remains responsible for constrained OCCT/build123d evaluation and exact artifact generation.
 
-All remote/evaluator failures must fail closed and appear as Grasshopper runtime errors. Provider warnings become Grasshopper warnings.
+Initial Phase 7 connection configuration is explicit environment configuration:
+
+```text
+BREPIA_GRASSHOPPER_BASE_URL
+BREPIA_GRASSHOPPER_TOKEN
+```
+
+The token is optional at the client type level but the accepted Brepia API remains authenticated; a missing/invalid token therefore fails as an evaluator error. A durable account/API-token distribution flow is a later product/security concern and is not embedded in `.gh` documents.
+
+The client bounds the 3DM response to 64 MiB and bounds error responses before surfacing them.
+
+## Rhino 8 exact import
+
+The plugin targets `.NET 8` and pins a matching stable Rhino 8 SDK pair:
+
+```text
+RhinoCommon 8.34.26223.11001
+Grasshopper 8.34.26223.11001
+```
+
+Runtime assets are excluded from the plugin package because Rhino supplies them.
+
+For each expected exact role the plugin:
+
+1. opens the returned 3DM through `File3dm`;
+2. validates project/schema/result-node/exact-manifest identity;
+3. validates the embedded filename set against the canonical contract;
+4. extracts the embedded STEP to a temporary isolated path;
+5. validates `ISO-10303-21`;
+6. creates a headless `RhinoDoc`;
+7. imports with `FileStp.Read`;
+8. requires exactly one native Rhino `Brep` for contract v1;
+9. duplicates that Brep out of the temporary document;
+10. cleans temporary files.
+
+There is no mesh-to-Brep fallback.
 
 ## Placement semantics
 
@@ -178,79 +179,121 @@ The evaluator returns geometry in Brepia component-local coordinates. The local 
 
 The component resolves exactly one target Plane for each solve:
 
-- when the Grasshopper Plane input is unconnected, use the project placement resolved under the current parameter values;
-- when the Plane input is connected, the connected Plane replaces the project placement.
+- when the Grasshopper Plane input has no supplied Plane data, use the project placement resolved under the current parameter values;
+- when the Plane input supplies a Plane, that Plane replaces the project placement.
 
-The component then applies a RhinoCommon plane-to-plane transform from component-local `WorldXY` to that target Plane. Axis magnitudes from the Brepia placement are orientation semantics only and must not introduce geometry scale.
+Before geometry placement, target axes are normalized/orthogonalized. The component then applies:
 
-The same rigid placement transform applies to primary geometry, optional project-object geometry and semantic point positions. Semantic point directions receive the transform's vector/orientation part only, never translation.
+```text
+Transform.PlaneToPlane(Plane.WorldXY, targetPlane)
+```
 
-## Rhino 8 SDK baseline for 7B
+Axis magnitudes therefore remain orientation semantics only and cannot introduce geometry scale.
 
-Current official Rhino 8 APIs confirm the required local import path:
+The same rigid transform applies to primary geometry, optional project-object geometry and semantic point positions. Semantic point directions receive the transform's vector/orientation part only, never translation.
 
-- `Rhino.FileIO.File3dm.EmbeddedFiles` is available since Rhino 8;
-- embedded entries expose `Filename` and `SaveToFile(...)`;
-- `Rhino.FileIO.FileStp.Read(path, RhinoDoc, FileStpReadOptions)` is available since Rhino 8;
-- `RhinoDoc.CreateHeadless(...)` provides an isolated document for code-driven file I/O.
+## Outputs and identity
 
-As of 2026-09-06, the current stable McNeel NuGet pair is `RhinoCommon` / `Grasshopper` `8.34.26223.11001`. Phase 7B should pin the pair together and exclude Rhino runtime assets from plugin output. A newer Rhino 9 beta is not a reason to move this Rhino 8 target.
+Fixed v1 outputs are populated in this order:
+
+1. `Result` — required exact native Rhino Brep;
+2. `Footprint` — optional exact native Rhino Brep;
+3. `Clearance` — optional exact native Rhino Brep;
+4. `Maintenance` — optional exact native Rhino Brep;
+5. `Connections` — transformed semantic connection points;
+6. `Mounting` — transformed semantic mounting points;
+7. `Cable` — transformed semantic cable points;
+8. `Metadata` — compact JSON interoperability envelope.
+
+The metadata envelope retains:
+
+- Brepia project ID/name/schema;
+- immutable source revision ID;
+- exact role -> canonical node identity;
+- transformed semantic point IDs/kinds/positions/directions/labels;
+- project metadata when present.
+
+This lets the simple point outputs remain convenient Grasshopper geometry while preserving the stronger Brepia identity needed by later reconciliation work.
+
+Evaluator warnings carried in the 3DM become Grasshopper `Warning` runtime messages. Contract/evaluator/import/placement failures become Grasshopper `Error` runtime messages.
 
 ## Phase 7 slices
 
 ### 7A — Exact solve transport and role manifest — repository complete
 
+Implemented:
+
 - deterministic exact-artifact manifest for fixed Brep outputs;
-- required primary and conditional optional role artifacts;
-- stable project/node/role identity;
-- deterministic filenames independent of display labels;
-- exact STEP per emitted Brep role;
-- validation before and after the embedded 3DM round trip;
-- existing STEP/3DM export behavior preserved;
-- Quality Gate #415 PASS at `25a12e28440499a1801ed7bafd151ec0849f088a`.
+- required `result` plus optional role artifacts conditional on canonical project-object role IDs;
+- stable project/node/role identity and deterministic filenames;
+- exact STEP generation for every emitted Brep role;
+- native 3DM embedding and independent sandbox round-trip validation;
+- existing STEP/3DM behavior retained.
 
-Real native smoke remains required as runtime evidence.
+Real local native smoke remains part of runtime evidence if not already run on the final Phase 7 branch.
 
-### 7B — Rhino 8 C#/.gha contract client — active
+### 7B — Rhino 8 C#/.gha contract client — complete
 
-- add a modern SDK-style Rhino 8 Grasshopper plugin project under `grasshopper/`;
-- reference matching official RhinoCommon and Grasshopper SDK packages without copying Rhino runtime assemblies into the plugin;
-- parse/validate contract v1 independently in C# and rebuild trusted derived runtime fields from canonical source;
-- persist the normalized contract in component state;
-- call the Brepia-compatible evaluator;
-- verify response model/exact-artifact identity before import;
-- extract exact STEP role artifacts from 3DM;
-- import exact STEP through RhinoCommon code-driven file I/O in a headless document;
-- return native Rhino Breps to the component runtime;
-- never consume tessellated 3DM document objects as Brep output fallback.
+Implemented and CI-compiled:
 
-### 7C — Dynamic inputs, Plane, outputs and diagnostics
+- modern SDK-style Rhino 8 Grasshopper plugin under `grasshopper/Brepia.Grasshopper`;
+- independent C# v1 contract validation/reconstruction;
+- canonical contract persistence;
+- authenticated bounded 3DM evaluator client;
+- exact embedded STEP -> headless RhinoDoc -> native Rhino Brep import;
+- fail-closed identity/artifact checks;
+- no tessellated mesh fallback.
 
-- rebuild dynamic numeric input ports from stable parameter IDs;
-- preserve fixed v1 output order;
-- support connected/unconnected Plane semantics;
-- transform exact Breps and semantic point data consistently;
-- expose metadata without discarding stable project/point identity;
-- map evaluator warnings/errors to Grasshopper runtime messages;
-- preserve useful component/project/revision identity in the Grasshopper document;
-- provide the explicit contract-load/replace UX needed for manual use before generated `.gh` packaging exists.
+### 7C — Dynamic inputs, Plane, outputs and diagnostics — complete
 
-### 7D — Real Rhino/Grasshopper acceptance
+Implemented and CI-compiled:
 
-Acceptance must use an installed Rhino 8 / Grasshopper runtime, not only static source tests.
+- stable-ID dynamic numeric inputs and optional Plane input;
+- source-preserving input reuse on compatible contract replacement;
+- fixed v1 outputs;
+- rigid WorldXY -> target Plane placement without scale;
+- transformed semantic points and identity-preserving metadata envelope;
+- evaluator warning transport and Grasshopper warning/error mapping;
+- explicit evaluator environment configuration without persisted secrets;
+- cross-platform Grasshopper double-click contract load/replace action;
+- `.gha` artifact publication from CI for Phase 7D acceptance.
+
+### 7D — Real Rhino/Grasshopper acceptance — active next
+
+Acceptance must use an installed Rhino 8 / Grasshopper runtime, not only static source tests or SDK compilation.
 
 Representative acceptance:
 
-1. load a saved Brepia cabinet contract into the component;
-2. verify published numeric inputs appear with stable identity and expected defaults;
-3. vary at least two dimensions in Grasshopper and observe native Rhino Brep geometry change;
-4. connect arbitrary placement Planes, including planes derived from an alignment-style workflow;
-5. verify output placement/orientation without scale distortion;
-6. verify `Result` is a native Rhino Brep, not a mesh;
-7. verify at least one auxiliary project output (semantic point/metadata and, when present in the fixture, exact optional role Brep);
-8. verify invalid contract/evaluator failures surface as Grasshopper errors and warnings map to warnings;
-9. reload the Grasshopper document and verify embedded contract/model/revision identity survives;
-10. ordinary Brepia operation remains independent of Rhino.
+1. install the CI-built `Brepia.Grasshopper.gha` in Rhino 8 / Grasshopper;
+2. configure an authenticated reachable Brepia evaluator;
+3. place one `Brepia Project` component and load a saved representative cabinet contract;
+4. verify published numeric inputs appear with expected labels/defaults while identity survives document save/reload;
+5. vary at least two dimensions and observe exact native Rhino Brep geometry change;
+6. leave Plane unsupplied and verify resolved project placement;
+7. supply arbitrary placement Planes, including an alignment-style derived Plane, and verify position/orientation without scale distortion;
+8. verify `Result` is a native Rhino Brep, not a mesh;
+9. verify at least one auxiliary exact role when configured and semantic points/metadata;
+10. verify invalid evaluator/auth/contract conditions surface as Grasshopper errors;
+11. save/reopen the Grasshopper document and verify embedded contract/project/revision identity plus compatible input wiring survives;
+12. ordinary Brepia operation remains independent of Rhino.
+
+## CI evidence before 7D
+
+Repository checkpoint before installed-runtime acceptance:
+
+```text
+83eddcecbb16cb83be9efb2534fc0a8496e7dd9f
+Publish Grasshopper plugin acceptance artifact
+```
+
+On that exact head:
+
+- Grasshopper Build #12 / run `34027757462` — PASS;
+- `dotnet restore` — PASS;
+- `dotnet build --configuration Release --no-restore --warnaserror` — PASS;
+- CI artifact `brepia-grasshopper` — published;
+- Quality Gate #436 / run `34027757460` — PASS;
+- tests/typecheck/lint/build/diff check — PASS.
 
 ## External repository assessment
 
@@ -260,16 +303,18 @@ Two external projects were reviewed as references; neither becomes a Phase 7 run
 
 Useful patterns:
 
-- component catalog/search and Grasshopper metadata;
+- React Flow based Grasshopper-like node visualization and component catalog/search;
+- browser Rhino/Three.js conversion patterns;
 - a small gateway around Rhino.Compute `/grasshopper` solves;
-- GH-to-JSON / JSON-to-GH experiments that may be useful for later `.gh` generation and round-trip analysis.
+- GH-to-JSON / JSON-to-GH experiments that may be useful when Phase 8 investigates generated `.gh` workflows.
 
 Boundaries:
 
-- its editable React Flow Grasshopper graph is not Brepia's product direction;
-- Liveblocks/collaborative graph state is not needed for the smart-component runtime;
-- Rhino.Compute remains optional;
-- its browser graph should not replace Brepia's canonical model or become a reason to build Grasshopper parity in Brepia.
+- its editable Grasshopper graph is its primary web artifact, whereas Brepia must keep `BrepProject` canonical;
+- Liveblocks/collaborative graph state is not needed for the Phase 7 smart-component runtime;
+- Rhino.Compute is optional in the Brepia roadmap and is not required for the first component;
+- its NodeParser overlaps with Brepia's existing BRep graph editor and should not replace that editor;
+- the repository is a hackathon-oriented reference and should be treated as inspiration rather than imported architecture.
 
 The repository LICENSE file is MIT. If code is ever copied rather than independently reimplemented, preserve its required copyright/license notice.
 
@@ -277,17 +322,17 @@ The repository LICENSE file is MIT. If code is ever copied rather than independe
 
 Useful patterns:
 
-- historical `GH_Component` and `.gha` packaging examples;
-- examples of a Grasshopper/web bridge.
+- concrete historical examples of `GH_Component` implementation and `.gha` packaging;
+- demonstrates a bridge between Grasshopper and web/native DOM UI.
 
 Boundaries:
 
-- its direction is primarily Grasshopper -> embedded web UI;
-- it targets Rhino 7-era .NET Framework/install paths and an old WebView2 stack;
+- its direction is primarily Grasshopper -> embedded web UI, not Brepia web -> smart Grasshopper project object;
+- the project targets .NET Framework 4.8 / Rhino 7-era install paths and an old WebView2 stack;
 - it is not an exact geometry/evaluator architecture;
-- Phase 7 uses current Rhino 8 SDK/project conventions instead.
+- Phase 7 uses current Rhino 8 SDK/project conventions instead of inheriting its build system.
 
-The repository is GPL-3.0. Direct code reuse is unnecessary for the planned component.
+The repository is GPL-3.0. Its license is compatible with Brepia's GPLv3 direction, but direct code reuse is unnecessary for the planned component.
 
 ## Explicit non-goals
 
@@ -296,7 +341,7 @@ Phase 7 does not add:
 - generated `.gh` workflow packaging (Phase 8);
 - a browser clone of the Grasshopper editor;
 - Liveblocks or collaborative GH graph editing;
-- generic GH graph import as canonical Brepia source;
+- generic GH graph import as Brepia source;
 - native translation of arbitrary Brepia features to editable GH nodes;
 - Rhino.Compute as a mandatory Brepia runtime;
 - Rhino.Inside as the Brepia host architecture;
@@ -316,4 +361,4 @@ npm run build
 git diff --check
 ```
 
-The C# plugin additionally requires an SDK build against the pinned Rhino 8 packages and then real Rhino/Grasshopper acceptance in 7D. Generic npm CI cannot substitute for installed Rhino runtime acceptance.
+The C# plugin additionally requires the Rhino 8 SDK build gate and then real Rhino/Grasshopper acceptance in 7D. A generic npm CI pass cannot substitute for the installed Rhino runtime acceptance.
