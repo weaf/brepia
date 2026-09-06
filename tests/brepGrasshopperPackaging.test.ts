@@ -23,14 +23,6 @@ const cli = fs.readFileSync(
   ),
   'utf8',
 );
-const ghIoProbeProject = fs.readFileSync(
-  new URL('../grasshopper/Brepia.GhIoProbe/Brepia.GhIoProbe.csproj', import.meta.url),
-  'utf8',
-);
-const ghIoProbe = fs.readFileSync(
-  new URL('../grasshopper/Brepia.GhIoProbe/Program.cs', import.meta.url),
-  'utf8',
-);
 const workflow = fs.readFileSync(
   new URL('../.github/workflows/grasshopper-build.yml', import.meta.url),
   'utf8',
@@ -74,28 +66,12 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(cli, /brepia-grasshopper-package-result/);
   });
 
-  it('isolates a standalone GH_IO XML probe from RhinoCommon and Grasshopper runtime references', () => {
-    assert.match(ghIoProbeProject, /GeneratePathProperty="true" ExcludeAssets="all"/);
-    assert.match(ghIoProbeProject, /<Reference Include="GH_IO">/);
-    assert.match(ghIoProbeProject, /lib\/net7\.0\/GH_IO\.dll/);
-    assert.doesNotMatch(ghIoProbeProject, /<Reference Include="RhinoCommon">/);
-    assert.doesNotMatch(ghIoProbeProject, /<Reference Include="Grasshopper">/);
-    assert.match(ghIoProbe, /GH_ISerializable/);
-    assert.match(ghIoProbe, /archive\.AppendObject/);
-    assert.match(ghIoProbe, /archive\.Serialize_Xml\(\)/);
-    assert.match(ghIoProbe, /readBack\.Deserialize_Xml\(persisted\)/);
-    assert.match(ghIoProbe, /readBack\.ExtractObject/);
-    assert.doesNotMatch(ghIoProbe, /Serialize_Binary/);
-  });
-
-  it('builds Rhino-hosted packaging code but runs only GH_IO standalone across Linux and Windows CI', () => {
+  it('builds Rhino-hosted package code on both Linux and Windows without executing an unsupported standalone Rhino host', () => {
     assert.match(workflow, /package-build:/);
-    assert.match(workflow, /gh-io-runtime-proof:/);
     assert.match(workflow, /ubuntu-latest/);
     assert.match(workflow, /windows-latest/);
     assert.match(workflow, /Brepia\.Grasshopper\.Packager\.csproj/);
-    assert.match(workflow, /Brepia\.GhIoProbe\.csproj/);
-    assert.match(workflow, /brepia-gh-io-probe\.ghx/);
+    assert.doesNotMatch(workflow, /gh-io-runtime-proof:/);
     assert.doesNotMatch(
       workflow,
       /dotnet run --project grasshopper\/Brepia\.Grasshopper\.Packager/,
