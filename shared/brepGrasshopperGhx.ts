@@ -74,15 +74,15 @@ function byteLength(value: string): number {
 
 function escapeXml(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 function decodeXml(value: string): string {
-  return value.replace(
+  const decoded = value.replace(
     /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g,
     (entity) => {
       switch (entity) {
@@ -100,14 +100,26 @@ function decodeXml(value: string): string {
           const hex = entity.startsWith('&#x');
           const digits = entity.slice(hex ? 3 : 2, -1);
           const codePoint = Number.parseInt(digits, hex ? 16 : 10);
-          if (!Number.isSafeInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
-            throw new GhxXmlError('malformed_xml', `Invalid XML character entity ${entity}.`);
+          if (
+            !Number.isSafeInteger(codePoint) ||
+            codePoint < 0 ||
+            codePoint > 0x10ffff
+          ) {
+            throw new GhxXmlError(
+              'malformed_xml',
+              `Invalid XML character entity ${entity}.`,
+            );
           }
           return String.fromCodePoint(codePoint);
         }
       }
     },
   );
+
+  if (/&[^\s<]*;/.test(decoded)) {
+    throw new GhxXmlError('malformed_xml', 'GHX contains an unsupported XML entity.');
+  }
+  return decoded;
 }
 
 function parseAttributes(source: string): Record<string, string> {
@@ -116,19 +128,34 @@ function parseAttributes(source: string): Record<string, string> {
   let count = 0;
 
   while (rest.length > 0) {
-    const match = /^([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(["'])(.*?)\2\s*/s.exec(rest);
+    const match = /^([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(["'])(.*?)\2\s*/s.exec(
+      rest,
+    );
     if (!match) {
-      throw new GhxXmlError('malformed_xml', `Malformed XML attributes near ${rest.slice(0, 80)}.`);
+      throw new GhxXmlError(
+        'malformed_xml',
+        `Malformed XML attributes near ${rest.slice(0, 80)}.`,
+      );
     }
     const name = match[1];
     const rawValue = match[3];
-    if (!name || rawValue == null || Object.hasOwn(attributes, name)) {
-      throw new GhxXmlError('malformed_xml', 'Duplicate or invalid XML attribute.');
+    if (
+      !name ||
+      rawValue == null ||
+      Object.prototype.hasOwnProperty.call(attributes, name)
+    ) {
+      throw new GhxXmlError(
+        'malformed_xml',
+        'Duplicate or invalid XML attribute.',
+      );
     }
     attributes[name] = decodeXml(rawValue);
     count += 1;
     if (count > MAX_XML_ATTRIBUTES) {
-      throw new GhxXmlError('malformed_xml', 'XML element has too many attributes.');
+      throw new GhxXmlError(
+        'malformed_xml',
+        'XML element has too many attributes.',
+      );
     }
     rest = rest.slice(match[0].length);
   }
@@ -152,9 +179,16 @@ function findTagEnd(xml: string, start: number): number {
   return -1;
 }
 
+function stackTop(stack: XmlNode[]): XmlNode | undefined {
+  return stack.length > 0 ? stack[stack.length - 1] : undefined;
+}
+
 function parseSafeXml(input: string): XmlNode {
   if (byteLength(input) > BREP_GRASSHOPPER_GHX_MAX_BYTES) {
-    throw new GhxXmlError('too_large', 'GHX exceeds the maximum supported byte length.');
+    throw new GhxXmlError(
+      'too_large',
+      'GHX exceeds the maximum supported byte length.',
+    );
   }
   if (input.includes('\0')) {
     throw new GhxXmlError('unsafe_xml', 'GHX contains a NUL byte.');
@@ -162,7 +196,10 @@ function parseSafeXml(input: string): XmlNode {
 
   let xml = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
   if (/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(xml)) {
-    throw new GhxXmlError('unsafe_xml', 'DOCTYPE, ENTITY and CDATA declarations are not allowed in Brepia GHX.');
+    throw new GhxXmlError(
+      'unsafe_xml',
+      'DOCTYPE, ENTITY and CDATA declarations are not allowed in Brepia GHX.',
+    );
   }
 
   xml = xml.trim();
@@ -174,7 +211,10 @@ function parseSafeXml(input: string): XmlNode {
     xml = xml.slice(declarationEnd + 2).trimStart();
   }
   if (xml.includes('<?')) {
-    throw new GhxXmlError('unsafe_xml', 'XML processing instructions are not allowed in Brepia GHX.');
+    throw new GhxXmlError(
+      'unsafe_xml',
+      'XML processing instructions are not allowed in Brepia GHX.',
+    );
   }
 
   const stack: XmlNode[] = [];
@@ -188,11 +228,15 @@ function parseSafeXml(input: string): XmlNode {
     if (open < 0) {
       const tail = xml.slice(cursor);
       if (tail.trim().length > 0) {
-        if (stack.length === 0) {
-          throw new GhxXmlError('malformed_xml', 'Text exists outside the root XML element.');
+        const current = stackTop(stack);
+        if (!current) {
+          throw new GhxXmlError(
+            'malformed_xml',
+            'Text exists outside the root XML element.',
+          );
         }
         const decoded = decodeXml(tail);
-        stack.at(-1)!.text += decoded;
+        current.text += decoded;
         textCount += decoded.length;
       }
       break;
@@ -200,17 +244,24 @@ function parseSafeXml(input: string): XmlNode {
 
     if (open > cursor) {
       const rawText = xml.slice(cursor, open);
-      if (stack.length === 0) {
+      const current = stackTop(stack);
+      if (!current) {
         if (rawText.trim().length > 0) {
-          throw new GhxXmlError('malformed_xml', 'Text exists outside the root XML element.');
+          throw new GhxXmlError(
+            'malformed_xml',
+            'Text exists outside the root XML element.',
+          );
         }
       } else {
         const decoded = decodeXml(rawText);
-        stack.at(-1)!.text += decoded;
+        current.text += decoded;
         textCount += decoded.length;
       }
       if (textCount > MAX_XML_TEXT) {
-        throw new GhxXmlError('malformed_xml', 'GHX XML text content exceeds the supported limit.');
+        throw new GhxXmlError(
+          'malformed_xml',
+          'GHX XML text content exceeds the supported limit.',
+        );
       }
     }
 
@@ -223,7 +274,10 @@ function parseSafeXml(input: string): XmlNode {
       continue;
     }
     if (xml.startsWith('<!', open)) {
-      throw new GhxXmlError('unsafe_xml', 'Unsupported XML declaration in GHX.');
+      throw new GhxXmlError(
+        'unsafe_xml',
+        'Unsupported XML declaration in GHX.',
+      );
     }
 
     const close = findTagEnd(xml, open + 1);
@@ -236,11 +290,17 @@ function parseSafeXml(input: string): XmlNode {
     if (tag.startsWith('/')) {
       const name = tag.slice(1).trim();
       if (!/^[A-Za-z_][A-Za-z0-9_.:-]*$/.test(name)) {
-        throw new GhxXmlError('malformed_xml', `Invalid closing XML element ${name}.`);
+        throw new GhxXmlError(
+          'malformed_xml',
+          `Invalid closing XML element ${name}.`,
+        );
       }
       const current = stack.pop();
       if (!current || current.name !== name) {
-        throw new GhxXmlError('malformed_xml', `Mismatched closing XML element ${name}.`);
+        throw new GhxXmlError(
+          'malformed_xml',
+          `Mismatched closing XML element ${name}.`,
+        );
       }
       continue;
     }
@@ -260,14 +320,20 @@ function parseSafeXml(input: string): XmlNode {
     };
     nodeCount += 1;
     if (nodeCount > MAX_XML_NODES) {
-      throw new GhxXmlError('malformed_xml', 'GHX contains too many XML nodes.');
+      throw new GhxXmlError(
+        'malformed_xml',
+        'GHX contains too many XML nodes.',
+      );
     }
 
-    const parent = stack.at(-1);
+    const parent = stackTop(stack);
     if (parent) {
       parent.children.push(node);
     } else if (root) {
-      throw new GhxXmlError('malformed_xml', 'GHX must contain exactly one XML root element.');
+      throw new GhxXmlError(
+        'malformed_xml',
+        'GHX must contain exactly one XML root element.',
+      );
     } else {
       root = node;
     }
@@ -275,7 +341,10 @@ function parseSafeXml(input: string): XmlNode {
     if (!selfClosing) {
       stack.push(node);
       if (stack.length > MAX_XML_DEPTH) {
-        throw new GhxXmlError('malformed_xml', 'GHX XML nesting exceeds the supported depth.');
+        throw new GhxXmlError(
+          'malformed_xml',
+          'GHX XML nesting exceeds the supported depth.',
+        );
       }
     }
   }
@@ -307,7 +376,9 @@ function itemText(parent: XmlNode, name: string): string | undefined {
 }
 
 function numberText(value: number): string {
-  if (!Number.isFinite(value)) throw new Error('GHX numeric values must be finite.');
+  if (!Number.isFinite(value)) {
+    throw new Error('GHX numeric values must be finite.');
+  }
   return Object.is(value, -0) ? '0' : String(value);
 }
 
@@ -329,9 +400,14 @@ function rectangleXml(control: BrepGrasshopperNumberControlPlan): string {
   return `<chunk name="Attributes"><items count="2"><item name="Bounds" type_name="gh_drawing_rectanglef" type_code="35"><X>${numberText(x)}</X><Y>${numberText(y)}</Y><W>${numberText(width)}</W><H>${numberText(height)}</H></item><item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>${numberText(pivotX)}</X><Y>${numberText(pivotY)}</Y></item></items></chunk>`;
 }
 
-function sliderXml(control: BrepGrasshopperNumberControlPlan, index: number): string {
+function sliderXml(
+  control: BrepGrasshopperNumberControlPlan,
+  index: number,
+): string {
   if (control.min == null || control.max == null || control.min >= control.max) {
-    throw new Error(`Brepia GHX slider ${control.inputId} requires finite increasing bounds.`);
+    throw new Error(
+      `Brepia GHX slider ${control.inputId} requires finite increasing bounds.`,
+    );
   }
   return `<chunk name="Object" index="${index}"><items count="2"><item name="GUID" type_name="gh_guid" type_code="9">${BREP_GRASSHOPPER_GHX_NUMBER_SLIDER_GUID}</item><item name="Name" type_name="gh_string" type_code="10">Number Slider</item></items><chunks count="1"><chunk name="Container"><items count="6"><item name="Description" type_name="gh_string" type_code="10">Numeric slider for single values</item><item name="InstanceGuid" type_name="gh_guid" type_code="9">${control.instanceGuid}</item><item name="Name" type_name="gh_string" type_code="10">Number Slider</item><item name="NickName" type_name="gh_string" type_code="10">${escapeXml(control.label)}</item><item name="Optional" type_name="gh_bool" type_code="1">false</item><item name="SourceCount" type_name="gh_int32" type_code="3">0</item></items><chunks count="2">${rectangleXml(control)}<chunk name="Slider"><items count="7"><item name="Digits" type_name="gh_int32" type_code="3">${decimalPlaces(control)}</item><item name="GripDisplay" type_name="gh_int32" type_code="3">1</item><item name="Interval" type_name="gh_int32" type_code="3">1</item><item name="Max" type_name="gh_double" type_code="6">${numberText(control.max)}</item><item name="Min" type_name="gh_double" type_code="6">${numberText(control.min)}</item><item name="SnapCount" type_name="gh_int32" type_code="3">0</item><item name="Value" type_name="gh_double" type_code="6">${numberText(control.default)}</item></items></chunk></chunks></chunk></chunks></chunk>`;
 }
@@ -344,8 +420,16 @@ function numberParameterXml(
 }
 
 function formatUuid(bytes: Uint8Array): string {
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join('-');
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
 }
 
 async function documentGuid(plan: BrepGrasshopperPackagePlan): Promise<string> {
@@ -397,7 +481,12 @@ function diagnostic(
   message: string,
   path?: string,
 ) {
-  diagnostics.push({ code, severity: 'error', message, ...(path ? { path } : {}) });
+  diagnostics.push({
+    code,
+    severity: 'error',
+    message,
+    ...(path ? { path } : {}),
+  });
 }
 
 function observeObject(
@@ -408,15 +497,27 @@ function observeObject(
   const path = `DefinitionObjects/Object[${index}]`;
   const componentGuid = itemText(objectNode, 'GUID')?.toLowerCase();
   const container = chunk(objectNode, 'Container');
-  const instanceGuid = container ? itemText(container, 'InstanceGuid')?.toLowerCase() : undefined;
+  const instanceGuid = container
+    ? itemText(container, 'InstanceGuid')?.toLowerCase()
+    : undefined;
   const label = container ? itemText(container, 'NickName') ?? '' : '';
 
   if (!componentGuid || !UUID.test(componentGuid)) {
-    diagnostic(diagnostics, 'invalid_component_guid', 'Grasshopper object GUID is missing or invalid.', path);
+    diagnostic(
+      diagnostics,
+      'invalid_component_guid',
+      'Grasshopper object GUID is missing or invalid.',
+      path,
+    );
     return undefined;
   }
   if (!container || !instanceGuid || !UUID.test(instanceGuid)) {
-    diagnostic(diagnostics, 'invalid_instance_guid', 'Grasshopper object InstanceGuid is missing or invalid.', path);
+    diagnostic(
+      diagnostics,
+      'invalid_instance_guid',
+      'Grasshopper object InstanceGuid is missing or invalid.',
+      path,
+    );
     return undefined;
   }
 
@@ -425,8 +526,20 @@ function observeObject(
     const min = slider ? parseFinite(itemText(slider, 'Min')) : undefined;
     const max = slider ? parseFinite(itemText(slider, 'Max')) : undefined;
     const value = slider ? parseFinite(itemText(slider, 'Value')) : undefined;
-    if (min == null || max == null || value == null || min >= max || value < min || value > max) {
-      diagnostic(diagnostics, 'invalid_slider_state', 'Number Slider requires finite Min < Max and an in-range Value.', path);
+    if (
+      min == null ||
+      max == null ||
+      value == null ||
+      min >= max ||
+      value < min ||
+      value > max
+    ) {
+      diagnostic(
+        diagnostics,
+        'invalid_slider_state',
+        'Number Slider requires finite Min < Max and an in-range Value.',
+        path,
+      );
       return undefined;
     }
     return { instanceGuid, presentation: 'slider', label, value };
@@ -436,9 +549,16 @@ function observeObject(
     const persistent = chunk(container, 'PersistentData');
     const branch = persistent ? chunk(persistent, 'Branch') : undefined;
     const storedItem = branch ? chunk(branch, 'Item') : undefined;
-    const value = storedItem ? parseFinite(itemText(storedItem, 'number')) : undefined;
+    const value = storedItem
+      ? parseFinite(itemText(storedItem, 'number'))
+      : undefined;
     if (value == null) {
-      diagnostic(diagnostics, 'invalid_number_state', 'Number parameter must contain one finite persistent numeric value.', path);
+      diagnostic(
+        diagnostics,
+        'invalid_number_state',
+        'Number parameter must contain one finite persistent numeric value.',
+        path,
+      );
       return undefined;
     }
     return { instanceGuid, presentation: 'number', label, value };
@@ -460,7 +580,9 @@ function compareExpected(
   diagnostics: BrepGrasshopperGhxDiagnostic[],
 ) {
   const byGuid = new Map(observed.map((entry) => [entry.instanceGuid, entry]));
-  const expectedGuids = new Set(plan.controls.map((control) => control.instanceGuid));
+  const expectedGuids = new Set(
+    plan.controls.map((control) => control.instanceGuid),
+  );
 
   for (const control of plan.controls) {
     const actual = byGuid.get(control.instanceGuid);
@@ -491,13 +613,28 @@ function compareExpected(
       );
     }
     if (control.min != null && actual.value < control.min) {
-      diagnostic(diagnostics, 'parameter_out_of_bounds', `Brepia parameter ${control.inputId} is below its canonical minimum.`, `parameter:${control.inputId}`);
+      diagnostic(
+        diagnostics,
+        'parameter_out_of_bounds',
+        `Brepia parameter ${control.inputId} is below its canonical minimum.`,
+        `parameter:${control.inputId}`,
+      );
     }
     if (control.max != null && actual.value > control.max) {
-      diagnostic(diagnostics, 'parameter_out_of_bounds', `Brepia parameter ${control.inputId} is above its canonical maximum.`, `parameter:${control.inputId}`);
+      diagnostic(
+        diagnostics,
+        'parameter_out_of_bounds',
+        `Brepia parameter ${control.inputId} is above its canonical maximum.`,
+        `parameter:${control.inputId}`,
+      );
     }
     if (mode === 'generated' && actual.value !== control.default) {
-      diagnostic(diagnostics, 'generated_default_mismatch', `Generated GHX parameter ${control.inputId} does not match the canonical default.`, `parameter:${control.inputId}`);
+      diagnostic(
+        diagnostics,
+        'generated_default_mismatch',
+        `Generated GHX parameter ${control.inputId} does not match the canonical default.`,
+        `parameter:${control.inputId}`,
+      );
     }
   }
 
@@ -531,7 +668,11 @@ export async function validateBrepGrasshopperParameterShellGhx(
     if (error instanceof GhxXmlError) {
       diagnostic(diagnostics, error.code, error.message);
     } else {
-      diagnostic(diagnostics, 'malformed_xml', 'GHX could not be parsed safely.');
+      diagnostic(
+        diagnostics,
+        'malformed_xml',
+        'GHX could not be parsed safely.',
+      );
     }
     return {
       accepted: false,
@@ -543,25 +684,47 @@ export async function validateBrepGrasshopperParameterShellGhx(
   }
 
   if (root.name !== 'Archive' || root.attributes.name !== 'Root') {
-    diagnostic(diagnostics, 'invalid_root', 'GHX root must be Archive name="Root".');
+    diagnostic(
+      diagnostics,
+      'invalid_root',
+      'GHX root must be Archive name="Root".',
+    );
   }
   const definition = chunk(root, 'Definition');
   if (!definition) {
-    diagnostic(diagnostics, 'missing_definition', 'GHX Definition chunk is missing.');
+    diagnostic(
+      diagnostics,
+      'missing_definition',
+      'GHX Definition chunk is missing.',
+    );
   }
-  const definitionObjects = definition ? chunk(definition, 'DefinitionObjects') : undefined;
+  const definitionObjects = definition
+    ? chunk(definition, 'DefinitionObjects')
+    : undefined;
   if (!definitionObjects) {
-    diagnostic(diagnostics, 'missing_definition_objects', 'GHX DefinitionObjects chunk is missing.');
+    diagnostic(
+      diagnostics,
+      'missing_definition_objects',
+      'GHX DefinitionObjects chunk is missing.',
+    );
   }
 
   if (definitionObjects) {
-    const declaredCount = Number.parseInt(itemText(definitionObjects, 'ObjectCount') ?? '', 10);
-    const objects = directChild(definitionObjects, 'chunks')?.children.filter(
-      (child) => child.name === 'chunk' && child.attributes.name === 'Object',
-    ) ?? [];
+    const declaredCount = Number.parseInt(
+      itemText(definitionObjects, 'ObjectCount') ?? '',
+      10,
+    );
+    const objects =
+      directChild(definitionObjects, 'chunks')?.children.filter(
+        (child) => child.name === 'chunk' && child.attributes.name === 'Object',
+      ) ?? [];
     summary.objectCount = objects.length;
     if (!Number.isSafeInteger(declaredCount) || declaredCount !== objects.length) {
-      diagnostic(diagnostics, 'object_count_mismatch', 'GHX ObjectCount does not match serialized Object chunks.');
+      diagnostic(
+        diagnostics,
+        'object_count_mismatch',
+        'GHX ObjectCount does not match serialized Object chunks.',
+      );
     }
 
     const instanceGuids = new Set<string>();
@@ -569,7 +732,11 @@ export async function validateBrepGrasshopperParameterShellGhx(
       const observed = observeObject(objectNode, diagnostics, index);
       if (!observed) continue;
       if (instanceGuids.has(observed.instanceGuid)) {
-        diagnostic(diagnostics, 'duplicate_instance_guid', `Duplicate Grasshopper InstanceGuid ${observed.instanceGuid}.`);
+        diagnostic(
+          diagnostics,
+          'duplicate_instance_guid',
+          `Duplicate Grasshopper InstanceGuid ${observed.instanceGuid}.`,
+        );
         continue;
       }
       instanceGuids.add(observed.instanceGuid);
@@ -582,12 +749,19 @@ export async function validateBrepGrasshopperParameterShellGhx(
   if (options.expected != null) {
     try {
       const plan = await createBrepGrasshopperPackagePlan(options.expected);
-      compareExpected(summary.parameters, plan, options.mode ?? 'generated', diagnostics);
+      compareExpected(
+        summary.parameters,
+        plan,
+        options.mode ?? 'generated',
+        diagnostics,
+      );
     } catch (error) {
       diagnostic(
         diagnostics,
         'invalid_expected_contract',
-        `Expected Brepia contract/package source is invalid: ${error instanceof Error ? error.message : String(error)}`,
+        `Expected Brepia contract/package source is invalid: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
   }
