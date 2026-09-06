@@ -45,8 +45,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  package-proof:
-    name: Package proof (${{ matrix.os }})
+  package-build:
+    name: Package build (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -69,13 +69,37 @@ jobs:
       - name: Build packager
         run: dotnet build grasshopper/Brepia.Grasshopper.Packager/Brepia.Grasshopper.Packager.csproj --configuration Release --no-restore --warnaserror
 
-      - name: Serialize representative Brepia project
-        run: dotnet run --project grasshopper/Brepia.Grasshopper.Packager/Brepia.Grasshopper.Packager.csproj --configuration Release --no-build -- "grasshopper/fixtures/cabinet-a42.brepia-grasshopper.json" "${{ runner.temp }}/brepia-cabinet-a42.gh"
+  gh-io-runtime-proof:
+    name: GH_IO runtime proof (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Upload generated Grasshopper document
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore standalone GH_IO probe
+        run: dotnet restore grasshopper/Brepia.GhIoProbe/Brepia.GhIoProbe.csproj
+
+      - name: Build standalone GH_IO probe
+        run: dotnet build grasshopper/Brepia.GhIoProbe/Brepia.GhIoProbe.csproj --configuration Release --no-restore --warnaserror
+
+      - name: Round-trip standalone GH_IO archive
+        run: dotnet run --project grasshopper/Brepia.GhIoProbe/Brepia.GhIoProbe.csproj --configuration Release --no-build -- "${{ runner.temp }}/brepia-gh-io-probe.gh"
+
+      - name: Upload GH_IO probe archive
         uses: actions/upload-artifact@v4
         with:
-          name: brepia-grasshopper-gh-${{ runner.os }}
-          path: ${{ runner.temp }}/brepia-cabinet-a42.gh
+          name: brepia-gh-io-probe-${{ runner.os }}
+          path: ${{ runner.temp }}/brepia-gh-io-probe.gh
           if-no-files-found: error
           retention-days: 14
