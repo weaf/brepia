@@ -15,16 +15,23 @@ if (!archive.AppendObject(expected, "BrepiaProbe"))
     Console.Error.WriteLine("Could not append GH_IO probe payload.");
     return 1;
 }
-if (!archive.WriteToFile(outputPath, overwrite: true, rememberPath: false))
+
+// Avoid GH_Archive.WriteToFile/ReadFromFile here. Those convenience methods
+// pull in desktop UI assemblies even though GH_IO's binary archive codec itself
+// is sufficient for deterministic headless serialization.
+var binary = archive.Serialize_Binary();
+if (binary.Length == 0)
 {
-    Console.Error.WriteLine("Could not write GH_IO probe archive.");
+    Console.Error.WriteLine("GH_IO produced an empty binary archive.");
     return 1;
 }
+File.WriteAllBytes(outputPath, binary);
 
+var persisted = File.ReadAllBytes(outputPath);
 var readBack = new GH_Archive();
-if (!readBack.ReadFromFile(outputPath))
+if (!readBack.Deserialize_Binary(persisted))
 {
-    Console.Error.WriteLine("Could not read GH_IO probe archive.");
+    Console.Error.WriteLine("Could not deserialize GH_IO probe archive.");
     return 1;
 }
 var actual = new ProbePayload();
@@ -37,7 +44,7 @@ if (!readBack.ExtractObject(actual, "BrepiaProbe") ||
 }
 
 Console.WriteLine(
-    $"GH_IO standalone round-trip PASS: {actual.ProjectId} {actual.SourceRevisionId} {new FileInfo(outputPath).Length} bytes");
+    $"GH_IO standalone round-trip PASS: {actual.ProjectId} {actual.SourceRevisionId} {persisted.Length} bytes");
 return 0;
 
 sealed class ProbePayload : GH_ISerializable
