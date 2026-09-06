@@ -3,7 +3,7 @@ using GH_IO.Serialization;
 
 if (args.Length != 1)
 {
-    Console.Error.WriteLine("Usage: Brepia.GhIoProbe <output.gh>");
+    Console.Error.WriteLine("Usage: Brepia.GhIoProbe <output.ghx>");
     return 2;
 }
 
@@ -16,22 +16,23 @@ if (!archive.AppendObject(expected, "BrepiaProbe"))
     return 1;
 }
 
-// Avoid GH_Archive.WriteToFile/ReadFromFile here. Those convenience methods
-// pull in desktop UI assemblies even though GH_IO's binary archive codec itself
-// is sufficient for deterministic headless serialization.
-var binary = archive.Serialize_Binary();
-if (binary.Length == 0)
+// Probe GH_IO's XML archive codec only. The binary codec references
+// System.Drawing.Common and the file convenience APIs also pull desktop UI
+// assemblies. XML keeps this capability check focused on portable archive
+// structure rather than Rhino/Grasshopper hosting or desktop dependencies.
+var xml = archive.Serialize_Xml();
+if (string.IsNullOrWhiteSpace(xml))
 {
-    Console.Error.WriteLine("GH_IO produced an empty binary archive.");
+    Console.Error.WriteLine("GH_IO produced an empty XML archive.");
     return 1;
 }
-File.WriteAllBytes(outputPath, binary);
+File.WriteAllText(outputPath, xml);
 
-var persisted = File.ReadAllBytes(outputPath);
+var persisted = File.ReadAllText(outputPath);
 var readBack = new GH_Archive();
-if (!readBack.Deserialize_Binary(persisted))
+if (!readBack.Deserialize_Xml(persisted))
 {
-    Console.Error.WriteLine("Could not deserialize GH_IO probe archive.");
+    Console.Error.WriteLine("Could not deserialize GH_IO XML probe archive.");
     return 1;
 }
 var actual = new ProbePayload();
@@ -39,12 +40,12 @@ if (!readBack.ExtractObject(actual, "BrepiaProbe") ||
     actual.ProjectId != expected.ProjectId ||
     actual.SourceRevisionId != expected.SourceRevisionId)
 {
-    Console.Error.WriteLine("GH_IO probe archive identity did not round-trip.");
+    Console.Error.WriteLine("GH_IO XML probe archive identity did not round-trip.");
     return 1;
 }
 
 Console.WriteLine(
-    $"GH_IO standalone round-trip PASS: {actual.ProjectId} {actual.SourceRevisionId} {persisted.Length} bytes");
+    $"GH_IO standalone XML round-trip PASS: {actual.ProjectId} {actual.SourceRevisionId} {new FileInfo(outputPath).Length} bytes");
 return 0;
 
 sealed class ProbePayload : GH_ISerializable
