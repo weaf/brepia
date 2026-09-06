@@ -10,6 +10,7 @@ Use these as current references where relevant:
 
 - `README.md` for product capabilities and basic setup;
 - `docs/brepia_branding.md` for naming and compatibility boundaries;
+- `docs/grasshopper_roundtrip_architecture.md` for the current Grasshopper/GHX product loop, validation boundary and round-trip compatibility contract;
 - `docs/local_supabase_lifecycle.md` and `.cursor/rules/database-workflow.mdc` for database lifecycle;
 - `docs/INTEGRATION.md` for the current OpenCode integration;
 - `docs/conversation_workspace.md` for persistent local conversation artifacts;

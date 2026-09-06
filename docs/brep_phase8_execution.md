@@ -1,216 +1,269 @@
-# BRep Phase 8 — Grasshopper package and round-trip workflow
+# BRep Phase 8 — GHX-native Grasshopper interoperability
 
 ## Status
 
-Phase 8 is active on the stacked branch:
+Phase 8 is active on:
 
 ```text
 feature/brep-grasshopper-gh-packaging
 ```
 
-Its base is the Phase 7 branch `feature/brep-grasshopper-smart-component`. Phase 7A–7C are repository-complete; Phase 7D installed Rhino/Grasshopper runtime acceptance remains deferred until a real Rhino 8 runtime is conveniently available.
+The detailed current product authority is `docs/grasshopper_roundtrip_architecture.md`. This execution document records completed implementation evidence and the revised Phase 8 slices that follow that architecture.
 
-Phase 8A is repository-complete. Phase 8B — plan-driven Grasshopper object emission — is the next implementation slice. Installed Rhino/Grasshopper runtime acceptance remains deferred and is not implied by Phase 8A completion.
+A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, Rhino 8 embedded Script components, GHXViewer and GhJSON-related work:
 
-## Product boundary
+- GHX is the primary Grasshopper document interchange target;
+- the user must see and revise the Brepia-generated 3D model in Brepia before Grasshopper is opened;
+- the canonical Brepia/BRep model remains authoritative for Brepia-owned geometry and revisions;
+- the preferred baseline is zero-install GHX using standard Grasshopper/Rhino 8 facilities, with embedded Script/C# Script where executable bridge logic is needed;
+- a Brepia `.gha` is optional/reference/fallback rather than a baseline product requirement;
+- initial GHX re-import is deliberately strict: recover supported Brepia parameter changes and provenance, but reject unsafe/unknown graph mutations rather than guessing;
+- AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update.
 
-Brepia remains the canonical AI-first parametric CAD system. The generated Grasshopper artifact is an interoperability/workflow package around the Brepia-owned smart component, not a translation of the full Brepia feature DAG into native Grasshopper nodes and not a second canonical authoring model.
-
-Target loop:
-
-```text
-Brepia AI + canonical BrepProject
-        |
-        v
-stable Grasshopper package plan
-        |
-        v
-Brepia Project component + ordinary GH controls/workflow
-        |
-        v
-Rhino / Grasshopper continuation
-        |
-        v
-identity-aware import/reconciliation back to Brepia
-```
-
-External Grasshopper additions remain external until a deliberate mapping/reconciliation rule exists. Phase 8 does not claim lossless arbitrary GH graph -> `BrepProject` conversion.
-
-## Runtime discovery
-
-Phase 8A explicitly tested the boundary between the Rhino/Grasshopper SDK packages and a standalone .NET host.
-
-Observed on ordinary GitHub-hosted Ubuntu and Windows runners:
-
-- the Phase 7 `.gha` continues to compile against the pinned Rhino 8 SDK;
-- the Phase 8 packager code referencing RhinoCommon/Grasshopper also compiles without an installed Rhino desktop;
-- executing the full Grasshopper/Rhino-dependent packager from a normal `dotnet` process fails before document emission because the Rhino/Grasshopper assemblies expect a Rhino-owned runtime host;
-- `GH_Archive.WriteToFile()` is not a portable Linux boundary because it loads `System.Windows.Forms`;
-- lower-level `GH_Archive.Serialize_Binary()` still loads `System.Drawing.Common` on stock Ubuntu;
-- `GH_Archive.Serialize_Xml()` also loads `System.Drawing.Common` on stock Ubuntu.
-
-Concrete diagnostic evidence:
-
-- Grasshopper Build run `34034673461`: full standalone packager execution failed on both Ubuntu and Windows with CoreCLR host initialization failure while compile succeeded;
-- Grasshopper Build run `34035092145`, Ubuntu job `101491581375`: standalone binary GH_IO serialization failed on missing `System.Drawing.Common`;
-- Grasshopper Build run `34035373743`, Ubuntu job `101492342721`: standalone XML GH_IO serialization failed on the same `System.Drawing.Common` dependency.
-
-The GH_IO probe was therefore removed from permanent CI. These experiments characterize the unsupported host boundary; Brepia will not accumulate compatibility shims, fake a Rhino host or reverse-engineer private Grasshopper binary serialization merely to bypass it.
-
-The supported free development boundary is instead:
+## Target loop
 
 ```text
-Linux / ordinary CI
-  - canonical Brepia contract tests
-  - deterministic package-plan tests
-  - normal Brepia quality gate
-  - Rhino/Grasshopper SDK compilation
-
-Installed Rhino / supported Rhino-owned host later
-  - instantiate real GH objects
-  - serialize/open complete .gh
-  - solve component
-  - import exact native Rhino Breps
-  - interactive canvas/save/reopen acceptance
+User intent
+   |
+   v
+Brepia AI
+   |
+   v
+canonical Brepia/BRep model
+   |
+   +----> Brepia evaluator ----> 3D preview + validation
+   |
+   +----> GHX compiler --------> editable model.ghx
+                                  |
+                                  v
+                              Grasshopper
+                                  |
+                                  v
+                              returned GHX
+                                  |
+                                  v
+                    strict Brepia compatibility gate
+                                  |
+                         supported changes only
+                                  |
+                                  v
+                         canonical Brepia model
+                                  |
+                                  v
+                              Brepia AI
 ```
 
-## Phase 8A — portable deterministic package plan
+Grasshopper is a continuation environment, not the first place where Brepia-generated geometry becomes visible.
 
-The portable source of truth for generated Grasshopper packaging is `shared/brepGrasshopperPackagePlan.ts`.
+## Completed exploratory/reusable work before the GHX pivot
 
-The plan is derived only from a normalized Phase 6 `brepia-grasshopper-contract` and contains:
+The work below remains valuable and is retained. It should not be interpreted as a requirement that the final product use a custom GHA component or Rhino-hosted `.gh` packager.
 
-- `kind = brepia-grasshopper-package-plan`;
-- schema version 1;
-- canonical project identity plus immutable source-revision provenance;
-- the normalized contract that the smart component must embed;
-- one deterministic Brepia Project component identity;
-- one deterministic control identity per published numeric parameter;
-- explicit control -> stable Brepia input-ID wiring;
-- deterministic canvas positions;
-- conservative control presentation:
-  - use a slider only when the canonical parameter supplies both finite `min` and `max` with `min < max`;
-  - otherwise use a normal number control rather than inventing an arbitrary slider range;
-- no generated source for `placement`; the standard Plane input remains unconnected so Phase 7 resolves canonical project placement until a Grasshopper user deliberately connects a Plane.
+### 8A — deterministic package model and identity — repository complete
 
-Generated Grasshopper object IDs are deterministic RFC 9562 UUIDv8 values. Their semantic key deliberately excludes `sourceRevisionId`:
+Implemented in `shared/brepGrasshopperPackagePlan.ts`:
 
-- project component identity derives from stable Brepia `projectId` + object role;
-- numeric control identity derives from stable Brepia `projectId` + parameter ID + object role;
-- `sourceRevisionId` remains immutable provenance inside the embedded contract/model identity;
-- a new revision of the same Brepia project therefore preserves generated component/control identity and can be reconciled with existing project-level Grasshopper wiring;
-- a different Brepia project identity receives different generated Grasshopper object IDs.
+- deterministic package plan derived from normalized Brepia contract;
+- stable project/control identities across ordinary Brepia revisions;
+- source revision retained as provenance rather than generated object identity;
+- one generated control/wire per supported published numeric parameter;
+- stable parameter-ID wiring;
+- deterministic layout;
+- no invented slider bounds;
+- placement input left unconnected by default;
+- no secrets in package state.
 
-The UUID input segments are length-prefixed before SHA-256 hashing, then encoded as RFC-variant UUIDv8 values. This avoids delimiter ambiguity while remaining deterministic across the TypeScript package plan and C# emitter boundary.
-
-The package plan contains no evaluator URL, bearer token or other secret/runtime configuration.
-
-## Rhino-hosted emission adapter
-
-`grasshopper/Brepia.Grasshopper/Packaging/BrepiaGrasshopperDocumentPackager.cs` is the Rhino/Grasshopper-side emitter boundary. It uses official `GH_Document` / `GH_Archive` APIs and the existing `BrepiaProjectComponent` persistence path rather than hand-authoring Grasshopper's private document schema.
-
-The adapter currently:
-
-- parses the trusted v1 contract;
-- instantiates one `BrepiaProjectComponent`;
-- embeds the normalized contract through the existing component persistence path;
-- applies the same revision-stable project-derived UUIDv8 component identity as the portable package model;
-- constructs a `GH_Document` / `Definition` archive;
-- contains no evaluator/solve call;
-- compiles against the exact pinned Rhino 8 SDK pair on ordinary CI.
-
-Actual execution that creates a complete `.gh` containing real Grasshopper objects remains installed-Rhino/runtime evidence. The adapter's numeric-control and wire emission is the next implementation slice and must follow the portable package plan rather than inventing a second model.
-
-Do not reverse-engineer a complete `.gh` binary graph merely to avoid the runtime boundary. The portable plan is deliberately separated from the runtime adapter so most product behavior can be designed, diffed and tested without Rhino while final emission remains faithful to Grasshopper's own object model.
-
-## Phase slices
-
-### 8A — deterministic package model and host boundary — repository complete
-
-Accepted repository behavior:
-
-- canonical contract -> deterministic package plan;
-- stable project/control identity across ordinary Brepia revisions while retaining exact source-revision provenance;
-- deterministic control layout and wiring by stable parameter ID;
-- no fabricated parameter semantics;
-- placement left unconnected by default;
-- no secrets in package state;
-- Rhino/GH emitter code compiles against the exact pinned SDK pair on Ubuntu and Windows;
-- unsupported standalone Rhino/GH and GH_IO runtime boundaries are explicitly characterized and excluded from the permanent gate.
-
-Repository acceptance checkpoint:
+Accepted checkpoint:
 
 ```text
 a033df76f054bf77c467118c8029a6a3eefe8f7e
-Reconcile Phase 8A runtime and identity findings
 ```
 
-On that exact implementation/documentation checkpoint:
+Evidence:
 
 - Quality Gate #468 / run `34035477350` — PASS;
-- tests — PASS;
-- typecheck — PASS;
-- lint — PASS;
-- build — PASS;
-- diff check — PASS;
-- Grasshopper Build #44 / run `34035477375` — PASS;
-- Phase 7 `.gha` restore/build/artifact job — PASS;
-- Phase 8 package build on `ubuntu-latest` — PASS;
-- Phase 8 package build on `windows-latest` — PASS.
+- Grasshopper Build #44 / run `34035477375` — PASS.
 
-This slice does **not** claim that a generated `.gh` has opened or solved in Grasshopper.
+The portable package plan is reusable as an intermediate representation for the GHX compiler.
 
-### 8B — plan-driven Grasshopper object emission — next
+### 8B — Rhino-hosted native GH object emission prototype — repository complete
 
-Implement the Rhino-hosted adapter from the portable plan:
+Implemented plan-driven instantiation of native Grasshopper controls, stable identities and wires through the pinned Grasshopper SDK. This proved the intended object semantics and parameter-ID wiring.
 
-- instantiate one `Brepia Project` component;
-- embed the normalized contract;
-- apply stable component identity;
-- instantiate supported numeric controls;
-- apply defaults/ranges/steps without widening canonical constraints;
-- connect controls to dynamic inputs by stable Brepia parameter ID, never label matching;
-- preserve the Plane input as intentionally unconnected by default;
-- serialize through Grasshopper's own document/archive APIs under a supported Rhino-owned runtime.
+Accepted checkpoint:
 
-Repository acceptance is compile/static/contract coverage; installed Rhino acceptance remains deferred.
+```text
+944f3b236ec16f54564d4feb045a3c3345208b3d
+```
 
-### 8C — Brepia export/package integration
+Evidence:
 
-Expose the Phase 8 packaging flow through the existing BRep export surface without changing `BrepProject` authority. Normal Brepia authoring, preview and native BRep export must remain independent of Rhino.
+- Quality Gate #472 / run `34036162049` — PASS;
+- Grasshopper Build #48 / run `34036162012` — PASS;
+- package compilation — PASS on Ubuntu and Windows.
 
-Any final `.gh` emission that requires a Rhino-owned runtime must remain an explicit optional interoperability boundary rather than becoming a hidden dependency of ordinary Brepia operation.
+This code is now reference/fallback implementation evidence. The active product direction no longer requires a Rhino-owned runtime merely to emit the primary GHX interchange artifact.
 
-### 8D — round-trip identity and reconciliation envelope
+### 8C — package-plan transport — repository complete
 
-Define what Brepia can reliably recover when a generated Grasshopper workflow returns:
+Implemented authenticated bounded transport for the deterministic package plan, normalization that rebuilds derived state from the embedded canonical contract, C# plan parsing and CLI support.
 
-- Brepia project and source revision identity;
-- embedded canonical Brepia contract/component state;
-- stable parameter IDs and current Brepia-owned input values where recoverable;
-- external downstream GH objects/connections as external graph evidence rather than silently converting them into canonical Brepia features.
+Accepted checkpoint:
 
-The first round trip is identity-aware reconciliation, not generic GH-to-BrepProject translation.
+```text
+86ce44428f196ab616f9c38fe37ff5d22be00023
+```
 
-### 8E — installed Rhino/Grasshopper end-to-end acceptance
+Evidence:
 
-When Rhino 8 is available, verify the representative cabinet workflow end-to-end:
+- Quality Gate #483 / run `34036826251` — PASS;
+- Grasshopper Build #59 / run `34036826254` — PASS.
 
-1. emit/open the generated `.gh`;
-2. verify the Brepia Project component loads from the installed `.gha`;
-3. verify generated controls, defaults and stable wiring;
-4. vary at least two parameters and receive changing native Rhino Breps;
-5. verify unconnected and connected Plane placement semantics without scale;
-6. verify auxiliary exact/semantic outputs and metadata identity;
-7. save/reopen the `.gh` and preserve Brepia identity/wiring;
-8. add ordinary Grasshopper downstream content and confirm Brepia-owned identity remains recognizable;
-9. exercise the first identity-aware import/reconciliation path back into Brepia.
+The transport and normalization boundaries remain reusable for GHX generation.
 
-Installed Rhino evidence is required before the roadmap can claim real `.gh` interoperability complete.
+### 8D — reconciliation envelope and Grasshopper document scanner — repository complete as exploratory boundary
+
+Implemented:
+
+- portable `brepia-grasshopper-reconciliation` envelope;
+- project/revision/component/control identity reconstruction from canonical contract;
+- parameter recovery with canonical bounds validation;
+- project-vs-Grasshopper placement classification;
+- evidence-only external object/connection capture;
+- fail-closed ambiguity handling;
+- C# `GH_Document` scanner that does not solve geometry merely to inspect state.
+
+Verified checkpoint immediately before the GHX-native roadmap pivot:
+
+```text
+fcc1e9ff589edc1a9570c4a6cddee79ef292ad7e
+Cover Phase 8D Grasshopper reconciliation extractor boundary
+```
+
+Exact-head evidence:
+
+- Quality Gate #488 / run `34037200446` — PASS;
+- Grasshopper Build #64 / run `34037200447` — PASS;
+- plugin build — PASS;
+- package build on `windows-latest` — PASS;
+- package build on `ubuntu-latest` — PASS.
+
+The concepts remain useful, but the final import path must be generalized from the custom `BrepiaProjectComponent` assumption to the GHX-native identity/compatibility contract described in `docs/grasshopper_roundtrip_architecture.md`.
+
+## Characterized runtime boundary
+
+Earlier probes established that compile success against Rhino/Grasshopper SDK packages does not imply a supported standalone Grasshopper runtime. Full standalone package execution and GH_IO serialization paths pulled Rhino/desktop/runtime dependencies in ordinary CI.
+
+Those negative probes remain useful evidence, but GHX-native generation changes their product significance: Brepia should not require a Rhino-owned runtime merely to create its primary Grasshopper document artifact.
+
+Do not add fake Rhino hosts, private binary `.gh` reverse engineering or compatibility shim chains merely to force standalone `.gh` generation.
+
+## Revised active Phase 8 slices
+
+### 8E — GHX compiler + deterministic validator foundation — next
+
+Build the portable GHX-native foundation around the existing package plan.
+
+Required outcomes:
+
+- define the minimal Brepia-supported GHX subset needed for the representative parametric model;
+- emit deterministic `.ghx` text without requiring installed Rhino/Grasshopper;
+- prefer standard Grasshopper objects;
+- prove a zero-install Rhino 8 Script/C# Script representation for embedded Brepia bridge logic where needed;
+- preserve stable Brepia project, revision-provenance and parameter identities;
+- create Rhino-produced/reference GHX fixtures where available;
+- parse generated GHX with a safe bounded XML parser;
+- produce machine-readable validation diagnostics;
+- validate object identities, supported state, connection references and Brepia semantic contract;
+- provide a developer inspection path; GHXViewer may be used as a visual reference/debug aid but is not the correctness gate.
+
+The validator must be deterministic. AI may repair failures but cannot declare an artifact valid by itself.
+
+### 8F — Brepia AI/product integration and preview parity
+
+Integrate GHX generation into the normal Brepia model lifecycle while preserving the existing native BRep preview/evaluation path.
+
+Representative acceptance scenario:
+
+1. user asks Brepia to create a composite/plastic electrical cabinet, 2000 x 600 x 600 mm, 3 mm wall, three DIN-rail rows;
+2. Brepia creates the canonical model and shows the 3D preview without Rhino;
+3. user asks for a larger handle and a window in the door;
+4. Brepia updates and previews the model;
+5. export generates a valid editable GHX representation of that same Brepia-owned model.
+
+AI should normally author a structured model/graph representation consumed by the compiler rather than freehand large GHX XML blobs.
+
+### 8G — strict v1 GHX round-trip
+
+Implement the first deliberately narrow import contract.
+
+Supported v1 behavior:
+
+- recognize Brepia project and provenance;
+- recognize expected Brepia-owned generated structure/code/template identity;
+- recover explicitly supported published parameter values;
+- validate values against canonical constraints;
+- allow harmless presentation/layout differences only where proven non-semantic;
+- update canonical Brepia state only after deterministic compatibility validation passes;
+- continue normal Brepia AI editing and preview after successful import.
+
+Unsupported v1 behavior:
+
+- arbitrary native GH nodes that alter model semantics;
+- unknown rewiring of Brepia-owned inputs;
+- unrecognized edits to embedded bridge/script logic;
+- arbitrary plugin components;
+- generic GH graph -> canonical `BrepProject` reconstruction.
+
+If unsupported content is detected, retain the last valid canonical Brepia revision and tell the user that the returned Grasshopper model cannot currently be reused with guaranteed results.
+
+AI may interpret the unsupported graph, explain likely changes and help recreate them in Brepia, but such interpretation remains advisory until a deterministic supported-import rule exists.
+
+### 8H — installed Rhino/Grasshopper end-to-end acceptance
+
+When Rhino 8 is available, verify the zero-install baseline end-to-end with no Brepia GHA installed:
+
+1. open Brepia-generated `.ghx` in Grasshopper;
+2. verify standard controls and embedded Script/C# Script load correctly;
+3. verify expected native Rhino geometry/output behavior;
+4. change at least two published parameters;
+5. save/reopen and preserve Brepia identity and supported state;
+6. re-import the parameter-modified GHX into Brepia;
+7. verify deterministic compatibility classification and recovered parameter values;
+8. continue editing the model with Brepia AI and native Brepia preview;
+9. regenerate a fresh GHX and reopen it successfully.
+
+Only after this evidence may the roadmap claim the zero-install GHX round trip operational in real Rhino/Grasshopper.
+
+## GHX validation and AI repair policy
+
+The minimum validator stack is:
+
+```text
+bounded bytes / UTF-8 / safe XML
+        -> GHX structural checks
+        -> Brepia semantic identity + parameter checks
+        -> round-trip compatibility classification
+        -> optional real Rhino/GH runtime acceptance
+```
+
+AI sits around, not instead of, this stack:
+
+```text
+validator diagnostics -> AI interpretation/repair -> deterministic re-validation
+```
+
+Never persist an AI-repaired generated artifact or returned GHX as canonical state until the deterministic gate passes.
+
+## Phase 7 relationship
+
+The Phase 7 `.gha` smart component remains useful reference implementation and an optional fallback experiment. Installed-Rhino acceptance of that GHA path is no longer a prerequisite for the GHX-native baseline.
+
+Do not delete or rewrite the existing Phase 7/8 implementation history merely because the product direction changed. Future work should reuse validated identity, transport, geometry and reconciliation concepts where they fit the GHX-native architecture.
 
 ## Validation and evidence classes
 
-Portable/repository work keeps the normal Brepia gate:
+Normal repository changes retain:
 
 ```bash
 npm test
@@ -220,11 +273,12 @@ npm run build
 git diff --check
 ```
 
-Grasshopper-side code additionally requires the pinned Rhino 8 SDK build gate. Runtime statements are classified explicitly as one of:
+Keep evidence classes explicit:
 
-- portable contract/package-plan evidence;
-- Rhino/Grasshopper SDK compile evidence;
-- negative standalone-host capability evidence;
-- installed Rhino/Grasshopper runtime evidence.
+- portable compiler/parser/validator tests;
+- deterministic GHX fixture tests;
+- Rhino/Grasshopper SDK compile evidence where SDK code remains relevant;
+- visual diagnostic evidence (for example GHXViewer) — useful but not correctness proof;
+- installed Rhino/Grasshopper runtime evidence — required for final real-runtime acceptance.
 
 Do not promote evidence from one class into another.
