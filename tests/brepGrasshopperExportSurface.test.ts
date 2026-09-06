@@ -8,40 +8,46 @@ const editor = fs.readFileSync(
 );
 
 describe('BRep Grasshopper product export surface', () => {
-  it('adds the generated Grasshopper contract beside the existing BRep downloads', () => {
+  it('offers executable GHX beside the existing BRep downloads', () => {
     assert.match(
       editor,
-      /type BrepDownloadFormat = 'step' \| '3dm' \| 'brep' \| 'grasshopper'/,
+      /type BrepDownloadFormat = 'step' \| '3dm' \| 'brep' \| 'ghx'/,
     );
     assert.match(editor, />\.STEP</);
     assert.match(editor, />\.3DM</);
     assert.match(editor, />\.BREP JSON</);
-    assert.match(editor, />\.GH CONTRACT</);
-    assert.match(editor, /Grasshopper interoperability/);
+    assert.match(editor, />\.GHX</);
+    assert.match(editor, /Editable Grasshopper model/);
+    assert.doesNotMatch(editor, />\.GH CONTRACT</);
   });
 
-  it('exports the saved canonical source with immutable revision provenance', () => {
-    assert.match(editor, /createBrepGrasshopperContract\(\{/);
-    assert.match(editor, /project,\s*sourceRevisionId: activeRevisionId,/s);
+  it('exports saved canonical source with immutable revision provenance through the portable GHX compiler', () => {
     assert.match(
       editor,
-      /Grasshopper contract export requires an active immutable BRep revision/,
+      /exportBrepGrasshopperGhx\(project, activeRevisionId\)/,
     );
-    assert.match(editor, /serializeBrepGrasshopperContract/);
-    assert.match(editor, /\.brepia-grasshopper\.json/);
-  });
-
-  it('requires saved parameter state for canonical and Grasshopper JSON but preserves native preview export behavior', () => {
-    assert.match(editor, /const brepAvailable = !dirty && !saving && !sourceSaving/);
     assert.match(
       editor,
-      /const grasshopperAvailable = brepAvailable && Boolean\(activeRevisionId\)/,
+      /Grasshopper GHX export requires an active immutable BRep revision/,
+    );
+    assert.match(editor, /mimeType: 'application\/xml'/);
+    assert.match(editor, /\.ghx`/);
+  });
+
+  it('requires saved parameter state for canonical and GHX exports but preserves native preview export behavior', () => {
+    assert.match(
+      editor,
+      /const brepAvailable = !dirty && !saving && !sourceSaving && !exporting/,
+    );
+    assert.match(
+      editor,
+      /const ghxAvailable = brepAvailable && Boolean\(activeRevisionId\)/,
     );
     assert.match(editor, /exportBrepStep\(project, values\)/);
     assert.match(editor, /exportBrep3dm\(project, values\)/);
     assert.match(
       editor,
-      /Save the parameter draft before exporting the canonical BRep project\s*package or Grasshopper contract\. STEP and 3DM can still export the\s*current preview values\./s,
+      /Save the parameter draft before exporting the canonical BRep project\s*package or Grasshopper GHX\. STEP and 3DM can still export the current\s*preview values\./s,
     );
   });
 });
