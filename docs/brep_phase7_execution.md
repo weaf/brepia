@@ -279,14 +279,14 @@ Representative acceptance:
 
 ## CI evidence before 7D
 
-Repository checkpoint before installed-runtime acceptance:
+The Phase 7C code/artifact checkpoint is:
 
 ```text
 ce5e3262942ed1705e7c906838aa1b76424f70fd
 Record Phase 7C implementation boundary
 ```
 
-On that exact head:
+No Grasshopper/plugin source changed after the successful build of that checkpoint. On that code/artifact checkpoint:
 
 - Grasshopper Build #13 / run `34027874628` — PASS;
 - `dotnet restore` — PASS;
@@ -294,6 +294,8 @@ On that exact head:
 - CI artifact `brepia-grasshopper` — published;
 - Quality Gate #437 / run `34027874632` — PASS;
 - tests/typecheck/lint/build/diff check — PASS.
+
+Subsequent branch commits in this document-only closeout section do not change the plugin artifact selected for 7D acceptance.
 
 ## External repository assessment
 
