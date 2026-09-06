@@ -1,4 +1,5 @@
 import { Box, GitBranch } from 'lucide-react';
+import { BrepGrasshopperImportButton } from '@/components/brep/BrepGrasshopperImportButton';
 import { BrepProjectViewerPanel } from '@/components/brep/BrepProjectEditor';
 import {
   BREP_GRAPH_WORKSPACE_TARGET_ID,
@@ -48,9 +49,12 @@ export function BrepProjectWorkspacePanel({
             Graph
           </Button>
         </div>
-        <span className="hidden text-[10px] text-adam-neutral-500 sm:inline">
-          {view === 'model' ? 'Primary BRep result' : 'Feature dependency graph'}
-        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="hidden text-[10px] text-adam-neutral-500 xl:inline">
+            {view === 'model' ? 'Primary BRep result' : 'Feature dependency graph'}
+          </span>
+          <BrepGrasshopperImportButton />
+        </div>
       </div>
 
       <div className="min-h-0 flex-1">
