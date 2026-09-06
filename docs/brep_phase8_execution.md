@@ -21,7 +21,7 @@ A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, 
 - AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update;
 - Brepia is not a general Grasshopper automation product: broader scripting/logic may remain in Grasshopper, ChatGPT, Python or MCP-based workflows.
 
-Repository-level 8E is complete. The next active implementation slice is 8F. Installed Rhino/Grasshopper runtime acceptance remains explicitly deferred to 8H.
+Repository-level 8E and 8F are complete. The next active implementation slice is 8G. Installed Rhino/Grasshopper runtime acceptance remains explicitly deferred to 8H.
 
 ## Target loop
 
@@ -226,24 +226,48 @@ Evidence boundary:
 
 No embedded GHX viewer is required. The user can inspect exported files in Grasshopper. If something is wrong, they can return the GHX, describe the problem or provide screenshots for AI-assisted diagnosis.
 
-### 8F — Brepia AI/product integration and preview parity — next
+### 8F — Brepia AI/product integration and preview parity — repository complete
 
-Integrate the now-validated GHX generation boundary into the normal Brepia model lifecycle while preserving the existing native BRep preview/evaluation path.
+The validated portable GHX boundary is integrated into the normal BRep project lifecycle without replacing or bypassing Brepia's native preview/evaluator.
 
-Representative acceptance scenario:
+Implemented:
 
-1. user asks Brepia to create a composite/plastic electrical cabinet, 2000 x 600 x 600 mm, 3 mm wall, three DIN-rail rows;
-2. Brepia creates the canonical model and shows the 3D preview without Rhino;
-3. user asks for a larger handle and a window in the door;
-4. Brepia updates and previews the model;
-5. export generates a valid editable GHX representation of that same Brepia-owned model when the canonical model belongs to the currently supported GHX subset;
-6. unsupported canonical geometry fails explicitly instead of silently producing an approximate Grasshopper model.
+- `src/services/brepGrasshopperExport.ts`
+  - derives the Grasshopper contract from the saved canonical project and active immutable source revision;
+  - compiles executable GHX entirely through the portable shared compiler;
+  - requires no Rhino host, server-side Rhino runtime, GHA, token or additional export endpoint.
+- `src/components/brep/BrepProjectEditor.tsx`
+  - exposes `.GHX` as the user-facing editable Grasshopper export alongside STEP, 3DM and canonical BRep JSON;
+  - removes the old contract-JSON product download from the export menu while retaining the contract internally as compiler infrastructure;
+  - GHX uses the saved canonical source plus `activeRevisionId` provenance;
+  - unsaved parameter preview values must be saved before canonical BRep/GHX export;
+  - STEP and 3DM intentionally retain current-preview export semantics;
+  - compiler errors for geometry outside the proven GHX subset surface through the existing project error path, and no approximate GHX is emitted.
+- product tests prove that the existing cabinet fixture compiles to executable GHX and that an unsupported canonical transform graph fails closed with `unsupported_model`.
 
-AI should normally author a structured model/graph representation consumed by the compiler rather than freehand large GHX XML blobs.
+Accepted repository checkpoint:
 
-The first product-facing integration should keep Brepia preview authoritative and expose deterministic GHX capability/diagnostics. It should not add a Grasshopper viewer or claim support for canonical node types that 8E has not yet proven.
+```text
+3c5b712403a7942af70f84b955732a89b29428ab
+Keep Rhino preview export test layout-tolerant
+```
 
-### 8G — strict v1 GHX round-trip
+Exact-head evidence:
+
+- Quality Gate #520 / run `34054348470` — PASS;
+- Grasshopper Build #96 / run `34054348472` — PASS;
+- portable tests — PASS;
+- TypeScript typecheck — PASS;
+- lint — PASS;
+- production build — PASS;
+- `git diff --check` — PASS;
+- Rhino/Grasshopper SDK plugin build — PASS;
+- package build on `ubuntu-latest` — PASS;
+- package build on `windows-latest` — PASS.
+
+The current product integration deliberately does not claim GHX support for canonical node types outside the 8E-proven single-box subset. Those models remain fully usable in Brepia/native BRep preview and STEP/3DM export, while GHX export fails explicitly instead of silently changing geometry semantics.
+
+### 8G — strict v1 GHX round-trip — next
 
 Implement the first deliberately narrow import contract in the product lifecycle.
 
@@ -267,7 +291,7 @@ Unsupported v1 behavior:
 
 If unsupported content is detected, retain the last valid canonical Brepia revision and tell the user that the returned Grasshopper model cannot currently be reused with guaranteed results.
 
-AI may interpret the unsupported graph, explain likely changes and help recreate them in Brepia, but such interpretation remains advisory until a deterministic supported-import rule exists.
+AI may interpret the unsupported graph, explain likely changes and help recreate them in Brepia, but such interpretation remains advisory until the supported-import gate proves that canonical state can be updated safely.
 
 ### 8H — installed Rhino/Grasshopper end-to-end acceptance
 
