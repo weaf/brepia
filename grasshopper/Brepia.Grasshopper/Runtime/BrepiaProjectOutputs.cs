@@ -30,7 +30,7 @@ public static class BrepiaProjectOutputs
         var targetPlane = suppliedPlane is Plane connected
             ? NormalizePlane(connected, "Grasshopper Plane input")
             : ParsePlacementPlane(imported.PlacementJson);
-        var transform = Transform.PlaneToPlane(Plane.WorldXY, targetPlane);
+        var transform = Rhino.Geometry.Transform.PlaneToPlane(Plane.WorldXY, targetPlane);
 
         var transformedBreps = new Dictionary<string, Brep>(StringComparer.Ordinal);
         try
@@ -165,7 +165,7 @@ public static class BrepiaProjectOutputs
 
     private static BrepiaSemanticPoint TransformPoint(
         BrepiaSemanticPoint point,
-        Transform transform)
+        Rhino.Geometry.Transform transform)
     {
         var position = point.Position;
         position.Transform(transform);
