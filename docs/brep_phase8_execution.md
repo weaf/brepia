@@ -10,7 +10,7 @@ feature/brep-grasshopper-gh-packaging
 
 The detailed current product authority is `docs/grasshopper_roundtrip_architecture.md`. This execution document records completed implementation evidence and the revised Phase 8 slices that follow that architecture.
 
-A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, Rhino 8 embedded Script components, GHXViewer and GhJSON-related work:
+A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, Rhino 8 embedded Script components and related open tooling:
 
 - GHX is the primary Grasshopper document interchange target;
 - the user must see and revise the Brepia-generated 3D model in Brepia before Grasshopper is opened;
@@ -18,7 +18,8 @@ A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, 
 - the preferred baseline is zero-install GHX using standard Grasshopper/Rhino 8 facilities, with embedded Script/C# Script where executable bridge logic is needed;
 - a Brepia `.gha` is optional/reference/fallback rather than a baseline product requirement;
 - initial GHX re-import is deliberately strict: recover supported Brepia parameter changes and provenance, but reject unsafe/unknown graph mutations rather than guessing;
-- AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update.
+- AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update;
+- Brepia is not a general Grasshopper automation product: broader scripting/logic may remain in Grasshopper, ChatGPT, Python or MCP-based workflows.
 
 ## Target loop
 
@@ -174,8 +175,9 @@ Required outcomes:
 - create Rhino-produced/reference GHX fixtures where available;
 - parse generated GHX with a safe bounded XML parser;
 - produce machine-readable validation diagnostics;
-- validate object identities, supported state, connection references and Brepia semantic contract;
-- provide a developer inspection path; GHXViewer may be used as a visual reference/debug aid but is not the correctness gate.
+- validate object identities, supported state, connection references and Brepia semantic contract.
+
+No embedded GHX viewer is required. The user can inspect exported files in Grasshopper. If something is wrong, they can return the GHX, describe the problem or provide screenshots for AI-assisted diagnosis.
 
 The validator must be deterministic. AI may repair failures but cannot declare an artifact valid by itself.
 
@@ -255,6 +257,22 @@ validator diagnostics -> AI interpretation/repair -> deterministic re-validation
 
 Never persist an AI-repaired generated artifact or returned GHX as canonical state until the deterministic gate passes.
 
+For issues visible only after export, the intended support path is simple: inspect in Grasshopper, then use the returned GHX plus user description/screenshots as AI troubleshooting context. Brepia does not need to duplicate Grasshopper's visual environment.
+
+## External logic boundary
+
+Brepia should stay focused on the supported products/model families and the canonical AI -> model -> preview -> GHX -> supported return loop.
+
+General Grasshopper automation does not need to move into Brepia. It can remain in tools such as:
+
+- ordinary Grasshopper graphs;
+- Rhino/Grasshopper Python or C# scripts;
+- ChatGPT-assisted scripting and interpretation;
+- MCP-controlled Rhino/Grasshopper workflows;
+- specialist plug-ins outside Brepia's supported round-trip contract.
+
+This is intentional scope control, not a missing feature.
+
 ## Phase 7 relationship
 
 The Phase 7 `.gha` smart component remains useful reference implementation and an optional fallback experiment. Installed-Rhino acceptance of that GHA path is no longer a prerequisite for the GHX-native baseline.
@@ -278,7 +296,6 @@ Keep evidence classes explicit:
 - portable compiler/parser/validator tests;
 - deterministic GHX fixture tests;
 - Rhino/Grasshopper SDK compile evidence where SDK code remains relevant;
-- visual diagnostic evidence (for example GHXViewer) — useful but not correctness proof;
 - installed Rhino/Grasshopper runtime evidence — required for final real-runtime acceptance.
 
 Do not promote evidence from one class into another.
