@@ -6,6 +6,8 @@ This document is the current architecture authority for Brepia's Grasshopper int
 
 The product goal is not to make Brepia a Grasshopper clone, and it is not to require a Brepia Grasshopper plug-in merely to use an exported model. The goal is to give Grasshopper the same role that OpenSCAD already has in Brepia: an AI-native professional CAD continuation format while Brepia remains able to create, preview, validate and revise the model before the external CAD tool is opened.
 
+Brepia is intentionally scoped to the products and parametric model families it chooses to support. It does not need to become a general-purpose Grasshopper automation, visualization or graph-authoring environment. Broader downstream logic can remain the responsibility of Grasshopper itself or external AI/tooling such as ChatGPT, Python scripts and MCP-based workflows.
+
 ## Product loop
 
 The target loop is:
@@ -60,6 +62,8 @@ Brepia validates and recovers the supported changes
   -> Brepia previews it
   -> a new GHX can be exported
 ```
+
+If a user adds unsupported Grasshopper logic, Brepia does not need to understand or preserve that logic in v1. The returned GHX may be classified as unsupported for canonical round-trip. The user can still describe the intended change, provide screenshots, or use other AI/tooling to reason about the Grasshopper-side workflow, while Brepia continues from its last valid canonical model.
 
 ## Authority and representations
 
@@ -126,6 +130,8 @@ Brepia may bootstrap component identifiers, state encodings and examples from pu
 
 GhJSON or similar formats may be useful as optional AI/debug adapters, but they are not canonical Brepia state and are not required by the product contract.
 
+AI can also assist after export. If a user encounters an issue in Grasshopper, they can describe the problem or provide screenshots/returned GHX for interpretation. That assistance does not require Brepia to embed a Grasshopper viewer or general graph debugger in the product.
+
 ## GHX validation
 
 AI must not be the only validator of generated or imported GHX.
@@ -191,13 +197,7 @@ An AI repair is never accepted merely because the AI says it is correct. It beco
 
 For unsupported imported GHX, AI may still explain what appears to have changed and help the user recreate the requested change in the canonical Brepia model. That interpretation is advisory until the supported-import gate proves that canonical state can be updated safely.
 
-## GHXViewer and diagnostic tools
-
-`seghier/GHXViewer` is useful as a development-time visual/parser diagnostic reference. It can parse and display GHX/XML structure and is useful for inspecting generated documents.
-
-It must not be treated as Brepia's correctness validator without additional evidence. Its current implementation uses browser XML parsing and visualization; it does not provide the full Brepia semantic and round-trip checks above.
-
-Brepia may use a viewer like GHXViewer for manual diagnostics or later build a small internal inspector, but the automated validator must remain independent and deterministic.
+Brepia does not need an embedded GHX viewer for this workflow. Grasshopper is the authoritative visual environment for the exported GHX. When troubleshooting is needed, the user can return the GHX, describe the problem, or provide screenshots for AI-assisted diagnosis.
 
 ## Strict v1 round-trip boundary
 
@@ -222,6 +222,20 @@ Unsupported initially:
 
 When unsupported content is detected, Brepia should state that it cannot guarantee or safely reuse that Grasshopper-modified model. The existing canonical Brepia revision remains intact.
 
+## Scope boundary for external logic
+
+Brepia should concentrate on creating, previewing, validating, parameterizing and exporting the supported product/model families it owns.
+
+It does not need to absorb every useful Grasshopper-side workflow into the application. General-purpose logic can remain external, for example:
+
+- ordinary native Grasshopper modeling downstream of the Brepia export;
+- Python or C# scripts used directly in Rhino/Grasshopper;
+- ChatGPT-assisted scripting or interpretation;
+- MCP-controlled Rhino/Grasshopper workflows;
+- specialist plug-ins that are not part of Brepia's supported round-trip contract.
+
+This keeps Brepia focused on the high-value loop while leaving open-ended CAD automation to tools that are already better suited to it.
+
 ## Acceptance principle
 
 A Grasshopper feature belongs in this roadmap when it improves this loop:
@@ -230,4 +244,4 @@ A Grasshopper feature belongs in this roadmap when it improves this loop:
 AI -> Brepia CAD -> preview/validate -> GHX -> human in Grasshopper -> supported GHX return -> Brepia AI
 ```
 
-Work that primarily turns Brepia into a weaker Grasshopper/Rhino clone does not belong in the baseline architecture.
+Work that primarily turns Brepia into a weaker Grasshopper/Rhino clone, a generic GHX viewer, or a general automation host does not belong in the baseline architecture.
