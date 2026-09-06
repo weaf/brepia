@@ -1,6 +1,4 @@
 import {
-  BREP_PROJECT_MAX_DESCRIPTION_CHARS,
-  BREP_PROJECT_MAX_NAME_CHARS,
   normalizeBrepProject,
   type BrepParameterUnit,
   type BrepProject,
@@ -397,8 +395,3 @@ export function parseBrepGrasshopperContractJson(
   }
   return normalizeBrepGrasshopperContract(value);
 }
-
-// Keep imported project text limits reachable from this module's public
-// contract without duplicating arbitrary new string limits for labels/docs.
-void BREP_PROJECT_MAX_NAME_CHARS;
-void BREP_PROJECT_MAX_DESCRIPTION_CHARS;
