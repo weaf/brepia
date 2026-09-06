@@ -119,11 +119,16 @@ describe('BRep Phase 7 Rhino/Grasshopper smart-component boundary', () => {
   });
 
   it('loads or replaces a portable contract explicitly instead of making its path canonical', () => {
-    assert.match(component, /Load Brepia contract…/);
-    assert.match(component, /Replace Brepia contract…/);
+    assert.match(component, /CreateAttributes\(\)/);
+    assert.match(component, /BrepiaProjectComponentAttributes/);
+    assert.match(component, /RespondToMouseDoubleClick/);
+    assert.match(component, /LoadContractFromDialog\(\)/);
+    assert.match(component, /Load Brepia Grasshopper contract/);
+    assert.match(component, /Replace Brepia Grasshopper contract/);
     assert.match(component, /Rhino\.UI\.OpenFileDialog/);
     assert.match(component, /\.brepia-grasshopper\.json/);
     assert.match(component, /LoadContractJson\(File\.ReadAllText\(dialog\.FileName\)\)/);
+    assert.doesNotMatch(component, /System\.Windows\.Forms/);
   });
 
   it('applies rigid WorldXY-to-target Plane placement to exact Breps and semantic data', () => {
