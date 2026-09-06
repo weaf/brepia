@@ -5,8 +5,10 @@ import { describe, it } from 'vitest';
 import {
   BrepGrasshopperGhxImportError,
   importBrepGrasshopperGhx,
+  importBrepGrasshopperGhxFile,
 } from '../src/services/brepGrasshopperImport.ts';
 import { compileBrepGrasshopperExecutableGhx } from '../shared/brepGrasshopperExecutableGhx.ts';
+import { BREP_GRASSHOPPER_GHX_ARCHIVE_MAX_BYTES } from '../shared/brepGrasshopperGhxArchive.ts';
 import type { BrepProject } from '../shared/brepProject.ts';
 
 const fixture = JSON.parse(
@@ -55,6 +57,28 @@ describe('BRep Phase 8G strict product GHX import', () => {
 
     assert.deepEqual(result.parameterValues, { height: 2100, width: 1200 });
     assert.deepEqual(result.changedParameterIds, []);
+  });
+
+  it('rejects oversized browser files before reading their complete text', async () => {
+    let read = false;
+    await assert.rejects(
+      () =>
+        importBrepGrasshopperGhxFile(
+          fixture.source,
+          fixture.model.sourceRevisionId,
+          {
+            size: BREP_GRASSHOPPER_GHX_ARCHIVE_MAX_BYTES + 1,
+            text: async () => {
+              read = true;
+              return '';
+            },
+          },
+        ),
+      (error: unknown) =>
+        error instanceof BrepGrasshopperGhxImportError &&
+        error.diagnostics.some((entry) => entry.code === 'too_large'),
+    );
+    assert.equal(read, false);
   });
 
   it('rejects a GHX exported from another Brepia revision even when project identity is stable', async () => {
