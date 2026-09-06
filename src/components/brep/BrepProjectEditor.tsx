@@ -54,12 +54,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
+import { exportBrepGrasshopperGhx } from '@/services/brepGrasshopperExport';
 import { exportBrep3dm, exportBrepStep } from '@/services/brepStepExport';
-import { download3DMFile, downloadSTEPFile } from '@/utils/downloadUtils';
 import {
-  createBrepGrasshopperContract,
-  serializeBrepGrasshopperContract,
-} from '@shared/brepGrasshopperContract';
+  download3DMFile,
+  downloadFile,
+  downloadSTEPFile,
+} from '@/utils/downloadUtils';
 import type { BrepNode, BrepProject } from '@shared/brepProject';
 import { replaceExistingBrepProjectNode } from '@shared/brepProjectEditing';
 import {
@@ -77,7 +78,7 @@ const BREP_EVALUATION_DEBOUNCE_MS = 120;
 // race the Podman request from the previous source snapshot.
 let browserBrepEditorEvaluationQueue: Promise<void> = Promise.resolve();
 
-type BrepDownloadFormat = 'step' | '3dm' | 'brep' | 'grasshopper';
+type BrepDownloadFormat = 'step' | '3dm' | 'brep' | 'ghx';
 
 export type BrepEditorRevision = {
   id: string;
@@ -104,7 +105,7 @@ type BrepProjectEditorContextValue = {
   exportStep: () => Promise<void>;
   export3dm: () => Promise<void>;
   exportProjectPackage: () => void;
-  exportGrasshopperContract: () => void;
+  exportGrasshopperGhx: () => Promise<void>;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
   revisionActionId: string | null;
@@ -488,40 +489,41 @@ export function BrepProjectEditorProvider({
     URL.revokeObjectURL(url);
   }, [packageTitle, project]);
 
-  const exportGrasshopperContract = useCallback(() => {
+  const exportGrasshopperGhx = useCallback(async () => {
     if (!activeRevisionId) {
-      setError(
-        'Grasshopper contract export requires an active immutable BRep revision.',
-      );
+      setError('Grasshopper GHX export requires an active immutable BRep revision.');
       return;
     }
+    if (dirty || exporting || saving || sourceSaving) return;
 
+    setExporting(true);
+    setError(null);
     try {
       const title = packageTitle ?? project.name;
-      const text = serializeBrepGrasshopperContract(
-        createBrepGrasshopperContract({
-          project,
-          sourceRevisionId: activeRevisionId,
-        }),
-      );
-      const url = URL.createObjectURL(
-        new Blob([text], { type: 'application/json' }),
-      );
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.brepia-grasshopper.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      const { ghx } = await exportBrepGrasshopperGhx(project, activeRevisionId);
+      downloadFile({
+        content: ghx,
+        filename: `${title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.ghx`,
+        mimeType: 'application/xml',
+      });
     } catch (reason) {
       if (mountedRef.current) {
         setError(
-          reason instanceof Error
-            ? reason.message
-            : 'Grasshopper contract export failed.',
+          reason instanceof Error ? reason.message : 'Grasshopper GHX export failed.',
         );
       }
+    } finally {
+      if (mountedRef.current) setExporting(false);
     }
-  }, [activeRevisionId, packageTitle, project]);
+  }, [
+    activeRevisionId,
+    dirty,
+    exporting,
+    packageTitle,
+    project,
+    saving,
+    sourceSaving,
+  ]);
 
   const runRevisionAction = useCallback(
     async (id: string, action: (id: string) => Promise<void>) => {
@@ -566,7 +568,7 @@ export function BrepProjectEditorProvider({
       exportStep,
       export3dm,
       exportProjectPackage,
-      exportGrasshopperContract,
+      exportGrasshopperGhx,
       revisions,
       activeRevisionId,
       revisionActionId,
@@ -579,7 +581,7 @@ export function BrepProjectEditorProvider({
       dirty,
       error,
       export3dm,
-      exportGrasshopperContract,
+      exportGrasshopperGhx,
       exportProjectPackage,
       exportStep,
       exporting,
@@ -860,20 +862,20 @@ function BrepExportBar() {
     exportStep,
     export3dm,
     exportProjectPackage,
-    exportGrasshopperContract,
+    exportGrasshopperGhx,
   } = useBrepProjectEditor();
   const [selectedFormat, setSelectedFormat] =
     useState<BrepDownloadFormat>('step');
 
   const nativeArtifactAvailable =
     !saving && !sourceSaving && !loading && !exporting;
-  const brepAvailable = !dirty && !saving && !sourceSaving;
-  const grasshopperAvailable = brepAvailable && Boolean(activeRevisionId);
+  const brepAvailable = !dirty && !saving && !sourceSaving && !exporting;
+  const ghxAvailable = brepAvailable && Boolean(activeRevisionId);
   const selectedAvailable =
     selectedFormat === 'brep'
       ? brepAvailable
-      : selectedFormat === 'grasshopper'
-        ? grasshopperAvailable
+      : selectedFormat === 'ghx'
+        ? ghxAvailable
         : nativeArtifactAvailable;
 
   const handleDownload = () => {
@@ -889,7 +891,7 @@ function BrepExportBar() {
       exportProjectPackage();
       return;
     }
-    exportGrasshopperContract();
+    void exportGrasshopperGhx();
   };
 
   return (
@@ -903,8 +905,7 @@ function BrepExportBar() {
           className="h-11 flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900 lg:h-12"
         >
           <Download className="mr-2 h-4 w-4" />
-          {exporting &&
-          (selectedFormat === 'step' || selectedFormat === '3dm')
+          {exporting && selectedFormat !== 'brep'
             ? 'EXPORTING…'
             : selectedFormat.toUpperCase()}
         </Button>
@@ -953,13 +954,13 @@ function BrepExportBar() {
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setSelectedFormat('grasshopper')}
-              disabled={!grasshopperAvailable}
+              onClick={() => setSelectedFormat('ghx')}
+              disabled={!ghxAvailable}
               className="cursor-pointer text-adam-text-primary"
             >
-              <span className="text-sm">.GH CONTRACT</span>
+              <span className="text-sm">.GHX</span>
               <span className="ml-3 text-xs text-adam-text-primary/60">
-                Grasshopper interoperability
+                Editable Grasshopper model
               </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -968,8 +969,8 @@ function BrepExportBar() {
       {dirty ? (
         <p className="text-[10px] text-adam-neutral-400">
           Save the parameter draft before exporting the canonical BRep project
-          package or Grasshopper contract. STEP and 3DM can still export the
-          current preview values.
+          package or Grasshopper GHX. STEP and 3DM can still export the current
+          preview values.
         </p>
       ) : null}
     </div>
