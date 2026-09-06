@@ -1,7 +1,6 @@
 import {
   ghxChunk,
   ghxChunks,
-  ghxDirectChild,
   ghxItemText,
   parseBrepGrasshopperGhxArchive,
   BrepGrasshopperGhxArchiveError,
