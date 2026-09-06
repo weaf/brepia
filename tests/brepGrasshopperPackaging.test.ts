@@ -23,13 +23,21 @@ const cli = fs.readFileSync(
   ),
   'utf8',
 );
+const ghIoProbeProject = fs.readFileSync(
+  new URL('../grasshopper/Brepia.GhIoProbe/Brepia.GhIoProbe.csproj', import.meta.url),
+  'utf8',
+);
+const ghIoProbe = fs.readFileSync(
+  new URL('../grasshopper/Brepia.GhIoProbe/Program.cs', import.meta.url),
+  'utf8',
+);
 const workflow = fs.readFileSync(
   new URL('../.github/workflows/grasshopper-build.yml', import.meta.url),
   'utf8',
 );
 
 describe('BRep Phase 8A Grasshopper packaging boundary', () => {
-  it('packages one embedded Brepia component through GH_IO without solving geometry', () => {
+  it('defines one embedded Brepia component package without solving geometry', () => {
     assert.match(packager, /new BrepiaProjectComponent\(\)/);
     assert.match(packager, /LoadContractJson\(contract\.NormalizedJson\)/);
     assert.match(packager, /new GH_Document\(\)/);
@@ -53,7 +61,7 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(packager, /brepia\.contract\.v1/);
   });
 
-  it('keeps the packager on the exact pinned Rhino 8 SDK pair', () => {
+  it('keeps Rhino-hosted package code on the exact pinned Rhino 8 SDK pair', () => {
     assert.match(cliProject, /<TargetFramework>net8\.0<\/TargetFramework>/);
     assert.match(cliProject, /RhinoCommon" Version="8\.34\.26223\.11001"/);
     assert.match(cliProject, /Grasshopper" Version="8\.34\.26223\.11001"/);
@@ -62,12 +70,27 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(cli, /brepia-grasshopper-package-result/);
   });
 
-  it('probes headless serialization on both Linux and Windows CI', () => {
-    assert.match(workflow, /package-proof:/);
+  it('isolates a standalone GH_IO probe from RhinoCommon and Grasshopper runtime references', () => {
+    assert.match(ghIoProbeProject, /GeneratePathProperty="true" ExcludeAssets="all"/);
+    assert.match(ghIoProbeProject, /<Reference Include="GH_IO">/);
+    assert.match(ghIoProbeProject, /lib\/net7\.0\/GH_IO\.dll/);
+    assert.doesNotMatch(ghIoProbeProject, /<Reference Include="RhinoCommon">/);
+    assert.doesNotMatch(ghIoProbeProject, /<Reference Include="Grasshopper">/);
+    assert.match(ghIoProbe, /GH_ISerializable/);
+    assert.match(ghIoProbe, /archive\.AppendObject/);
+    assert.match(ghIoProbe, /readBack\.ExtractObject/);
+  });
+
+  it('builds Rhino-hosted packaging code but runs only GH_IO standalone across Linux and Windows CI', () => {
+    assert.match(workflow, /package-build:/);
+    assert.match(workflow, /gh-io-runtime-proof:/);
     assert.match(workflow, /ubuntu-latest/);
     assert.match(workflow, /windows-latest/);
     assert.match(workflow, /Brepia\.Grasshopper\.Packager\.csproj/);
-    assert.match(workflow, /cabinet-a42\.brepia-grasshopper\.json/);
-    assert.match(workflow, /brepia-grasshopper-gh-\$\{\{ runner\.os \}\}/);
+    assert.match(workflow, /Brepia\.GhIoProbe\.csproj/);
+    assert.doesNotMatch(
+      workflow,
+      /dotnet run --project grasshopper\/Brepia\.Grasshopper\.Packager/,
+    );
   });
 });
