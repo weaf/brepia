@@ -14,12 +14,15 @@ import { createBrepGrasshopperPackagePlan } from './brepGrasshopperPackagePlan.t
 import {
   BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID,
   BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
+  BREP_GRASSHOPPER_SCRIPT_OBJECT_HINT_GUID,
   BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID,
   createBrepGrasshopperRhinoScriptPlan,
   type BrepGrasshopperRhinoScriptInput,
   type BrepGrasshopperRhinoScriptOutput,
   type BrepGrasshopperRhinoScriptPlan,
 } from './brepGrasshopperRhinoScript.ts';
+
+const SYSTEM_CORELIB = 'System.Private.CoreLib';
 
 export type BrepGrasshopperExecutableGhxDiagnostic = {
   code: string;
@@ -48,6 +51,14 @@ function parseFinite(value: string | undefined): number | undefined {
   if (value == null || value.length === 0) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function guidText(
+  parent: BrepGrasshopperGhxArchiveNode,
+  name: string,
+  index?: string,
+): string | undefined {
+  return ghxItemText(parent, name, index)?.toLowerCase();
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -89,11 +100,9 @@ function validateNumericControl(
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
   path: string,
 ): void {
-  const componentGuid = ghxItemText(object, 'GUID')?.toLowerCase();
+  const componentGuid = guidText(object, 'GUID');
   const container = objectContainer(object);
-  const instanceGuid = container
-    ? ghxItemText(container, 'InstanceGuid')?.toLowerCase()
-    : undefined;
+  const instanceGuid = container ? guidText(container, 'InstanceGuid') : undefined;
   if (!container || !instanceGuid) {
     error(diagnostics, 'invalid_control', 'Numeric control is missing Container/InstanceGuid.', path);
     return;
@@ -211,7 +220,7 @@ function validateInput(
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = `script/input:${expected.inputId}`;
-  if (ghxItemText(parameterData, 'InputId', String(index)) !== BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID) {
+  if (guidText(parameterData, 'InputId', String(index)) !== BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID) {
     error(diagnostics, 'script_input_type_changed', `Script input ${expected.inputId} parameter type changed.`, path);
   }
   const input = ghxChunk(parameterData, 'InputParam', String(index));
@@ -219,7 +228,7 @@ function validateInput(
     error(diagnostics, 'missing_script_input', `Script input ${expected.inputId} is missing.`, path);
     return;
   }
-  if (ghxItemText(input, 'InstanceGuid') !== expected.instanceGuid) {
+  if (guidText(input, 'InstanceGuid') !== expected.instanceGuid.toLowerCase()) {
     error(diagnostics, 'script_input_identity_changed', `Script input ${expected.inputId} identity changed.`, path);
   }
   if (
@@ -232,15 +241,23 @@ function validateInput(
   if (ghxItemText(input, 'SourceCount') !== expectedSourceCount) {
     error(diagnostics, 'script_rewired', `Script input ${expected.inputId} source count changed.`, path);
   }
-  const source = ghxItemText(input, 'Source', '0');
-  if (expected.sourceObjectGuid ? source !== expected.sourceObjectGuid : source != null) {
+  const source = guidText(input, 'Source', '0');
+  if (
+    expected.sourceObjectGuid
+      ? source !== expected.sourceObjectGuid.toLowerCase()
+      : source != null
+  ) {
     error(diagnostics, 'script_rewired', `Script input ${expected.inputId} was rewired.`, path);
   }
-  if (ghxItemText(input, 'TypeHintID') !== expected.typeHintGuid) {
+  if (guidText(input, 'TypeHintID') !== expected.typeHintGuid.toLowerCase()) {
     error(diagnostics, 'script_input_type_changed', `Script input ${expected.inputId} type hint changed.`, path);
   }
   const converter = ghxChunk(input, 'ConverterData');
-  if (!converter || ghxItemText(converter, 'TypeName') !== expected.converterType) {
+  if (
+    !converter ||
+    ghxItemText(converter, 'AssemblyName') !== SYSTEM_CORELIB ||
+    ghxItemText(converter, 'TypeName') !== expected.converterType
+  ) {
     error(diagnostics, 'script_input_type_changed', `Script input ${expected.inputId} converter changed.`, path);
   }
 }
@@ -252,7 +269,7 @@ function validateOutput(
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = `script/output:${expected.outputId}`;
-  if (ghxItemText(parameterData, 'OutputId', String(index)) !== BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID) {
+  if (guidText(parameterData, 'OutputId', String(index)) !== BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID) {
     error(diagnostics, 'script_output_type_changed', `Script output ${expected.outputId} parameter type changed.`, path);
   }
   const output = ghxChunk(parameterData, 'OutputParam', String(index));
@@ -260,7 +277,7 @@ function validateOutput(
     error(diagnostics, 'missing_script_output', `Script output ${expected.outputId} is missing.`, path);
     return;
   }
-  if (ghxItemText(output, 'InstanceGuid') !== expected.instanceGuid) {
+  if (guidText(output, 'InstanceGuid') !== expected.instanceGuid.toLowerCase()) {
     error(diagnostics, 'script_output_identity_changed', `Script output ${expected.outputId} identity changed.`, path);
   }
   if (
@@ -272,6 +289,15 @@ function validateOutput(
   if (ghxItemText(output, 'SourceCount') !== '0') {
     error(diagnostics, 'script_output_rewired', `Script output ${expected.outputId} unexpectedly has a source.`, path);
   }
+  const converter = ghxChunk(output, 'ConverterData');
+  if (
+    guidText(output, 'TypeHintID') !== BREP_GRASSHOPPER_SCRIPT_OBJECT_HINT_GUID ||
+    !converter ||
+    ghxItemText(converter, 'AssemblyName') !== SYSTEM_CORELIB ||
+    ghxItemText(converter, 'TypeName') !== 'System.Object'
+  ) {
+    error(diagnostics, 'script_output_type_changed', `Script output ${expected.outputId} converter or type hint changed.`, path);
+  }
 }
 
 function validateScript(
@@ -280,10 +306,10 @@ function validateScript(
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = 'DefinitionObjects/BrepiaScript';
-  if (ghxItemText(object, 'GUID') !== BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID) {
+  if (guidText(object, 'GUID') !== BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID) {
     error(diagnostics, 'script_type_changed', 'Brepia C# Script component type changed.', path);
   }
-  if (ghxItemText(object, 'Lib') !== BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID) {
+  if (guidText(object, 'Lib') !== BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID) {
     error(diagnostics, 'script_library_changed', 'Brepia C# Script library identity changed.', path);
   }
   const container = objectContainer(object);
@@ -291,8 +317,27 @@ function validateScript(
     error(diagnostics, 'missing_script_container', 'Brepia C# Script Container is missing.', path);
     return;
   }
-  if (ghxItemText(container, 'InstanceGuid') !== expected.componentInstanceGuid) {
+  if (guidText(container, 'InstanceGuid') !== expected.componentInstanceGuid.toLowerCase()) {
     error(diagnostics, 'script_identity_changed', 'Brepia C# Script instance identity changed.', path);
+  }
+  if (
+    ghxItemText(container, 'Name') !== 'C# Script' ||
+    ghxItemText(container, 'NickName') !== expected.componentNickname ||
+    ghxItemText(container, 'GraftStandardOutputLines') !== 'true' ||
+    ghxItemText(container, 'MarshGuids') !== 'false' ||
+    ghxItemText(container, 'MarshInputs') !== 'false' ||
+    ghxItemText(container, 'MarshOutputs') !== 'false' ||
+    ghxItemText(container, 'UsingLibraryInputParam') !== 'false' ||
+    ghxItemText(container, 'UsingScriptInputParam') !== 'false' ||
+    ghxItemText(container, 'UsingScriptOutputParam') !== 'false' ||
+    ghxItemText(container, 'UsingStandardOutputParam') !== 'false'
+  ) {
+    error(
+      diagnostics,
+      'script_runtime_settings_changed',
+      'Brepia C# Script runtime settings changed.',
+      path,
+    );
   }
   if (ghxItemText(container, 'ScriptComponentVersion') !== '3') {
     error(diagnostics, 'script_version_changed', 'Brepia C# Script persistence version changed.', path);
@@ -303,10 +348,16 @@ function validateScript(
     error(diagnostics, 'missing_script_parameters', 'Brepia C# Script ParameterData is missing.', path);
     return;
   }
-  if (ghxItemText(parameterData, 'InputCount') !== String(expected.inputs.length)) {
+  if (
+    ghxItemText(parameterData, 'InputCount') !== String(expected.inputs.length) ||
+    ghxChunks(parameterData, 'InputParam').length !== expected.inputs.length
+  ) {
     error(diagnostics, 'script_input_count_changed', 'Brepia C# Script input count changed.', path);
   }
-  if (ghxItemText(parameterData, 'OutputCount') !== String(expected.outputs.length)) {
+  if (
+    ghxItemText(parameterData, 'OutputCount') !== String(expected.outputs.length) ||
+    ghxChunks(parameterData, 'OutputParam').length !== expected.outputs.length
+  ) {
     error(diagnostics, 'script_output_count_changed', 'Brepia C# Script output count changed.', path);
   }
   expected.inputs.forEach((input, index) =>
@@ -321,6 +372,19 @@ function validateScript(
     error(diagnostics, 'missing_script_source', 'Brepia C# Script source chunk is missing.', path);
     return;
   }
+  if (
+    ghxItemText(script, 'MarshGuids') !== 'false' ||
+    ghxItemText(script, 'MarshInputs') !== 'false' ||
+    ghxItemText(script, 'MarshOutputs') !== 'false' ||
+    ghxItemText(script, 'Title') !== 'Brepia'
+  ) {
+    error(
+      diagnostics,
+      'script_runtime_settings_changed',
+      'Embedded Brepia C# Script settings changed.',
+      path,
+    );
+  }
   if (ghxItemText(script, 'Text') !== expectedSourceBase64(expected.source)) {
     error(
       diagnostics,
@@ -330,8 +394,12 @@ function validateScript(
     );
   }
   const language = ghxChunk(script, 'LanguageSpec');
-  if (!language || ghxItemText(language, 'Taxon') !== '*.*.csharp') {
-    error(diagnostics, 'script_language_changed', 'Brepia script is no longer C#.', path);
+  if (
+    !language ||
+    ghxItemText(language, 'Taxon') !== '*.*.csharp' ||
+    ghxItemText(language, 'Version') !== '*.*'
+  ) {
+    error(diagnostics, 'script_language_changed', 'Brepia script language/version changed.', path);
   }
 }
 
@@ -396,13 +464,21 @@ export async function validateBrepGrasshopperExecutableGhx(
   }
 
   const expectedControls = new Map(
-    packagePlan.controls.map((control) => [control.instanceGuid, control]),
+    packagePlan.controls.map((control) => [control.instanceGuid.toLowerCase(), control]),
   );
   const seenControls = new Set<string>();
   let scriptCount = 0;
 
   objects.forEach((object, index) => {
-    const guid = ghxItemText(object, 'GUID')?.toLowerCase();
+    if (object.attributes.index !== String(index)) {
+      error(
+        diagnostics,
+        'object_index_mismatch',
+        `Grasshopper object index ${object.attributes.index ?? '(missing)'} does not match expected index ${index}.`,
+        `DefinitionObjects/Object[${index}]`,
+      );
+    }
+    const guid = guidText(object, 'GUID');
     if (
       guid === BREP_GRASSHOPPER_GHX_NUMBER_SLIDER_GUID ||
       guid === BREP_GRASSHOPPER_GHX_NUMBER_PARAMETER_GUID
@@ -436,7 +512,7 @@ export async function validateBrepGrasshopperExecutableGhx(
   });
 
   for (const control of packagePlan.controls) {
-    if (!seenControls.has(control.instanceGuid)) {
+    if (!seenControls.has(control.instanceGuid.toLowerCase())) {
       error(
         diagnostics,
         'missing_parameter_control',
