@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Rhino;
 using Rhino.DocObjects;
@@ -10,10 +11,14 @@ public sealed record BrepiaImportedExactArtifacts(
     IReadOnlyDictionary<string, Brep> BrepsByRole,
     string? PlacementJson,
     string? ProjectObjectJson,
-    string? MetadataJson);
+    string? MetadataJson,
+    IReadOnlyList<string> Warnings);
 
 public static class BrepiaExactArtifactImporter
 {
+    private const int MaxWarnings = 128;
+    private const int MaxWarningChars = 4096;
+
     public static BrepiaImportedExactArtifacts Import(
         byte[] threeDmBytes,
         BrepiaGrasshopperContract contract)
@@ -46,6 +51,7 @@ public static class BrepiaExactArtifactImporter
                 ?? throw new InvalidDataException(
                     "Brepia 3DM response is missing brepia.exactBrepArtifacts.");
             ValidateManifest(manifestJson, contract.ExactArtifacts);
+            var warnings = ParseWarnings(model.Strings.GetValue("brepia.warnings"));
 
             var embeddedByName = new Dictionary<string, File3dmEmbeddedFile>(StringComparer.Ordinal);
             foreach (var embedded in model.EmbeddedFiles)
@@ -89,7 +95,8 @@ public static class BrepiaExactArtifactImporter
                 imported,
                 model.Strings.GetValue("brepia.placement"),
                 model.Strings.GetValue("brepia.projectObject"),
-                model.Strings.GetValue("brepia.metadata"));
+                model.Strings.GetValue("brepia.metadata"),
+                warnings);
         }
         finally
         {
@@ -130,6 +137,42 @@ public static class BrepiaExactArtifactImporter
         return breps[0];
     }
 
+    private static IReadOnlyList<string> ParseWarnings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+
+        JsonArray warnings;
+        try
+        {
+            warnings = JsonNode.Parse(json) as JsonArray
+                ?? throw new InvalidDataException("brepia.warnings must be a JSON array.");
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("brepia.warnings is invalid JSON.", error);
+        }
+
+        if (warnings.Count > MaxWarnings)
+        {
+            throw new InvalidDataException(
+                $"Brepia evaluator returned more than {MaxWarnings} warnings.");
+        }
+
+        var result = new List<string>(warnings.Count);
+        foreach (var node in warnings)
+        {
+            if (node is not JsonValue value ||
+                !value.TryGetValue<string>(out var warning) ||
+                warning.Length > MaxWarningChars)
+            {
+                throw new InvalidDataException(
+                    $"Every Brepia warning must be text of at most {MaxWarningChars} characters.");
+            }
+            if (!string.IsNullOrWhiteSpace(warning)) result.Add(warning.Trim());
+        }
+        return result;
+    }
+
     private static void ValidateManifest(
         string json,
         IReadOnlyList<BrepiaExactArtifactExpectation> expected)
@@ -140,7 +183,7 @@ public static class BrepiaExactArtifactImporter
             manifest = JsonNode.Parse(json) as JsonArray
                 ?? throw new InvalidDataException("brepia.exactBrepArtifacts must be a JSON array.");
         }
-        catch (System.Text.Json.JsonException error)
+        catch (JsonException error)
         {
             throw new InvalidDataException("brepia.exactBrepArtifacts is invalid JSON.", error);
         }
