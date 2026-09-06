@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'grasshopper/**'
+      - 'tests/brepGrasshopperPlugin.test.ts'
       - '.github/workflows/grasshopper-build.yml'
   push:
     branches:
       - master
     paths:
       - 'grasshopper/**'
+      - 'tests/brepGrasshopperPlugin.test.ts'
       - '.github/workflows/grasshopper-build.yml'
 
 permissions:
@@ -32,3 +34,11 @@ jobs:
 
       - name: Build
         run: dotnet build grasshopper/Brepia.Grasshopper/Brepia.Grasshopper.csproj --configuration Release --no-restore --warnaserror
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: brepia-grasshopper
+          path: grasshopper/Brepia.Grasshopper/bin/Release/net8.0/Brepia.Grasshopper.gha
+          if-no-files-found: error
+          retention-days: 14
