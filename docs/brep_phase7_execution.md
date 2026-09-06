@@ -11,7 +11,7 @@ Merge pull request #34 — Phase 6: Grasshopper export contract
 
 Current implementation is authoritative. `docs/brep_kernel_plan.md` remains roadmap context; completed Phase 1–6 execution/status documents are evidence, not independent source authority.
 
-Phase 7A–7C are repository-complete. Phase 7D real Rhino/Grasshopper runtime acceptance remains before the PR can leave draft.
+Phase 7A–7C are repository-complete. Phase 7D real Rhino/Grasshopper runtime acceptance is intentionally deferred until an installed Rhino 8 runtime is available. Lack of that runtime does not block repository/CI-verifiable follow-on development, but deferred acceptance must not be represented as completed runtime evidence.
 
 ## Product boundary
 
@@ -258,9 +258,9 @@ Implemented and CI-compiled:
 - cross-platform Grasshopper double-click contract load/replace action;
 - `.gha` artifact publication from CI for Phase 7D acceptance.
 
-### 7D — Real Rhino/Grasshopper acceptance — active next
+### 7D — Real Rhino/Grasshopper acceptance — deferred runtime evidence
 
-Acceptance must use an installed Rhino 8 / Grasshopper runtime, not only static source tests or SDK compilation.
+Acceptance requires an installed Rhino 8 / Grasshopper runtime, not only static source tests or SDK compilation. It is intentionally deferred while that runtime is not conveniently available. Repository/CI-verifiable development may continue, but nothing should claim the following runtime behavior as accepted until this checklist is actually executed.
 
 Representative acceptance:
 
@@ -277,25 +277,45 @@ Representative acceptance:
 11. save/reopen the Grasshopper document and verify embedded contract/project/revision identity plus compatible input wiring survives;
 12. ordinary Brepia operation remains independent of Rhino.
 
-## CI evidence before 7D
+## Development policy while 7D is deferred
 
-The Phase 7C code/artifact checkpoint is:
+Until an installed Rhino runtime is available, continue only work that has a meaningful non-Rhino verification path. The preferred evidence stack is:
 
 ```text
-ce5e3262942ed1705e7c906838aa1b76424f70fd
-Record Phase 7C implementation boundary
+pure contract/state tests
+        +
+.NET/Rhino/Grasshopper SDK compilation
+        +
+GH_IO serialization tests where runtime-independent
+        +
+rhino3dm/openNURBS 3DM validation
+        +
+Brepia native OCCT/build123d smoke/evaluator tests
+        |
+        v
+installed Rhino/Grasshopper acceptance later
 ```
 
-No Grasshopper/plugin source changed after the successful build of that checkpoint. On that code/artifact checkpoint:
+The deferred Rhino checklist is an acceptance debt, not a reason to stall unrelated implementation. Conversely, SDK compilation or archive serialization must never be presented as proof that Grasshopper solved the component or that Rhino imported the exact BRep correctly at runtime.
 
-- Grasshopper Build #13 / run `34027874628` — PASS;
+## CI evidence before deferred 7D
+
+Current branch checkpoint before this policy update:
+
+```text
+4c714805f16bfbb38161cda857262dc256d902ca
+```
+
+On that exact head:
+
+- Grasshopper Build #15 / run `34028020269` — PASS;
 - `dotnet restore` — PASS;
 - `dotnet build --configuration Release --no-restore --warnaserror` — PASS;
 - CI artifact `brepia-grasshopper` — published;
-- Quality Gate #437 / run `34027874632` — PASS;
+- Quality Gate #439 / run `34028020315` — PASS;
 - tests/typecheck/lint/build/diff check — PASS.
 
-Subsequent branch commits in this document-only closeout section do not change the plugin artifact selected for 7D acceptance.
+The Phase 7C implementation itself was complete by `ce5e3262942ed1705e7c906838aa1b76424f70fd`; later commits only reconciled Phase 7 documentation and acceptance policy.
 
 ## External repository assessment
 
@@ -363,4 +383,4 @@ npm run build
 git diff --check
 ```
 
-The C# plugin additionally requires the Rhino 8 SDK build gate and then real Rhino/Grasshopper acceptance in 7D. A generic npm CI pass cannot substitute for the installed Rhino runtime acceptance.
+The C# plugin additionally requires the Rhino 8 SDK build gate. Real installed Rhino/Grasshopper acceptance remains separately tracked as deferred 7D evidence; generic npm/.NET CI cannot substitute for it.
