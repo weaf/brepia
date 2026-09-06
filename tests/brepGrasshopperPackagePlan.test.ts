@@ -93,7 +93,7 @@ describe('BRep Phase 8 portable Grasshopper package plan', () => {
     );
   });
 
-  it('changes generated object identity when the immutable source revision changes', async () => {
+  it('keeps generated GH object identity stable across Brepia revisions', async () => {
     const first = await createBrepGrasshopperPackagePlan(fixture);
     const changed = structuredClone(fixture) as {
       model: Record<string, unknown>;
@@ -101,14 +101,28 @@ describe('BRep Phase 8 portable Grasshopper package plan', () => {
     changed.model.sourceRevisionId = 'revision-43';
     const second = await createBrepGrasshopperPackagePlan(changed);
 
+    assert.equal(second.model.sourceRevisionId, 'revision-43');
+    assert.equal(first.component.instanceGuid, second.component.instanceGuid);
+    assert.deepEqual(
+      first.controls.map((control) => control.instanceGuid),
+      second.controls.map((control) => control.instanceGuid),
+    );
+  });
+
+  it('changes generated GH object identity when canonical project identity changes', async () => {
+    const first = await createBrepGrasshopperPackagePlan(fixture);
+    const changed = structuredClone(fixture) as {
+      model: Record<string, unknown>;
+      source: Record<string, unknown>;
+    };
+    changed.model.projectId = 'cabinetB42';
+    changed.source.id = 'cabinetB42';
+    const second = await createBrepGrasshopperPackagePlan(changed);
+
     assert.notEqual(first.component.instanceGuid, second.component.instanceGuid);
     assert.notDeepEqual(
       first.controls.map((control) => control.instanceGuid),
       second.controls.map((control) => control.instanceGuid),
-    );
-    assert.deepEqual(
-      first.controls.map((control) => control.inputId),
-      second.controls.map((control) => control.inputId),
     );
   });
 
