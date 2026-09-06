@@ -54,6 +54,7 @@ import { Route as ApiAiSettingsProfilesProfileIdRouteImport } from './routes/api
 import { Route as ApiAiSettingsProvidersProviderIdRouteImport } from './routes/api/ai-settings/providers/$providerId';
 import { Route as ApiAiSettingsProvidersBuiltinsRouteImport } from './routes/api/ai-settings/providers/builtins';
 import { Route as ApiAiSettingsProvidersTestRouteImport } from './routes/api/ai-settings/providers/test';
+import { Route as ApiBrepExportGrasshopperPlanRouteImport } from './routes/api/brep/export.grasshopper-plan';
 import { Route as ApiBrepExportStepRouteImport } from './routes/api/brep/export.step';
 import { Route as ApiInternalAccountDeleteRouteImport } from './routes/api/internal/account/delete';
 import { Route as ApiModelsCatalogAllRouteImport } from './routes/api/models/catalog/all';
@@ -291,6 +292,12 @@ const ApiAiSettingsProvidersTestRoute =
     path: '/test',
     getParentRoute: () => ApiAiSettingsProvidersRoute,
   } as any);
+const ApiBrepExportGrasshopperPlanRoute =
+  ApiBrepExportGrasshopperPlanRouteImport.update({
+    id: '/api/brep/export/grasshopper-plan',
+    path: '/api/brep/export/grasshopper-plan',
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const ApiBrepExportStepRoute = ApiBrepExportStepRouteImport.update({
   id: '/api/brep/export/step',
   path: '/api/brep/export/step',
@@ -363,6 +370,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute;
+  '/api/brep/export/grasshopper-plan': typeof ApiBrepExportGrasshopperPlanRoute;
   '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
@@ -412,6 +420,7 @@ export interface FileRoutesByTo {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute;
+  '/api/brep/export/grasshopper-plan': typeof ApiBrepExportGrasshopperPlanRoute;
   '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
@@ -465,6 +474,7 @@ export interface FileRoutesById {
   '/api/ai-settings/providers/$providerId': typeof ApiAiSettingsProvidersProviderIdRouteWithChildren;
   '/api/ai-settings/providers/builtins': typeof ApiAiSettingsProvidersBuiltinsRoute;
   '/api/ai-settings/providers/test': typeof ApiAiSettingsProvidersTestRoute;
+  '/api/brep/export/grasshopper-plan': typeof ApiBrepExportGrasshopperPlanRoute;
   '/api/brep/export/step': typeof ApiBrepExportStepRoute;
   '/api/internal/account/delete': typeof ApiInternalAccountDeleteRoute;
   '/api/models/catalog/all': typeof ApiModelsCatalogAllRoute;
@@ -517,6 +527,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
+    | '/api/brep/export/grasshopper-plan'
     | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
@@ -566,6 +577,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
+    | '/api/brep/export/grasshopper-plan'
     | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
@@ -618,6 +630,7 @@ export interface FileRouteTypes {
     | '/api/ai-settings/providers/$providerId'
     | '/api/ai-settings/providers/builtins'
     | '/api/ai-settings/providers/test'
+    | '/api/brep/export/grasshopper-plan'
     | '/api/brep/export/step'
     | '/api/internal/account/delete'
     | '/api/models/catalog/all'
@@ -657,6 +670,7 @@ export interface RootRouteChildren {
   ApiSettingsAdminModelsRoute: typeof ApiSettingsAdminModelsRoute;
   ApiSettingsInstanceIdentityRoute: typeof ApiSettingsInstanceIdentityRoute;
   ApiSettingsRuntimeIntegrationsRoute: typeof ApiSettingsRuntimeIntegrationsRoute;
+  ApiBrepExportGrasshopperPlanRoute: typeof ApiBrepExportGrasshopperPlanRoute;
   ApiBrepExportStepRoute: typeof ApiBrepExportStepRoute;
   ApiInternalAccountDeleteRoute: typeof ApiInternalAccountDeleteRoute;
 }
@@ -978,6 +992,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiSettingsProvidersTestRouteImport;
       parentRoute: typeof ApiAiSettingsProvidersRoute;
     };
+    '/api/brep/export/grasshopper-plan': {
+      id: '/api/brep/export/grasshopper-plan';
+      path: '/api/brep/export/grasshopper-plan';
+      fullPath: '/api/brep/export/grasshopper-plan';
+      preLoaderRoute: typeof ApiBrepExportGrasshopperPlanRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     '/api/brep/export/step': {
       id: '/api/brep/export/step';
       path: '/api/brep/export/step';
@@ -1171,6 +1192,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSettingsAdminModelsRoute: ApiSettingsAdminModelsRoute,
   ApiSettingsInstanceIdentityRoute: ApiSettingsInstanceIdentityRoute,
   ApiSettingsRuntimeIntegrationsRoute: ApiSettingsRuntimeIntegrationsRoute,
+  ApiBrepExportGrasshopperPlanRoute: ApiBrepExportGrasshopperPlanRoute,
   ApiBrepExportStepRoute: ApiBrepExportStepRoute,
   ApiInternalAccountDeleteRoute: ApiInternalAccountDeleteRoute,
 };
