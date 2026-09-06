@@ -2,14 +2,16 @@
 
 ## Status
 
-Active on `feature/brep-rhino3dm-interoperability` from accepted Phase 5C merge checkpoint:
+Complete and accepted on PR #33 from accepted Phase 5C merge checkpoint:
 
 ```text
 e7b679cfa0b89478f0ce8d016dc374ab60d423ab
 Merge pull request #32 — Phase 5C: BRep project-object authoring
 ```
 
-The implementation and `docs/brep_phase5_execution.md` remain the architectural authority. This document records the dependency/conversion findings and the intentionally narrow 5D execution contract.
+The final Phase 5 `master` checkpoint is defined by the PR #33 merge commit rather than a pre-merge branch SHA.
+
+The implementation and `docs/brep_phase5_execution.md` remain the architectural authority. This document records the dependency/conversion findings, the intentionally narrow 5D contract and its acceptance evidence.
 
 ## Dependency decision
 
@@ -20,9 +22,11 @@ Selection criteria verified before implementation:
 - stable rhino3dm 8.32.1 release rather than a beta release;
 - CPython 3.12 manylinux wheels for the Linux architectures relevant to the native sandbox;
 - headless 3DM read/write through openNURBS without requiring Rhino desktop, RhinoCommon or Rhino.Compute;
-- rhino3dm upstream license is MIT; the built image must retain applicable rhino3dm/openNURBS notices.
+- rhino3dm upstream license is MIT; the built image retains applicable rhino3dm/openNURBS notices.
 
 `rhino3dm` is an interoperability/document library here, not Brepia's modeling kernel.
+
+The slim native image also includes `fontconfig` so rhino3dm's headless font initialization has a valid default configuration. The image's base pip version is intentionally not upgraded solely for 5D because it installs all pinned wheels successfully and is not part of the runtime interoperability contract.
 
 ## Geometry fidelity decision
 
@@ -57,9 +61,11 @@ If one node carries multiple roles, the 3DM contains one mesh object for that ca
 
 The existing rootless Podman sandbox remains authoritative. Runtime networking stays disabled and rhino3dm is installed only in the pinned native image.
 
-The driver must fail closed before success if its own 3DM cannot be independently re-opened with rhino3dm, if millimetre units or project/placement identity fail to round trip, or if the embedded STEP cannot be extracted with its ISO-10303-21 signature intact.
+The driver fails closed before success if its own 3DM cannot be independently re-opened with rhino3dm, if millimetre units or project/placement identity fail to round trip, or if the embedded STEP cannot be extracted with its ISO-10303-21 signature intact.
 
 The host additionally accepts 3DM bytes only from a regular non-symlink file below the existing artifact-size cap and with a valid `3D Geometry File Format ` header.
+
+The Python binding uses `File3dmStringTable` mapping syntax (`model.Strings[key] = value`) for document user strings. A real native smoke exposed and corrected the initially assumed non-Python `SetString` spelling before acceptance.
 
 ## HTTP/product transport
 
@@ -69,6 +75,8 @@ The existing authenticated native export route remains backward-compatible for S
 - `Accept: model/vnd.3dm` -> `model/vnd.3dm` interoperability artifact.
 
 This avoids introducing a second execution or authorization path solely for an output format. A future Grasshopper packaging API may introduce its own higher-level endpoint in Phase 6+.
+
+The existing BRep download selector exposes `.STEP`, `.3DM` and `.BREP JSON`. STEP and 3DM use current preview parameter values; the canonical Brepia package continues to require saved source state.
 
 ## Explicit non-goals
 
@@ -84,18 +92,21 @@ This avoids introducing a second execution or authorization path solely for an o
 - multi-result STEP semantics;
 - changes to OpenSCAD workflows.
 
-## Acceptance
+## Acceptance closeout
 
-5D can close Phase 5 only after all of the following are true:
+Phase 5D is accepted and closes Phase 5.
 
-1. the pinned native image builds with build123d/OCCT plus `rhino3dm==8.32.1`;
-2. real rootless-Podman smoke emits valid `result.json`, exact `model.step` and `model.3dm`;
-3. the driver re-opens the 3DM headlessly and verifies millimetre units, project/placement identity and embedded exact STEP extraction;
-4. a representative project preserves primary Result, FP/CL/MT roles and semantic points in the 3DM contract without duplicate meshes for one multi-role node;
-5. host validation rejects malformed/oversized 3DM artifacts before bytes are exposed;
-6. authenticated STEP export remains unchanged and 3DM export returns the negotiated media type/artifact;
-7. a user-facing BRep download path exposes 3DM without changing canonical source/revision semantics;
-8. ordinary Model/Graph, parameter evaluation, immutable revisions, STEP and BRep JSON regressions remain green;
-9. OpenSCAD behavior remains unchanged;
-10. repository tests, typecheck, lint, build and diff checks are green;
-11. Phase 5 execution documentation is reconciled and Phase 5 is marked complete.
+Evidence on 2026-09-06:
+
+- the rebuilt native image successfully installed the pinned build123d/OCCT stack plus `rhino3dm==8.32.1` and the required headless font configuration;
+- real rootless-Podman smoke completed successfully with primary result `cut`, 732 triangles, semantic roles `footprint`, `clearanceEnvelope` and `maintenanceEnvelope`, and `cableEntry` resolved to position `[50,10,0]` with direction `[0,0,1]`;
+- the same smoke emitted both `model.step` and `model.3dm`;
+- because success is written only after the driver's internal verification, that smoke also proves rhino3dm independently re-opened the generated 3DM, verified millimetre units/project/placement identity, extracted `brepia-primary.step` and verified its STEP signature;
+- browser acceptance confirmed ordinary Model/Graph behavior, parameter-driven native preview, STEP export, 3DM export and canonical BRep JSON behavior remained green;
+- 3DM files from both tested cases were independently opened successfully in a separate mobile application;
+- host-side malformed/oversized/header validation is regression-covered before artifact exposure;
+- the user-facing `.3DM` export uses current preview parameter values like STEP without changing canonical source/revision semantics;
+- Quality Gate #397 passed after the real-runtime binding/fontconfig correction with tests, typecheck, lint, build and diff check green;
+- a final Quality Gate must pass on the exact documentation closeout head before PR #33 is merged.
+
+PR #33 is the Phase 5 closeout vehicle. Its merge commit becomes the final Phase 5 `master` checkpoint.
