@@ -32,7 +32,18 @@ public static class BrepiaGrasshopperDocumentPackager
         string outputPath)
     {
         var contract = BrepiaGrasshopperContract.Parse(contractJson);
-        var plan = BrepiaGrasshopperPackagePlan.Create(contract);
+        return WritePlan(BrepiaGrasshopperPackagePlan.Create(contract), outputPath);
+    }
+
+    public static BrepiaGrasshopperPackageResult WritePackagePlan(
+        string packagePlanJson,
+        string outputPath) =>
+        WritePlan(BrepiaGrasshopperPackagePlan.Parse(packagePlanJson), outputPath);
+
+    private static BrepiaGrasshopperPackageResult WritePlan(
+        BrepiaGrasshopperPackagePlan plan,
+        string outputPath)
+    {
         var fullOutputPath = Path.GetFullPath(outputPath);
         if (!string.Equals(
                 Path.GetExtension(fullOutputPath),
@@ -99,8 +110,8 @@ public static class BrepiaGrasshopperDocumentPackager
         return new BrepiaGrasshopperPackageResult(
             fullOutputPath,
             fileInfo.Length,
-            contract.ProjectId,
-            contract.SourceRevisionId,
+            plan.Contract.ProjectId,
+            plan.Contract.SourceRevisionId,
             plan.Component.InstanceGuid,
             generatedControls.Length);
     }
