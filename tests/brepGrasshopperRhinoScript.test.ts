@@ -20,8 +20,22 @@ const fixture = JSON.parse(
   ),
 ) as Record<string, unknown>;
 
-function cloneFixture(): Record<string, any> {
-  return JSON.parse(JSON.stringify(fixture)) as Record<string, any>;
+type MutableFixture = Record<string, unknown> & {
+  model: Record<string, unknown> & {
+    sourceRevisionId: string;
+  };
+  source: Record<string, unknown> & {
+    nodes: Array<Record<string, unknown>>;
+    resultNodeId: string;
+    projectObject: Record<string, unknown> & {
+      footprintNodeId?: string;
+      clearanceEnvelopeNodeId?: string;
+    };
+  };
+};
+
+function cloneFixture(): MutableFixture {
+  return JSON.parse(JSON.stringify(fixture)) as MutableFixture;
 }
 
 describe('BRep Phase 8E-B Rhino C# script plan', () => {
