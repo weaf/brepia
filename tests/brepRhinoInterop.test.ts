@@ -32,6 +32,12 @@ describe('BRep Rhino/openNURBS interoperability contract', () => {
     assert.match(containerfile, /ARG RHINO3DM_VERSION=8\.32\.1/);
     assert.match(containerfile, /rhino3dm==\$\{RHINO3DM_VERSION\}/);
     assert.match(containerfile, /m\.version\('rhino3dm'\)/);
+    assert.match(containerfile, /fontconfig libgl1/);
+  });
+
+  it('uses the actual rhino3dm Python document-string API', () => {
+    assert.match(driver, /model\.Strings\[key\] = value/);
+    assert.doesNotMatch(driver, /model\.Strings\.SetString/);
   });
 
   it('writes native 3DM semantics without pretending tessellation is exact BRep conversion', () => {
