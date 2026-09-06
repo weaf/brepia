@@ -5,6 +5,7 @@ on:
     paths:
       - 'grasshopper/**'
       - 'tests/brepGrasshopperPlugin.test.ts'
+      - 'tests/brepGrasshopperPackaging.test.ts'
       - '.github/workflows/grasshopper-build.yml'
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'grasshopper/**'
       - 'tests/brepGrasshopperPlugin.test.ts'
+      - 'tests/brepGrasshopperPackaging.test.ts'
       - '.github/workflows/grasshopper-build.yml'
 
 permissions:
