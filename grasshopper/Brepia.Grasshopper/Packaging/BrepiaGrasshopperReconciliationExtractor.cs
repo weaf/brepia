@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Brepia.Grasshopper.Components;
+using Brepia.Grasshopper.Runtime;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Special;
@@ -244,7 +245,10 @@ public static class BrepiaGrasshopperReconciliationExtractor
             }
             if (sourceObject is Param_Number numberParameter)
             {
-                var persistent = numberParameter.PersistentData.AllData(true).ToArray();
+                var persistent = numberParameter.PersistentData
+                    .AllData(true)
+                    .OfType<GH_Number>()
+                    .ToArray();
                 if (persistent.Length == 1) return persistent[0].Value;
             }
         }
