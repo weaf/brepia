@@ -2,27 +2,24 @@
 
 ## Status
 
-Phase 5 — project-object contract and Rhino interoperability — is active.
+Phase 5 — project-object contract and Rhino interoperability — is complete and accepted.
 
-Accepted Phase 5A checkpoint:
+Accepted checkpoints:
 
 ```text
 601a51ee811d2bbaae236a797b7e0cecd81075eb
-Merge pull request #30 from weaf/feature/brep-project-object-contract
-Phase 5A: BRep project-object contract
-```
+Merge pull request #30 — Phase 5A: BRep project-object contract
 
-Accepted Phase 5B checkpoint:
-
-```text
 2fbef6649701bd33f51d971104a303a69ac32c38
-Merge pull request #31 from weaf/feature/brep-project-object-evaluation
-Phase 5B: native BRep project-object evaluation
+Merge pull request #31 — Phase 5B: native BRep project-object evaluation
+
+e7b679cfa0b89478f0ce8d016dc374ab60d423ab
+Merge pull request #32 — Phase 5C: BRep project-object authoring
 ```
 
-Phase 5C is complete on PR #32 and accepted for merge. The final `master` checkpoint is defined by the PR merge commit rather than a pre-merge branch SHA.
+Phase 5D is complete and accepted on PR #33. The PR #33 merge commit is the final Phase 5 `master` checkpoint; do not substitute a pre-merge branch SHA for that checkpoint.
 
-The current implementation is the source of truth. `docs/brep_kernel_plan.md` provides the roadmap goal, while completed Phase 1–4 execution/status documents are historical evidence.
+The current implementation remains the source of truth. `docs/brep_kernel_plan.md` provides roadmap context. This document is completed-phase evidence after PR #33 merges, not an active implementation queue. Detailed 5D dependency/fidelity evidence is in `docs/brep_phase5_5d_interop.md`.
 
 ## Reconciled Phase 5 architecture
 
@@ -37,38 +34,42 @@ The accepted BRep stack now provides:
 - exact STEP export from the primary `resultNodeId` only;
 - immutable project source revisions with compare-and-set activation;
 - complete canonical BRep snapshots for built-in AI, OpenCode and Codex editing paths;
-- a shared `Model | Graph` BRep workspace where the 3D viewer and dependency graph are peer views over the same canonical project rather than forcing the graph into the narrow Parameters inspector.
+- a shared `Model | Graph` BRep workspace where the 3D viewer and dependency graph are peer views over the same canonical project;
+- headless Rhino/openNURBS interoperability through pinned `rhino3dm==8.32.1` inside the existing isolated native sandbox;
+- 3DM export containing tessellated Result/project-object meshes, real semantic point objects, Brepia identity/placement/metadata user strings and the exact primary STEP embedded as `brepia-primary.step`.
 
-No `rhino3dm`, openNURBS, RhinoCommon, Rhino.Compute or Grasshopper runtime dependency exists in the application today.
+RhinoCommon, Rhino desktop, Rhino.Compute and a Grasshopper runtime are not dependencies of the accepted Phase 5 application.
 
 ## Phase 5 architecture locks
 
 1. `BrepProject` remains Brepia's only canonical editable BRep source model.
 2. Rhino/3DM/Grasshopper artifacts are interoperability outputs, never a second source of truth.
-3. The existing isolated build123d/OCCT runtime remains authoritative for native BRep evaluation.
-4. `resultNodeId` remains the primary BRep authority; project-object geometry roles are auxiliary semantics and never a competing primary-result field.
-5. Existing `placement` remains the local/insertion coordinate contract and must not silently become a local-preview transform.
-6. Existing project/node/parameter identities remain stable. Existing semantic point IDs are also stable while the same point continues to exist.
+3. The isolated build123d/OCCT runtime remains authoritative for native BRep evaluation and exact primary STEP.
+4. `resultNodeId` remains the primary BRep authority; project-object geometry roles are auxiliary semantics, not a competing primary-result field.
+5. `placement` remains the local/insertion coordinate contract and does not silently become a local-preview transform.
+6. Existing project/node/parameter identities remain stable. Existing semantic point IDs remain stable while the same semantic point continues to exist.
 7. Existing OpenSCAD workflows remain independent and unchanged.
-8. Phase 5 must not require Rhino to author, edit, evaluate or STEP-export ordinary BRep projects.
-9. Rhino.Compute and Grasshopper runtime/component work remain later phases unless explicitly pulled forward by a proven interoperability requirement.
-10. Native auxiliary outputs must remain bounded and deterministic.
-11. Direct UI project-object writes must use the accepted full-project source-save guard and immutable CAS persistence path; no second history model is allowed.
+8. Ordinary BRep authoring, evaluation and STEP export must not require Rhino.
+9. Rhino.Compute and Grasshopper runtime/component work remain later phases unless a future roadmap explicitly changes that boundary.
+10. Native primary and auxiliary outputs remain bounded and deterministic.
+11. Direct project-object UI writes use the accepted full-project source-save guard and immutable CAS persistence path; no second history model exists.
 12. Graph visualization remains presentation-only and never becomes source authority.
-13. `Model` and `Graph` are presentation/workspace modes only; switching views must not create revisions, mutate project source or change primary-result semantics.
+13. `Model` and `Graph` are presentation/workspace modes only; switching views does not create revisions, mutate source or change primary-result semantics.
+14. 3DM tessellation must never be described as exact OCCT-to-Rhino BRep conversion. Exact primary CAD fidelity remains the embedded/native STEP artifact.
+15. 3DM geometry remains in Brepia's component-local coordinates; `placement` travels as semantic insertion-plane data rather than being implicitly applied as a transform.
+16. 3DM is an export/interoperability container, not canonical/imported authoring source in Phase 5.
 
 ## Additive v1 source compatibility
 
-Phase 5A added optional `projectObject` data to schema version 1. This remains additive:
+Phase 5A added optional `projectObject` data to schema version 1 without changing existing field meaning:
 
 - valid existing v1 projects without `projectObject` remain valid;
-- no existing source field changes meaning;
-- no existing ID is regenerated;
+- no existing project/node/parameter ID is regenerated;
 - canonical package import/export transports the complete normalized project snapshot;
 - AI complete-snapshot schemas accept and preserve project-object data;
 - an empty project-object definition canonicalizes back to no `projectObject` field.
 
-A future breaking source-format change may introduce a new schema version, but these optional semantic outputs do not require one.
+The 5D 3DM capability does not change the canonical source schema version.
 
 ## 5A — Canonical project-object contract — complete
 
@@ -94,7 +95,7 @@ Each point has a stable ID, kind `connection | mounting | cable`, local mm posit
 
 ## 5B — Native project-object evaluation — complete
 
-A successful native evaluation includes a kernel-neutral `projectObject` result alongside the accepted primary result fields:
+A successful native evaluation includes a kernel-neutral `projectObject` result beside the accepted primary result fields:
 
 ```text
 status / provider / projectId / resultNodeId
@@ -115,140 +116,86 @@ Key invariants:
 - top-level `bodies`/`bounds` remain primary-result-only;
 - auxiliary role geometry uses the same build123d/OCCT DAG cache and stable node IDs;
 - semantic scalars resolve under the exact current parameter values;
-- host validation treats sandbox result JSON as untrusted and verifies role IDs and resolved semantic data against the normalized request;
-- provider result-contract version is `0.2.0`;
+- host validation treats sandbox result JSON as untrusted and verifies role IDs/resolved semantic data against the normalized request;
+- accepted 5B provider result-contract version is `0.2.0`;
 - exact STEP remains derived only from `resultNodeId`;
 - auxiliary geometry is intentionally not added to the ordinary browser preview.
 
 ## 5C — Project-object authoring and AI product integration — complete
 
-### Direct authoring surface
+The accepted direct editor supports assigning/clearing Footprint, Clearance envelope and Maintenance envelope, plus adding/editing/removing stable semantic points with kind, optional label, local position and optional direction. Compatible `mm` and `none` parameter references are supported.
 
-5C adds a compact, collapsed-by-default **Project object** section beside the accepted Phase 4D project-definition editor.
+Existing semantic point IDs are read-only in direct editing. If semantic identity genuinely changes, the user removes the old point and creates a new one. New point IDs receive deterministic suggestions but remain explicit editable drafts before first save.
 
-The editor supports:
+Project-object writes:
 
-- assigning or clearing Footprint;
-- assigning or clearing Clearance envelope;
-- assigning or clearing Maintenance envelope;
-- assigning the same feature node to multiple roles when intentionally desired;
-- adding, editing and removing semantic points;
-- stable point IDs;
-- point kind `connection`, `mounting` or `cable`;
-- optional point label;
-- local mm position with literal or compatible `mm` published-parameter scalars;
-- optional unitless direction with literal or compatible `none` published-parameter scalars.
+1. construct a complete next `BrepProject` through the shared project-object editing helper;
+2. canonical-normalize all role/point/reference/unit rules;
+3. pass through the existing `saveProjectSource(...)` guard;
+4. persist through the immutable source-revision/CAS path.
 
-Existing semantic point IDs are read-only in the direct editor. Changing a point's label, kind, position or direction preserves identity. If the semantic identity genuinely changes, the user removes the old point and creates a new one.
+No project-object database table, patch API or separate history model was introduced.
 
-New point IDs are explicit editable drafts before first save and receive deterministic current-snapshot suggestions such as `connection`, `connection2`, and so on.
+The dependency graph remains presentation-only and shows `FP`, `CL` and `MT` role markers. Role-assigned nodes are protected from delete until the role is explicitly cleared.
 
-### Result versus project-object roles
+The accepted workspace model is **Model | Graph** in the main BRep workspace:
 
-The UI makes this distinction explicit:
+- `Model` renders the primary-result native 3D viewer;
+- `Graph` renders the dependency graph as a full peer workspace;
+- Parameters-side Features remains a compact navigator/inspector;
+- Graph and Features share selection and Edit / Set result / Delete callbacks;
+- view switching is ephemeral UI state;
+- the same workspace modes are available in the mobile/tablet workspace sheet.
 
-- **Result** is the canonical primary body used by the ordinary 3D preview and exact primary STEP export.
-- **Footprint / Clearance / Maintenance** are semantic auxiliary outputs evaluated separately by the native runtime.
+Provider-visible BRep schemas and instructions for built-in AI, OpenCode and Codex use complete project snapshots and explicitly preserve unchanged project/node/parameter/project-object identities and semantic point IDs.
 
-Assigning a project-object role does not implicitly change Result, and Set result does not implicitly rewrite project-object roles.
+## 5D — Minimum Rhino/3DM interoperability — complete
 
-5C does not add auxiliary-geometry overlay/toggling to the ordinary browser viewer. That can be added later as a presentation/UX capability without changing canonical source semantics.
+5D pins `rhino3dm==8.32.1` in the existing Python 3.12 rootless/headless native sandbox. build123d/OCCT remains authoritative for modeling/evaluation and exact primary STEP.
 
-### Canonical write path
+The 3DM artifact uses an explicit dual-representation contract:
 
-Project-object UI writes:
+- native Rhino Mesh objects represent the tessellated Result and declared project-object geometry for direct 3DM visibility/interoperability;
+- real Rhino point objects represent resolved connection/mounting/cable points;
+- document/object user strings preserve project identity, node identity, semantic roles, resolved placement, metadata and project-object semantics;
+- the exact primary OCCT STEP is embedded as `brepia-primary.step`.
 
-1. construct a complete next `BrepProject` through `replaceBrepProjectObjectDefinition(...)`;
-2. canonical-normalize all role/point/reference/unit rules before persistence;
-3. call the existing `saveProjectSource(...)` guard;
-4. persist through the accepted `onProjectSourceCommit(...)` immutable source-revision/CAS path.
+One unique canonical node is emitted once even if it carries multiple roles; its metadata records every role.
 
-No project-object-specific database tables, patch API or history model are introduced.
+The native driver re-opens its generated 3DM before success and verifies millimetre units, project/placement identity and extraction/signature of the embedded STEP. The host independently bounds the artifact, requires a regular non-symlink file and verifies the 3DM header before exposing bytes.
 
-The existing source-write guards therefore continue to block project-object writes while:
+The existing authenticated native export route remains backward-compatible for STEP and uses content negotiation for `model/vnd.3dm`. The BRep download selector exposes `.STEP`, `.3DM` and `.BREP JSON`; STEP and 3DM use current preview parameter values, while the canonical package continues to require saved source state.
 
-- a parameter preview is dirty;
-- another source/parameter/revision/export write is active;
-- the current AI turn is streaming.
+Provider capability version is `0.3.0` because the native runner emits the 3DM sibling artifact in addition to the accepted result/STEP outputs.
 
-Read-only graph navigation remains available under those conditions.
+A real native acceptance run exposed two headless integration details before closeout:
 
-### Graph product integration and workspace
+- Python `File3dmStringTable` uses mapping syntax (`model.Strings[key] = value`) rather than the initially assumed `SetString` method;
+- the slim image needs `fontconfig` to avoid an invalid/default font-config environment during rhino3dm initialization.
 
-The dependency graph remains presentation-only and identifies nodes carrying semantic project-object roles:
+Both were corrected and regression-covered before final acceptance. The image base pip version was not upgraded solely for 5D because it successfully installs all pinned wheels and is not part of the runtime contract.
 
-- `FP` — Footprint;
-- `CL` — Clearance envelope;
-- `MT` — Maintenance envelope.
+### 5D non-goals
 
-The selected-node details expose full role names. Safe delete is surfaced before mutation: a role-assigned node cannot be deleted until all project-object roles referencing it are explicitly cleared. There is no hidden role rewrite or cascading delete.
+5D does not add:
 
-The accepted 5C workspace uses **Model | Graph** as peer modes in the main BRep workspace:
-
-- `Model` renders the existing primary-result native 3D viewer;
-- `Graph` renders the dependency graph in the main workspace rather than constraining it to the Parameters-panel width;
-- the Parameters-side Features section remains a compact navigator/inspector and exposes a Graph shortcut;
-- the main Graph view and Features inspector share the same feature selection and the same Edit / Set result / Delete callbacks;
-- view switching is ephemeral UI state and does not write project source or revision history;
-- the same workspace modes are available inside the existing mobile/tablet workspace sheet.
-
-This replaces the interim attempt to make the full dependency graph fit every possible Parameters-panel width. The graph no longer depends on device-viewport heuristics to decide its primary workspace layout.
-
-### AI product integration
-
-The provider-visible structured BRep schema already accepted `projectObject` in 5A. 5C completes model-facing behavior by making project-object semantics explicit across:
-
-- `tool.build_brep_project`;
-- injected `context.brep_project`;
-- OpenCode native BRep transport;
-- Codex native BRep transport.
-
-All four paths instruct the model/agent to:
-
-- return complete project snapshots, never patches;
-- preserve unchanged project/node/parameter identities;
-- preserve unchanged project-object role assignments;
-- preserve existing semantic point IDs while editing the same semantic point;
-- keep `resultNodeId` distinct from auxiliary project-object roles;
-- use only schema-supported role and semantic-point fields;
-- respect mm versus unitless scalar compatibility.
-
-No separate AI project-object tool or patch protocol is introduced.
-
-### 5C non-goals
-
-5C does not add:
-
-- auxiliary geometry overlay/toggling in the ordinary 3D viewer;
-- multi-output STEP;
-- 3DM/rhino3dm;
+- Rhino desktop/RhinoCommon;
 - Rhino.Compute;
-- Grasshopper component/runtime generation;
-- new BRep feature node types;
-- kernel-topology IDs;
-- a second project-object persistence/history system;
-- placement transformation of local native preview geometry.
+- Grasshopper runtime/component generation or `.gh` files;
+- 3DM as canonical/editable source;
+- 3DM import/authoring round trips;
+- mesh-derived geometry advertised as exact BRep/NURBS;
+- placement transformation of local native geometry;
+- multi-result STEP;
+- OpenSCAD changes.
 
-## 5D — Minimum Rhino/3DM interoperability and Phase 5 closeout — next
+## Phase 5 acceptance closeout
 
-After the accepted 5C merge, add only the minimum 3DM/rhino3dm capability needed to prove the later Grasshopper path.
+### 5A
 
-Before adding a dependency, verify and record:
+Phase 5A was accepted and merged through PR #30. Quality Gates #367 and #368 passed; it introduced no new browser/native-execution product surface and therefore used contract/regression acceptance.
 
-- exact rhino3dm/openNURBS package/version;
-- Linux/headless support in the selected implementation path;
-- licensing/distribution terms;
-- exact geometry conversion capability from the existing OCCT result without making Rhino the authoritative kernel.
-
-Target interoperability acceptance should prove that a representative BRep project object can produce a useful 3DM-compatible artifact carrying geometry plus placement/object metadata/project-object semantics where the selected library supports them.
-
-Do not broaden 5D into a Grasshopper component/runtime; that is Phase 6+ work.
-
-## Phase 5A acceptance closeout
-
-Phase 5A was accepted and merged through PR #30. Quality Gates #367 and #368 passed; the slice had no new browser/native-execution product surface and therefore used contract/regression acceptance.
-
-## Phase 5B acceptance closeout
+### 5B
 
 Phase 5B was accepted and merged through PR #31 at `2fbef6649701bd33f51d971104a303a69ac32c38`.
 
@@ -256,24 +203,36 @@ Evidence:
 
 - Quality Gates #369 and #370 passed;
 - real rootless-Podman build123d/OCCT smoke passed with primary result `cut`, 732 triangles, all three semantic roles and `cableEntry` resolved to `[50,10,0]` with direction `[0,0,1]`;
-- focused browser regression confirmed ordinary BRep preview, Dimension-driven native re-evaluation and STEP export remained green;
-- primary-result viewer/STEP behavior remained unchanged.
+- focused browser regression confirmed ordinary BRep preview, Dimension-driven native re-evaluation and STEP export remained green.
 
-## Phase 5C acceptance closeout
+### 5C
 
-Phase 5C is browser/product accepted on PR #32.
+Phase 5C was accepted and merged through PR #32 at `e7b679cfa0b89478f0ce8d016dc374ab60d423ab`.
 
 Evidence:
 
-- direct Project object authoring for footprint, clearance, maintenance and semantic points was accepted on desktop/mobile;
-- role assignment/clearing, stable semantic-point identity, parameter-backed point scalars, validation, immutable revision persistence, reload/restore and role-aware safe-delete behavior were accepted;
-- built-in/local BRep AI preservation and intentional project-object editing flows were accepted without unintended canonical identity churn;
+- direct Project object authoring and stable semantic points were accepted on desktop/mobile;
+- role assignment/clearing, parameter-backed point scalars, validation, immutable revision persistence, reload/restore and role-aware safe-delete behavior were accepted;
+- built-in/local BRep AI preservation and intentional project-object editing flows were accepted without unintended identity churn;
 - ordinary primary-result preview and STEP behavior remained unchanged;
-- graph role markers and project-object interactions were accepted;
-- the initial narrow Parameters-panel graph UX was replaced with the accepted `Model | Graph` main-workspace design after browser feedback;
-- the final focused browser check accepted Model/Graph switching and the larger graph workspace as the preferred permanent BRep interaction model;
-- Quality Gate #371 passed the original 5C implementation;
-- Quality Gate #387 passed the final accepted workspace head with 623/623 tests plus typecheck, lint, build and diff check green;
-- the final closeout head must also pass the repository Quality Gate before PR #32 is merged.
+- the accepted `Model | Graph` main-workspace design replaced the earlier narrow-panel graph presentation;
+- Quality Gates #371 and #387 passed implementation stages;
+- Quality Gate #388 passed the final closeout head.
 
-5C is therefore complete once that final closeout-head gate is green and PR #32 is merged.
+### 5D and final Phase 5 acceptance
+
+Phase 5D was product/native accepted on PR #33 on 2026-09-06.
+
+Evidence:
+
+- the rebuilt native image successfully installed the pinned build123d/OCCT stack plus `rhino3dm==8.32.1` and headless font configuration;
+- real rootless-Podman smoke completed with primary result `cut`, 732 triangles, semantic roles `footprint`, `clearanceEnvelope`, `maintenanceEnvelope`, and `cableEntry` at `[50,10,0]` with direction `[0,0,1]`;
+- the same smoke emitted both `model.step` and `model.3dm`;
+- by driver contract, successful smoke also proves the generated 3DM was independently re-opened with rhino3dm, millimetre/project/placement identity round-tripped, and embedded `brepia-primary.step` was extracted with a valid STEP signature;
+- browser acceptance confirmed Model/Graph, parameter-driven preview, STEP export, 3DM export and canonical BRep JSON behavior were green;
+- 3DM artifacts from both tested cases opened successfully in a separate mobile application, providing independent consumer verification outside Brepia/rhino3dm;
+- host malformed/oversized/header rejection and current-preview-value export behavior are regression-covered;
+- Quality Gate #397 passed after the native binding/fontconfig correction with tests, typecheck, lint, build and diff check green;
+- the exact documentation closeout head must pass one final Quality Gate before PR #33 merges.
+
+Once that final closeout-head gate is green and PR #33 is merged, Phase 5 is closed. Future roadmap work must start from the resulting `master` merge checkpoint and treat this document as completed-phase evidence.

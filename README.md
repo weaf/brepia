@@ -26,6 +26,7 @@ Brepia is an open-source browser-based workspace for parametric and Creative 3D 
 - Edit native BRep published parameters, feature DAG nodes, dependencies, result selection, placement and object metadata through immutable project revisions.
 - Inspect BRep dependency graphs and directly author project-object semantics such as footprint, clearance/maintenance roles and stable local connection, mounting and cable points.
 - Evaluate native BRep geometry in an isolated build123d/OCCT sandbox and export exact primary-result STEP directly from that native path.
+- Export Rhino/openNURBS `.3dm` interoperability files containing viewable Result/project-object meshes, semantic points and Brepia metadata, with the exact primary STEP embedded for CAD-fidelity handoff.
 - Use complete canonical BRep snapshots in supported AI, OpenCode and Codex editing workflows while preserving stable project/node/parameter/object identities.
 - Inspect models in a live browser-based 3D viewer.
 - Use text or reference images in Creative 3D workflows.
@@ -36,12 +37,13 @@ Brepia is an open-source browser-based workspace for parametric and Creative 3D 
 
 ## Export formats
 
-| Format   | Use                            |
-| -------- | ------------------------------ |
-| **STL**  | 3D printing and mesh workflows |
-| **SCAD** | Editable OpenSCAD source       |
-| **DXF**  | 2D CAD exchange                |
-| **STEP** | 3D CAD exchange                |
+| Format   | Use                                           |
+| -------- | --------------------------------------------- |
+| **STL**  | 3D printing and mesh workflows                |
+| **SCAD** | Editable OpenSCAD source                      |
+| **DXF**  | 2D CAD exchange                               |
+| **STEP** | Exact native BRep CAD exchange                |
+| **3DM**  | Rhino/openNURBS interoperability and semantics |
 
 Creative workflows can also provide GLB output when supported by the selected backend. Native BRep projects can additionally export their canonical Brepia project package for lossless Brepia round trips.
 
@@ -76,7 +78,7 @@ For local database setup and migration details, see [`docs/local_supabase_lifecy
 
 ### Native BRep
 
-Build the pinned build123d/OCCT evaluation sandbox with:
+Build the pinned build123d/OCCT/rhino3dm evaluation and interoperability sandbox with:
 
 ```bash
 ./scripts/brep/build-image.sh

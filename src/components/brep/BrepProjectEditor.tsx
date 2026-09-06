@@ -54,8 +54,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
-import { exportBrepStep } from '@/services/brepStepExport';
-import { downloadSTEPFile } from '@/utils/downloadUtils';
+import { exportBrep3dm, exportBrepStep } from '@/services/brepStepExport';
+import { download3DMFile, downloadSTEPFile } from '@/utils/downloadUtils';
 import type { BrepNode, BrepProject } from '@shared/brepProject';
 import { replaceExistingBrepProjectNode } from '@shared/brepProjectEditing';
 import {
@@ -73,7 +73,7 @@ const BREP_EVALUATION_DEBOUNCE_MS = 120;
 // race the Podman request from the previous source snapshot.
 let browserBrepEditorEvaluationQueue: Promise<void> = Promise.resolve();
 
-type BrepDownloadFormat = 'step' | 'brep';
+type BrepDownloadFormat = 'step' | '3dm' | 'brep';
 
 export type BrepEditorRevision = {
   id: string;
@@ -98,6 +98,7 @@ type BrepProjectEditorContextValue = {
   saveFeatureNode: (node: BrepNode) => Promise<void>;
   saveProjectSource: (project: BrepProject) => Promise<void>;
   exportStep: () => Promise<void>;
+  export3dm: () => Promise<void>;
   exportProjectPackage: () => void;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
@@ -446,6 +447,24 @@ export function BrepProjectEditorProvider({
     }
   }, [exporting, loading, project, saving, sourceSaving, values]);
 
+  const export3dm = useCallback(async () => {
+    if (exporting || loading || saving || sourceSaving) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const threeDm = await exportBrep3dm(project, values);
+      download3DMFile(threeDm);
+    } catch (reason) {
+      if (mountedRef.current) {
+        setError(
+          reason instanceof Error ? reason.message : 'BRep 3DM export failed.',
+        );
+      }
+    } finally {
+      if (mountedRef.current) setExporting(false);
+    }
+  }, [exporting, loading, project, saving, sourceSaving, values]);
+
   const exportProjectPackage = useCallback(() => {
     const title = packageTitle ?? project.name;
     const text = serializeBrepProjectPackage(
@@ -505,6 +524,7 @@ export function BrepProjectEditorProvider({
       saveFeatureNode,
       saveProjectSource,
       exportStep,
+      export3dm,
       exportProjectPackage,
       revisions,
       activeRevisionId,
@@ -517,6 +537,7 @@ export function BrepProjectEditorProvider({
       activeRevisionId,
       dirty,
       error,
+      export3dm,
       exportProjectPackage,
       exportStep,
       exporting,
@@ -794,19 +815,25 @@ function BrepExportBar() {
     loading,
     exporting,
     exportStep,
+    export3dm,
     exportProjectPackage,
   } = useBrepProjectEditor();
   const [selectedFormat, setSelectedFormat] =
     useState<BrepDownloadFormat>('step');
 
-  const stepAvailable = !saving && !sourceSaving && !loading && !exporting;
+  const nativeArtifactAvailable =
+    !saving && !sourceSaving && !loading && !exporting;
   const brepAvailable = !dirty && !saving && !sourceSaving;
   const selectedAvailable =
-    selectedFormat === 'step' ? stepAvailable : brepAvailable;
+    selectedFormat === 'brep' ? brepAvailable : nativeArtifactAvailable;
 
   const handleDownload = () => {
     if (selectedFormat === 'step') {
       void exportStep();
+      return;
+    }
+    if (selectedFormat === '3dm') {
+      void export3dm();
       return;
     }
     exportProjectPackage();
@@ -823,7 +850,7 @@ function BrepExportBar() {
           className="h-11 flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900 lg:h-12"
         >
           <Download className="mr-2 h-4 w-4" />
-          {exporting && selectedFormat === 'step'
+          {exporting && selectedFormat !== 'brep'
             ? 'EXPORTING…'
             : selectedFormat.toUpperCase()}
         </Button>
@@ -843,12 +870,22 @@ function BrepExportBar() {
           >
             <DropdownMenuItem
               onClick={() => setSelectedFormat('step')}
-              disabled={!stepAvailable}
+              disabled={!nativeArtifactAvailable}
               className="cursor-pointer text-adam-text-primary"
             >
               <span className="text-sm">.STEP</span>
               <span className="ml-3 text-xs text-adam-text-primary/60">
                 Native CAD exchange
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setSelectedFormat('3dm')}
+              disabled={!nativeArtifactAvailable}
+              className="cursor-pointer text-adam-text-primary"
+            >
+              <span className="text-sm">.3DM</span>
+              <span className="ml-3 text-xs text-adam-text-primary/60">
+                Rhino interoperability
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -867,7 +904,7 @@ function BrepExportBar() {
       {dirty ? (
         <p className="text-[10px] text-adam-neutral-400">
           Save the parameter draft before exporting the canonical BRep project
-          package. STEP can still export the current preview values.
+          package. STEP and 3DM can still export the current preview values.
         </p>
       ) : null}
     </div>
