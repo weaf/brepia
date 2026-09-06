@@ -143,7 +143,8 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
       /(<chunk name="OutputParam" index="0">[\s\S]*?<item name="TypeHintID" type_name="gh_guid" type_code="9">)([^<]+)(<\/item>)/;
     const changed = ghx.replace(
       outputHintPattern,
-      '$122222222-2222-4222-8222-222222222222$3',
+      (_match, prefix: string, _current: string, suffix: string) =>
+        `${prefix}22222222-2222-4222-8222-222222222222${suffix}`,
     );
     assert.notEqual(changed, ghx);
 
