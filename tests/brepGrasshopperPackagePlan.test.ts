@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
+  BREP_GRASSHOPPER_PACKAGE_PLAN_MAX_BYTES,
+  BrepGrasshopperPackagePlanError,
   createBrepGrasshopperPackagePlan,
+  normalizeBrepGrasshopperPackagePlan,
+  parseBrepGrasshopperPackagePlanJson,
   serializeBrepGrasshopperPackagePlan,
 } from '../shared/brepGrasshopperPackagePlan.ts';
 
@@ -19,6 +23,16 @@ const fixture = JSON.parse(
 
 const UUID_V8 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function expectPlanError(
+  action: () => Promise<unknown>,
+  code: BrepGrasshopperPackagePlanError['code'],
+) {
+  return expect(action()).rejects.toMatchObject({
+    name: 'BrepGrasshopperPackagePlanError',
+    code,
+  });
+}
 
 describe('BRep Phase 8 portable Grasshopper package plan', () => {
   it('is deterministic and preserves canonical project/revision identity', async () => {
@@ -93,7 +107,7 @@ describe('BRep Phase 8 portable Grasshopper package plan', () => {
     );
   });
 
-  it('keeps generated GH object identity stable across Brepia revisions', async () => {
+  it('keeps generated object identity stable when only immutable source revision provenance changes', async () => {
     const first = await createBrepGrasshopperPackagePlan(fixture);
     const changed = structuredClone(fixture) as {
       model: Record<string, unknown>;
@@ -101,28 +115,15 @@ describe('BRep Phase 8 portable Grasshopper package plan', () => {
     changed.model.sourceRevisionId = 'revision-43';
     const second = await createBrepGrasshopperPackagePlan(changed);
 
-    assert.equal(second.model.sourceRevisionId, 'revision-43');
     assert.equal(first.component.instanceGuid, second.component.instanceGuid);
     assert.deepEqual(
       first.controls.map((control) => control.instanceGuid),
       second.controls.map((control) => control.instanceGuid),
     );
-  });
-
-  it('changes generated GH object identity when canonical project identity changes', async () => {
-    const first = await createBrepGrasshopperPackagePlan(fixture);
-    const changed = structuredClone(fixture) as {
-      model: Record<string, unknown>;
-      source: Record<string, unknown>;
-    };
-    changed.model.projectId = 'cabinetB42';
-    changed.source.id = 'cabinetB42';
-    const second = await createBrepGrasshopperPackagePlan(changed);
-
-    assert.notEqual(first.component.instanceGuid, second.component.instanceGuid);
-    assert.notDeepEqual(
-      first.controls.map((control) => control.instanceGuid),
-      second.controls.map((control) => control.instanceGuid),
+    assert.notEqual(first.model.sourceRevisionId, second.model.sourceRevisionId);
+    assert.deepEqual(
+      first.controls.map((control) => control.inputId),
+      second.controls.map((control) => control.inputId),
     );
   });
 
@@ -148,6 +149,49 @@ describe('BRep Phase 8 portable Grasshopper package plan', () => {
     assert.deepEqual(
       plan.controls.map((control) => control.inputId),
       ['height', 'width'],
+    );
+  });
+
+  it('normalizes transported plans from only the embedded canonical contract', async () => {
+    const canonical = await createBrepGrasshopperPackagePlan(fixture);
+    const tampered = structuredClone(canonical) as typeof canonical;
+    tampered.model.projectId = 'evil-project';
+    tampered.component.instanceGuid = '00000000-0000-8000-8000-000000000000';
+    tampered.controls = [];
+    tampered.connections = [];
+    tampered.placement.generatedSource = null;
+
+    await expect(normalizeBrepGrasshopperPackagePlan(tampered)).resolves.toEqual(
+      canonical,
+    );
+  });
+
+  it('round-trips the versioned transport JSON and rejects malformed or unsupported envelopes', async () => {
+    const canonical = await createBrepGrasshopperPackagePlan(fixture);
+    const serialized = await serializeBrepGrasshopperPackagePlan(fixture);
+
+    await expect(parseBrepGrasshopperPackagePlanJson(serialized)).resolves.toEqual(
+      canonical,
+    );
+    await expectPlanError(
+      () => parseBrepGrasshopperPackagePlanJson('{'),
+      'invalid_json',
+    );
+    await expectPlanError(
+      () =>
+        normalizeBrepGrasshopperPackagePlan({
+          kind: 'brepia-grasshopper-package-plan',
+          schemaVersion: 2,
+          contract: fixture,
+        }),
+      'unsupported_version',
+    );
+    await expectPlanError(
+      () =>
+        parseBrepGrasshopperPackagePlanJson(
+          ' '.repeat(BREP_GRASSHOPPER_PACKAGE_PLAN_MAX_BYTES + 1),
+        ),
+      'too_large',
     );
   });
 });
