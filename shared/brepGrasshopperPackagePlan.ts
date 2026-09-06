@@ -14,6 +14,7 @@ const CONTROL_Y_STEP = 70;
 const COMPONENT_X = 420;
 const CONTROL_WIDTH = 280;
 const CONTROL_HEIGHT = 28;
+const INSTANCE_GUID_NAMESPACE = 'brepia-grasshopper-package-plan-v1';
 
 export type BrepGrasshopperCanvasPoint = {
   x: number;
@@ -99,16 +100,34 @@ function formatUuid(bytes: Uint8Array): string {
   ].join('-');
 }
 
-async function stableInstanceGuid(parts: string[]): Promise<string> {
-  const input = new TextEncoder().encode(
-    ['brepia-grasshopper-package-plan-v1', ...parts].join('\n'),
+function encodeStableSegments(parts: string[]): Uint8Array {
+  const encoder = new TextEncoder();
+  const segments = [INSTANCE_GUID_NAMESPACE, ...parts].map((part) =>
+    encoder.encode(part),
   );
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', input));
+  const byteLength = segments.reduce((total, segment) => total + 4 + segment.length, 0);
+  const encoded = new Uint8Array(byteLength);
+  const view = new DataView(encoded.buffer);
+  let offset = 0;
+
+  for (const segment of segments) {
+    view.setUint32(offset, segment.length, false);
+    offset += 4;
+    encoded.set(segment, offset);
+    offset += segment.length;
+  }
+  return encoded;
+}
+
+async function stableInstanceGuid(parts: string[]): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', encodeStableSegments(parts)),
+  );
   const uuid = digest.slice(0, 16);
 
   // RFC 9562 UUIDv8: deterministic application-defined payload with RFC variant.
-  uuid[6] = (uuid[6] & 0x0f) | 0x80;
-  uuid[8] = (uuid[8] & 0x3f) | 0x80;
+  uuid[6] = ((uuid[6] ?? 0) & 0x0f) | 0x80;
+  uuid[8] = ((uuid[8] ?? 0) & 0x3f) | 0x80;
   return formatUuid(uuid);
 }
 
@@ -116,7 +135,12 @@ export async function createBrepGrasshopperPackagePlan(
   value: unknown,
 ): Promise<BrepGrasshopperPackagePlan> {
   const contract = normalizeBrepGrasshopperContract(value);
-  const identity = [contract.model.projectId, contract.model.sourceRevisionId];
+
+  // Grasshopper object identity intentionally survives Brepia revisions. The
+  // immutable sourceRevisionId remains provenance in the embedded contract;
+  // project/parameter identity is what lets later exports and reconciliation
+  // recognize the same Brepia-owned object and its stable inputs.
+  const identity = [contract.model.projectId];
   const componentGuid = await stableInstanceGuid([...identity, 'brepia-project']);
   const numberInputs = contract.interface.inputs.filter(
     (input): input is BrepGrasshopperNumberInput => input.type === 'number',
