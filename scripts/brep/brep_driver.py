@@ -167,6 +167,7 @@ def write_3dm(project, result, exact_step_paths, three_dm_path):
         "brepia.exactBrepArtifacts": compact_json(exact_artifacts),
         "brepia.placement": compact_json(placement),
         "brepia.projectObject": compact_json(semantic_contract),
+        "brepia.warnings": compact_json(result["warnings"]),
     }
     if metadata is not None:
         document_strings["brepia.metadata"] = compact_json(metadata)
@@ -241,6 +242,8 @@ def write_3dm(project, result, exact_step_paths, three_dm_path):
         raise ValueError("3dm_export_failed: placement did not round trip")
     if check.Strings["brepia.exactBrepArtifacts"] != compact_json(exact_artifacts):
         raise ValueError("3dm_export_failed: exact artifact manifest did not round trip")
+    if check.Strings["brepia.warnings"] != compact_json(result["warnings"]):
+        raise ValueError("3dm_export_failed: warnings did not round trip")
 
     expected_names = {artifact["fileName"] for artifact in exact_artifacts}
     embedded_by_name = {item.Filename: item for item in check.EmbeddedFiles}
