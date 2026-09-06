@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 6 is active on `feature/brep-grasshopper-export-contract` from the accepted Phase 5 merge checkpoint:
+Phase 6 is complete on `feature/brep-grasshopper-export-contract` from the accepted Phase 5 merge checkpoint:
 
 ```text
 fb7ba650710d4bf138ad747b8d4d8413731297a1
@@ -13,7 +13,9 @@ Current implementation is authoritative. `docs/brep_kernel_plan.md` is roadmap c
 
 Phase 6A is implemented and Quality Gate #400 passed on exact contract head `3823ef7f3303601356325cad9d6ef9e7740d6260`.
 
-Phase 6B is implemented and browser-accepted. The BRep download selector exposes the generated Grasshopper contract from the saved canonical project snapshot plus the active immutable revision identity. STEP and 3DM continue to use current preview parameter values, while canonical BRep JSON and Grasshopper contract export require saved parameter state. Quality Gate #405 passed on exact accepted 6B implementation head `ac41fadb7f7408977fe977fbd2bbc47b778eb20c`. Phase closeout documentation is now recorded; only the final post-closeout Quality Gate remains before PR readiness.
+Phase 6B is implemented and browser-accepted. The BRep download selector exposes the generated Grasshopper contract from the saved canonical project snapshot plus the active immutable revision identity. STEP and 3DM continue to use current preview parameter values, while canonical BRep JSON and Grasshopper contract export require saved parameter state. Quality Gate #405 passed on exact accepted 6B implementation head `ac41fadb7f7408977fe977fbd2bbc47b778eb20c`.
+
+Closeout documentation was recorded on `4ee5765f1ddb4aee9ab49bf844982dc8297d7e54`, and final post-closeout Quality Gate #406 passed on that exact head with Test, Typecheck, Lint, Build and Diff check all green. Phase 6 functional acceptance and repository closeout are complete.
 
 ## Goal
 
@@ -170,13 +172,14 @@ Accepted verification:
 - `.GH CONTRACT` downloaded successfully as `*.brepia-grasshopper.json`;
 - with an unsaved parameter preview, canonical `.BREP JSON` and `.GH CONTRACT` export were unavailable while STEP/3DM preview export remained available;
 - after saving the parameter revision, `.GH CONTRACT` became available again against the new saved canonical revision;
-- existing STEP, 3DM and BRep JSON export behavior remained operational.
+- existing STEP, 3DM and BRep JSON export behavior remained operational;
+- final post-closeout Quality Gate #406 PASS on exact closeout documentation head `4ee5765f1ddb4aee9ab49bf844982dc8297d7e54`.
 
 Closeout state:
 
 - Phase 6 functional acceptance is complete;
 - no Grasshopper/Rhino runtime was introduced into ordinary Brepia operation;
-- final post-closeout Quality Gate on the documentation head is required before PR #34 is marked ready.
+- repository closeout verification is complete and PR #34 is ready for merge review.
 
 ## Explicit non-goals
 
