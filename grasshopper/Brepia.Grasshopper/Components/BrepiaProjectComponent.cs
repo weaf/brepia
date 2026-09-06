@@ -1,8 +1,10 @@
 using System.Text.Json;
-using System.Windows.Forms;
 using Brepia.Grasshopper.Runtime;
 using GH_IO.Serialization;
+using Grasshopper.GUI;
+using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Attributes;
 using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Types;
 using Rhino.Geometry;
@@ -26,7 +28,7 @@ public sealed class BrepiaProjectComponent : GH_Component
         : base(
             "Brepia Project",
             "Brepia",
-            "A Brepia-authored parametric project object. The embedded contract remains the canonical component payload.",
+            "A Brepia-authored parametric project object. Double-click to load or replace its embedded Brepia contract.",
             "Brepia",
             "Project")
     {
@@ -39,12 +41,39 @@ public sealed class BrepiaProjectComponent : GH_Component
 
     public BrepiaGrasshopperContract? Contract => _contract;
 
+    public override void CreateAttributes()
+    {
+        m_attributes = new BrepiaProjectComponentAttributes(this);
+    }
+
     public void LoadContractJson(string json)
     {
         var next = BrepiaGrasshopperContract.Parse(json);
         RecordUndoEvent("Load Brepia contract");
         ApplyContract(next);
         ExpireSolution(recompute: true);
+    }
+
+    internal void LoadContractFromDialog()
+    {
+        var dialog = new Rhino.UI.OpenFileDialog
+        {
+            Title = _contract is null ? "Load Brepia Grasshopper contract" : "Replace Brepia Grasshopper contract",
+            Filter = "Brepia Grasshopper contract (*.brepia-grasshopper.json)|*.brepia-grasshopper.json|JSON files (*.json)|*.json||",
+            MultiSelect = false,
+        };
+        if (!dialog.ShowOpenDialog()) return;
+
+        try
+        {
+            LoadContractJson(File.ReadAllText(dialog.FileName));
+        }
+        catch (Exception error)
+        {
+            _contractLoadError = $"Could not load Brepia contract: {error.Message}";
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, _contractLoadError);
+            ExpireSolution(recompute: false);
+        }
     }
 
     protected override void RegisterInputParams(GH_InputParamManager pManager)
@@ -70,26 +99,6 @@ public sealed class BrepiaProjectComponent : GH_Component
             GH_ParamAccess.item);
     }
 
-    protected override void AppendAdditionalComponentMenuItems(ToolStripDropDown menu)
-    {
-        base.AppendAdditionalComponentMenuItems(menu);
-        Menu_AppendItem(
-            menu,
-            _contract is null ? "Load Brepia contract…" : "Replace Brepia contract…",
-            (_, _) => LoadContractFromDialog());
-        Menu_AppendItem(
-            menu,
-            "Show Brepia identity",
-            (_, _) => ShowIdentity(),
-            _contract is not null);
-        Menu_AppendItem(
-            menu,
-            "Show evaluator configuration",
-            (_, _) => Rhino.UI.Dialogs.ShowTextDialog(
-                BrepiaEvaluatorEnvironment.Describe(),
-                "Brepia evaluator"));
-    }
-
     protected override void SolveInstance(IGH_DataAccess DA)
     {
         if (_contractLoadError is not null)
@@ -101,7 +110,7 @@ public sealed class BrepiaProjectComponent : GH_Component
         {
             AddRuntimeMessage(
                 GH_RuntimeMessageLevel.Remark,
-                "No Brepia contract is embedded. Use the component menu to load a *.brepia-grasshopper.json contract.");
+                "No Brepia contract is embedded. Double-click this component to load a *.brepia-grasshopper.json contract.");
             return;
         }
 
@@ -376,42 +385,6 @@ public sealed class BrepiaProjectComponent : GH_Component
         return ids;
     }
 
-    private void LoadContractFromDialog()
-    {
-        var dialog = new Rhino.UI.OpenFileDialog
-        {
-            Title = _contract is null ? "Load Brepia Grasshopper contract" : "Replace Brepia Grasshopper contract",
-            Filter = "Brepia Grasshopper contract (*.brepia-grasshopper.json)|*.brepia-grasshopper.json|JSON files (*.json)|*.json||",
-            MultiSelect = false,
-        };
-        if (!dialog.ShowOpenDialog()) return;
-
-        try
-        {
-            LoadContractJson(File.ReadAllText(dialog.FileName));
-        }
-        catch (Exception error)
-        {
-            _contractLoadError = $"Could not load Brepia contract: {error.Message}";
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, _contractLoadError);
-            ExpireSolution(recompute: false);
-        }
-    }
-
-    private void ShowIdentity()
-    {
-        if (_contract is null) return;
-        Rhino.UI.Dialogs.ShowTextDialog(
-            string.Join(
-                Environment.NewLine,
-                $"Project: {_contract.ProjectName}",
-                $"Project ID: {_contract.ProjectId}",
-                $"Project schema: {_contract.ProjectSchemaVersion}",
-                $"Source revision: {_contract.SourceRevisionId}",
-                $"Published inputs: {_contract.Parameters.Count}"),
-            "Brepia project identity");
-    }
-
     private static Brep RequiredRole(
         IReadOnlyDictionary<string, Brep> roles,
         string role) =>
@@ -423,4 +396,23 @@ public sealed class BrepiaProjectComponent : GH_Component
         IReadOnlyDictionary<string, Brep> roles,
         string role) =>
         roles.TryGetValue(role, out var brep) ? brep : null;
+}
+
+internal sealed class BrepiaProjectComponentAttributes : GH_ComponentAttributes
+{
+    private readonly BrepiaProjectComponent _component;
+
+    public BrepiaProjectComponentAttributes(BrepiaProjectComponent component)
+        : base(component)
+    {
+        _component = component;
+    }
+
+    public override GH_ObjectResponse RespondToMouseDoubleClick(
+        GH_Canvas sender,
+        GH_CanvasMouseEvent e)
+    {
+        _component.LoadContractFromDialog();
+        return GH_ObjectResponse.Handled;
+    }
 }
