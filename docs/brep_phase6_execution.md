@@ -11,6 +11,10 @@ Merge pull request #33 — Phase 5D: minimum Rhino 3DM interoperability
 
 Current implementation is authoritative. `docs/brep_kernel_plan.md` is roadmap context and `docs/brep_phase5_execution.md` is completed-phase evidence.
 
+Phase 6A is implemented and Quality Gate #400 passed on exact contract head `3823ef7f3303601356325cad9d6ef9e7740d6260`.
+
+Phase 6B is implemented on the same draft PR. The BRep download selector now exposes the generated Grasshopper contract from the saved canonical project snapshot plus the active immutable revision identity. STEP and 3DM continue to use current preview parameter values, while canonical BRep JSON and Grasshopper contract export require saved parameter state. Phase closeout remains pending final CI and focused browser acceptance.
+
 ## Goal
 
 Define a stable, versioned Grasshopper-facing contract for a canonical `BrepProject` without introducing a Grasshopper runtime yet.
@@ -131,6 +135,8 @@ Project identity remains stable across ordinary Brepia revisions while the sourc
 
 ### 6A — Shared contract and deterministic mapping
 
+Implemented:
+
 - TypeScript contract types/constants;
 - create/normalize/parse/serialize helpers;
 - deterministic published-parameter mapping;
@@ -139,13 +145,26 @@ Project identity remains stable across ordinary Brepia revisions while the sourc
 - bounded artifact parsing;
 - focused tests for identity, ordering, optional roles, semantic points and tamper/stale-manifest canonicalization.
 
+Verification:
+
+- Quality Gate #400 PASS on `3823ef7f3303601356325cad9d6ef9e7740d6260`.
+
 ### 6B — Product export surface
 
-- expose the generated contract from the existing BRep download selector;
-- use the saved canonical source snapshot, not unsaved preview parameter overrides;
-- carry the active immutable revision ID as provenance/model-version identity;
-- keep STEP/3DM/BRep JSON behavior unchanged;
-- add focused browser/static regression coverage and documentation.
+Implemented:
+
+- generated contract exposed from the existing BRep download selector as `.GH CONTRACT`;
+- exported file suffix `.brepia-grasshopper.json`;
+- saved canonical source snapshot is used, never unsaved preview parameter overrides;
+- active immutable revision/message ID is carried as `sourceRevisionId` provenance;
+- export is disabled while parameter edits are dirty, matching canonical BRep JSON semantics;
+- STEP/3DM continue to export current preview parameter values unchanged;
+- focused static regression coverage verifies selector presence, provenance binding and STEP/3DM preview behavior.
+
+Pending before closeout:
+
+- final Quality Gate on the 6B branch head;
+- focused browser acceptance of `.GH CONTRACT`, `.BREP JSON`, `.STEP` and `.3DM` behavior.
 
 ## Explicit non-goals
 
