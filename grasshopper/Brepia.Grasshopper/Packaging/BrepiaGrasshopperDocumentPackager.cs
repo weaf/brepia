@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using Brepia.Grasshopper.Components;
@@ -17,6 +18,7 @@ public sealed record BrepiaGrasshopperPackageResult(
 public static class BrepiaGrasshopperDocumentPackager
 {
     private const string DefinitionArchiveName = "Definition";
+    private const string InstanceGuidNamespace = "brepia-grasshopper-package-plan-v1";
 
     public static BrepiaGrasshopperPackageResult Write(
         string contractJson,
@@ -42,10 +44,7 @@ public static class BrepiaGrasshopperDocumentPackager
 
         var component = new BrepiaProjectComponent();
         component.LoadContractJson(contract.NormalizedJson);
-        var componentInstanceId = StableGuid(
-            contract.ProjectId,
-            contract.SourceRevisionId,
-            "brepia-project-component");
+        var componentInstanceId = StableGuid(contract.ProjectId, "brepia-project");
         component.NewInstanceGuid(componentInstanceId);
 
         var document = new GH_Document();
@@ -59,12 +58,18 @@ public static class BrepiaGrasshopperDocumentPackager
         {
             throw new InvalidDataException("Could not serialize the Grasshopper document archive.");
         }
-        if (!archive.WriteToFile(fullOutputPath, overwrite: true, rememberPath: false))
-        {
-            throw new IOException("Could not write the Grasshopper document archive.");
-        }
 
-        ValidateArchive(fullOutputPath, contract, componentInstanceId);
+        // Avoid GH_Archive.WriteToFile/ReadFromFile. Those convenience APIs pull
+        // desktop UI dependencies; the archive codec plus ordinary file I/O is
+        // a narrower cross-platform Rhino-hosted boundary.
+        var binary = archive.Serialize_Binary();
+        if (binary.Length == 0)
+        {
+            throw new IOException("Grasshopper document archive serialized to zero bytes.");
+        }
+        File.WriteAllBytes(fullOutputPath, binary);
+
+        ValidateArchive(binary, contract, componentInstanceId);
 
         var fileInfo = new FileInfo(fullOutputPath);
         if (!fileInfo.Exists || fileInfo.Length <= 0)
@@ -81,12 +86,12 @@ public static class BrepiaGrasshopperDocumentPackager
     }
 
     private static void ValidateArchive(
-        string path,
+        byte[] binary,
         BrepiaGrasshopperContract contract,
         Guid componentInstanceId)
     {
         var archive = new GH_Archive();
-        if (!archive.ReadFromFile(path))
+        if (!archive.Deserialize_Binary(binary))
         {
             throw new InvalidDataException("Grasshopper archive could not be read back after serialization.");
         }
@@ -102,13 +107,30 @@ public static class BrepiaGrasshopperDocumentPackager
         }
     }
 
-    private static Guid StableGuid(
-        string projectId,
-        string sourceRevisionId,
-        string role)
+    private static Guid StableGuid(params string[] parts)
     {
-        var bytes = SHA256.HashData(
-            Encoding.UTF8.GetBytes($"brepia-gh-v1\n{projectId}\n{sourceRevisionId}\n{role}"));
-        return new Guid(bytes.AsSpan(0, 16));
+        var segments = new[] { InstanceGuidNamespace }
+            .Concat(parts)
+            .Select(Encoding.UTF8.GetBytes)
+            .ToArray();
+        var input = new byte[segments.Sum(segment => 4 + segment.Length)];
+        var offset = 0;
+        foreach (var segment in segments)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(
+                input.AsSpan(offset, 4),
+                checked((uint)segment.Length));
+            offset += 4;
+            segment.CopyTo(input, offset);
+            offset += segment.Length;
+        }
+
+        var hash = SHA256.HashData(input);
+        hash[6] = (byte)((hash[6] & 0x0f) | 0x80);
+        hash[8] = (byte)((hash[8] & 0x3f) | 0x80);
+        var hex = Convert.ToHexString(hash.AsSpan(0, 16)).ToLowerInvariant();
+        return Guid.ParseExact(
+            $"{hex[..8]}-{hex[8..12]}-{hex[12..16]}-{hex[16..20]}-{hex[20..32]}",
+            "D");
     }
 }
