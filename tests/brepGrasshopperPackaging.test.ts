@@ -43,22 +43,23 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(packager, /new GH_Document\(\)/);
     assert.match(packager, /document\.AddObject\(component, update: false\)/);
     assert.match(packager, /archive\.AppendObject\(document, DefinitionArchiveName\)/);
-    assert.match(
-      packager,
-      /archive\.WriteToFile\(fullOutputPath, overwrite: true, rememberPath: false\)/,
-    );
+    assert.match(packager, /archive\.Serialize_Binary\(\)/);
+    assert.match(packager, /File\.WriteAllBytes\(fullOutputPath, binary\)/);
+    assert.doesNotMatch(packager, /archive\.WriteToFile/);
     assert.doesNotMatch(packager, /BrepiaSolveRuntime/);
     assert.doesNotMatch(packager, /EvaluateThreeDmAsync/);
   });
 
-  it('uses stable project and revision identity and validates the written archive', () => {
+  it('keeps GH object identity stable by project while retaining revision provenance', () => {
+    assert.match(packager, /InstanceGuidNamespace = "brepia-grasshopper-package-plan-v1"/);
     assert.match(packager, /SHA256\.HashData/);
-    assert.match(packager, /contract\.ProjectId/);
+    assert.match(packager, /StableGuid\(contract\.ProjectId, "brepia-project"\)/);
     assert.match(packager, /contract\.SourceRevisionId/);
     assert.match(packager, /component\.NewInstanceGuid\(componentInstanceId\)/);
-    assert.match(packager, /archive\.ReadFromFile\(path\)/);
+    assert.match(packager, /archive\.Deserialize_Binary\(binary\)/);
     assert.match(packager, /archive\.Serialize_Xml\(\)/);
     assert.match(packager, /brepia\.contract\.v1/);
+    assert.doesNotMatch(packager, /StableGuid\([\s\S]*contract\.SourceRevisionId/);
   });
 
   it('keeps Rhino-hosted package code on the exact pinned Rhino 8 SDK pair', () => {
@@ -70,7 +71,7 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(cli, /brepia-grasshopper-package-result/);
   });
 
-  it('isolates a standalone GH_IO probe from RhinoCommon and Grasshopper runtime references', () => {
+  it('isolates a standalone GH_IO XML probe from RhinoCommon and Grasshopper runtime references', () => {
     assert.match(ghIoProbeProject, /GeneratePathProperty="true" ExcludeAssets="all"/);
     assert.match(ghIoProbeProject, /<Reference Include="GH_IO">/);
     assert.match(ghIoProbeProject, /lib\/net7\.0\/GH_IO\.dll/);
@@ -78,7 +79,10 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.doesNotMatch(ghIoProbeProject, /<Reference Include="Grasshopper">/);
     assert.match(ghIoProbe, /GH_ISerializable/);
     assert.match(ghIoProbe, /archive\.AppendObject/);
+    assert.match(ghIoProbe, /archive\.Serialize_Xml\(\)/);
+    assert.match(ghIoProbe, /readBack\.Deserialize_Xml\(persisted\)/);
     assert.match(ghIoProbe, /readBack\.ExtractObject/);
+    assert.doesNotMatch(ghIoProbe, /Serialize_Binary/);
   });
 
   it('builds Rhino-hosted packaging code but runs only GH_IO standalone across Linux and Windows CI', () => {
@@ -88,6 +92,7 @@ describe('BRep Phase 8A Grasshopper packaging boundary', () => {
     assert.match(workflow, /windows-latest/);
     assert.match(workflow, /Brepia\.Grasshopper\.Packager\.csproj/);
     assert.match(workflow, /Brepia\.GhIoProbe\.csproj/);
+    assert.match(workflow, /brepia-gh-io-probe\.ghx/);
     assert.doesNotMatch(
       workflow,
       /dotnet run --project grasshopper\/Brepia\.Grasshopper\.Packager/,
