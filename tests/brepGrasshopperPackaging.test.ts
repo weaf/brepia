@@ -35,7 +35,7 @@ const workflow = fs.readFileSync(
   'utf8',
 );
 
-describe('BRep Phase 8B Grasshopper packaging boundary', () => {
+describe('BRep Phase 8B/8C Grasshopper packaging boundary', () => {
   it('mirrors the accepted portable package-plan identity and layout semantics in the Rhino emitter', () => {
     assert.match(packagePlan, /InstanceGuidNamespace = "brepia-grasshopper-package-plan-v1"/);
     assert.match(packagePlan, /StableGuid\(contract\.ProjectId, "brepia-project"\)/);
@@ -50,6 +50,20 @@ describe('BRep Phase 8B Grasshopper packaging boundary', () => {
     assert.match(packagePlan, /parameter\.Min is not null && parameter\.Max is not null/);
     assert.match(packagePlan, /PlacementInputId => BrepiaGrasshopperContract\.PlacementInputId/);
     assert.doesNotMatch(packagePlan, /SourceRevisionId.*StableGuid/);
+  });
+
+  it('rebuilds transported package-plan derived state from the embedded canonical contract', () => {
+    assert.match(packagePlan, /Kind = "brepia-grasshopper-package-plan"/);
+    assert.match(packagePlan, /SchemaVersion = 1/);
+    assert.match(packagePlan, /MaxBytes = 4 \* 1024 \* 1024/);
+    assert.match(packagePlan, /JsonDocument\.Parse\(json\)/);
+    assert.match(packagePlan, /root\.TryGetProperty\("contract"/);
+    assert.match(packagePlan, /BrepiaGrasshopperContract\.Parse\(contractElement\.GetRawText\(\)\)/);
+    assert.match(packagePlan, /return Create\(contract\)/);
+    assert.match(
+      packagePlan,
+      /transported component\/control\/wire sections are derived data/,
+    );
   });
 
   it('emits one embedded Brepia component plus real native GH numeric controls without solving geometry', () => {
@@ -97,7 +111,6 @@ describe('BRep Phase 8B Grasshopper packaging boundary', () => {
     assert.match(packager, /component\.NewInstanceGuid\(plan\.Component\.InstanceGuid\)/);
     assert.match(packager, /slider\.NewInstanceGuid\(plan\.InstanceGuid\)/);
     assert.match(packager, /parameter\.NewInstanceGuid\(plan\.InstanceGuid\)/);
-    assert.match(packager, /contract\.SourceRevisionId/);
     assert.match(packager, /plan\.Contract\.SourceRevisionId/);
   });
 
@@ -117,6 +130,15 @@ describe('BRep Phase 8B Grasshopper packaging boundary', () => {
     assert.match(packager, /brepia\.contract\.v1/);
     assert.match(packager, /plan\.Controls\.Any/);
     assert.doesNotMatch(packager, /archive\.WriteToFile/);
+  });
+
+  it('accepts the versioned server package-plan transport at the Rhino-owned emitter boundary', () => {
+    assert.match(packager, /WritePackagePlan/);
+    assert.match(packager, /BrepiaGrasshopperPackagePlan\.Parse\(packagePlanJson\)/);
+    assert.match(packager, /WritePlan\(/);
+    assert.match(cli, /--plan/);
+    assert.match(cli, /WritePackagePlan\(inputJson, outputPath\)/);
+    assert.match(cli, /GeneratedControlCount/);
   });
 
   it('keeps Rhino-hosted package code on the exact pinned Rhino 8 SDK pair', () => {
