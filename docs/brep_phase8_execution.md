@@ -10,7 +10,7 @@ feature/brep-grasshopper-gh-packaging
 
 Its base is the Phase 7 branch `feature/brep-grasshopper-smart-component`. Phase 7A–7C are repository-complete; Phase 7D installed Rhino/Grasshopper runtime acceptance remains deferred until a real Rhino 8 runtime is conveniently available.
 
-Phase 8 must therefore maximize deterministic Linux/CI-verifiable work without treating SDK compilation or serialization experiments as proof of a real Grasshopper solve.
+Phase 8A is repository-complete. Phase 8B — plan-driven Grasshopper object emission — is the next implementation slice. Installed Rhino/Grasshopper runtime acceptance remains deferred and is not implied by Phase 8A completion.
 
 ## Product boundary
 
@@ -125,9 +125,9 @@ Do not reverse-engineer a complete `.gh` binary graph merely to avoid the runtim
 
 ## Phase slices
 
-### 8A — deterministic package model and host boundary — repository implementation complete, gates pending
+### 8A — deterministic package model and host boundary — repository complete
 
-Acceptance without Rhino Desktop:
+Accepted repository behavior:
 
 - canonical contract -> deterministic package plan;
 - stable project/control identity across ordinary Brepia revisions while retaining exact source-revision provenance;
@@ -138,9 +138,29 @@ Acceptance without Rhino Desktop:
 - Rhino/GH emitter code compiles against the exact pinned SDK pair on Ubuntu and Windows;
 - unsupported standalone Rhino/GH and GH_IO runtime boundaries are explicitly characterized and excluded from the permanent gate.
 
+Repository acceptance checkpoint:
+
+```text
+a033df76f054bf77c467118c8029a6a3eefe8f7e
+Reconcile Phase 8A runtime and identity findings
+```
+
+On that exact implementation/documentation checkpoint:
+
+- Quality Gate #468 / run `34035477350` — PASS;
+- tests — PASS;
+- typecheck — PASS;
+- lint — PASS;
+- build — PASS;
+- diff check — PASS;
+- Grasshopper Build #44 / run `34035477375` — PASS;
+- Phase 7 `.gha` restore/build/artifact job — PASS;
+- Phase 8 package build on `ubuntu-latest` — PASS;
+- Phase 8 package build on `windows-latest` — PASS.
+
 This slice does **not** claim that a generated `.gh` has opened or solved in Grasshopper.
 
-### 8B — plan-driven Grasshopper object emission
+### 8B — plan-driven Grasshopper object emission — next
 
 Implement the Rhino-hosted adapter from the portable plan:
 
