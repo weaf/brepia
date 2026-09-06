@@ -59,6 +59,23 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
     );
   });
 
+  it('accepts equivalent GUID casing from a Rhino-saved GHX', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const changed = ghx.replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+      (guid) => guid.toUpperCase(),
+    );
+    assert.notEqual(changed, ghx);
+
+    const result = await validateBrepGrasshopperExecutableGhx(
+      changed,
+      fixture,
+      'generated',
+    );
+    assert.equal(result.accepted, true);
+    assert.deepEqual(result.diagnostics, []);
+  });
+
   it('rejects any embedded Brepia script-source mutation', async () => {
     const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
     const scriptTextPattern =
@@ -99,6 +116,86 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
     );
     assert.equal(result.accepted, false);
     assert.ok(result.diagnostics.some((entry) => entry.code === 'script_rewired'));
+  });
+
+  it('rejects script input converter assembly mutation', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const changed = ghx.replace(
+      '<item name="AssemblyName" type_name="gh_string" type_code="10">System.Private.CoreLib</item>',
+      '<item name="AssemblyName" type_name="gh_string" type_code="10">System.Private.CoreLib.Tampered</item>',
+    );
+    assert.notEqual(changed, ghx);
+
+    const result = await validateBrepGrasshopperExecutableGhx(
+      changed,
+      fixture,
+      'returned',
+    );
+    assert.equal(result.accepted, false);
+    assert.ok(
+      result.diagnostics.some((entry) => entry.code === 'script_input_type_changed'),
+    );
+  });
+
+  it('rejects script output type-hint mutation', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const outputHintPattern =
+      /(<chunk name="OutputParam" index="0">[\s\S]*?<item name="TypeHintID" type_name="gh_guid" type_code="9">)([^<]+)(<\/item>)/;
+    const changed = ghx.replace(
+      outputHintPattern,
+      '$122222222-2222-4222-8222-222222222222$3',
+    );
+    assert.notEqual(changed, ghx);
+
+    const result = await validateBrepGrasshopperExecutableGhx(
+      changed,
+      fixture,
+      'returned',
+    );
+    assert.equal(result.accepted, false);
+    assert.ok(
+      result.diagnostics.some((entry) => entry.code === 'script_output_type_changed'),
+    );
+  });
+
+  it('rejects script runtime-setting mutation', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const changed = ghx.replace(
+      '<item name="MarshInputs" type_name="gh_bool" type_code="1">false</item>',
+      '<item name="MarshInputs" type_name="gh_bool" type_code="1">true</item>',
+    );
+    assert.notEqual(changed, ghx);
+
+    const result = await validateBrepGrasshopperExecutableGhx(
+      changed,
+      fixture,
+      'returned',
+    );
+    assert.equal(result.accepted, false);
+    assert.ok(
+      result.diagnostics.some(
+        (entry) => entry.code === 'script_runtime_settings_changed',
+      ),
+    );
+  });
+
+  it('rejects inconsistent Grasshopper object indexes', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const changed = ghx.replace(
+      '<chunk name="Object" index="0">',
+      '<chunk name="Object" index="99">',
+    );
+    assert.notEqual(changed, ghx);
+
+    const result = await validateBrepGrasshopperExecutableGhx(
+      changed,
+      fixture,
+      'returned',
+    );
+    assert.equal(result.accepted, false);
+    assert.ok(
+      result.diagnostics.some((entry) => entry.code === 'object_index_mismatch'),
+    );
   });
 
   it('rejects unknown graph objects instead of trying to interpret them into canonical Brepia state', async () => {
