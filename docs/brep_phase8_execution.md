@@ -21,6 +21,8 @@ A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, 
 - AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update;
 - Brepia is not a general Grasshopper automation product: broader scripting/logic may remain in Grasshopper, ChatGPT, Python or MCP-based workflows.
 
+Repository-level 8E is complete. The next active implementation slice is 8F. Installed Rhino/Grasshopper runtime acceptance remains explicitly deferred to 8H.
+
 ## Target loop
 
 ```text
@@ -161,29 +163,72 @@ Do not add fake Rhino hosts, private binary `.gh` reverse engineering or compati
 
 ## Revised active Phase 8 slices
 
-### 8E — GHX compiler + deterministic validator foundation — next
+### 8E — GHX compiler + deterministic validator foundation — repository complete
 
-Build the portable GHX-native foundation around the existing package plan.
+The portable zero-install foundation is implemented without requiring an installed Rhino/Grasshopper runtime.
 
-Required outcomes:
+Implemented:
 
-- define the minimal Brepia-supported GHX subset needed for the representative parametric model;
-- emit deterministic `.ghx` text without requiring installed Rhino/Grasshopper;
-- prefer standard Grasshopper objects;
-- prove a zero-install Rhino 8 Script/C# Script representation for embedded Brepia bridge logic where needed;
-- preserve stable Brepia project, revision-provenance and parameter identities;
-- create Rhino-produced/reference GHX fixtures where available;
-- parse generated GHX with a safe bounded XML parser;
-- produce machine-readable validation diagnostics;
-- validate object identities, supported state, connection references and Brepia semantic contract.
+- `shared/brepGrasshopperGhx.ts`
+  - deterministic GHX parameter-shell emission from the existing package plan;
+  - real Grasshopper Number Slider / Number object identities;
+  - bounded safe XML parsing and machine-readable diagnostics;
+  - generated-mode canonical-default validation and returned-mode bounded parameter recovery.
+- `shared/brepGrasshopperGhxArchive.ts`
+  - reusable bounded GHX XML archive parser;
+  - 4 MiB input limit, bounded nodes/depth/attributes/text;
+  - rejects DTD, ENTITY, CDATA, processing instructions and malformed structure before semantic recovery.
+- `shared/brepGrasshopperRhinoScript.ts`
+  - deterministic Rhino 8 C# Script plan using McNeel/Rhino built-in component and RhinoCode identities;
+  - self-contained RhinoCommon geometry code with no Brepia token, HTTP callback or GHA dependency;
+  - stable component/input/output identity across Brepia revisions while `sourceRevisionId` remains provenance;
+  - the current proven geometry subset is deliberately **exactly one canonical `box` node** whose result is the project result; optional semantic geometry roles may reuse that same result box;
+  - other canonical node types (`cylinder`, `transform`, `subtract`, `fillet`) fail closed as unsupported until their RhinoCommon equivalence is separately proven.
+- `shared/brepGrasshopperExecutableGhx.ts`
+  - deterministic executable GHX candidate composed from native Number/Slider controls plus one embedded Rhino 8 C# Script component;
+  - stable numeric input wiring;
+  - unconnected placement input resolves canonical project placement;
+  - eight Brepia output roles are preserved.
+- `shared/brepGrasshopperExecutableGhxValidation.ts`
+  - strict deterministic compatibility gate for the supported v1 executable subset;
+  - accepts generated canonical state and parameter-only returned edits within canonical bounds;
+  - normalizes GUID casing but freezes semantic identities;
+  - validates control type/state, script component/library identity, port identity, converter assemblies/types, type hints, source wiring, runtime/marshalling flags, script source, language/version and object indexing;
+  - unknown objects, rewiring, code mutation, runtime-setting mutation or unsupported graph changes fail closed and cannot become canonical Brepia state.
+
+Reference format evidence was taken from public McNeel Rhino 8 GHX fixtures in `mcneel/rhinocodetests`; the production implementation remains Brepia-owned and does not depend on that repository at runtime.
+
+Accepted repository checkpoint:
+
+```text
+a44143ca31f29ba410f940ddbe7b6adbd525b782
+Make GHX output mutation unambiguous
+```
+
+Exact-head evidence:
+
+- Quality Gate #514 / run `34053885690` — PASS;
+- Grasshopper Build #90 / run `34053885711` — PASS;
+- portable test suite — PASS;
+- TypeScript typecheck — PASS;
+- lint — PASS;
+- production build — PASS;
+- `git diff --check` — PASS;
+- Rhino/Grasshopper SDK plugin build — PASS;
+- package build on `ubuntu-latest` — PASS;
+- package build on `windows-latest` — PASS.
+
+Evidence boundary:
+
+- this proves the portable compiler/parser/validator contract and that retained Rhino/Grasshopper SDK code compiles on CI;
+- it does **not** prove that the generated executable GHX has opened, compiled or solved inside an installed Rhino 8/Grasshopper host;
+- real open/solve/parameter-change/save/reopen acceptance remains 8H and must not be inferred from repository CI.
 
 No embedded GHX viewer is required. The user can inspect exported files in Grasshopper. If something is wrong, they can return the GHX, describe the problem or provide screenshots for AI-assisted diagnosis.
 
-The validator must be deterministic. AI may repair failures but cannot declare an artifact valid by itself.
+### 8F — Brepia AI/product integration and preview parity — next
 
-### 8F — Brepia AI/product integration and preview parity
-
-Integrate GHX generation into the normal Brepia model lifecycle while preserving the existing native BRep preview/evaluation path.
+Integrate the now-validated GHX generation boundary into the normal Brepia model lifecycle while preserving the existing native BRep preview/evaluation path.
 
 Representative acceptance scenario:
 
@@ -191,13 +236,16 @@ Representative acceptance scenario:
 2. Brepia creates the canonical model and shows the 3D preview without Rhino;
 3. user asks for a larger handle and a window in the door;
 4. Brepia updates and previews the model;
-5. export generates a valid editable GHX representation of that same Brepia-owned model.
+5. export generates a valid editable GHX representation of that same Brepia-owned model when the canonical model belongs to the currently supported GHX subset;
+6. unsupported canonical geometry fails explicitly instead of silently producing an approximate Grasshopper model.
 
 AI should normally author a structured model/graph representation consumed by the compiler rather than freehand large GHX XML blobs.
 
+The first product-facing integration should keep Brepia preview authoritative and expose deterministic GHX capability/diagnostics. It should not add a Grasshopper viewer or claim support for canonical node types that 8E has not yet proven.
+
 ### 8G — strict v1 GHX round-trip
 
-Implement the first deliberately narrow import contract.
+Implement the first deliberately narrow import contract in the product lifecycle.
 
 Supported v1 behavior:
 
