@@ -282,17 +282,17 @@ Representative acceptance:
 Repository checkpoint before installed-runtime acceptance:
 
 ```text
-83eddcecbb16cb83be9efb2534fc0a8496e7dd9f
-Publish Grasshopper plugin acceptance artifact
+ce5e3262942ed1705e7c906838aa1b76424f70fd
+Record Phase 7C implementation boundary
 ```
 
 On that exact head:
 
-- Grasshopper Build #12 / run `34027757462` — PASS;
+- Grasshopper Build #13 / run `34027874628` — PASS;
 - `dotnet restore` — PASS;
 - `dotnet build --configuration Release --no-restore --warnaserror` — PASS;
 - CI artifact `brepia-grasshopper` — published;
-- Quality Gate #436 / run `34027757460` — PASS;
+- Quality Gate #437 / run `34027874632` — PASS;
 - tests/typecheck/lint/build/diff check — PASS.
 
 ## External repository assessment
