@@ -126,7 +126,7 @@ def write_3dm(project, result, step_path, three_dm_path):
     if metadata is not None:
         document_strings["brepia.metadata"] = compact_json(metadata)
     for key, value in document_strings.items():
-        model.Strings.SetString(key, value)
+        model.Strings[key] = value
 
     bodies = {body["id"]: body for body in result["bodies"]}
     for body in result["projectObject"]["geometry"].values():
