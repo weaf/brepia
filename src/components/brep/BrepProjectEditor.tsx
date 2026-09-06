@@ -427,7 +427,6 @@ export function BrepProjectEditorProvider({
       dirty,
       exporting,
       onProjectSourceCommit,
-      project,
       revisionActionId,
       saving,
       sourceEditingDisabled,
