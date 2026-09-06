@@ -20,7 +20,7 @@ public static class BrepiaEvaluatorEnvironment
                 $"{BaseUrlVariable} must be an absolute http/https URL.");
         }
 
-        var normalized = uri.AbsoluteUri.EndsWith('/', StringComparison.Ordinal)
+        var normalized = uri.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
             ? uri
             : new Uri($"{uri.AbsoluteUri}/", UriKind.Absolute);
         var token = Environment.GetEnvironmentVariable(TokenVariable)?.Trim();
