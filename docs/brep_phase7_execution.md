@@ -96,14 +96,16 @@ All remote/evaluator failures must fail closed and appear as Grasshopper runtime
 
 ## Placement semantics
 
-The evaluator returns geometry in Brepia component-local coordinates.
+The evaluator returns geometry in Brepia component-local coordinates. The local source basis is the canonical component basis (`WorldXY` in Rhino terms); the persisted project placement is an insertion target, not the source basis of already-transformed geometry.
 
-The component constructs the source Plane from the resolved project placement under the current parameter values. It then applies one RhinoCommon plane-to-plane transform from that source Plane to:
+The component resolves exactly one target Plane for each solve:
 
-- the connected Grasshopper Plane when supplied; or
-- the same resolved project Plane when the input is unconnected, yielding the canonical insertion placement.
+- when the Grasshopper Plane input is unconnected, use the project placement resolved under the current parameter values;
+- when the Plane input is connected, the connected Plane replaces the project placement.
 
-The same transform applies to primary geometry, optional project-object geometry, semantic point positions and semantic point directions. Placement axes represent orientation, never scale.
+The component then applies a RhinoCommon plane-to-plane transform from the component-local `WorldXY` basis to that target Plane. Axis magnitudes from the Brepia placement are orientation semantics only and must not introduce geometry scale.
+
+The same rigid placement transform applies to primary geometry, optional project-object geometry and semantic point positions. Semantic point directions receive the transform's vector/orientation part only, never translation.
 
 ## Phase 7 slices
 
