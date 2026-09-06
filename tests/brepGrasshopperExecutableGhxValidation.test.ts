@@ -61,8 +61,10 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
 
   it('rejects any embedded Brepia script-source mutation', async () => {
     const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const scriptTextPattern =
+      /(<chunk name="Script"><items count="5">[\s\S]*?<item name="Text" type_name="gh_string" type_code="10">)([^<])/;
     const changed = ghx.replace(
-      /(<chunk name="Script"><items count="5">[\s\S]*?<item name="Text" type_name="gh_string" type_code="10">)([^<])/, 
+      scriptTextPattern,
       (_match, prefix: string, first: string) => `${prefix}${first === 'A' ? 'B' : 'A'}`,
     );
     assert.notEqual(changed, ghx);
