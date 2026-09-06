@@ -7,6 +7,7 @@ import {
 export const BREP_GRASSHOPPER_PACKAGE_PLAN_KIND =
   'brepia-grasshopper-package-plan' as const;
 export const BREP_GRASSHOPPER_PACKAGE_PLAN_SCHEMA_VERSION = 1 as const;
+export const BREP_GRASSHOPPER_PACKAGE_PLAN_MAX_BYTES = 4 * 1024 * 1024;
 
 const CONTROL_X = 40;
 const CONTROL_Y = 80;
@@ -74,6 +75,27 @@ export type BrepGrasshopperPackagePlan = {
     behavior: 'leave-unconnected-for-project-placement';
   };
 };
+
+export type BrepGrasshopperPackagePlanErrorCode =
+  | 'invalid_plan'
+  | 'invalid_json'
+  | 'unsupported_version'
+  | 'too_large';
+
+export class BrepGrasshopperPackagePlanError extends Error {
+  constructor(
+    public readonly code: BrepGrasshopperPackagePlanErrorCode,
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'BrepGrasshopperPackagePlanError';
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function finiteNumber(value: number | undefined): number | undefined {
   return value != null && Number.isFinite(value) ? value : undefined;
@@ -211,8 +233,83 @@ export async function createBrepGrasshopperPackagePlan(
   };
 }
 
+/**
+ * Normalize a transported package plan by trusting only its embedded canonical
+ * Brepia contract. Derived object identity/layout/wiring is rebuilt rather than
+ * accepted as an independent authority.
+ */
+export async function normalizeBrepGrasshopperPackagePlan(
+  value: unknown,
+): Promise<BrepGrasshopperPackagePlan> {
+  if (!isRecord(value)) {
+    throw new BrepGrasshopperPackagePlanError(
+      'invalid_plan',
+      'Grasshopper package plan must be an object.',
+    );
+  }
+  if (value.kind !== BREP_GRASSHOPPER_PACKAGE_PLAN_KIND) {
+    throw new BrepGrasshopperPackagePlanError(
+      'invalid_plan',
+      `Grasshopper package plan kind must be ${BREP_GRASSHOPPER_PACKAGE_PLAN_KIND}.`,
+    );
+  }
+  if (value.schemaVersion !== BREP_GRASSHOPPER_PACKAGE_PLAN_SCHEMA_VERSION) {
+    if (typeof value.schemaVersion === 'number') {
+      throw new BrepGrasshopperPackagePlanError(
+        'unsupported_version',
+        `Unsupported Grasshopper package plan schema version: ${value.schemaVersion}.`,
+      );
+    }
+    throw new BrepGrasshopperPackagePlanError(
+      'invalid_plan',
+      'Grasshopper package plan schemaVersion is required.',
+    );
+  }
+  if (!('contract' in value)) {
+    throw new BrepGrasshopperPackagePlanError(
+      'invalid_plan',
+      'Grasshopper package plan must embed its canonical Brepia contract.',
+    );
+  }
+
+  try {
+    return await createBrepGrasshopperPackagePlan(value.contract);
+  } catch (error) {
+    if (error instanceof BrepGrasshopperPackagePlanError) throw error;
+    throw new BrepGrasshopperPackagePlanError(
+      'invalid_plan',
+      'Grasshopper package plan contains an invalid canonical Brepia contract.',
+      error,
+    );
+  }
+}
+
 export async function serializeBrepGrasshopperPackagePlan(
   value: unknown,
 ): Promise<string> {
   return `${JSON.stringify(await createBrepGrasshopperPackagePlan(value), null, 2)}\n`;
+}
+
+export async function parseBrepGrasshopperPackagePlanJson(
+  text: string,
+): Promise<BrepGrasshopperPackagePlan> {
+  const byteLength = new TextEncoder().encode(text).byteLength;
+  if (byteLength > BREP_GRASSHOPPER_PACKAGE_PLAN_MAX_BYTES) {
+    throw new BrepGrasshopperPackagePlanError(
+      'too_large',
+      `Grasshopper package plan exceeds ${BREP_GRASSHOPPER_PACKAGE_PLAN_MAX_BYTES} bytes.`,
+    );
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new BrepGrasshopperPackagePlanError(
+      'invalid_json',
+      'Grasshopper package plan is not valid JSON.',
+      error,
+    );
+  }
+  return normalizeBrepGrasshopperPackagePlan(value);
 }
