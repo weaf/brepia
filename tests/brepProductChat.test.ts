@@ -105,7 +105,8 @@ describe('BRep product chat client boundary', () => {
 
   it('keeps persisted BRep leaf authority server-side while message caches synchronize', () => {
     assert.match(brepViewSource, /leafPresentInMessages/);
-    assert.match(brepViewSource, /Synchronizing BRep conversation/);
+    assert.match(brepViewSource, /isRecentPendingBrepCreation/);
+    assert.match(brepViewSource, /<BrepCreationProgress/);
     assert.doesNotMatch(
       brepViewSource,
       /current_message_leaf_id:\s*userMessageId/,
