@@ -12,9 +12,9 @@ Repository implementation is now complete for the first four UX tracks on `featu
 - **UX-2 per-turn model/transport provenance** — repository complete;
 - **UX-3 stable resizable side-panel width** — implemented before this checkpoint;
 - **UX-4 user-defined BRep revision names** — implemented before this checkpoint;
-- **ROBUST-1 persisted server-side generation status** — reconciled below; implementation remains next.
+- **ROBUST-1 persisted server-side generation status** — state contract started; schema/server persistence remains next.
 
-Latest exact-head repository evidence for UX-1/UX-2:
+Latest exact-head repository evidence for UX-1/UX-2 before ROBUST-1 contract work:
 
 ```text
 8d32d07110dccd8753399632ddc6821396be01bd
@@ -267,6 +267,17 @@ The repository now has enough server infrastructure to implement this without ma
 4. Existing `persist_brep_ai_revision` demonstrates the desired ownership/CAS discipline for immutable BRep state. Generation runs should use independent run IDs and monotonic per-run sequence/state transitions so an older run cannot overwrite a newer run's presentation state.
 5. Repository database changes are schema-first by `AGENTS.md`: edit `supabase/schemas/`, generate/review the migration with local `npx supabase db diff`, apply it locally, and regenerate `shared/database.ts`. `shared/database.ts` must not be hand-edited. This database slice therefore must be generated in a real local Supabase checkout rather than fabricated through a remote file-only edit.
 
+The shared repository contract has now started in `shared/generationRun.ts` with focused tests in `tests/generationRun.test.ts`. It defines:
+
+- explicit run statuses `queued`, `running`, `waiting_for_preview`, `completed`, `failed`, `cancelled`;
+- truthful ordered phases from `request_saved` through `preview_ready`;
+- `waiting_for_preview` as the current boundary after a BRep revision is persisted but before a real evaluate request occurs;
+- monotonic `sequence` as an idempotency/state-version field, explicitly not a percentage;
+- no phase regression even if a stale writer has a newer wall-clock timestamp;
+- same-phase detail updates for events such as an OpenCode reconnect without fabricating forward progress;
+- bounded detail/error fields;
+- terminal status immutability.
+
 Recommended v1 authority model after this reconciliation:
 
 ```text
@@ -328,10 +339,10 @@ generation_run
   actual_model_id?
   transport_kind
   execution_mode?
-  status                    // queued/running/completed/failed/cancelled
+  status                    // queued/running/waiting_for_preview/completed/failed/cancelled
   phase                     // current truthful server phase
   detail?                   // bounded machine/UI-safe detail
-  sequence                  // monotonic progress version
+  sequence                  // monotonic state version, not percent
   created_at
   started_at?
   updated_at
@@ -416,6 +427,6 @@ The UI must always show a truthful persisted stage or terminal result; it must n
 2. **UX-4 revision names** — implemented; browser acceptance pending.
 3. **UX-1 Parametric/Mesh + Attach controls** — repository complete; browser acceptance pending.
 4. **UX-2 per-turn model provenance** — repository complete; browser/real-model acceptance pending.
-5. **ROBUST-1 persisted generation status** — next schema/server/client slice; database artifacts must be generated with the repository's local schema-first Supabase workflow.
+5. **ROBUST-1 persisted generation status** — shared state contract started; next database/server/client slice must use the repository's local schema-first Supabase workflow.
 
 Keep installed Rhino/Grasshopper Phase 9 acceptance independent. None of these product UX/robustness items should weaken the strict GHX validation boundary or change the canonical BRep revision model.
