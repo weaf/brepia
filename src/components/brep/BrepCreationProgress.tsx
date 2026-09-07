@@ -52,15 +52,18 @@ export function BrepCreationProgress({
   leafPresent,
   model,
   executionMode,
+  requestSavedOverride,
 }: {
   messages: Message[];
   messagesFetched: boolean;
   leafPresent: boolean;
   model: Model;
   executionMode: 'cli' | 'streaming';
+  requestSavedOverride?: boolean;
 }) {
   const conversationSynced = messagesFetched && leafPresent;
-  const requestSaved = messages.some((message) => message.role === 'user');
+  const requestSaved =
+    requestSavedOverride ?? messages.some((message) => message.role === 'user');
 
   const steps: ProgressStep[] = [
     { label: 'Open BRep project', state: 'complete' },
