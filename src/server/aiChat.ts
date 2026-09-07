@@ -89,6 +89,7 @@ import {
   beginActiveGeneration,
   cancelActiveGeneration,
 } from './activeGeneration';
+import { resolveAiTurnProvenance } from './aiTurnProvenance';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
 
 export const PARAMETRIC_AGENT_PROMPT = loadBundledInstruction('parametric');
@@ -1293,6 +1294,18 @@ export async function handleAiChatRequest(req: Request) {
       400,
     );
   }
+  const turnProvenance = resolveAiTurnProvenance({
+    actualModelId,
+    transport,
+    executionMode,
+  });
+  const turnMetadata: AppUIMessage['metadata'] = {
+    model: rawBody.model,
+    ...(conversation.type === 'creative'
+      ? { agentModel: actualModelId }
+      : {}),
+    ...turnProvenance,
+  };
   console.info('transport', {
     modelId: actualModelId,
     executionMode,
@@ -1552,13 +1565,12 @@ export async function handleAiChatRequest(req: Request) {
         result.toUIMessageStream<AppUIMessage>({
           originalMessages: branchMessages,
           generateMessageId: () => crypto.randomUUID(),
+          messageMetadata: ({ part }) =>
+            part.type === 'start' ? turnMetadata : undefined,
           onFinish: async ({ responseMessage, isContinuation }) => {
             const metadata = {
               ...(responseMessage.metadata ?? {}),
-              model: rawBody.model,
-              ...(conversation.type === 'creative'
-                ? { agentModel: actualModelId }
-                : {}),
+              ...turnMetadata,
             };
 
             const baseFinalizedParts =
