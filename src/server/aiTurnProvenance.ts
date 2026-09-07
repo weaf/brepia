@@ -51,6 +51,18 @@ export function resolveAiTurnProvenance({
     };
   }
 
+  // Legacy persisted OpenCode IDs can still select CLI vs Streaming in the
+  // product. CLI uses the older normal adapter internally, so classify the
+  // user-visible transport from the immutable model ID rather than exposing
+  // that implementation detail as a misleading direct-provider turn.
+  if (actualModelId.startsWith('opencode/')) {
+    return {
+      actualModel: actualModelId,
+      transportKind: 'opencode',
+      openCodeExecutionMode: executionMode,
+    };
+  }
+
   if (actualModelId.startsWith('agent/codex/')) {
     return {
       actualModel: stripAgentPrefix(actualModelId, 'agent/codex/'),
