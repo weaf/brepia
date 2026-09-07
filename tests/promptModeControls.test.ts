@@ -50,10 +50,26 @@ describe('home prompt creation mode controls', () => {
       promptViewSource,
       /attachmentDisabledReason="Native BRep creation is text-only for now\."/,
     );
+    assert.match(textAreaSource, /if \(attachmentInteractionsDisabled\) \{/);
     assert.match(textAreaSource, /if \(attachmentsDisabled\) \{/);
     assert.match(textAreaSource, /const handlePaste =/);
     assert.match(textAreaSource, /const handleDrop = async/);
     assert.match(textAreaSource, /await addItems\(droppedFiles\)/);
+  });
+
+  it('blocks all attachment ingress while the prompt itself is disabled', () => {
+    assert.match(
+      textAreaSource,
+      /const attachmentInteractionsDisabled = disabled \|\| attachmentsDisabled/,
+    );
+    assert.match(
+      textAreaSource,
+      /const addItems = async \(files: FileList\) => \{\s*if \(attachmentInteractionsDisabled\)/,
+    );
+    assert.match(
+      textAreaSource,
+      /disabled=\{attachmentInteractionsDisabled\}/,
+    );
   });
 
   it('does not silently carry incompatible Mesh attachments into Parametric', () => {
