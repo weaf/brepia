@@ -47,6 +47,11 @@ import {
 import { getCreativeInputValidationIssue } from '@/lib/creativeInputValidation';
 import { resolvePreferredCreativeAgentModel } from '@/lib/creativeAgentSelection';
 
+type ParametricSourceKind = 'openscad' | 'brep';
+type PromptMessageMetadata = AppUIMessage['metadata'] & {
+  parametricSourceKind?: 'brep';
+};
+
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   if (
@@ -98,6 +103,8 @@ export function PromptView() {
   }, [profile?.full_name, user, isProfileLoading]);
 
   const [type, setType] = useState<'parametric' | 'creative'>('parametric');
+  const [parametricSourceKind, setParametricSourceKind] =
+    useState<ParametricSourceKind>('openscad');
 
   const parametricDefaultModel = useMemo(
     () =>
@@ -169,6 +176,18 @@ export function PromptView() {
   const [images, setImages] = useState<MessageItem[]>([]);
   const [mesh, setMesh] = useState<MessageItem | null>(null);
 
+  const handleParametricSourceChange = (next: ParametricSourceKind) => {
+    if (next === 'brep' && (images.length > 0 || mesh)) {
+      toast({
+        title: 'Remove attachments first',
+        description:
+          'Native BRep creation currently starts from a text prompt only. Remove attached images or meshes before switching model type.',
+      });
+      return;
+    }
+    setParametricSourceKind(next);
+  };
+
   const [draftConversationId, setDraftConversationId] = useState(() =>
     crypto.randomUUID(),
   );
@@ -207,6 +226,8 @@ export function PromptView() {
     mutationFn: async (parts: AppUIMessage['parts']) => {
       if (!user?.id) throw new Error('User must be authenticated');
       const conversationId = draftConversationId;
+      const isNativeBrep =
+        type === 'parametric' && parametricSourceKind === 'brep';
       const creativeAgentModel =
         type === 'creative'
           ? resolvePreferredCreativeAgentModel(parametricModels)
@@ -215,9 +236,14 @@ export function PromptView() {
       if (type === 'creative' && !creativeAgentModel) {
         throw new Error('No compatible Creative AI model is available');
       }
+      if (isNativeBrep && parts.some((part) => part.type !== 'text')) {
+        throw new Error(
+          'Native BRep creation currently supports text prompts only. Remove attachments and try again.',
+        );
+      }
 
       const submittedParts =
-        type === 'parametric'
+        type === 'parametric' && !isNativeBrep
           ? ((await Promise.all(
               parts.map(async (part) => {
                 if (
@@ -276,6 +302,9 @@ export function PromptView() {
       posthog.capture('new_conversation', {
         type: type,
         model_name: model,
+        ...(type === 'parametric'
+          ? { parametric_source_kind: parametricSourceKind }
+          : {}),
         ...(creativeAgentModel
           ? { creative_agent_model_name: creativeAgentModel }
           : {}),
@@ -308,7 +337,12 @@ export function PromptView() {
                 openCodeExecutionMode: executionMode,
                 ...(type === 'creative'
                   ? { creativePromptProfileId, creativeAgentModel }
-                  : { promptProfileId }),
+                  : {
+                      promptProfileId,
+                      ...(isNativeBrep
+                        ? { parametricSourceKind: 'brep' as const }
+                        : {}),
+                    }),
               },
             },
           ])
@@ -342,8 +376,9 @@ export function PromptView() {
         throw new Error('No message parts to send');
       }
 
-      const messageMetadata: AppUIMessage['metadata'] = {
+      const messageMetadata: PromptMessageMetadata = {
         model,
+        ...(isNativeBrep ? { parametricSourceKind: 'brep' as const } : {}),
         ...(creativeAgentModel ? { agentModel: creativeAgentModel } : {}),
       };
 
@@ -355,7 +390,7 @@ export function PromptView() {
       });
 
       const chat = createAndCacheAiChat({
-        id: conversation.id,
+        id: isNativeBrep ? `brep:${conversation.id}` : conversation.id,
         generateId: () => crypto.randomUUID(),
         messages: [],
         transport: new DefaultChatTransport<AppUIMessage>({
@@ -379,15 +414,20 @@ export function PromptView() {
             },
           }),
         }),
-        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+        sendAutomaticallyWhen: isNativeBrep
+          ? () => false
+          : lastAssistantMessageIsCompleteWithToolCalls,
       });
-      void chat
-        .sendMessage({
-          id: userMessageId,
-          parts: submittedParts,
-          metadata: messageMetadata,
-        })
-        .catch((error) => {
+
+      const sendPromise = chat.sendMessage({
+        id: userMessageId,
+        parts: submittedParts,
+        metadata: messageMetadata,
+      });
+      if (isNativeBrep) {
+        await sendPromise;
+      } else {
+        void sendPromise.catch((error) => {
           Sentry.captureException(error, {
             extra: {
               hook: 'PromptView initial chat',
@@ -395,6 +435,7 @@ export function PromptView() {
             },
           });
         });
+      }
 
       void (async () => {
         try {
@@ -455,10 +496,15 @@ export function PromptView() {
 
       return {
         conversationId: conversation.id,
+        destination: isNativeBrep ? ('brep' as const) : ('editor' as const),
       };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      if (data.destination === 'brep') {
+        window.location.assign(`/brep/${data.conversationId}`);
+        return;
+      }
       navigate({ to: '/editor/$id', params: { id: data.conversationId } });
     },
     onError: (error) => {
@@ -473,6 +519,19 @@ export function PromptView() {
   });
 
   const handlePromptSubmit = (parts: AppUIMessage['parts']) => {
+    if (
+      type === 'parametric' &&
+      parametricSourceKind === 'brep' &&
+      parts.some((part) => part.type !== 'text')
+    ) {
+      toast({
+        title: 'Native BRep is text-only for now',
+        description:
+          'Remove attached images or meshes before creating a native BRep project.',
+      });
+      return;
+    }
+
     const issue = getCreativeInputValidationIssue({
       conversationType: type,
       model,
@@ -556,6 +615,54 @@ export function PromptView() {
                   />
                 </div>
               )}
+              {user && type === 'parametric' && (
+                <div className="flex flex-col gap-3 rounded-xl border border-adam-neutral-700 bg-adam-background-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-adam-text-tertiary">
+                      Parametric model type
+                    </p>
+                    <p className="mt-1 text-xs text-adam-text-secondary">
+                      {parametricSourceKind === 'brep'
+                        ? 'Native BRep uses the exact Brepia BRep kernel and opens in the BRep workspace.'
+                        : 'OpenSCAD keeps the existing script-based parametric workflow.'}
+                    </p>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label="Parametric model type"
+                    className="flex shrink-0 overflow-hidden rounded-lg border border-adam-neutral-700"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={parametricSourceKind === 'openscad'}
+                      disabled={isGenerating}
+                      onClick={() => handleParametricSourceChange('openscad')}
+                      className={cn(
+                        'px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                        parametricSourceKind === 'openscad'
+                          ? 'bg-adam-blue/15 text-adam-blue'
+                          : 'bg-transparent text-adam-text-secondary hover:bg-adam-neutral-800 hover:text-adam-text-primary',
+                      )}
+                    >
+                      OpenSCAD
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={parametricSourceKind === 'brep'}
+                      disabled={isGenerating}
+                      onClick={() => handleParametricSourceChange('brep')}
+                      className={cn(
+                        'border-l border-adam-neutral-700 px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                        parametricSourceKind === 'brep'
+                          ? 'bg-adam-blue/15 text-adam-blue'
+                          : 'bg-transparent text-adam-text-secondary hover:bg-adam-neutral-800 hover:text-adam-text-primary',
+                      )}
+                    >
+                      Native BRep
+                    </button>
+                  </div>
+                </div>
+              )}
               <SelectedItemsContext.Provider
                 value={{ images, setImages, mesh, setMesh }}
               >
@@ -575,7 +682,11 @@ export function PromptView() {
                       return;
                     }
                   }}
-                  placeholder={homePrompt}
+                  placeholder={
+                    type === 'parametric' && parametricSourceKind === 'brep'
+                      ? 'Describe the native parametric BRep model you want to create…'
+                      : homePrompt
+                  }
                   type={type}
                   disabled={isGenerating}
                   model={model}
@@ -587,15 +698,17 @@ export function PromptView() {
                   draftStorageKey={HOME_PROMPT_DRAFT_KEY}
                 />
               </SelectedItemsContext.Provider>
-              {user && type === 'parametric' && (
-                <div className="flex justify-end">
-                  <ScadImportButton
-                    model={model}
-                    executionMode={executionMode}
-                    disabled={isGenerating}
-                  />
-                </div>
-              )}
+              {user &&
+                type === 'parametric' &&
+                parametricSourceKind === 'openscad' && (
+                  <div className="flex justify-end">
+                    <ScadImportButton
+                      model={model}
+                      executionMode={executionMode}
+                      disabled={isGenerating}
+                    />
+                  </div>
+                )}
               {!user && (
                 <p className="text-center text-sm text-gray-500">
                   <Link
