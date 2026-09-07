@@ -2,9 +2,9 @@
 
 ## Status
 
-**Pending real local browser acceptance.**
+**Accepted in the real local browser/runtime on 2026-09-07.**
 
-Phase 8A–8G have repository-level implementation and CI evidence, but that evidence does not prove the complete user-facing Brepia flow. Phase 8 must not be called fully product-accepted until this gate passes.
+Phase 8A–8G established the repository implementation and CI evidence. Phase 8H has now also proven the complete user-facing Brepia-side round trip through the real browser UI.
 
 Installed Rhino/Grasshopper open/solve acceptance remains separate Phase 9 work in `docs/brep_phase9_rhino_acceptance.md`.
 
@@ -86,6 +86,38 @@ The harness must fail unless all of the following are true:
 
 A successful run writes `brep-ghx-roundtrip-accepted.png` as visual evidence.
 
+## Acceptance evidence — 2026-09-07
+
+The real local Playwright run passed the complete flow above against the real authenticated Brepia application and native BRep runtime.
+
+The acceptance exercise exposed and corrected two integration defects before the final pass:
+
+1. the browser harness still targeted the obsolete sign-in selector `#email`; it now uses the current `#identifier` field;
+2. GHX import inserted an immutable message revision, but the database `update_leaf_trigger` automatically advanced `conversations.current_message_leaf_id` to every newly inserted message. The import persistence path now restores the pre-import active leaf with a compare-and-swap update only while the leaf still points to the imported revision, so it cannot overwrite a genuinely newer user/AI leaf.
+
+Final browser evidence:
+
+```text
+real UI sign-in                         PASS
+AI creates supported canonical box     PASS
+native Brepia 3D preview               PASS
+GHX export through product UI          PASS
+Width 1200 -> 1500 returned edit       PASS
+GHX import through product UI          PASS
+new immutable revision                 PASS
+imported revision initially inactive   PASS
+explicit revision activation           PASS
+Width = 1500 after activation          PASS
+native preview after activation        PASS
+```
+
+Repository gates on product-fix checkpoint `26b303ffad38f5aee062dda11173044831308466`:
+
+- Quality Gate #546 / run `34136092218` — PASS;
+- Grasshopper Build #119 / run `34136092167` — PASS.
+
+Phase 8 is therefore **Brepia-side product-accepted for the strict v1 GHX subset**.
+
 ## Failure policy
 
 Do not weaken the deterministic GHX validator merely to make browser acceptance pass.
@@ -103,9 +135,9 @@ Unknown GHX graph/script/wiring/runtime mutations remain unsupported and must co
 
 ## Phase boundary
 
-After this browser gate passes, Phase 8 can be called Brepia-side product-accepted for the strict v1 subset.
+Phase 8 is now Brepia-side product-accepted for the strict v1 subset.
 
-Phase 9 then adds only the missing real Rhino 8 / Grasshopper host evidence:
+Phase 9 adds only the missing real Rhino 8 / Grasshopper host evidence:
 
 ```text
 Brepia-exported GHX
