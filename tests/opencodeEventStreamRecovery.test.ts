@@ -20,10 +20,10 @@ describe('OpenCode durable event stream recovery', () => {
     assert.equal(isRecoverableOpenCodeEventStreamError(error), true);
   });
 
-  it('does not hide ordinary OpenCode protocol failures', () => {
+  it('does not hide ordinary non-transport OpenCode failures', () => {
     assert.equal(
       isRecoverableOpenCodeEventStreamError(
-        new Error('event fetch failed HTTP 400: invalid cursor'),
+        new Error('OpenCode rejected the returned project envelope'),
       ),
       false,
     );
