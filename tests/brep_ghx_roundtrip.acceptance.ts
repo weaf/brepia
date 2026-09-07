@@ -2,12 +2,15 @@ import { Buffer } from 'node:buffer';
 import { expect, test, type Download, type Page } from '@playwright/test';
 
 const ORIGIN = (process.env.BREPIA_ACCEPTANCE_ORIGIN ?? 'http://localhost:3002').replace(/\/+$/, '');
-const EMAIL = process.env.BREP_GHX_EMAIL ?? process.env.B9_EMAIL;
+const IDENTIFIER =
+  process.env.BREP_GHX_IDENTIFIER ??
+  process.env.BREP_GHX_EMAIL ??
+  process.env.B9_EMAIL;
 const PASSWORD = process.env.BREP_GHX_PASSWORD ?? process.env.B9_PASSWORD;
 
-if (!EMAIL || !PASSWORD) {
+if (!IDENTIFIER || !PASSWORD) {
   throw new Error(
-    'Set BREP_GHX_EMAIL/BREP_GHX_PASSWORD (or B9_EMAIL/B9_PASSWORD) before running the Phase 8H browser acceptance.',
+    'Set BREP_GHX_IDENTIFIER/BREP_GHX_PASSWORD (BREP_GHX_EMAIL or B9_EMAIL/B9_PASSWORD remain supported) before running the Phase 8H browser acceptance.',
   );
 }
 
@@ -22,10 +25,26 @@ const PROMPT = [
 
 async function signIn(page: Page) {
   await page.goto(`${ORIGIN}/signin`);
-  await page.locator('#identifier').fill(EMAIL!);
+  await page.locator('#identifier').fill(IDENTIFIER!);
   await page.locator('#password').fill(PASSWORD!);
-  await page.locator('button[type="submit"]').click();
-  await expect(page).not.toHaveURL(/\/signin(?:\?|$)/, { timeout: 30000 });
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+
+  const authError = page
+    .getByText(/Invalid username\/email or password|An error occurred while signing in/)
+    .first();
+  const outcome = await Promise.race([
+    page
+      .waitForURL((url) => url.pathname !== '/signin', { timeout: 30000 })
+      .then(() => 'signed-in' as const),
+    authError
+      .waitFor({ state: 'visible', timeout: 30000 })
+      .then(() => 'auth-error' as const),
+  ]);
+
+  if (outcome === 'auth-error') {
+    const message = (await authError.textContent())?.trim() || 'unknown authentication error';
+    throw new Error(`Phase 8H sign-in failed: ${message}`);
+  }
 }
 
 async function downloadText(download: Download): Promise<string> {
