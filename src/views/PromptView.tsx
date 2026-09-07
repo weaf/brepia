@@ -183,17 +183,37 @@ export function PromptView() {
     'cli',
   );
 
+  const [isLoaded, setIsLoaded] = useState(false);
+  const isMobile = useIsMobile();
+  const [images, setImages] = useState<MessageItem[]>([]);
+  const [mesh, setMesh] = useState<MessageItem | null>(null);
+
   const handleTypeChange = (newType: 'parametric' | 'creative') => {
+    if (newType === type) return;
+
+    if (newType === 'parametric' && (images.length > 0 || mesh)) {
+      const nativeBrepTarget = parametricSourceKind === 'brep';
+      const hasUnsupportedImages = images.length > 0;
+      const hasUnsupportedMesh = Boolean(
+        mesh && (mesh.fileType !== 'stl' || mesh.isUploading),
+      );
+
+      if (nativeBrepTarget || hasUnsupportedImages || hasUnsupportedMesh) {
+        toast({
+          title: 'Remove incompatible attachments first',
+          description: nativeBrepTarget
+            ? 'Native BRep creation is text-only. Remove attachments before switching back to Parametric.'
+            : 'OpenSCAD Parametric mode can retain a completed STL attachment, but other Mesh-mode attachments must be removed first.',
+        });
+        return;
+      }
+    }
+
     setType(newType);
     setModel(
       newType === 'creative' ? creativeDefaultModel : parametricDefaultModel,
     );
   };
-
-  const [isLoaded, setIsLoaded] = useState(false);
-  const isMobile = useIsMobile();
-  const [images, setImages] = useState<MessageItem[]>([]);
-  const [mesh, setMesh] = useState<MessageItem | null>(null);
 
   const handleParametricSourceChange = (next: ParametricSourceKind) => {
     if (next === 'brep' && (images.length > 0 || mesh)) {
@@ -654,7 +674,41 @@ export function PromptView() {
           <div className="flex w-full flex-col items-center">
             <div className="w-full max-w-3xl space-y-4 pb-12">
               {user && (
-                <div className="flex justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div
+                    role="group"
+                    aria-label="Creation mode"
+                    className="flex shrink-0 overflow-hidden rounded-lg border border-adam-neutral-700 bg-adam-background-2"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={type === 'parametric'}
+                      disabled={isGenerating}
+                      onClick={() => handleTypeChange('parametric')}
+                      className={cn(
+                        'px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                        type === 'parametric'
+                          ? 'bg-adam-blue/15 text-adam-blue'
+                          : 'bg-transparent text-adam-text-secondary hover:bg-adam-neutral-800 hover:text-adam-text-primary',
+                      )}
+                    >
+                      Parametric
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={type === 'creative'}
+                      disabled={isGenerating}
+                      onClick={() => handleTypeChange('creative')}
+                      className={cn(
+                        'border-l border-adam-neutral-700 px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                        type === 'creative'
+                          ? 'bg-adam-blue/15 text-adam-blue'
+                          : 'bg-transparent text-adam-text-secondary hover:bg-adam-neutral-800 hover:text-adam-text-primary',
+                      )}
+                    >
+                      Mesh
+                    </button>
+                  </div>
                   <InstructionProfileSelector
                     selectedProfileId={instructionProfileId}
                     onProfileChange={setInstructionProfileId}
@@ -667,7 +721,7 @@ export function PromptView() {
                 <div className="flex flex-col gap-3 rounded-xl border border-adam-neutral-700 bg-adam-background-2 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-xs font-medium uppercase tracking-wide text-adam-text-tertiary">
-                      Parametric model type
+                      Parametric source
                     </p>
                     <p className="mt-1 text-xs text-adam-text-secondary">
                       {parametricSourceKind === 'brep'
@@ -737,10 +791,13 @@ export function PromptView() {
                   }
                   type={type}
                   disabled={isGenerating}
+                  attachmentsDisabled={
+                    type === 'parametric' && parametricSourceKind === 'brep'
+                  }
+                  attachmentDisabledReason="Native BRep creation is text-only for now."
                   model={model}
                   setModel={setModel}
                   showFullLabels={true}
-                  onTypeChange={handleTypeChange}
                   executionMode={executionMode}
                   onExecutionModeChange={setExecutionMode}
                   draftStorageKey={HOME_PROMPT_DRAFT_KEY}
