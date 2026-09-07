@@ -99,21 +99,27 @@ describe('durable generation run transitions', () => {
   });
 
   it('models the current BRep boundary as waiting for preview, not a fake queue', () => {
-    const sourceReady = applyGenerationRunTransition(initialRun(), {
+    const generating = applyGenerationRunTransition(initialRun(), {
       sequence: 2,
+      status: 'running',
+      phase: 'generating',
+      updatedAt: '2026-09-07T20:00:02.000Z',
+    });
+    const sourceReady = applyGenerationRunTransition(generating, {
+      sequence: 3,
       status: 'waiting_for_preview',
       phase: 'revision_saved',
       responseMessageId: 'assistant-1',
       updatedAt: '2026-09-07T20:00:10.000Z',
     });
     const evaluation = applyGenerationRunTransition(sourceReady, {
-      sequence: 3,
+      sequence: 4,
       status: 'running',
       phase: 'evaluation_requested',
       updatedAt: '2026-09-07T20:00:20.000Z',
     });
     const ready = applyGenerationRunTransition(evaluation, {
-      sequence: 4,
+      sequence: 5,
       status: 'completed',
       phase: 'preview_ready',
       updatedAt: '2026-09-07T20:00:30.000Z',
