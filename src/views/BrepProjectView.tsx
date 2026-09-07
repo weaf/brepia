@@ -1,5 +1,6 @@
 import { ChatTitle } from '@/components/chat/ChatTitle';
 import { BrepChatSession } from '@/components/brep/BrepChatSession';
+import { BrepCreationProgress } from '@/components/brep/BrepCreationProgress';
 import {
   BrepProjectEditorProvider,
   BrepProjectParametersPanel,
@@ -19,6 +20,7 @@ import {
 import { normalizeModelId } from '@shared/models';
 import { supabase } from '@/lib/supabase';
 import {
+  isRecentPendingBrepCreation,
   persistUserMessage,
   useChangeRatingMutation,
   useMessagesQuery,
@@ -139,7 +141,7 @@ export default function BrepProjectView() {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <ActivityIndicator label="Loading BRep project" />
+        <ActivityIndicator label="Loading BRep project" showLabel />
       </div>
     );
   }
@@ -425,11 +427,20 @@ function BrepProjectWorkspace() {
     [changeRating],
   );
 
-  if (!areMessagesFetched || !leafPresentInMessages) {
+  const pendingBrepCreation = isRecentPendingBrepCreation(
+    conversation,
+    dbMessages,
+  );
+
+  if (!areMessagesFetched || !leafPresentInMessages || pendingBrepCreation) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <ActivityIndicator label="Synchronizing BRep conversation" />
-      </div>
+      <BrepCreationProgress
+        messages={dbMessages}
+        messagesFetched={areMessagesFetched}
+        leafPresent={leafPresentInMessages}
+        model={model}
+        executionMode={executionMode}
+      />
     );
   }
 
