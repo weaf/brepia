@@ -50,6 +50,21 @@ describe('AI turn provenance', () => {
     );
   });
 
+  it('keeps legacy OpenCode IDs attributable in CLI mode', () => {
+    assert.deepEqual(
+      resolveAiTurnProvenance({
+        actualModelId: 'opencode/llama-swap/qwen3.6-35b-heretic',
+        transport: { kind: 'normal' },
+        executionMode: 'cli',
+      }),
+      {
+        actualModel: 'opencode/llama-swap/qwen3.6-35b-heretic',
+        transportKind: 'opencode',
+        openCodeExecutionMode: 'cli',
+      },
+    );
+  });
+
   it('records Codex CLI as a distinct transport', () => {
     assert.deepEqual(
       resolveAiTurnProvenance({
