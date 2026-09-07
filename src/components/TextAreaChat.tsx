@@ -956,11 +956,13 @@ function TextAreaChat({
   });
 
   const addItems = async (files: FileList) => {
-    if (attachmentsDisabled) {
-      toast({
-        title: 'Attachments unavailable',
-        description: attachmentDisabledReason,
-      });
+    if (attachmentInteractionsDisabled) {
+      if (attachmentsDisabled) {
+        toast({
+          title: 'Attachments unavailable',
+          description: attachmentDisabledReason,
+        });
+      }
       return;
     }
 
