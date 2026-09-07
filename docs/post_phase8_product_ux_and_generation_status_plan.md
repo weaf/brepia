@@ -1,8 +1,40 @@
 # Post-Phase 8 product UX and durable generation-status plan
 
-Status: planned follow-up after the accepted Brepia-side Phase 8 GHX loop.
+Status: active follow-up after the accepted Brepia-side Phase 8 GHX loop.
 
 This document captures product/robustness work identified during real mobile and local-model acceptance. It is intentionally separate from installed Rhino/Grasshopper Phase 9 acceptance.
+
+## Current implementation checkpoint — 2026-09-07
+
+Repository implementation is now complete for the first four UX tracks on `feature/brep-grasshopper-gh-packaging`:
+
+- **UX-1 explicit creation modes and unified Attach** — repository complete;
+- **UX-2 per-turn model/transport provenance** — repository complete;
+- **UX-3 stable resizable side-panel width** — implemented before this checkpoint;
+- **UX-4 user-defined BRep revision names** — implemented before this checkpoint;
+- **ROBUST-1 persisted server-side generation status** — reconciled below; implementation remains next.
+
+Latest exact-head repository evidence for UX-1/UX-2:
+
+```text
+8d32d07110dccd8753399632ddc6821396be01bd
+Test disabled attachment ingress guard
+```
+
+- Quality Gate #597 — PASS;
+- Grasshopper Build #170 — PASS.
+
+Evidence boundary: these gates prove repository tests/typecheck/lint/build/diff-check and retained Grasshopper build compatibility. They do **not** replace the still-open manual visual/browser check of the new prompt hierarchy, Attach behavior, provenance labels, panel width and revision-name presentation in the user's real local runtime.
+
+The current implementation preserves the existing authority boundaries:
+
+- `conversation.type = 'parametric'` remains unchanged for Native BRep;
+- Native BRep is still selected explicitly through `parametricSourceKind = 'brep'`;
+- Native BRep attachments remain fail-closed/text-only;
+- per-turn provenance is persisted on assistant messages and is not reconstructed from later conversation settings;
+- BRep revision names remain presentation metadata outside immutable source/message lineage.
+
+---
 
 ## Goals
 
@@ -22,9 +54,24 @@ The tracks may ship independently, but the durable generation-status work should
 
 ## UX-1 — explicit creation modes and unified Attach control
 
+### Status
+
+**Repository complete on 2026-09-07.** Manual visual/browser acceptance remains open.
+
+Implemented behavior:
+
+- the home prompt shows separate top-level `Parametric` and `Mesh` controls;
+- `OpenSCAD | Native BRep` remains a Parametric-only second level;
+- the separate image and 3D-file buttons are replaced by one `Attach` entry point;
+- the selected files still flow through the existing mode-aware validation instead of trusting the file picker filter;
+- Parametric image attachment remains conditional on the selected model's vision capability;
+- Native BRep disables picker, paste and drag/drop attachment ingress and retains the existing submit-time text-only guard;
+- disabled/generating prompt state also blocks attachment ingress;
+- switching from Mesh to Parametric is blocked when incompatible attachments would otherwise be carried silently; a completed STL may remain when the target is compatible OpenSCAD.
+
 ### Problem
 
-The current prompt chrome uses one Mesh button as a mode toggle. This makes it visually ambiguous whether the control means "create a mesh" or "switch creation mode". Image and 3D-file attachment also occupy two separate buttons even though both are input attachments.
+The previous prompt chrome used one Mesh button as a mode toggle. This made it visually ambiguous whether the control meant "create a mesh" or "switch creation mode". Image and 3D-file attachment also occupied two separate buttons even though both are input attachments.
 
 ### Target interaction
 
@@ -40,22 +87,16 @@ When Parametric is selected, keep the existing source subtype:
 OpenSCAD | Native BRep
 ```
 
-Replace the separate image and 3D-file buttons with one Attach control. The Attach menu exposes the input kinds valid for the active mode, for example:
+Replace the separate image and 3D-file buttons with one Attach control. The control accepts the input kinds valid for the active mode and lets the existing validation contract determine the selected file type.
 
-```text
-Attach
-  Image
-  3D model
-```
-
-Native BRep remains text-only until its attachment contract is deliberately expanded. In that mode Attach should either be hidden or disabled with a clear explanation; it must not silently inherit OpenSCAD asset semantics.
+Native BRep remains text-only until its attachment contract is deliberately expanded. In that mode Attach is disabled with a clear explanation; it must not silently inherit OpenSCAD asset semantics.
 
 ### Acceptance
 
 - Parametric and Mesh are separate visible controls; no single button toggles between them implicitly.
 - Parametric retains OpenSCAD/Native BRep as a second-level choice.
 - one Attach entry point replaces the current image/STL button pair;
-- existing paste and drag/drop behavior remains supported;
+- existing paste and drag/drop behavior remains supported where attachments are allowed;
 - file validation remains mode-aware and fail-closed;
 - switching modes does not silently retain incompatible attachments.
 
@@ -63,13 +104,29 @@ Native BRep remains text-only until its attachment contract is deliberately expa
 
 ## UX-2 — per-turn model and transport provenance
 
+### Status
+
+**Repository complete on 2026-09-07.** Manual browser presentation/real-model acceptance remains open.
+
+Forward-going assistant metadata now persists immutable turn-level provenance:
+
+- requested/product model in the existing `metadata.model` field;
+- `metadata.actualModel` for the actual AI/controller/underlying model;
+- `metadata.transportKind` as `direct`, `opencode`, `codex` or generic `cli-agent`;
+- `metadata.openCodeExecutionMode` for OpenCode CLI vs Streaming;
+- Creative retains `metadata.agentModel` and the mesh backend separately.
+
+The same resolved metadata is attached to the live AI SDK message stream and to the persisted assistant message, so the label shown immediately after generation matches the label after reload.
+
+OpenCode compatibility covers both current `agent/opencode/...` IDs and legacy persisted `opencode/...` IDs. Legacy messages that predate execution-mode persistence display only the provenance that can be proven from their own metadata; CLI vs Streaming is not invented retroactively.
+
 ### Problem
 
-The model selector shows the model that will be used for the next turn, but historical assistant iterations do not clearly show which model actually produced them. This becomes especially confusing when a project is created with one local model and then iterated with another model, OpenCode, or Codex.
+The model selector shows the model that will be used for the next turn, but historical assistant iterations did not clearly show which model actually produced them. This becomes especially confusing when a project is created with one local model and then iterated with another model, OpenCode, or Codex.
 
 ### Existing authority
 
-Assistant messages already persist model metadata. Creative turns additionally persist the actual controller/agent model separately from the 3D mesh backend. This existing per-message metadata, not the conversation's current/default model, must remain the authority for historical display.
+Assistant messages already persist model metadata. Creative turns additionally persist the actual controller/agent model separately from the 3D mesh backend. This existing per-message metadata, not the conversation's current/default model, remains the authority for historical display.
 
 ### Target display
 
@@ -82,7 +139,7 @@ Codex CLI · <actual model>
 Ornith
 ```
 
-Creative/Mesh turns should distinguish the controller AI from the mesh backend when both exist:
+Creative/Mesh turns distinguish the controller AI from the mesh backend when both exist:
 
 ```text
 AI: Qwen3.8-27B
@@ -91,7 +148,7 @@ AI: Qwen3.8-27B
 
 ### Metadata contract
 
-Forward-going assistant metadata should capture enough immutable turn-level provenance to render this without consulting current settings:
+Forward-going assistant metadata captures enough immutable turn-level provenance to render this without consulting current settings:
 
 - requested model ID;
 - actual model/agent ID used for the turn;
@@ -99,7 +156,7 @@ Forward-going assistant metadata should capture enough immutable turn-level prov
 - OpenCode execution mode (`cli` or `streaming`) where relevant;
 - Creative 3D backend separately from Creative controller AI.
 
-Legacy messages should render whatever provenance is already available and omit unknown fields rather than inventing them.
+Legacy messages render whatever provenance is already available and omit unknown fields rather than inventing them.
 
 ### Acceptance
 
@@ -112,6 +169,10 @@ Legacy messages should render whatever provenance is already available and omit 
 ---
 
 ## UX-3 — stable right-hand panel width and wrapping
+
+### Status
+
+**Implemented.** Static reconciliation confirms the content-containment contract; manual resize/browser acceptance remains open for the latest checkpoint.
 
 ### Problem
 
@@ -143,6 +204,10 @@ None may expand the pane. Text adapts inside the selected width and the preview 
 ---
 
 ## UX-4 — user-defined BRep revision names
+
+### Status
+
+**Implemented.** Static reconciliation confirms presentation-only persistence outside immutable source lineage; manual reload/reopen/browser acceptance remains open for the latest checkpoint.
 
 ### Problem
 
@@ -192,6 +257,34 @@ Revision 4 · Active
 
 ## ROBUST-1 — persisted server-side generation status/progress
 
+### Status / implementation reconciliation — 2026-09-07
+
+The repository now has enough server infrastructure to implement this without making the browser authoritative, but two boundaries matter:
+
+1. `src/server/supabaseClient.ts` already exposes a server-only service-role Supabase client. ROBUST-1 should use that for status mutations while ordinary authenticated clients receive read-only RLS access to their own run rows. Do not add broad authenticated INSERT/UPDATE policies merely to make status writes convenient.
+2. AI/agent generation is server-owned in `src/server/aiChat.ts`, so request acceptance, transport selection, generation, response receipt, validation and immutable-message persistence can all truthfully update a durable run from the server.
+3. Native BRep evaluation itself is server-executed by `/api/brep/evaluate`, but the initial preview request is currently initiated by the browser. Therefore `Native evaluator queued` must not be claimed at AI completion unless the product actually schedules that evaluation server-side. V1 may instead link the authenticated evaluate request to the generation run and persist `evaluation_started`/`preview_ready` when that request occurs. A later queued-worker slice can remove the remaining browser initiation entirely.
+4. Existing `persist_brep_ai_revision` demonstrates the desired ownership/CAS discipline for immutable BRep state. Generation runs should use independent run IDs and monotonic per-run sequence/state transitions so an older run cannot overwrite a newer run's presentation state.
+5. Repository database changes are schema-first by `AGENTS.md`: edit `supabase/schemas/`, generate/review the migration with local `npx supabase db diff`, apply it locally, and regenerate `shared/database.ts`. `shared/database.ts` must not be hand-edited. This database slice therefore must be generated in a real local Supabase checkout rather than fabricated through a remote file-only edit.
+
+Recommended v1 authority model after this reconciliation:
+
+```text
+authenticated browser
+  -> persists/owns user message through existing conversation policy
+  -> calls chat/evaluate endpoints
+  -> READS generation_runs for owned conversations
+
+Brepia server
+  -> service-role INSERT/UPDATE generation_runs
+  -> bounded state-transition helper
+  -> never stores raw provider output/secrets as progress detail
+
+Supabase RLS
+  -> owner SELECT only for ordinary authenticated clients
+  -> no ordinary client INSERT/UPDATE/DELETE policy
+```
+
 ### Why this is separate
 
 The current BRep pending UI can infer useful coarse state from persisted conversation/messages and now recovers much better after mobile backgrounding. It still cannot truthfully expose every server step, because intermediate generation state is not persisted as first-class server data.
@@ -209,17 +302,19 @@ AI/agent generating
 Response received
 Validating canonical artifact
 Saving immutable revision
-Native evaluator queued
+Native evaluation requested
 Evaluating build123d/OCCT geometry
 Preparing viewer mesh
 Preview ready
 ```
 
+`Native evaluator queued` is reserved for a future implementation that actually owns a server-side queue/job dispatch boundary.
+
 Transport-specific information can be included where useful, for example an OpenCode event-stream reconnect, without presenting a reconnect as a failed generation.
 
 ### Proposed persistence model
 
-Introduce an authenticated generation-run record owned by the conversation/user. Exact naming should be reconciled with the existing Supabase schema before implementation, but the logical fields are:
+Introduce an authenticated generation-run record owned by the conversation/user. Exact SQL is generated through the schema-first local workflow, but the logical fields are:
 
 ```text
 generation_run
@@ -245,13 +340,14 @@ generation_run
   error_message?            // bounded/sanitized
 ```
 
-For v1, one current persisted row with monotonic `sequence` is sufficient if the product only needs current progress plus final state. If audit/history of every transition proves useful, add an append-only `generation_events` table rather than embedding an unbounded event array in the run row.
+For v1, one current persisted row with monotonic `sequence` is sufficient if the product only needs current progress plus final state. Separate rows per run mean an old run never overwrites a newer run row; the client selects the newest relevant run for its conversation/turn. If audit/history of every transition proves useful, add an append-only `generation_events` table rather than embedding an unbounded event array in the run row.
 
 ### Security
 
-- normal auth/user ownership/RLS applies;
+- normal auth/user ownership/RLS applies to reads;
 - a user can only read generation runs for conversations they own;
-- client writes to generation status are not authoritative;
+- ordinary authenticated clients receive no direct generation-run write policy;
+- server-only service-role code owns run creation/transitions;
 - server transitions are validated/bounded;
 - raw provider/OpenCode/Codex output and secrets must never be copied into status detail/error fields.
 
@@ -259,13 +355,13 @@ For v1, one current persisted row with monotonic `sequence` is sufficient if the
 
 The server creates/updates the generation run at real boundaries:
 
-1. request accepted/input persisted;
+1. request accepted/input already persisted;
 2. model/agent transport selected;
 3. generation dispatched/running;
 4. final response received;
 5. artifact/tool output validated;
 6. immutable assistant/source revision persistence begins/completes;
-7. BRep native evaluation queued/started/completed when applicable;
+7. authenticated BRep evaluate request starts/completes when applicable;
 8. terminal `completed`, `failed` or `cancelled`.
 
 The stream sent to the browser becomes an *observer* of the generation, not the owner of its lifecycle.
@@ -316,10 +412,10 @@ The UI must always show a truthful persisted stage or terminal result; it must n
 
 ## Recommended implementation order
 
-1. **UX-3 stable side-panel sizing** — small shared layout fix with immediate usability value.
-2. **UX-4 revision names** — presentation-only persistence, low risk to canonical lineage.
-3. **UX-1 Parametric/Mesh + Attach controls** — prompt chrome cleanup across creation modes.
-4. **UX-2 per-turn model provenance** — expose already-persisted metadata first, then extend forward metadata for transport/execution mode.
-5. **ROBUST-1 persisted generation status** — schema/server/client slice with real background/reload acceptance.
+1. **UX-3 stable side-panel sizing** — implemented; browser acceptance pending.
+2. **UX-4 revision names** — implemented; browser acceptance pending.
+3. **UX-1 Parametric/Mesh + Attach controls** — repository complete; browser acceptance pending.
+4. **UX-2 per-turn model provenance** — repository complete; browser/real-model acceptance pending.
+5. **ROBUST-1 persisted generation status** — next schema/server/client slice; database artifacts must be generated with the repository's local schema-first Supabase workflow.
 
 Keep installed Rhino/Grasshopper Phase 9 acceptance independent. None of these product UX/robustness items should weaken the strict GHX validation boundary or change the canonical BRep revision model.
