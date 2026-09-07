@@ -10,12 +10,15 @@ import {
 } from 'react';
 import { BufferAttribute, BufferGeometry } from 'three';
 import {
+  Check,
   ChevronDown,
   ChevronUp,
   Download,
   FileCode2,
+  Pencil,
   RefreshCcw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { BrepFeatureEditor } from '@/components/brep/BrepFeatureEditor';
 import { BrepProjectDefinitionEditor } from '@/components/brep/BrepProjectDefinitionEditor';
@@ -56,6 +59,7 @@ import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
 import { exportBrepGrasshopperGhx } from '@/services/brepGrasshopperExport';
 import { exportBrep3dm, exportBrepStep } from '@/services/brepStepExport';
+import { BREP_REVISION_LABEL_MAX_LENGTH } from '@/services/brepRevisionLabelService';
 import {
   download3DMFile,
   downloadFile,
@@ -83,6 +87,7 @@ type BrepDownloadFormat = 'step' | '3dm' | 'brep' | 'ghx';
 export type BrepEditorRevision = {
   id: string;
   label: string;
+  name?: string;
 };
 
 type BrepProjectEditorContextValue = {
@@ -110,6 +115,7 @@ type BrepProjectEditorContextValue = {
   activeRevisionId?: string;
   revisionActionId: string | null;
   selectRevision: (id: string) => Promise<void>;
+  renameRevision: (id: string, label: string) => Promise<void>;
   restoreRevision: (id: string) => Promise<void>;
   deleteRevision: (id: string) => Promise<void>;
 };
@@ -170,6 +176,7 @@ export function BrepProjectEditorProvider({
   onParameterValuesCommit,
   onProjectSourceCommit,
   onSelectRevision,
+  onRenameRevision,
   onRestoreRevision,
   onDeleteRevision,
   children,
@@ -182,6 +189,7 @@ export function BrepProjectEditorProvider({
   onParameterValuesCommit: (values: BrepParameterValues) => Promise<void>;
   onProjectSourceCommit: (project: BrepProject) => Promise<void>;
   onSelectRevision: (id: string) => Promise<void>;
+  onRenameRevision: (id: string, label: string) => Promise<void>;
   onRestoreRevision: (id: string) => Promise<void>;
   onDeleteRevision: (id: string) => Promise<void>;
   children: ReactNode;
@@ -573,6 +581,8 @@ export function BrepProjectEditorProvider({
       activeRevisionId,
       revisionActionId,
       selectRevision: (id) => runRevisionAction(id, onSelectRevision),
+      renameRevision: (id, label) =>
+        runRevisionAction(id, (revisionId) => onRenameRevision(revisionId, label)),
       restoreRevision: (id) => runRevisionAction(id, onRestoreRevision),
       deleteRevision: (id) => runRevisionAction(id, onDeleteRevision),
     }),
@@ -587,6 +597,7 @@ export function BrepProjectEditorProvider({
       exporting,
       loading,
       onDeleteRevision,
+      onRenameRevision,
       onRestoreRevision,
       onSelectRevision,
       packageTitle,
@@ -743,13 +754,24 @@ function RevisionHistory() {
     revisionActionId,
     sourceSaving,
     selectRevision,
+    renameRevision,
     restoreRevision,
     deleteRevision,
   } = useBrepProjectEditor();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(
+    null,
+  );
   const orderedRevisions = useMemo(() => [...revisions].reverse(), [revisions]);
 
   if (revisions.length === 0) return null;
+
+  const saveName = async () => {
+    if (!editing) return;
+    const { id, value } = editing;
+    setEditing(null);
+    await renameRevision(id, value);
+  };
 
   return (
     <Collapsible
@@ -774,74 +796,146 @@ function RevisionHistory() {
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-3 max-h-[220px] space-y-1 overflow-y-auto pr-1">
+        <div className="mt-3 max-h-[220px] min-w-0 space-y-1 overflow-y-auto pr-1">
           {orderedRevisions.map((revision) => {
             const active = revision.id === activeRevisionId;
             const busy = revisionActionId === revision.id;
+            const displayLabel = revision.name ?? revision.label;
+            const isEditing = editing?.id === revision.id;
+
             return (
               <div
                 key={revision.id}
-                className="flex items-center gap-1 rounded-lg border border-adam-neutral-700 bg-adam-neutral-900/40 p-1"
+                className="flex min-w-0 items-center gap-1 rounded-lg border border-adam-neutral-700 bg-adam-neutral-900/40 p-1"
               >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-w-0 flex-1 justify-start px-2 text-xs"
-                  disabled={active || !!revisionActionId || sourceSaving}
-                  onClick={() => void selectRevision(revision.id)}
-                >
-                  <span className="truncate">
-                    {revision.label}
-                    {active ? ' · Active' : ''}
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs"
-                  disabled={!!revisionActionId || sourceSaving}
-                  onClick={() => void restoreRevision(revision.id)}
-                >
-                  {busy ? 'Working…' : 'Restore'}
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
+                {isEditing ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editing.value}
+                      maxLength={BREP_REVISION_LABEL_MAX_LENGTH}
+                      aria-label={`Rename ${revision.label}`}
+                      placeholder={revision.label}
+                      onChange={(event) =>
+                        setEditing({ id: revision.id, value: event.target.value })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void saveName();
+                        } else if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
+                      className="h-8 min-w-0 flex-1 rounded-md border border-adam-neutral-700 bg-adam-neutral-950 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue"
+                    />
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-adam-text-tertiary hover:text-destructive"
-                      aria-label={`Delete ${revision.label}`}
-                      disabled={active || !!revisionActionId || sourceSaving}
+                      className="h-8 w-8 shrink-0"
+                      aria-label="Save revision name"
+                      disabled={!!revisionActionId || sourceSaving}
+                      onClick={() => void saveName()}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Check className="h-4 w-4" />
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        Delete {revision.label}?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This removes the revision from the project revision list.
-                        Its immutable lineage record is retained internally so
-                        historical AI branches and retries cannot be corrupted.
-                        The active revision cannot be deleted.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={() => void deleteRevision(revision.id)}
-                      >
-                        Delete revision
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      aria-label="Cancel revision rename"
+                      onClick={() => setEditing(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-w-0 flex-1 justify-start px-2 text-xs"
+                      disabled={active || !!revisionActionId || sourceSaving}
+                      onClick={() => void selectRevision(revision.id)}
+                    >
+                      <span className="min-w-0 text-left">
+                        <span className="block truncate" title={displayLabel}>
+                          {displayLabel}
+                          {active ? ' · Active' : ''}
+                        </span>
+                        {revision.name ? (
+                          <span className="block truncate text-[10px] text-adam-neutral-500">
+                            {revision.label}
+                          </span>
+                        ) : null}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-adam-text-tertiary"
+                      aria-label={`Rename ${revision.label}`}
+                      title="Rename revision"
+                      disabled={!!revisionActionId || sourceSaving}
+                      onClick={() =>
+                        setEditing({ id: revision.id, value: revision.name ?? '' })
+                      }
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-xs"
+                      disabled={!!revisionActionId || sourceSaving}
+                      onClick={() => void restoreRevision(revision.id)}
+                    >
+                      {busy ? 'Working…' : 'Restore'}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-adam-text-tertiary hover:text-destructive"
+                          aria-label={`Delete ${displayLabel}`}
+                          disabled={active || !!revisionActionId || sourceSaving}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Delete {displayLabel}?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This removes the revision from the project revision list.
+                            Its immutable lineage record is retained internally so
+                            historical AI branches and retries cannot be corrupted.
+                            The active revision cannot be deleted.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => void deleteRevision(revision.id)}
+                          >
+                            Delete revision
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
+                )}
               </div>
             );
           })}
@@ -1005,7 +1099,7 @@ export function BrepProjectParametersPanel() {
     Boolean(revisionActionId);
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden break-words border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-adam-neutral-700 bg-gradient-to-r from-adam-bg-secondary-dark to-adam-bg-secondary-dark/95 px-4 py-3 lg:h-14 lg:px-6 lg:py-6">
         <span className="text-base font-semibold tracking-tight text-adam-text-primary lg:text-lg">
           Parameters
@@ -1023,7 +1117,7 @@ export function BrepProjectParametersPanel() {
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between overflow-hidden">
         <ScrollArea className="flex-1 px-4 py-4 lg:px-6 lg:py-6">
           <div className="mb-4 lg:mb-6">
             <BrepProjectFilesPanel />
