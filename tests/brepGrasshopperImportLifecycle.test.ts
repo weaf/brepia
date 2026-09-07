@@ -34,6 +34,10 @@ const workspaceSource = fs.readFileSync(
   new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
   'utf8',
 );
+const triggerSource = fs.readFileSync(
+  new URL('../supabase/schemas/triggers.sql', import.meta.url),
+  'utf8',
+);
 
 describe('BRep Phase 8G GHX lifecycle integration', () => {
   it('builds a normalized immutable BRep artifact from validated GHX parameter state', () => {
@@ -60,12 +64,25 @@ describe('BRep Phase 8G GHX lifecycle integration', () => {
     );
   });
 
-  it('persists the validated import as an immutable branch revision without silently changing the active leaf', () => {
+  it('persists the validated import as an immutable branch revision while preserving the effective active leaf', () => {
+    assert.match(triggerSource, /update_leaf_trigger/);
+    assert.match(
+      triggerSource,
+      /current_message_leaf_id\s*=\s*new\.id/,
+    );
     assert.match(persistenceSource, /supabase\.from\('messages'\)\.insert/);
     assert.match(persistenceSource, /parent_message_id: parentMessageId/);
     assert.match(persistenceSource, /metadata: \{\}/);
-    assert.doesNotMatch(persistenceSource, /from\('conversations'\)/);
-    assert.doesNotMatch(persistenceSource, /current_message_leaf_id/);
+    assert.match(persistenceSource, /activeLeafId: string/);
+    assert.match(persistenceSource, /from\('conversations'\)/);
+    assert.match(
+      persistenceSource,
+      /update\(\{ current_message_leaf_id: activeLeafId \}\)/,
+    );
+    assert.match(
+      persistenceSource,
+      /eq\('current_message_leaf_id', messageId\)/,
+    );
   });
 
   it('exposes bounded strict GHX import in the BRep workspace and creates no revision for unchanged state', () => {
@@ -74,7 +91,9 @@ describe('BRep Phase 8G GHX lifecycle integration', () => {
     assert.match(importButtonSource, /importBrepGrasshopperGhxFile\(/);
     assert.match(importButtonSource, /changedParameterIds\.length === 0/);
     assert.match(importButtonSource, /persistBrepGrasshopperImportedRevision\(/);
+    assert.match(importButtonSource, /activeLeafId: leafId/);
     assert.match(importButtonSource, /Revision history/);
-    assert.match(importButtonSource, /invalidateQueries/);
+    assert.match(importButtonSource, /queryKey: \['messages', conversation\.id\]/);
+    assert.match(importButtonSource, /queryKey: \['conversations'\]/);
   });
 });
