@@ -33,7 +33,7 @@ export function BrepGrasshopperImportButton() {
   );
 
   const importFile = async (file: BrepGrasshopperGhxFileLike) => {
-    if (!activeSource || importing) return;
+    if (!activeSource || !leafId || importing) return;
     setImporting(true);
     setStatus(null);
     try {
@@ -54,12 +54,16 @@ export function BrepGrasshopperImportButton() {
       await persistBrepGrasshopperImportedRevision({
         conversationId: conversation.id,
         parentMessageId: activeSource.messageId,
+        activeLeafId: leafId,
         artifact: activeSource.artifact,
         parameterValues: result.parameterValues,
       });
-      await queryClient.invalidateQueries({
-        queryKey: ['messages', conversation.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['messages', conversation.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ['conversations'] }),
+      ]);
       setStatus({
         kind: 'success',
         message: `Imported ${result.changedParameterIds.length} GHX parameter change${result.changedParameterIds.length === 1 ? '' : 's'} as a new revision. Activate it from Revision history when ready.`,
