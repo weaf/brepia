@@ -22,7 +22,7 @@ const PROMPT = [
 
 async function signIn(page: Page) {
   await page.goto(`${ORIGIN}/signin`);
-  await page.locator('#email').fill(EMAIL!);
+  await page.locator('#identifier').fill(EMAIL!);
   await page.locator('#password').fill(PASSWORD!);
   await page.locator('button[type="submit"]').click();
   await expect(page).not.toHaveURL(/\/signin(?:\?|$)/, { timeout: 30000 });
