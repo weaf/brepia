@@ -101,15 +101,19 @@ test('prompt -> Brepia preview -> GHX export -> parameter edit -> GHX import -> 
 }) => {
   await signIn(page);
 
-  await page.goto(`${ORIGIN}/brep`);
-  await expect(
-    page.getByRole('heading', { name: 'Create native BRep with AI' }),
-  ).toBeVisible();
+  await page.goto(`${ORIGIN}/`);
+  const nativeBrepButton = page.getByRole('button', {
+    name: 'Native BRep',
+    exact: true,
+  });
+  await expect(nativeBrepButton).toBeVisible();
+  await nativeBrepButton.click();
+  await expect(nativeBrepButton).toHaveAttribute('aria-pressed', 'true');
 
-  await page
-    .getByPlaceholder('Describe the native parametric model you want to create…')
-    .fill(PROMPT);
-  await page.getByRole('button', { name: 'Create with AI' }).click();
+  const promptInput = page.locator('textarea').first();
+  await expect(promptInput).toBeVisible();
+  await promptInput.fill(PROMPT);
+  await promptInput.press('Enter');
 
   await page.waitForURL(/\/brep\/[0-9a-f-]+$/i, { timeout: 180000 });
   await expect(page.getByText('Parameters', { exact: true })).toBeVisible({
