@@ -294,21 +294,30 @@ export function useChangeRatingMutation({
       queryClient.setQueryData<Message[]>(
         ['messages', conversationId],
         (oldMessages) =>
-          oldMessages?.map((m) =>
-            m.id === messageId ? { ...m, rating } : m,
-          ),
+          oldMessages?.map((m) => (m.id === messageId ? { ...m, rating } : m)),
       );
-
       const { error } = await supabase
         .from('messages')
         .update({ rating })
-        .eq('id', messageId)
-        .eq('conversation_id', conversationId);
+        .eq('id', messageId);
       if (error) throw error;
     },
   });
 }
 
+/**
+ * "Restore" an old assistant message — matches the legacy CADAM behavior
+ * exactly: insert a fresh row that COPIES the message's role, parts,
+ * metadata, and `parent_message_id`, then point the conversation's
+ * `current_message_leaf_id` at the new copy. Because the copy shares the
+ * original's parent, the two messages become siblings, so BranchNavigation
+ * keeps working (the user can flip back to whichever version they want).
+ *
+ * The previous implementation just retargeted `current_message_leaf_id`
+ * to the existing message — that "worked" superficially but broke the
+ * sibling story for any subsequent retry, because the assistant being
+ * restored already had its own children in the tree.
+ */
 export function useRestoreMessageMutation({
   conversation,
   updateConversationAsync,
@@ -317,32 +326,40 @@ export function useRestoreMessageMutation({
   updateConversationAsync?: (conversation: Conversation) => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async ({ message }: { message: Message }) => {
-      const newMessageId = crypto.randomUUID();
+    mutationKey: ['restore-message', conversation.id],
+    mutationFn: async ({
+      message,
+    }: {
+      message: Pick<
+        Message,
+        'role' | 'parts' | 'metadata' | 'parent_message_id'
+      >;
+    }) => {
+      const newId = crypto.randomUUID();
       const { error } = await supabase.from('messages').insert({
-        id: newMessageId,
+        id: newId,
         conversation_id: conversation.id,
         role: message.role,
         parts: JSON.parse(JSON.stringify(message.parts)),
         metadata: JSON.parse(JSON.stringify(message.metadata ?? {})),
         parent_message_id: message.parent_message_id,
-        rating: message.rating,
+        rating: 0,
       });
       if (error) throw error;
 
       if (updateConversationAsync) {
         await updateConversationAsync({
           ...conversation,
-          current_message_leaf_id: newMessageId,
+          current_message_leaf_id: newId,
         });
       }
 
-      await queryClient.invalidateQueries({
+      // Pull the freshly inserted row into the messages query so the
+      // tree merge sees it as a sibling immediately.
+      queryClient.invalidateQueries({
         queryKey: ['messages', conversation.id],
       });
-      return newMessageId;
     },
   });
 }
