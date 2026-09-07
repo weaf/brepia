@@ -2,13 +2,13 @@
 
 ## Status
 
-Phase 8 is repository-complete on:
+Phase 8 is repository-complete and Brepia-side product-accepted for the strict v1 GHX subset on:
 
 ```text
 feature/brep-grasshopper-gh-packaging
 ```
 
-The detailed current product authority is `docs/grasshopper_roundtrip_architecture.md`. This execution document records completed implementation evidence and the revised Phase 8 slices that follow that architecture.
+The detailed current product authority is `docs/grasshopper_roundtrip_architecture.md`. This execution document records completed implementation evidence and the revised Phase 8 slices that follow that architecture. Browser/product acceptance is recorded separately in `docs/brep_phase8h_browser_acceptance.md`.
 
 A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, Rhino 8 embedded Script components and related open tooling:
 
@@ -21,7 +21,7 @@ A design pivot was agreed on 2026-09-06 after reviewing GHX/GH format behavior, 
 - AI remains central to generation, interpretation and repair, but deterministic parsing/validation gates every accepted GHX artifact and every canonical round-trip update;
 - Brepia is not a general Grasshopper automation product: broader scripting/logic may remain in Grasshopper, ChatGPT, Python or MCP-based workflows.
 
-Repository-level Phase 8 is complete through 8G. Installed Rhino/Grasshopper runtime acceptance is no longer a blocking Phase 8 sub-step; it is tracked separately in `docs/brep_phase9_rhino_acceptance.md` and begins when a real Rhino 8 workstation is available.
+Repository-level Phase 8 is complete through 8G and the complete Brepia-side browser/product round trip is accepted as Phase 8H. Installed Rhino/Grasshopper runtime acceptance is not a blocking Phase 8 sub-step; it is tracked separately in `docs/brep_phase9_rhino_acceptance.md` and begins when a real Rhino 8 workstation is available.
 
 ## Target loop
 
@@ -82,16 +82,14 @@ Accepted checkpoint:
 a033df76f054bf77c467118c8029a6a3eefe8f7e
 ```
 
-Evidence:
+Exact-head evidence:
 
-- Quality Gate #468 / run `34035477350` — PASS;
-- Grasshopper Build #44 / run `34035477375` — PASS.
-
-The portable package plan is reusable as an intermediate representation for the GHX compiler.
+- Quality Gate #468 — PASS;
+- Grasshopper Build #44 — PASS.
 
 ### 8B — Rhino-hosted native GH object emission prototype — repository complete
 
-Implemented plan-driven instantiation of native Grasshopper controls, stable identities and wires through the pinned Grasshopper SDK. This proved the intended object semantics and parameter-ID wiring.
+This retained prototype proved native Grasshopper object creation through RhinoCommon/Grasshopper SDK code and remains useful reference/fallback work after the GHX pivot.
 
 Accepted checkpoint:
 
@@ -99,17 +97,12 @@ Accepted checkpoint:
 944f3b236ec16f54564d4feb045a3c3345208b3d
 ```
 
-Evidence:
+Exact-head evidence:
 
-- Quality Gate #472 / run `34036162049` — PASS;
-- Grasshopper Build #48 / run `34036162012` — PASS;
-- package compilation — PASS on Ubuntu and Windows.
-
-This code is now reference/fallback implementation evidence. The active product direction no longer requires a Rhino-owned runtime merely to emit the primary GHX interchange artifact.
+- Quality Gate #472 — PASS;
+- Grasshopper Build #48 — PASS.
 
 ### 8C — package-plan transport — repository complete
-
-Implemented authenticated bounded transport for the deterministic package plan, normalization that rebuilds derived state from the embedded canonical contract, C# plan parsing and CLI support.
 
 Accepted checkpoint:
 
@@ -117,86 +110,27 @@ Accepted checkpoint:
 86ce44428f196ab616f9c38fe37ff5d22be00023
 ```
 
-Evidence:
+Exact-head evidence:
 
-- Quality Gate #483 / run `34036826251` — PASS;
-- Grasshopper Build #59 / run `34036826254` — PASS.
+- Quality Gate #483 — PASS;
+- Grasshopper Build #59 — PASS.
 
-The transport and normalization boundaries remain reusable for GHX generation.
+### 8D — reconciliation research boundary — repository complete
 
-### 8D — reconciliation envelope and Grasshopper document scanner — repository complete as exploratory boundary
-
-Implemented:
-
-- portable `brepia-grasshopper-reconciliation` envelope;
-- project/revision/component/control identity reconstruction from canonical contract;
-- parameter recovery with canonical bounds validation;
-- project-vs-Grasshopper placement classification;
-- evidence-only external object/connection capture;
-- fail-closed ambiguity handling;
-- C# `GH_Document` scanner that does not solve geometry merely to inspect state.
-
-Verified checkpoint immediately before the GHX-native roadmap pivot:
+Accepted checkpoint:
 
 ```text
 fcc1e9ff589edc1a9570c4a6cddee79ef292ad7e
-Cover Phase 8D Grasshopper reconciliation extractor boundary
 ```
 
 Exact-head evidence:
 
-- Quality Gate #488 / run `34037200446` — PASS;
-- Grasshopper Build #64 / run `34037200447` — PASS;
-- plugin build — PASS;
-- package build on `windows-latest` — PASS;
-- package build on `ubuntu-latest` — PASS.
-
-The concepts remain useful, but the final import path was generalized from the custom `BrepiaProjectComponent` assumption to the GHX-native identity/compatibility contract described in `docs/grasshopper_roundtrip_architecture.md`.
-
-## Characterized runtime boundary
-
-Earlier probes established that compile success against Rhino/Grasshopper SDK packages does not imply a supported standalone Grasshopper runtime. Full standalone package execution and GH_IO serialization paths pulled Rhino/desktop/runtime dependencies in ordinary CI.
-
-Those negative probes remain useful evidence, but GHX-native generation changes their product significance: Brepia does not require a Rhino-owned runtime merely to create its primary Grasshopper document artifact.
-
-Do not add fake Rhino hosts, private binary `.gh` reverse engineering or compatibility shim chains merely to force standalone `.gh` generation.
-
-## Completed Phase 8 slices
+- Quality Gate #488 — PASS;
+- Grasshopper Build #64 — PASS.
 
 ### 8E — GHX compiler + deterministic validator foundation — repository complete
 
-The portable zero-install foundation is implemented without requiring an installed Rhino/Grasshopper runtime.
-
-Implemented:
-
-- `shared/brepGrasshopperGhx.ts`
-  - deterministic GHX parameter-shell emission from the existing package plan;
-  - real Grasshopper Number Slider / Number object identities;
-  - bounded safe XML parsing and machine-readable diagnostics;
-  - generated-mode canonical-default validation and returned-mode bounded parameter recovery.
-- `shared/brepGrasshopperGhxArchive.ts`
-  - reusable bounded GHX XML archive parser;
-  - 4 MiB input limit, bounded nodes/depth/attributes/text;
-  - rejects DTD, ENTITY, CDATA, processing instructions and malformed structure before semantic recovery.
-- `shared/brepGrasshopperRhinoScript.ts`
-  - deterministic Rhino 8 C# Script plan using McNeel/Rhino built-in component and RhinoCode identities;
-  - self-contained RhinoCommon geometry code with no Brepia token, HTTP callback or GHA dependency;
-  - stable component/input/output identity across Brepia revisions while `sourceRevisionId` remains provenance;
-  - the current proven geometry subset is deliberately **exactly one canonical `box` node** whose result is the project result; optional semantic geometry roles may reuse that same result box;
-  - other canonical node types (`cylinder`, `transform`, `subtract`, `fillet`) fail closed as unsupported until their RhinoCommon equivalence is separately proven.
-- `shared/brepGrasshopperExecutableGhx.ts`
-  - deterministic executable GHX candidate composed from native Number/Slider controls plus one embedded Rhino 8 C# Script component;
-  - stable numeric input wiring;
-  - unconnected placement input resolves canonical project placement;
-  - eight Brepia output roles are preserved.
-- `shared/brepGrasshopperExecutableGhxValidation.ts`
-  - strict deterministic compatibility gate for the supported v1 executable subset;
-  - accepts generated canonical state and parameter-only returned edits within canonical bounds;
-  - normalizes GUID casing but freezes semantic identities;
-  - validates control type/state, script component/library identity, port identity, converter assemblies/types, type hints, source wiring, runtime/marshalling flags, script source, language/version and object indexing;
-  - unknown objects, rewiring, code mutation, runtime-setting mutation or unsupported graph changes fail closed and cannot become canonical Brepia state.
-
-Reference format evidence was taken from public McNeel Rhino 8 GHX fixtures in `mcneel/rhinocodetests`; the production implementation remains Brepia-owned and does not depend on that repository at runtime.
+Implemented deterministic portable GHX generation, bounded safe XML parsing, self-contained Rhino 8 C# Script, stable Brepia wiring and strict fail-closed returned-GHX validation. The currently proven executable geometry subset is deliberately exactly one canonical box result.
 
 Accepted repository checkpoint:
 
@@ -304,6 +238,34 @@ Exact-head evidence:
 - Rhino/Grasshopper SDK plugin build — PASS;
 - package build on Ubuntu — PASS;
 - package build on Windows — PASS.
+
+### 8H — Brepia browser/product round-trip — accepted
+
+The complete Brepia-side strict-v1 loop was accepted in the real authenticated local browser/runtime on 2026-09-07. Full evidence and the post-acceptance main-page routing note live in `docs/brep_phase8h_browser_acceptance.md`.
+
+Accepted loop:
+
+```text
+prompt
+ -> Native BRep
+ -> Brepia native 3D
+ -> GHX export
+ -> Width 1200 -> 1500
+ -> GHX import
+ -> new immutable revision remains inactive
+ -> explicit activation
+ -> Width 1500
+ -> native 3D again
+```
+
+The browser exercise also exposed and corrected sign-in selector drift and the database `update_leaf_trigger` interaction that had auto-activated imported revisions. The final import lifecycle restores the previous active leaf with compare-and-swap semantics only while the trigger still points to the imported revision.
+
+Repository gates on the 8H product-fix checkpoint `26b303ffad38f5aee062dda11173044831308466`:
+
+- Quality Gate #546 / run `34136092218` — PASS;
+- Grasshopper Build #119 / run `34136092167` — PASS.
+
+Subsequent post-Phase 8 UX work is tracked in `docs/post_phase8_product_ux_and_generation_status_plan.md`; it does not weaken or replace the accepted GHX round-trip evidence.
 
 ## Deferred real-runtime acceptance
 
