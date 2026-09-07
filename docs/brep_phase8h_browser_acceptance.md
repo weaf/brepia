@@ -8,6 +8,12 @@ Phase 8A–8G established the repository implementation and CI evidence. Phase 8
 
 Installed Rhino/Grasshopper open/solve acceptance remains separate Phase 9 work in `docs/brep_phase9_rhino_acceptance.md`.
 
+### Post-acceptance product routing note
+
+Later on 2026-09-07, native BRep creation moved from the standalone `/brep` creation panel into the ordinary main-page composer under `Parametric` -> `Native BRep`. The resulting project still opens at `/brep/<conversation-id>`, still uses `conversation.type = 'parametric'`, and is still armed by explicit `parametricSourceKind = 'brep'` intent.
+
+Required assertions 2–3 below therefore record the exact UI route exercised by the original accepted Phase 8H run; they are historical acceptance evidence, not the current creation-entrypoint contract. Any new browser regression should start native BRep creation from the main-page composer while retaining the rest of this round-trip contract.
+
 ## Purpose
 
 Verify the complete Brepia-side loop through the real browser UI:
