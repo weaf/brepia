@@ -43,7 +43,13 @@ function hasPersistedBrepSource(messages: Message[]): boolean {
   );
 }
 
-function recentPendingBrepCreation(
+/**
+ * A newly routed native-BRep conversation is not corrupt merely because its
+ * first assistant revision has not landed yet. Keep that state explicit so
+ * product surfaces can explain what is happening while the server-side AI turn
+ * continues after a mobile browser has been backgrounded.
+ */
+export function isRecentPendingBrepCreation(
   conversation: Conversation,
   messages: Message[],
 ): boolean {
@@ -177,32 +183,20 @@ export const useMessagesQuery = () => {
     // Mobile browsers may suspend the foreground fetch/SSE connection when
     // Chrome is backgrounded. The server independently consumes/persists the
     // AI stream, so poll while the newest row is still a recent non-terminal
-    // turn: either the user is awaiting the first assistant row, or an
-    // assistant exists but is still at build/tool/streaming intermediate state.
-    // Imported synthetic baselines are terminal by definition and therefore do
-    // not poll. Focus still triggers an immediate refetch after suspension.
-    //
-    // A fresh Native BRep creation is special: while no canonical BRep source
-    // has been persisted yet, queryFn deliberately returns [] so the BRep view
-    // stays in its Synchronizing state instead of presenting the recent root
-    // user message as a corrupt/invalid project. Keep polling that empty state
-    // for the same bounded pending window.
+    // turn. A fresh native-BRep creation remains visible as its real persisted
+    // user row; the BRep product surface interprets that as an explicit pending
+    // creation instead of hiding it or misclassifying it as corrupt state.
     refetchInterval: (query) => {
       if (shouldPollForPendingAssistant(query.state.data)) {
         return PENDING_ASSISTANT_POLL_MS;
       }
       if (
-        conversation.settings?.parametricSourceKind === 'brep' &&
-        (query.state.data?.length ?? 0) === 0
+        isRecentPendingBrepCreation(
+          conversation,
+          query.state.data ?? [],
+        )
       ) {
-        const createdAt = conversation.created_at;
-        const createdAtMs = createdAt ? Date.parse(createdAt) : Number.NaN;
-        if (
-          Number.isFinite(createdAtMs) &&
-          Date.now() - createdAtMs < PENDING_ASSISTANT_MAX_AGE_MS
-        ) {
-          return PENDING_ASSISTANT_POLL_MS;
-        }
+        return PENDING_ASSISTANT_POLL_MS;
       }
       return false;
     },
@@ -263,10 +257,6 @@ export const useMessagesQuery = () => {
         }
       }
 
-      if (recentPendingBrepCreation(conversation, rows)) {
-        return [];
-      }
-
       return rows;
     },
   });
@@ -283,7 +273,6 @@ export function useChangeRatingMutation({
   conversationId: string;
 }) {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationKey: ['change-rating', conversationId],
     mutationFn: async ({
