@@ -51,6 +51,16 @@ export function cancelActiveGeneration(
   return true;
 }
 
+export function hasActiveGenerationForConversation(
+  conversationId: string,
+): boolean {
+  const suffix = `:${conversationId}`;
+  for (const key of activeGenerations.keys()) {
+    if (key.endsWith(suffix)) return true;
+  }
+  return false;
+}
+
 /**
  * Stop whichever active AI generation owns a conversation without requiring
  * the mesh layer to know the authenticated user id a second time.
