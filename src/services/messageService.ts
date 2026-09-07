@@ -32,6 +32,33 @@ export function shouldPollForPendingAssistant(
   });
 }
 
+function hasPersistedBrepSource(messages: Message[]): boolean {
+  return messages.some(
+    (message) =>
+      message.role === 'assistant' &&
+      Array.isArray(message.parts) &&
+      (message.parts as AppUIMessage['parts']).some(
+        (part) => part.type === 'data-brep-project',
+      ),
+  );
+}
+
+function recentPendingBrepCreation(
+  conversation: Conversation,
+  messages: Message[],
+): boolean {
+  if (conversation.settings?.parametricSourceKind !== 'brep') return false;
+  if (hasPersistedBrepSource(messages)) return false;
+
+  const latest = messages.at(-1);
+  const createdAt = latest?.created_at ?? conversation.created_at;
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) return false;
+  if (Date.now() - createdAtMs >= PENDING_ASSISTANT_MAX_AGE_MS) return false;
+
+  return messages.length === 0 || latest?.role === 'user';
+}
+
 /**
  * Insert a new user message into the conversation. The `update_leaf_trigger`
  * on `public.messages` automatically advances
@@ -153,10 +180,30 @@ export const useMessagesQuery = () => {
     // assistant exists but is still at build/tool/streaming intermediate state.
     // Imported synthetic baselines are terminal by definition and therefore do
     // not poll. Focus still triggers an immediate refetch after suspension.
-    refetchInterval: (query) =>
-      shouldPollForPendingAssistant(query.state.data)
-        ? PENDING_ASSISTANT_POLL_MS
-        : false,
+    //
+    // A fresh Native BRep creation is special: while no canonical BRep source
+    // has been persisted yet, queryFn deliberately returns [] so the BRep view
+    // stays in its Synchronizing state instead of presenting the recent root
+    // user message as a corrupt/invalid project. Keep polling that empty state
+    // for the same bounded pending window.
+    refetchInterval: (query) => {
+      if (shouldPollForPendingAssistant(query.state.data)) {
+        return PENDING_ASSISTANT_POLL_MS;
+      }
+      if (
+        conversation.settings?.parametricSourceKind === 'brep' &&
+        (query.state.data?.length ?? 0) === 0
+      ) {
+        const createdAtMs = Date.parse(conversation.created_at);
+        if (
+          Number.isFinite(createdAtMs) &&
+          Date.now() - createdAtMs < PENDING_ASSISTANT_MAX_AGE_MS
+        ) {
+          return PENDING_ASSISTANT_POLL_MS;
+        }
+      }
+      return false;
+    },
     queryFn: async () => {
       const { data, error } = await supabase
         .from('messages')
@@ -214,6 +261,10 @@ export const useMessagesQuery = () => {
         }
       }
 
+      if (recentPendingBrepCreation(conversation, rows)) {
+        return [];
+      }
+
       return rows;
     },
   });
@@ -230,6 +281,7 @@ export function useChangeRatingMutation({
   conversationId: string;
 }) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationKey: ['change-rating', conversationId],
     mutationFn: async ({
@@ -242,30 +294,21 @@ export function useChangeRatingMutation({
       queryClient.setQueryData<Message[]>(
         ['messages', conversationId],
         (oldMessages) =>
-          oldMessages?.map((m) => (m.id === messageId ? { ...m, rating } : m)),
+          oldMessages?.map((m) =>
+            m.id === messageId ? { ...m, rating } : m,
+          ),
       );
+
       const { error } = await supabase
         .from('messages')
         .update({ rating })
-        .eq('id', messageId);
+        .eq('id', messageId)
+        .eq('conversation_id', conversationId);
       if (error) throw error;
     },
   });
 }
 
-/**
- * "Restore" an old assistant message — matches the legacy CADAM behavior
- * exactly: insert a fresh row that COPIES the message's role, parts,
- * metadata, and `parent_message_id`, then point the conversation's
- * `current_message_leaf_id` at the new copy. Because the copy shares the
- * original's parent, the two messages become siblings, so BranchNavigation
- * keeps working (the user can flip back to whichever version they want).
- *
- * The previous implementation just retargeted `current_message_leaf_id`
- * to the existing message — that "worked" superficially but broke the
- * sibling story for any subsequent retry, because the assistant being
- * restored already had its own children in the tree.
- */
 export function useRestoreMessageMutation({
   conversation,
   updateConversationAsync,
@@ -274,40 +317,32 @@ export function useRestoreMessageMutation({
   updateConversationAsync?: (conversation: Conversation) => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationKey: ['restore-message', conversation.id],
-    mutationFn: async ({
-      message,
-    }: {
-      message: Pick<
-        Message,
-        'role' | 'parts' | 'metadata' | 'parent_message_id'
-      >;
-    }) => {
-      const newId = crypto.randomUUID();
+    mutationFn: async ({ message }: { message: Message }) => {
+      const newMessageId = crypto.randomUUID();
       const { error } = await supabase.from('messages').insert({
-        id: newId,
+        id: newMessageId,
         conversation_id: conversation.id,
         role: message.role,
         parts: JSON.parse(JSON.stringify(message.parts)),
         metadata: JSON.parse(JSON.stringify(message.metadata ?? {})),
         parent_message_id: message.parent_message_id,
-        rating: 0,
+        rating: message.rating,
       });
       if (error) throw error;
 
       if (updateConversationAsync) {
         await updateConversationAsync({
           ...conversation,
-          current_message_leaf_id: newId,
+          current_message_leaf_id: newMessageId,
         });
       }
 
-      // Pull the freshly inserted row into the messages query so the
-      // tree merge sees it as a sibling immediately.
-      queryClient.invalidateQueries({
+      await queryClient.invalidateQueries({
         queryKey: ['messages', conversation.id],
       });
+      return newMessageId;
     },
   });
 }
