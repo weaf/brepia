@@ -52,6 +52,7 @@ function recentPendingBrepCreation(
 
   const latest = messages.at(-1);
   const createdAt = latest?.created_at ?? conversation.created_at;
+  if (!createdAt) return false;
   const createdAtMs = Date.parse(createdAt);
   if (!Number.isFinite(createdAtMs)) return false;
   if (Date.now() - createdAtMs >= PENDING_ASSISTANT_MAX_AGE_MS) return false;
@@ -194,7 +195,8 @@ export const useMessagesQuery = () => {
         conversation.settings?.parametricSourceKind === 'brep' &&
         (query.state.data?.length ?? 0) === 0
       ) {
-        const createdAtMs = Date.parse(conversation.created_at);
+        const createdAt = conversation.created_at;
+        const createdAtMs = createdAt ? Date.parse(createdAt) : Number.NaN;
         if (
           Number.isFinite(createdAtMs) &&
           Date.now() - createdAtMs < PENDING_ASSISTANT_MAX_AGE_MS
