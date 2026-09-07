@@ -76,9 +76,11 @@ export function logWarning(
     resources?: string[];
     userId?: string;
     conversationId?: string;
+    additionalContext?: Record<string, unknown>;
   },
 ) {
   const payload = {
+    ...context.additionalContext,
     fn: context.functionName,
     level: 'warn',
     message,
