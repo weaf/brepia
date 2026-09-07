@@ -153,9 +153,13 @@ test('prompt -> Brepia preview -> GHX export -> parameter edit -> GHX import -> 
     buffer: Buffer.from(editedGhx, 'utf8'),
   });
 
-  await expect(
-    page.getByText(/Imported 1 GHX parameter change as a new revision\./),
-  ).toBeVisible({ timeout: 30000 });
+  const importStatus = page
+    .getByText(/Imported 1 GHX parameter change as a new revision\./)
+    .first();
+  await expect(importStatus).toHaveText(
+    /Imported 1 GHX parameter change as a new revision\./,
+    { timeout: 30000 },
+  );
 
   const revisionButtonsAfter = await ensureRevisionHistoryOpen(page);
   await expect(revisionButtonsAfter).toHaveCount(revisionCountBefore + 1);
