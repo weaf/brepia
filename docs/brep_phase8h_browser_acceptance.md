@@ -75,7 +75,7 @@ BREPIA_ACCEPTANCE_ORIGIN='http://localhost:3002'
 
 ## Required assertions
 
-The harness must fail unless all of the following are true:
+The original accepted harness failed unless all of the following were true:
 
 1. real UI sign-in succeeds;
 2. `/brep` exposes `Create native BRep with AI`;
@@ -91,6 +91,14 @@ The harness must fail unless all of the following are true:
 12. native BRep preview renders for the imported state.
 
 A successful run writes `brep-ghx-roundtrip-accepted.png` as visual evidence.
+
+For future reruns after the main-page creation move, assertions 2–3 are replaced only at the creation-entrypoint layer:
+
+```text
+main page -> Parametric -> Native BRep -> prompt -> /brep/<conversation-id>
+```
+
+The GHX/export/import/immutable-revision/explicit-activation assertions remain unchanged.
 
 ## Acceptance evidence — 2026-09-07
 
@@ -121,6 +129,8 @@ Repository gates on product-fix checkpoint `26b303ffad38f5aee062dda1117304483130
 
 - Quality Gate #546 / run `34136092218` — PASS;
 - Grasshopper Build #119 / run `34136092167` — PASS.
+
+Subsequent post-acceptance UX work does not invalidate this GHX evidence. The post-Phase 8 UX/provenance repository checkpoint `8d32d07110dccd8753399632ddc6821396be01bd` also passed Quality Gate #597 and Grasshopper Build #170; those repository gates are not a replacement for a future visual rerun of the updated main-page prompt chrome.
 
 Phase 8 is therefore **Brepia-side product-accepted for the strict v1 GHX subset**.
 
