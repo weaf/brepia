@@ -33,6 +33,10 @@ import {
   restoreBrepProjectRevision,
   selectBrepProjectRevision,
 } from '@/services/brepProjectService';
+import {
+  brepRevisionLabels,
+  renameBrepProjectRevision,
+} from '@/services/brepRevisionLabelService';
 import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import { resolveActiveBrepAiSourceForLeaf } from '@shared/brepAiContext';
 import type { BrepProject } from '@shared/brepProject';
@@ -244,14 +248,24 @@ function BrepProjectWorkspace() {
     () => new Set(hiddenBrepRevisionIds(conversation.settings)),
     [conversation.settings],
   );
+  const revisionLabelMap = useMemo(
+    () => brepRevisionLabels(conversation.settings),
+    [conversation.settings],
+  );
   const editorRevisions = useMemo(
     () =>
       revisions.flatMap((revision, index) =>
         hiddenRevisionIdSet.has(revision.id)
           ? []
-          : [{ id: revision.id, label: `Revision ${index + 1}` }],
+          : [
+              {
+                id: revision.id,
+                label: `Revision ${index + 1}`,
+                name: revisionLabelMap[revision.id],
+              },
+            ],
       ),
-    [hiddenRevisionIdSet, revisions],
+    [hiddenRevisionIdSet, revisionLabelMap, revisions],
   );
 
   const refreshWorkspace = useCallback(async () => {
@@ -488,6 +502,14 @@ function BrepProjectWorkspace() {
         await selectBrepProjectRevision({
           conversationId: conversation.id,
           messageId,
+        });
+        await refreshWorkspace();
+      }}
+      onRenameRevision={async (messageId, label) => {
+        await renameBrepProjectRevision({
+          conversationId: conversation.id,
+          messageId,
+          label,
         });
         await refreshWorkspace();
       }}
