@@ -137,6 +137,8 @@ Unknown GHX graph/script/wiring/runtime mutations remain unsupported and must co
 
 Phase 8 is now Brepia-side product-accepted for the strict v1 subset.
 
+This does not make the stacked Phase 8 pull request independently mergeable while its Phase 7 base pull request remains intentionally open/draft. Repository integration must preserve that branch boundary.
+
 Phase 9 adds only the missing real Rhino 8 / Grasshopper host evidence:
 
 ```text
