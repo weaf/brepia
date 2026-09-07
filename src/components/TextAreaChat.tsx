@@ -8,12 +8,11 @@ import React, {
 } from 'react';
 import {
   ArrowUp,
-  ImagePlus,
-  FileUp,
   Images,
   Square,
   CircleX,
   Box,
+  Paperclip,
   X,
 } from 'lucide-react';
 import {
@@ -82,6 +81,10 @@ interface TextAreaChatProps {
   placeholder?: string;
   stopGenerating?: () => void;
   disabled?: boolean;
+  /** Disable every attachment ingress (picker, paste and drag/drop). */
+  attachmentsDisabled?: boolean;
+  /** User-facing explanation shown on the disabled Attach control. */
+  attachmentDisabledReason?: string;
   model: Model;
   setModel: (model: Model) => void;
   showFullLabels?: boolean; // Controls whether to show full text labels on buttons
@@ -480,6 +483,8 @@ function TextAreaChat({
   type,
   stopGenerating,
   disabled = false,
+  attachmentsDisabled = false,
+  attachmentDisabledReason = 'Attachments are not available in this mode.',
   model,
   setModel,
   showFullLabels = false,
@@ -510,6 +515,26 @@ function TextAreaChat({
   const showPolygonControls = creativeModel
     ? shouldShowPolygonControls(creativeModel)
     : false;
+  const imageAttachmentsAllowed =
+    type === 'creative' || parametricModelSupportsVision(model);
+  const attachmentInteractionsDisabled = disabled || attachmentsDisabled;
+  const attachmentAccept = useMemo(() => {
+    const imageAccept = imageAttachmentsAllowed
+      ? VALID_IMAGE_FORMATS.join(', ')
+      : '';
+    const meshAccept =
+      type === 'creative'
+        ? `${SUPPORTED_MESH_EXTENSIONS.join(', ')}, application/octet-stream`
+        : '.stl, model/stl, application/sla, application/vnd.ms-pki.stl, application/octet-stream';
+    return [imageAccept, meshAccept].filter(Boolean).join(', ');
+  }, [imageAttachmentsAllowed, type]);
+  const attachmentTooltip = attachmentsDisabled
+    ? attachmentDisabledReason
+    : type === 'creative'
+      ? 'Attach images or supported 3D models'
+      : imageAttachmentsAllowed
+        ? 'Attach images or STL models'
+        : 'Attach STL models';
 
   // Parametric mode: bounding box and filename from STL parsing
   const [meshBoundingBox, setMeshBoundingBox] = useState<BoundingBox | null>(
@@ -931,10 +956,19 @@ function TextAreaChat({
   });
 
   const addItems = async (files: FileList) => {
+    if (attachmentsDisabled) {
+      toast({
+        title: 'Attachments unavailable',
+        description: attachmentDisabledReason,
+      });
+      return;
+    }
+
     const newItems = Array.from(files);
     let hasSmallImages = false;
     let hasLargeImages = false;
     let hasInvalidImages = false;
+    let hasUnsupportedImages = false;
     let hasInvalidItems = false;
     const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit
 
@@ -942,6 +976,11 @@ function TextAreaChat({
       newItems.map(async (file) => {
         // First check file type Must be jpeg, png, gif, or webp.
         if (!file.type.includes('image')) {
+          return null;
+        }
+
+        if (!imageAttachmentsAllowed) {
+          hasUnsupportedImages = true;
           return null;
         }
 
@@ -998,7 +1037,13 @@ function TextAreaChat({
       newItems.length > filteredImages.length + filteredMeshes.length;
 
     // Show specific errors first, then generic error only if there are truly invalid file types
-    if (hasSmallImages) {
+    if (hasUnsupportedImages) {
+      toast({
+        title: 'Images unavailable for this model',
+        description:
+          'The selected Parametric AI model does not accept image attachments. Choose a vision-capable model or attach an STL instead.',
+      });
+    } else if (hasSmallImages) {
       toast({
         title: 'Image too small',
         description:
@@ -1021,8 +1066,10 @@ function TextAreaChat({
         title: 'Invalid file format',
         description:
           type === 'creative'
-            ? 'Some files were not added because they are not valid file formats. Must be jpeg, png, webp, glb, stl, or obj.'
-            : 'Some files were not added because they are not valid file formats. Must be jpeg, png, webp, or stl.',
+            ? 'Some files were not added because they are not valid file formats. Must be jpeg, png, webp, glb, stl, obj, or fbx.'
+            : imageAttachmentsAllowed
+              ? 'Some files were not added because they are not valid file formats. Must be jpeg, png, webp, or stl.'
+              : 'Some files were not added because they are not valid file formats. This model accepts STL attachments only.',
       });
     }
 
@@ -1217,6 +1264,11 @@ function TextAreaChat({
 
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault();
+      if (attachmentInteractionsDisabled) {
+        setIsDragging(false);
+        setIsDragHover(false);
+        return;
+      }
       setIsDragging(true);
       // When a drag operation newly enters the window, assume it's not hovering
       // over a specific component's hot-zone yet. Hot-zones will override this.
@@ -1261,7 +1313,7 @@ function TextAreaChat({
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDropGlobal);
     };
-  }, []);
+  }, [attachmentInteractionsDisabled]);
 
   useEffect(() => {
     if (images.length === 0 && mesh === null) {
@@ -1301,11 +1353,11 @@ function TextAreaChat({
       onDrop={handleDrop}
       onDragEnter={(event) => {
         event.preventDefault();
-        setIsDragging(true);
+        if (!attachmentInteractionsDisabled) setIsDragging(true);
       }}
       onDragOver={(event) => {
         event.preventDefault();
-        setIsDragging(true);
+        if (!attachmentInteractionsDisabled) setIsDragging(true);
       }}
       onDragLeave={(event) => {
         event.preventDefault();
@@ -1325,7 +1377,7 @@ function TextAreaChat({
         className={cn(
           'mx-auto flex w-[95%] min-w-52 overflow-hidden rounded-t-xl border-x-2 border-t-2',
           'transition-[height,opacity,border-color,background-color] duration-200 ease-in-out',
-          disabled
+          attachmentInteractionsDisabled
             ? 'h-0 border-transparent bg-transparent opacity-0'
             : !isDragging && images.length === 0 && mesh === null
               ? 'h-0 border-transparent bg-transparent opacity-0'
@@ -1358,7 +1410,7 @@ function TextAreaChat({
           }
         }}
       >
-        {!disabled && (
+        {!attachmentInteractionsDisabled && (
           <>
             {isDragging && (images.length > 0 || mesh !== null) ? (
               <div
@@ -1378,7 +1430,7 @@ function TextAreaChat({
                     color: isDragHover ? '#00A6FF' : 'rgba(0, 166, 255, 0.85)',
                   }}
                 >
-                  Add more images here
+                  Add more attachments here
                 </p>
               </div>
             ) : images.length === 0 && mesh === null ? (
@@ -1401,7 +1453,7 @@ function TextAreaChat({
                     color: isDragHover ? '#00A6FF' : 'rgba(0, 166, 255, 0.85)',
                   }}
                 >
-                  Drop images and 3D models here
+                  Drop supported attachments here
                 </p>
               </div>
             ) : (
@@ -1570,90 +1622,74 @@ function TextAreaChat({
           </div>
         </div>
         <div className="flex items-center justify-between border-t border-[#2a2a2a] p-3">
-          <div className="flex items-center gap-1">
-            {(type !== 'parametric' ||
-              parametricModelSupportsVision(model)) && (
-              <div
-                className={cn(
-                  'transition-all duration-300 ease-out',
-                  'pointer-events-auto scale-100 opacity-100',
-                )}
-              >
-                <Button
-                  variant="outline"
-                  className="flex h-8 w-8 items-center gap-2 rounded-lg border border-[#2a2a2a] bg-adam-background-2 p-0 text-sm text-adam-text-secondary hover:bg-adam-bg-secondary-dark"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = VALID_IMAGE_FORMATS.join(', ');
-                    input.onchange = () => handleItemsChange(input.files);
-                    input.click();
-                  }}
-                  disabled={disabled}
-                >
-                  <ImagePlus className="h-5 w-5" />
-                </Button>
-              </div>
-            )}
-
+          <div className="flex flex-wrap items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="flex h-8 w-8 items-center gap-2 rounded-lg border border-[#2a2a2a] bg-adam-background-2 p-0 text-sm text-adam-text-secondary hover:bg-adam-bg-secondary-dark"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept =
-                      type === 'creative'
-                        ? `${SUPPORTED_MESH_EXTENSIONS.join(', ')}, application/octet-stream`
-                        : '.stl, model/stl, application/sla, application/vnd.ms-pki.stl, application/octet-stream';
-                    input.onchange = () => handleItemsChange(input.files);
-                    input.click();
-                  }}
-                  disabled={disabled}
-                  aria-label={
-                    type === 'creative' ? 'Upload 3D model' : 'Upload STL model'
-                  }
-                >
-                  <FileUp className="h-5 w-5" />
-                </Button>
+                <span className="inline-flex">
+                  <Button
+                    variant="outline"
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-adam-background-2 px-2 text-sm text-adam-text-secondary hover:bg-adam-bg-secondary-dark"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.multiple = true;
+                      input.accept = attachmentAccept;
+                      input.onchange = () => handleItemsChange(input.files);
+                      input.click();
+                    }}
+                    disabled={attachmentInteractionsDisabled}
+                    aria-label="Attach files"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    <span className="text-xs">Attach</span>
+                  </Button>
+                </span>
               </TooltipTrigger>
-              <TooltipContent>
-                {type === 'creative' ? 'Upload 3D model' : 'Upload STL model'}
-              </TooltipContent>
+              <TooltipContent>{attachmentTooltip}</TooltipContent>
             </Tooltip>
 
             {onTypeChange && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'flex h-8 items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-adam-background-2 px-2 text-sm transition-colors',
-                      type === 'creative'
-                        ? 'border-adam-blue/50 bg-adam-blue/10 text-adam-blue'
-                        : 'text-adam-text-secondary hover:bg-adam-bg-secondary-dark',
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTypeChange(
-                        type === 'parametric' ? 'creative' : 'parametric',
-                      );
-                    }}
-                  >
-                    <Box className="h-4 w-4" />
-                    <span className="hidden text-xs lg:inline">Mesh</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {type === 'parametric'
-                    ? 'Switch to Creative mode'
-                    : 'Switch to Parametric mode'}
-                </TooltipContent>
-              </Tooltip>
+              <div
+                role="group"
+                aria-label="Creation mode"
+                className="flex h-8 shrink-0 overflow-hidden rounded-lg border border-[#2a2a2a]"
+              >
+                <button
+                  type="button"
+                  aria-pressed={type === 'parametric'}
+                  disabled={isLoading || disabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTypeChange('parametric');
+                  }}
+                  className={cn(
+                    'px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                    type === 'parametric'
+                      ? 'bg-adam-blue/15 text-adam-blue'
+                      : 'bg-transparent text-adam-text-secondary hover:bg-adam-bg-secondary-dark hover:text-adam-text-primary',
+                  )}
+                >
+                  Parametric
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={type === 'creative'}
+                  disabled={isLoading || disabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTypeChange('creative');
+                  }}
+                  className={cn(
+                    'border-l border-[#2a2a2a] px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                    type === 'creative'
+                      ? 'bg-adam-blue/15 text-adam-blue'
+                      : 'bg-transparent text-adam-text-secondary hover:bg-adam-bg-secondary-dark hover:text-adam-text-primary',
+                  )}
+                >
+                  Mesh
+                </button>
+              </div>
             )}
 
             {showPolygonControls && (
