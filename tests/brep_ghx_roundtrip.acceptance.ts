@@ -23,8 +23,27 @@ const PROMPT = [
   'Do not add transforms, cylinders, subtracts, fillets, auxiliary semantic geometry, or placement changes.',
 ].join(' ');
 
+async function waitForReactHydration(page: Page) {
+  await page.locator('#identifier').waitFor({ state: 'visible', timeout: 30000 });
+  await page.waitForFunction(
+    () => {
+      const node = document.querySelector('#identifier');
+      return Boolean(
+        node &&
+          Object.keys(node).some(
+            (key) =>
+              key.startsWith('__reactFiber$') || key.startsWith('__reactProps$'),
+          ),
+      );
+    },
+    undefined,
+    { timeout: 30000 },
+  );
+}
+
 async function signIn(page: Page) {
   await page.goto(`${ORIGIN}/signin`);
+  await waitForReactHydration(page);
   await page.locator('#identifier').fill(IDENTIFIER!);
   await page.locator('#password').fill(PASSWORD!);
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
@@ -32,17 +51,20 @@ async function signIn(page: Page) {
   const authError = page
     .getByText(/Invalid username\/email or password|An error occurred while signing in/)
     .first();
-  const outcome = await Promise.race([
-    page
-      .waitForURL((url) => url.pathname !== '/signin', { timeout: 30000 })
-      .then(() => 'signed-in' as const),
-    authError
-      .waitFor({ state: 'visible', timeout: 30000 })
-      .then(() => 'auth-error' as const),
-  ]);
 
-  if (outcome === 'auth-error') {
-    const message = (await authError.textContent())?.trim() || 'unknown authentication error';
+  await expect
+    .poll(
+      async () => {
+        if (new URL(page.url()).pathname !== '/signin') return true;
+        return authError.isVisible().catch(() => false);
+      },
+      { timeout: 30000 },
+    )
+    .toBe(true);
+
+  if (await authError.isVisible().catch(() => false)) {
+    const message =
+      (await authError.textContent())?.trim() || 'unknown authentication error';
     throw new Error(`Phase 8H sign-in failed: ${message}`);
   }
 }
