@@ -8,6 +8,7 @@ import { signInWithSsoProvider } from '@/lib/ssoAuth';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScadImportButton } from '@/components/ScadImportButton';
 import { InstructionProfileSelector } from '@/components/InstructionProfileSelector';
+import { BrepCreationProgress } from '@/components/brep/BrepCreationProgress';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Model } from '@shared/types';
@@ -51,6 +52,8 @@ type ParametricSourceKind = 'openscad' | 'brep';
 type PromptMessageMetadata = AppUIMessage['metadata'] & {
   parametricSourceKind?: 'brep';
 };
+
+const PENDING_BREP_SESSION_KEY = 'brepia.pendingBrepConversationId';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -105,6 +108,7 @@ export function PromptView() {
   const [type, setType] = useState<'parametric' | 'creative'>('parametric');
   const [parametricSourceKind, setParametricSourceKind] =
     useState<ParametricSourceKind>('openscad');
+  const [brepRequestSaved, setBrepRequestSaved] = useState(false);
 
   const parametricDefaultModel = useMemo(
     () =>
@@ -159,6 +163,21 @@ export function PromptView() {
     setInstructionProfileId(aiPreferences.defaultInstructionProfileId);
     initialInstructionProfileAppliedRef.current = true;
   }, [aiPreferences, user]);
+
+  useEffect(() => {
+    const navigation = window.performance
+      .getEntriesByType('navigation')
+      .at(0) as PerformanceNavigationTiming | undefined;
+    if (navigation?.type !== 'reload') return;
+
+    const pendingConversationId = window.sessionStorage.getItem(
+      PENDING_BREP_SESSION_KEY,
+    );
+    if (!pendingConversationId) return;
+
+    window.sessionStorage.removeItem(PENDING_BREP_SESSION_KEY);
+    window.location.replace(`/brep/${pendingConversationId}`);
+  }, []);
 
   const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
     'cli',
@@ -228,6 +247,7 @@ export function PromptView() {
       const conversationId = draftConversationId;
       const isNativeBrep =
         type === 'parametric' && parametricSourceKind === 'brep';
+      if (isNativeBrep) setBrepRequestSaved(false);
       const creativeAgentModel =
         type === 'creative'
           ? resolvePreferredCreativeAgentModel(parametricModels)
@@ -389,6 +409,14 @@ export function PromptView() {
         parentMessageId: null,
       });
 
+      if (isNativeBrep) {
+        window.sessionStorage.setItem(
+          PENDING_BREP_SESSION_KEY,
+          conversation.id,
+        );
+        setBrepRequestSaved(true);
+      }
+
       const chat = createAndCacheAiChat({
         id: isNativeBrep ? `brep:${conversation.id}` : conversation.id,
         generateId: () => crypto.randomUUID(),
@@ -502,12 +530,15 @@ export function PromptView() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (data.destination === 'brep') {
+        window.sessionStorage.removeItem(PENDING_BREP_SESSION_KEY);
         window.location.assign(`/brep/${data.conversationId}`);
         return;
       }
       navigate({ to: '/editor/$id', params: { id: data.conversationId } });
     },
     onError: (error) => {
+      window.sessionStorage.removeItem(PENDING_BREP_SESSION_KEY);
+      setBrepRequestSaved(false);
       setDraftConversationId(crypto.randomUUID());
       Sentry.captureException(error);
       toast({
@@ -548,6 +579,23 @@ export function PromptView() {
 
     handleGenerate(parts);
   };
+
+  if (
+    isGenerating &&
+    type === 'parametric' &&
+    parametricSourceKind === 'brep'
+  ) {
+    return (
+      <BrepCreationProgress
+        messages={[]}
+        messagesFetched
+        leafPresent
+        model={model}
+        executionMode={executionMode}
+        requestSavedOverride={brepRequestSaved}
+      />
+    );
+  }
 
   return (
     <div
