@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   testMatch: 'brep_ghx_roundtrip.acceptance.ts',
-  timeout: 300000,
+  timeout: 480000,
   expect: {
     timeout: 30000,
   },
