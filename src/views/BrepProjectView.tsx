@@ -17,6 +17,7 @@ import {
   messageRowToChatMessage,
   type ChatMessage,
 } from '@/lib/aiMessages';
+import { UNCONFIGURED_MODEL_ID } from '@/lib/defaultModels';
 import { normalizeModelId } from '@shared/models';
 import { supabase } from '@/lib/supabase';
 import {
@@ -187,7 +188,7 @@ function BrepProjectWorkspace() {
   const [model, setModel] = useState<Model>(
     conversation.settings?.model
       ? normalizeModelId(conversation.settings.model)
-      : 'openai/gpt-5.6-sol',
+      : UNCONFIGURED_MODEL_ID,
   );
   const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
     conversation.settings?.openCodeExecutionMode ?? 'cli',
