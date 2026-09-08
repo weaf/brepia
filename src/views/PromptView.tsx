@@ -34,6 +34,7 @@ import { createAndCacheAiChat } from '@/hooks/useCachedAiChat';
 import type { AppUIMessage } from '@shared/chatAi';
 import { ensureInputRecords } from '@/lib/aiMessages';
 import { createOpenScadProjectAssetDescriptor } from '@/lib/openScadProjectAssetStorage';
+import { useLatestBrepGenerationRun } from '@/services/generationRunService';
 import { persistUserMessage } from '@/services/messageService';
 import { HOME_PROMPT_DRAFT_KEY } from '@/lib/promptDraft';
 import { pickHomePromptMessage } from '@/lib/homePromptCopy';
@@ -355,9 +356,6 @@ export function PromptView() {
         conversation_id: conversationId,
       });
 
-      // Pin the complete repository instruction package independently from the
-      // mode-specific custom prompt profile. Existing conversations therefore
-      // keep their selected CADAM/Standard lineage when defaults change.
       const promptProfileId = aiPreferences?.defaultPromptProfileId ?? null;
       const creativePromptProfileId =
         aiPreferences?.defaultCreativePromptProfileId ?? null;
@@ -569,6 +567,14 @@ export function PromptView() {
     },
   });
 
+  const nativeBrepGenerationActive =
+    isGenerating && type === 'parametric' && parametricSourceKind === 'brep';
+  const { data: homeGenerationRun } = useLatestBrepGenerationRun({
+    conversationId: draftConversationId,
+    enabled: Boolean(user?.id) && nativeBrepGenerationActive,
+    pollWhenMissing: nativeBrepGenerationActive,
+  });
+
   const handlePromptSubmit = (parts: AppUIMessage['parts']) => {
     if (
       type === 'parametric' &&
@@ -600,11 +606,7 @@ export function PromptView() {
     handleGenerate(parts);
   };
 
-  if (
-    isGenerating &&
-    type === 'parametric' &&
-    parametricSourceKind === 'brep'
-  ) {
+  if (nativeBrepGenerationActive) {
     return (
       <BrepCreationProgress
         messages={[]}
@@ -613,6 +615,7 @@ export function PromptView() {
         model={model}
         executionMode={executionMode}
         requestSavedOverride={brepRequestSaved}
+        generationRun={homeGenerationRun}
       />
     );
   }

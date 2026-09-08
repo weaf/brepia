@@ -78,4 +78,11 @@ describe('home prompt creation mode controls', () => {
     assert.match(promptViewSource, /images\.length > 0/);
     assert.match(promptViewSource, /parametricSourceKind === 'brep'/);
   });
+
+  it('reads durable server progress during the first Native BRep generation', () => {
+    assert.match(promptViewSource, /useLatestBrepGenerationRun\(\{/);
+    assert.match(promptViewSource, /conversationId: draftConversationId/);
+    assert.match(promptViewSource, /pollWhenMissing: nativeBrepGenerationActive/);
+    assert.match(promptViewSource, /generationRun=\{homeGenerationRun\}/);
+  });
 });
