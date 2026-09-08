@@ -87,8 +87,13 @@ import { resolveCreativeAgentModel } from './creativeAgentModel';
 import { createUserAiRuntimeContext } from './aiInstructionRuntime';
 import {
   beginActiveGeneration,
-  cancelActiveGeneration,
+  cancelActiveGenerationWithRunId,
 } from './activeGeneration';
+import {
+  AiGenerationRunLifecycle,
+  cancelDurableGenerationRun,
+} from './aiGenerationRunLifecycle';
+import { generationRunKindForConversation } from './generationRunPersistence';
 import { resolveAiTurnProvenance } from './aiTurnProvenance';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
 
@@ -845,12 +850,18 @@ export async function handleAiChatRequest(req: Request) {
   }
 
   if (parsedBody.kind === 'cancel') {
-    return jsonResponse(
-      {
-        canceled: cancelActiveGeneration(user.id, conversation.id),
-      },
-      200,
+    const cancellation = cancelActiveGenerationWithRunId(
+      user.id,
+      conversation.id,
     );
+    if (cancellation.durableRunId) {
+      await cancelDurableGenerationRun(
+        cancellation.durableRunId,
+        user.id,
+        conversation.id,
+      );
+    }
+    return jsonResponse({ canceled: cancellation.cancelled }, 200);
   }
 
   const rawBody = parsedBody.body;
@@ -1306,6 +1317,37 @@ export async function handleAiChatRequest(req: Request) {
       : {}),
     ...turnProvenance,
   };
+
+  let generationRun: AiGenerationRunLifecycle;
+  try {
+    generationRun = await AiGenerationRunLifecycle.create({
+      userId: user.id,
+      conversationId: conversation.id,
+      requestMessageId: leafMessageId,
+      kind: generationRunKindForConversation(
+        conversation.type,
+        Boolean(activeBrepSource),
+      ),
+      requestedModelId: baseLogContext.requestedModelId,
+    });
+    await generationRun.dispatched(turnProvenance);
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-chat',
+      statusCode: 500,
+      userId: user.id,
+      conversationId: conversation.id,
+      additionalContext: {
+        ...baseLogContext,
+        operation: 'create_generation_run',
+      },
+    });
+    return jsonResponse(
+      { error: 'Generation status could not be initialized' },
+      500,
+    );
+  }
+
   console.info('transport', {
     modelId: actualModelId,
     executionMode,
@@ -1355,6 +1397,7 @@ export async function handleAiChatRequest(req: Request) {
 
         const supportsTools = built.capabilities.supportsTools;
         if (!supportsTools) {
+          await generationRun.failed('provider_tools_unsupported');
           return jsonResponse(
             { error: 'Provider does not support required CAD tools' },
             400,
@@ -1375,6 +1418,7 @@ export async function handleAiChatRequest(req: Request) {
             operation: 'build_custom_chat_model',
           },
         });
+        await generationRun.failed('model_initialization_failed');
         const message =
           error instanceof Error ? error.message : 'Custom provider error';
         return jsonResponse({ error: message }, 400);
@@ -1402,6 +1446,7 @@ export async function handleAiChatRequest(req: Request) {
         operation: 'build_chat_model',
       },
     });
+    await generationRun.failed('model_initialization_failed');
     const message = error instanceof Error ? error.message : String(error);
     return jsonResponse(
       { error: `Failed to initialize model ${actualModelId}: ${message}` },
@@ -1440,7 +1485,20 @@ export async function handleAiChatRequest(req: Request) {
     !streamingOpenCode &&
     !forceBuildToolChoice;
 
-  const activeGeneration = beginActiveGeneration(user.id, conversation.id);
+  const activeGeneration = beginActiveGeneration(
+    user.id,
+    conversation.id,
+    generationRun.id,
+  );
+  if (activeGeneration.replacedDurableRunId) {
+    await cancelDurableGenerationRun(
+      activeGeneration.replacedDurableRunId,
+      user.id,
+      conversation.id,
+      'Generation superseded by a newer request.',
+    );
+  }
+  await generationRun.generating();
 
   const result = streamText({
     model: chatLanguageModel,
@@ -1489,7 +1547,11 @@ export async function handleAiChatRequest(req: Request) {
     experimental_transform: smoothStream({ delayInMs: 30 }),
     onError: ({ error }) => {
       activeGeneration.finish();
-      if (isRequestAbort(error, activeGeneration.signal)) return;
+      if (isRequestAbort(error, activeGeneration.signal)) {
+        void generationRun.cancelled('Generation aborted.');
+        return;
+      }
+      void generationRun.failed('model_stream_failed');
 
       logError(error, {
         functionName: 'ai-chat',
@@ -1504,6 +1566,7 @@ export async function handleAiChatRequest(req: Request) {
     },
     onFinish: ({ steps }) => {
       activeGeneration.finish();
+      void generationRun.responseReceived();
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
         step.toolCalls?.some((call) => call.toolName === buildToolName),
@@ -1533,8 +1596,10 @@ export async function handleAiChatRequest(req: Request) {
     onError: (error) => {
       activeGeneration.finish();
       if (isRequestAbort(error, activeGeneration.signal)) {
+        void generationRun.cancelled('Generation aborted.');
         return 'Generation stopped';
       }
+      void generationRun.failed('ui_stream_failed');
 
       logError(error, {
         functionName: 'ai-chat',
@@ -1568,6 +1633,8 @@ export async function handleAiChatRequest(req: Request) {
           messageMetadata: ({ part }) =>
             part.type === 'start' ? turnMetadata : undefined,
           onFinish: async ({ responseMessage, isContinuation }) => {
+            await generationRun.validatingArtifact(responseMessage.id);
+
             const metadata = {
               ...(responseMessage.metadata ?? {}),
               ...turnMetadata,
@@ -1596,6 +1663,7 @@ export async function handleAiChatRequest(req: Request) {
               isContinuation,
               hasPendingToolCall,
             });
+            await generationRun.savingRevision(responseMessage.id);
             let error: { message: string } | null = null;
             if (persistAction === 'update') {
               if (activeBrepSource) {
@@ -1654,6 +1722,12 @@ export async function handleAiChatRequest(req: Request) {
                 conversationId: conversation.id,
                 additionalContext: { operation: 'persist_response_message' },
               });
+              await generationRun.failed('response_persistence_failed');
+            } else {
+              await generationRun.persisted(
+                responseMessage.id,
+                Boolean(activeBrepSource),
+              );
             }
 
             if (!error && !hasPendingToolCall && anthropicAuxiliaryAvailable) {
