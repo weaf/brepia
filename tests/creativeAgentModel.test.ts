@@ -45,16 +45,30 @@ describe('Creative agent model selection', () => {
     });
   });
 
-  it('keeps an explicitly requested vision model authoritative', () => {
-    const result = selectCreativeAgentModel(
+  it('keeps an explicitly requested model only when it is selectable in Settings', () => {
+    const selected = selectCreativeAgentModel(
       { settings: {} },
       'local/qwen-vision-30b',
+      [
+        catalogEntry('local/qwen-vision-30b', { supportsVision: true }),
+        catalogEntry('local/qwen3.6-35b-mtp-128k'),
+      ],
+    );
+
+    expect(selected).toEqual({
+      modelId: 'local/qwen-vision-30b',
+      source: 'request',
+    });
+
+    const stale = selectCreativeAgentModel(
+      { settings: {} },
+      'local/deleted-model',
       [catalogEntry('local/qwen3.6-35b-mtp-128k')],
     );
 
-    expect(result).toEqual({
-      modelId: 'local/qwen-vision-30b',
-      source: 'request',
+    expect(stale).toEqual({
+      modelId: 'local/qwen3.6-35b-mtp-128k',
+      source: 'catalog',
     });
   });
 });
