@@ -55,17 +55,63 @@ export function shouldPollGenerationRun(
   return !isGenerationRunTerminal(run.status);
 }
 
+export function selectGenerationRunAfterBaseline(
+  run: GenerationRunSnapshot | undefined,
+  baselineRunId: string | null | undefined,
+): GenerationRunSnapshot | undefined {
+  if (!run || (baselineRunId && run.id === baselineRunId)) return undefined;
+  return run;
+}
+
+export async function getLatestBrepGenerationRun({
+  conversationId,
+  requestMessageId,
+}: {
+  conversationId: string;
+  requestMessageId?: string;
+}): Promise<GenerationRunSnapshot | undefined> {
+  let query = supabase
+    .from('generation_runs')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('kind', 'brep');
+
+  if (requestMessageId) {
+    query = query.eq('request_message_id', requestMessageId);
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data
+    ? generationRunRowToClientSnapshot(data as GenerationRunRow)
+    : undefined;
+}
+
 export function useLatestBrepGenerationRun({
   conversationId,
   enabled = true,
   pollWhenMissing = false,
+  requestMessageId,
+  baselineRunId,
 }: {
   conversationId: string;
   enabled?: boolean;
   pollWhenMissing?: boolean;
+  requestMessageId?: string;
+  baselineRunId?: string | null;
 }) {
   return useQuery<GenerationRunSnapshot | undefined>({
-    queryKey: ['generation-run', 'brep', conversationId],
+    queryKey: [
+      'generation-run',
+      'brep',
+      conversationId,
+      requestMessageId ?? null,
+      baselineRunId ?? null,
+    ],
     enabled: enabled && Boolean(conversationId),
     refetchOnWindowFocus: 'always',
     refetchIntervalInBackground: true,
@@ -74,19 +120,13 @@ export function useLatestBrepGenerationRun({
         ? GENERATION_RUN_POLL_MS
         : false,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('generation_runs')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .eq('kind', 'brep')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data
-        ? generationRunRowToClientSnapshot(data as GenerationRunRow)
-        : undefined;
+      const run = await getLatestBrepGenerationRun({
+        conversationId,
+        ...(requestMessageId ? { requestMessageId } : {}),
+      });
+      return requestMessageId
+        ? selectGenerationRunAfterBaseline(run, baselineRunId)
+        : run;
     },
   });
 }

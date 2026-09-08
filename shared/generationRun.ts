@@ -104,6 +104,15 @@ const terminalStatuses = new Set<GenerationRunStatus>([
   'cancelled',
 ]);
 
+const aiEditingPhases = new Set<GenerationRunPhase>([
+  'request_saved',
+  'model_dispatched',
+  'generating',
+  'response_received',
+  'validating_artifact',
+  'saving_revision',
+]);
+
 const allowedStatusTransitions: Record<
   GenerationRunStatus,
   ReadonlySet<GenerationRunStatus>
@@ -289,4 +298,17 @@ export function isGenerationRunTerminal(
   status: GenerationRunStatus,
 ): boolean {
   return terminalStatuses.has(status);
+}
+
+/**
+ * Whether a durable BRep run still owns source-write exclusion.
+ *
+ * Once the immutable revision has been saved, native evaluation/viewer work is
+ * preview lifecycle rather than AI source generation and must not keep the
+ * Parameters/source editors locked. Terminal runs never own the edit lock.
+ */
+export function isGenerationRunAiEditing(
+  run: Pick<GenerationRunSnapshot, 'status' | 'phase'>,
+): boolean {
+  return !isGenerationRunTerminal(run.status) && aiEditingPhases.has(run.phase);
 }

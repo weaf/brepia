@@ -3,6 +3,7 @@ import { describe, it } from 'vitest';
 import {
   applyGenerationRunTransition,
   GenerationRunTransitionError,
+  isGenerationRunAiEditing,
   isGenerationRunTerminal,
   type GenerationRunSnapshot,
 } from '../shared/generationRun';
@@ -130,6 +131,48 @@ describe('durable generation run transitions', () => {
     assert.equal(evaluation.phase, 'evaluation_requested');
     assert.equal(ready.status, 'completed');
     assert.ok(isGenerationRunTerminal(ready.status));
+  });
+
+  it('locks source editing only while AI generation can still mutate source', () => {
+    const activePhases: GenerationRunSnapshot['phase'][] = [
+      'request_saved',
+      'model_dispatched',
+      'generating',
+      'response_received',
+      'validating_artifact',
+      'saving_revision',
+    ];
+    for (const phase of activePhases) {
+      assert.equal(
+        isGenerationRunAiEditing({ status: 'running', phase }),
+        true,
+        phase,
+      );
+    }
+
+    const previewPhases: GenerationRunSnapshot['phase'][] = [
+      'revision_saved',
+      'evaluation_requested',
+      'evaluating_native',
+      'preparing_viewer',
+      'preview_ready',
+    ];
+    for (const phase of previewPhases) {
+      assert.equal(
+        isGenerationRunAiEditing({ status: 'running', phase }),
+        false,
+        phase,
+      );
+    }
+
+    assert.equal(
+      isGenerationRunAiEditing({ status: 'failed', phase: 'saving_revision' }),
+      false,
+    );
+    assert.equal(
+      isGenerationRunAiEditing({ status: 'cancelled', phase: 'generating' }),
+      false,
+    );
   });
 
   it('requires bounded terminal failure metadata and freezes terminal runs', () => {

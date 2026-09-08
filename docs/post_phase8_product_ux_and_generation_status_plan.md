@@ -4,27 +4,26 @@ Status: active follow-up after the accepted Brepia-side Phase 8 GHX loop.
 
 This document captures product/robustness work identified during real mobile and local-model acceptance. It is intentionally separate from installed Rhino/Grasshopper Phase 9 acceptance.
 
-## Current implementation checkpoint — 2026-09-07
+## Current implementation checkpoint — 2026-09-08
 
-Repository implementation is now complete for the first four UX tracks on `feature/brep-grasshopper-gh-packaging`:
+Repository implementation is now complete for the four UX tracks and the first durable-generation robustness slice on `feature/brep-grasshopper-gh-packaging`:
 
 - **UX-1 explicit creation modes and unified Attach** — repository complete;
 - **UX-2 per-turn model/transport provenance** — repository complete;
 - **UX-3 stable resizable side-panel width** — implemented before this checkpoint;
 - **UX-4 user-defined BRep revision names** — implemented before this checkpoint;
-- **ROBUST-1 persisted server-side generation status** — state contract started; schema/server persistence remains next.
+- **ROBUST-1 persisted server-side generation status** — durable schema/server/client lifecycle implemented, including request-aware retry correlation and reload-safe BRep edit exclusion; browser/live-model acceptance remains open.
 
-Latest exact-head repository evidence for UX-1/UX-2 before ROBUST-1 contract work:
+Latest exact-head repository evidence before the ROBUST-1 request-correlation hardening:
 
 ```text
-8d32d07110dccd8753399632ddc6821396be01bd
-Test disabled attachment ingress guard
+a53165efdfd1d1abd47aaf9c61f124d4a2071c47
+Assert current BRep creation UX in GHX acceptance
 ```
 
-- Quality Gate #597 — PASS;
-- Grasshopper Build #170 — PASS.
+The preceding repository gates were green. The new ROBUST-1 hardening must receive its own Quality Gate/Grasshopper Build evidence after commit.
 
-Evidence boundary: these gates prove repository tests/typecheck/lint/build/diff-check and retained Grasshopper build compatibility. They do **not** replace the still-open manual visual/browser check of the new prompt hierarchy, Attach behavior, provenance labels, panel width and revision-name presentation in the user's real local runtime.
+Evidence boundary: repository gates prove tests/typecheck/lint/build/diff-check and retained Grasshopper build compatibility. They do **not** replace the still-open manual visual/browser check of the prompt hierarchy, Attach behavior, provenance labels, panel width, revision-name presentation, or durable edit-lock recovery in the user's real local runtime.
 
 The current implementation preserves the existing authority boundaries:
 
@@ -32,7 +31,9 @@ The current implementation preserves the existing authority boundaries:
 - Native BRep is still selected explicitly through `parametricSourceKind = 'brep'`;
 - Native BRep attachments remain fail-closed/text-only;
 - per-turn provenance is persisted on assistant messages and is not reconstructed from later conversation settings;
-- BRep revision names remain presentation metadata outside immutable source/message lineage.
+- BRep revision names remain presentation metadata outside immutable source/message lineage;
+- `generation_runs` is server-written and owner-readable through RLS; the browser observes durable state rather than owning generation progress;
+- installed Rhino/Grasshopper host acceptance remains Phase 9 and is not part of this product robustness slice.
 
 ---
 
@@ -257,52 +258,40 @@ Revision 4 · Active
 
 ## ROBUST-1 — persisted server-side generation status/progress
 
-### Status / implementation reconciliation — 2026-09-07
+### Status / implementation reconciliation — 2026-09-08
 
-The repository now has enough server infrastructure to implement this without making the browser authoritative, but two boundaries matter:
+**Repository implementation complete for the current browser/server lifecycle; manual live-runtime acceptance remains open.**
 
-1. `src/server/supabaseClient.ts` already exposes a server-only service-role Supabase client. ROBUST-1 should use that for status mutations while ordinary authenticated clients receive read-only RLS access to their own run rows. Do not add broad authenticated INSERT/UPDATE policies merely to make status writes convenient.
-2. AI/agent generation is server-owned in `src/server/aiChat.ts`, so request acceptance, transport selection, generation, response receipt, validation and immutable-message persistence can all truthfully update a durable run from the server.
-3. Native BRep evaluation itself is server-executed by `/api/brep/evaluate`, but the initial preview request is currently initiated by the browser. Therefore `Native evaluator queued` must not be claimed at AI completion unless the product actually schedules that evaluation server-side. V1 may instead link the authenticated evaluate request to the generation run and persist `evaluation_started`/`preview_ready` when that request occurs. A later queued-worker slice can remove the remaining browser initiation entirely.
-4. Existing `persist_brep_ai_revision` demonstrates the desired ownership/CAS discipline for immutable BRep state. Generation runs should use independent run IDs and monotonic per-run sequence/state transitions so an older run cannot overwrite a newer run's presentation state.
-5. Repository database changes are schema-first by `AGENTS.md`: edit `supabase/schemas/`, generate/review the migration with local `npx supabase db diff`, apply it locally, and regenerate `shared/database.ts`. `shared/database.ts` must not be hand-edited. This database slice therefore must be generated in a real local Supabase checkout rather than fabricated through a remote file-only edit.
+The implemented authority model is now:
 
-The shared repository contract has now started in `shared/generationRun.ts` with focused tests in `tests/generationRun.test.ts`. It defines:
+1. `generation_runs` persists one immutable run identity per generation attempt, with monotonic per-run `sequence`, truthful status/phase, requested/actual model and transport provenance, bounded details/errors, and request/response message correlation.
+2. Ordinary authenticated clients have owner-scoped RLS `SELECT`; generation-run creation and transitions remain server/service-role owned. There is no ordinary authenticated write policy.
+3. AI/agent generation in `src/server/aiChat.ts` owns the durable transitions from `request_saved` through `revision_saved`.
+4. Authenticated `/api/brep/evaluate` correlates the current conversation/revision server-side and advances the same run through `evaluation_requested`, `evaluating_native`, `preparing_viewer` and `preview_ready`; the browser never supplies a trusted generation-run ID.
+5. The BRep client reads durable run state with polling/reload fallback. A new send/edit/retry captures the latest run for that exact `request_message_id` immediately before AI dispatch and uses its run ID as a baseline cursor. The old terminal attempt is therefore treated as a missing-row handoff until a different, newer run ID appears. This is required because retry/regenerate may legitimately reuse the same user request message ID.
+6. On reload, where no local attempt cursor survives, the latest owned BRep run remains authoritative. A queued/running AI phase can therefore recover the edit exclusion even though the prior React/AI-SDK stream state is gone.
+7. Source-write exclusion is intentionally narrower than the full native-preview lifecycle. `request_saved`, `model_dispatched`, `generating`, `response_received`, `validating_artifact` and `saving_revision` lock BRep Parameters/source writes. The lock ends at `revision_saved`; `evaluation_requested`, `evaluating_native`, `preparing_viewer` and `preview_ready` are preview work and must not keep the immutable source editor locked. Terminal `completed`, `failed` and `cancelled` runs never own the edit lock.
+8. Initial browser creation progress still uses the same durable server phases and keeps the existing fail-closed missing-row handoff while the first run row is being created.
+
+The shared contract in `shared/generationRun.ts` and focused tests in `tests/generationRun.test.ts` / `tests/generationRunClient.test.ts` cover:
 
 - explicit run statuses `queued`, `running`, `waiting_for_preview`, `completed`, `failed`, `cancelled`;
 - truthful ordered phases from `request_saved` through `preview_ready`;
-- `waiting_for_preview` as the current boundary after a BRep revision is persisted but before a real evaluate request occurs;
+- `waiting_for_preview` as the boundary after a BRep revision is persisted but before/while a real evaluate request takes over;
 - monotonic `sequence` as an idempotency/state-version field, explicitly not a percentage;
 - no phase regression even if a stale writer has a newer wall-clock timestamp;
 - same-phase detail updates for events such as an OpenCode reconnect without fabricating forward progress;
-- bounded detail/error fields;
-- terminal status immutability.
-
-Recommended v1 authority model after this reconciliation:
-
-```text
-authenticated browser
-  -> persists/owns user message through existing conversation policy
-  -> calls chat/evaluate endpoints
-  -> READS generation_runs for owned conversations
-
-Brepia server
-  -> service-role INSERT/UPDATE generation_runs
-  -> bounded state-transition helper
-  -> never stores raw provider output/secrets as progress detail
-
-Supabase RLS
-  -> owner SELECT only for ordinary authenticated clients
-  -> no ordinary client INSERT/UPDATE/DELETE policy
-```
+- bounded detail/error fields and terminal immutability;
+- request-ID + baseline-run correlation for retries that reuse a request message;
+- the BRep edit-lock boundary ending at `revision_saved` rather than at `preview_ready`.
 
 ### Why this is separate
 
-The current BRep pending UI can infer useful coarse state from persisted conversation/messages and now recovers much better after mobile backgrounding. It still cannot truthfully expose every server step, because intermediate generation state is not persisted as first-class server data.
+Durable progress is server data, not a browser animation. React mutation/stream state may improve immediacy, but it is not authoritative for whether generation is still running or which server phase has completed.
 
-Do not replace this with fake percentages or client timers. The next step is a real durable progress channel.
+Do not replace persisted state with fake percentages or client timers.
 
-### Desired user experience
+### User experience
 
 A creation/iteration can display real server-owned stages such as:
 
@@ -319,13 +308,13 @@ Preparing viewer mesh
 Preview ready
 ```
 
-`Native evaluator queued` is reserved for a future implementation that actually owns a server-side queue/job dispatch boundary.
+`Native evaluator queued` remains reserved for a future implementation that actually owns a server-side queue/job dispatch boundary.
 
 Transport-specific information can be included where useful, for example an OpenCode event-stream reconnect, without presenting a reconnect as a failed generation.
 
-### Proposed persistence model
+### Persistence model
 
-Introduce an authenticated generation-run record owned by the conversation/user. Exact SQL is generated through the schema-first local workflow, but the logical fields are:
+The implemented generation-run row contains:
 
 ```text
 generation_run
@@ -333,25 +322,25 @@ generation_run
   user_id
   conversation_id
   request_message_id
-  response_message_id?      // once known
-  kind                      // parametric / brep / creative
+  response_message_id?
+  kind
   requested_model_id
   actual_model_id?
   transport_kind
   execution_mode?
-  status                    // queued/running/waiting_for_preview/completed/failed/cancelled
-  phase                     // current truthful server phase
-  detail?                   // bounded machine/UI-safe detail
-  sequence                  // monotonic state version, not percent
+  status
+  phase
+  detail?
+  sequence
   created_at
   started_at?
   updated_at
   completed_at?
   error_code?
-  error_message?            // bounded/sanitized
+  error_message?
 ```
 
-For v1, one current persisted row with monotonic `sequence` is sufficient if the product only needs current progress plus final state. Separate rows per run mean an old run never overwrites a newer run row; the client selects the newest relevant run for its conversation/turn. If audit/history of every transition proves useful, add an append-only `generation_events` table rather than embedding an unbounded event array in the run row.
+Separate rows per attempt prevent one attempt from overwriting another. `sequence` orders state transitions *within* a run; it is not used as a cross-run cursor. Cross-attempt client correlation uses the request message plus the previously observed run ID.
 
 ### Security
 
@@ -375,21 +364,22 @@ The server creates/updates the generation run at real boundaries:
 7. authenticated BRep evaluate request starts/completes when applicable;
 8. terminal `completed`, `failed` or `cancelled`.
 
-The stream sent to the browser becomes an *observer* of the generation, not the owner of its lifecycle.
+The stream sent to the browser is an observer of generation, not the owner of its lifecycle.
 
 ### Client delivery
 
-Use persisted state as the authority with two delivery paths:
+The current client uses persisted state as authority with bounded polling/refetch fallback. Realtime/SSE status delivery may be added later as an optimization; it is not required for correctness.
 
-- live updates through Supabase Realtime or an application SSE/status endpoint;
-- bounded polling/refetch fallback for mobile browsers, reconnects and environments where a live subscription is suspended.
+For a fresh BRep AI attempt, the client first captures the latest run ID for that request message. While the latest request-scoped row is still that baseline row, the query deliberately exposes no current run and continues the short handoff poll. A new run is accepted only after its ID differs from the baseline. This prevents stale terminal cache data from falsely completing a retry before the server creates its new run row.
 
-On reload/reopen, the client reads the persisted generation run first and renders the correct stage immediately. It must not depend on the old React mutation state still existing.
+On reload/reopen there is no local cursor, so the client reads the latest persisted BRep run for the conversation and derives recovery/edit exclusion from its durable phase.
 
 ### Browser/background contract
 
 - leaving or backgrounding the browser does not cancel generation unless the user explicitly requests Cancel;
 - returning to the project rehydrates the latest persisted progress;
+- queued/running BRep AI source work restores source-write exclusion after reload;
+- once `revision_saved` is durable, native evaluation/viewer work does not keep Parameters/source editing locked;
 - completion while the browser is absent yields the final persisted project/revision on return;
 - browser disconnect and OpenCode event-stream reconnect are distinguished from user cancellation;
 - terminal failure is persisted and visible after reload instead of degrading into an ambiguous empty project.
@@ -404,18 +394,18 @@ Persisted status alone makes browser reconnect/reload durable. It does not autom
 
 ### Acceptance scenarios
 
-At minimum verify each with direct llama-swap, OpenCode and Codex/CLI-agent where supported:
+Repository tests cover the state contract and request/baseline correlation. Manual/live acceptance should still verify, with direct llama-swap, OpenCode and Codex/CLI-agent where supported:
 
-1. start generation and remain on page;
-2. background mobile Chrome for 30–60 seconds and return;
-3. hard reload while generation is running;
-4. navigate to home and reopen the running project from the sidebar;
-5. generation completes while no project tab is open;
-6. OpenCode event SSE disconnect/reconnect while agent continues;
-7. explicit user cancel;
-8. provider/agent failure before artifact creation;
-9. failure during BRep validation/native evaluation;
-10. successful terminal state followed by reload.
+1. start a later BRep AI edit and remain on page;
+2. retry/regenerate the same user request after a previous terminal run and confirm the old run is not accepted as the new attempt;
+3. edit an earlier user turn and confirm the new request branch gets its own current run;
+4. hard reload during `queued`/`running` AI source generation and confirm `AI editing…`/write exclusion recovers;
+5. reach `revision_saved` and confirm Parameters/source editing unlocks while native evaluation/viewer preparation continues;
+6. background mobile Chrome for 30–60 seconds and return;
+7. navigate to home and reopen the running project from the sidebar;
+8. generation completes while no project tab is open;
+9. OpenCode event SSE disconnect/reconnect while agent continues;
+10. explicit user cancel and provider/agent/native-evaluation failure paths.
 
 The UI must always show a truthful persisted stage or terminal result; it must never infer completion merely because a browser stream ended.
 
@@ -427,6 +417,6 @@ The UI must always show a truthful persisted stage or terminal result; it must n
 2. **UX-4 revision names** — implemented; browser acceptance pending.
 3. **UX-1 Parametric/Mesh + Attach controls** — repository complete; browser acceptance pending.
 4. **UX-2 per-turn model provenance** — repository complete; browser/real-model acceptance pending.
-5. **ROBUST-1 persisted generation status** — shared state contract started; next database/server/client slice must use the repository's local schema-first Supabase workflow.
+5. **ROBUST-1 persisted generation status** — repository implementation complete for durable browser/server lifecycle; request-aware retry/reload acceptance remains to be run in the real runtime.
 
 Keep installed Rhino/Grasshopper Phase 9 acceptance independent. None of these product UX/robustness items should weaken the strict GHX validation boundary or change the canonical BRep revision model.

@@ -19,7 +19,10 @@ import {
 } from '@/lib/aiMessages';
 import { normalizeModelId } from '@shared/models';
 import { supabase } from '@/lib/supabase';
-import { useLatestBrepGenerationRun } from '@/services/generationRunService';
+import {
+  getLatestBrepGenerationRun,
+  useLatestBrepGenerationRun,
+} from '@/services/generationRunService';
 import {
   isRecentPendingBrepCreation,
   persistUserMessage,
@@ -43,6 +46,7 @@ import { resolveActiveBrepAiSourceForLeaf } from '@shared/brepAiContext';
 import type { BrepProject } from '@shared/brepProject';
 import type { BrepParameterValues } from '@shared/brepProvider';
 import type { AppUIMessage } from '@shared/chatAi';
+import { isGenerationRunAiEditing } from '@shared/generationRun';
 import Tree from '@shared/Tree';
 import type { Conversation, Message, Model } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -72,6 +76,11 @@ function isLifecycleOnlyBrepRevision(
     hasEmptyMetadata(message.metadata)
   );
 }
+
+type BrepGenerationAttempt = {
+  requestMessageId: string;
+  baselineRunId: string | null;
+};
 
 export default function BrepProjectView() {
   const { id } = useParams({ from: '/_layout/_auth/brep/$id' });
@@ -184,11 +193,11 @@ function BrepProjectWorkspace() {
     conversation.settings?.openCodeExecutionMode ?? 'cli',
   );
   const [isChatStreaming, setIsChatStreaming] = useState(false);
-  const isChatStreamingRef = useRef(false);
+  const [generationAttempt, setGenerationAttempt] =
+    useState<BrepGenerationAttempt | null>(null);
   const [mobilePreviewVersion, setMobilePreviewVersion] = useState(0);
 
   const handleChatLoadingChange = useCallback((loading: boolean) => {
-    isChatStreamingRef.current = loading;
     setIsChatStreaming(loading);
   }, []);
 
@@ -313,6 +322,20 @@ function BrepProjectWorkspace() {
     [conversation, updateConversation],
   );
 
+  const prepareGenerationAttempt = useCallback(
+    async (requestMessageId: string) => {
+      const baselineRun = await getLatestBrepGenerationRun({
+        conversationId: conversation.id,
+        requestMessageId,
+      });
+      setGenerationAttempt({
+        requestMessageId,
+        baselineRunId: baselineRun?.id ?? null,
+      });
+    },
+    [conversation.id],
+  );
+
   const handleSendParts = useCallback(
     async (parts: AppUIMessage['parts']) => {
       if (!user?.id) throw new Error('User must be authenticated');
@@ -327,9 +350,10 @@ function BrepProjectWorkspace() {
         metadata: { model },
         parentMessageId: conversation.current_message_leaf_id ?? null,
       });
+      await prepareGenerationAttempt(userMessageId);
       return { userMessageId };
     },
-    [conversation, model, user?.id],
+    [conversation, model, prepareGenerationAttempt, user?.id],
   );
 
   const handleRetry = useCallback(
@@ -340,8 +364,9 @@ function BrepProjectWorkspace() {
         ...conversation,
         current_message_leaf_id: parentId,
       });
+      await prepareGenerationAttempt(parentId);
     },
-    [conversation, updateConversationAsync],
+    [conversation, prepareGenerationAttempt, updateConversationAsync],
   );
 
   const handleEdit = useCallback(
@@ -359,12 +384,13 @@ function BrepProjectWorkspace() {
         metadata: { model },
         parentMessageId: parentId,
       });
+      await prepareGenerationAttempt(newUserMessageId);
       return {
         newUserMessageId,
         parentPath: parentId ? branchForLeaf(parentId) : [],
       };
     },
-    [branchForLeaf, conversation, model, user?.id],
+    [branchForLeaf, conversation, model, prepareGenerationAttempt, user?.id],
   );
 
   const handleRestore = useCallback(
@@ -452,8 +478,25 @@ function BrepProjectWorkspace() {
   } = useLatestBrepGenerationRun({
     conversationId: conversation.id,
     enabled: Boolean(user?.id),
-    pollWhenMissing: pendingBrepCreation,
+    pollWhenMissing: pendingBrepCreation || Boolean(generationAttempt),
+    ...(generationAttempt
+      ? {
+          requestMessageId: generationAttempt.requestMessageId,
+          baselineRunId: generationAttempt.baselineRunId,
+        }
+      : {}),
   });
+  const generationHandoffPending = Boolean(generationAttempt && !generationRun);
+  const durableAiEditing = Boolean(
+    generationRun && isGenerationRunAiEditing(generationRun),
+  );
+  const isAiEditing =
+    generationHandoffPending ||
+    durableAiEditing ||
+    (!generationAttempt && isChatStreaming);
+  const isAiEditingRef = useRef(isAiEditing);
+  isAiEditingRef.current = isAiEditing;
+
   const durableCreationWithoutSource =
     !activeSource &&
     Boolean(generationRun) &&
@@ -494,10 +537,15 @@ function BrepProjectWorkspace() {
       packageTitle={activeSource.artifact.title}
       activeRevisionId={activeSource.messageId}
       revisions={editorRevisions}
-      sourceEditingDisabled={isChatStreaming}
+      sourceEditingDisabled={isAiEditing}
       onParameterValuesCommit={async (
         parameterValues: BrepParameterValues,
       ) => {
+        if (isAiEditingRef.current) {
+          throw new Error(
+            'BRep parameter editing is disabled while AI is creating a new immutable revision.',
+          );
+        }
         await persistBrepProjectParameterRevision({
           conversationId: conversation.id,
           parentMessageId: leafId,
@@ -507,9 +555,9 @@ function BrepProjectWorkspace() {
         await refreshWorkspace();
       }}
       onProjectSourceCommit={async (project: BrepProject) => {
-        if (isChatStreamingRef.current) {
+        if (isAiEditingRef.current) {
           throw new Error(
-            'BRep feature editing is disabled while the current AI turn is streaming.',
+            'BRep feature editing is disabled while AI is creating a new immutable revision.',
           );
         }
         await persistBrepProjectSourceRevision({
@@ -576,7 +624,7 @@ function BrepProjectWorkspace() {
                     Workspace
                   </Button>
                   <span className="hidden text-xs text-adam-text-tertiary sm:inline">
-                    {isChatStreaming ? 'AI editing…' : 'Native BRep'}
+                    {isAiEditing ? 'AI editing…' : 'Native BRep'}
                   </span>
                 </div>
               </div>
@@ -600,9 +648,17 @@ function BrepProjectWorkspace() {
             </>
           }
           previewSlot={<BrepProjectWorkspacePanel />}
-          parametersSlot={<BrepProjectParametersPanel />}
+          parametersSlot={
+            <fieldset disabled={isAiEditing} className="contents">
+              <BrepProjectParametersPanel />
+            </fieldset>
+          }
           mobilePreviewSlot={<BrepProjectWorkspacePanel isMobile />}
-          mobileParametersSlot={<BrepProjectParametersPanel />}
+          mobileParametersSlot={
+            <fieldset disabled={isAiEditing} className="contents">
+              <BrepProjectParametersPanel />
+            </fieldset>
+          }
         />
       </BrepFeatureWorkspaceProvider>
     </BrepProjectEditorProvider>

@@ -8,6 +8,7 @@ import {
 } from '../src/lib/brepGenerationProgress';
 import {
   generationRunRowToClientSnapshot,
+  selectGenerationRunAfterBaseline,
   shouldPollGenerationRun,
 } from '../src/services/generationRunService';
 
@@ -81,6 +82,33 @@ describe('client durable generation status', () => {
       ),
       false,
     );
+  });
+
+  it('does not let an older run for the same request satisfy a new retry handoff', () => {
+    const previousAttempt = run({
+      id: 'run-old',
+      status: 'completed',
+      phase: 'preview_ready',
+      completedAt: '2026-09-08T04:00:10.000Z',
+    });
+    assert.equal(
+      selectGenerationRunAfterBaseline(previousAttempt, 'run-old'),
+      undefined,
+    );
+    assert.equal(
+      shouldPollGenerationRun(
+        selectGenerationRunAfterBaseline(previousAttempt, 'run-old'),
+        true,
+      ),
+      true,
+    );
+
+    const nextAttempt = run({ id: 'run-new', sequence: 1 });
+    assert.equal(
+      selectGenerationRunAfterBaseline(nextAttempt, 'run-old')?.id,
+      'run-new',
+    );
+    assert.equal(selectGenerationRunAfterBaseline(nextAttempt, null)?.id, 'run-new');
   });
 
   it('drives creation steps from durable server phases', () => {
