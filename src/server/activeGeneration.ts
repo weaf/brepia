@@ -1,6 +1,7 @@
 type ActiveGenerationEntry = {
   controller: AbortController;
   runId: symbol;
+  durableRunId?: string;
 };
 
 const activeGenerations = new Map<string, ActiveGenerationEntry>();
@@ -12,11 +13,18 @@ function generationKey(userId: string, conversationId: string): string {
 export type ActiveGeneration = {
   signal: AbortSignal;
   finish: () => void;
+  replacedDurableRunId?: string;
+};
+
+export type CancelledActiveGeneration = {
+  cancelled: boolean;
+  durableRunId?: string;
 };
 
 export function beginActiveGeneration(
   userId: string,
   conversationId: string,
+  durableRunId?: string,
 ): ActiveGeneration {
   const key = generationKey(userId, conversationId);
   const previous = activeGenerations.get(key);
@@ -25,6 +33,7 @@ export function beginActiveGeneration(
   const entry: ActiveGenerationEntry = {
     controller: new AbortController(),
     runId: Symbol('generation'),
+    ...(durableRunId ? { durableRunId } : {}),
   };
   activeGenerations.set(key, entry);
 
@@ -35,6 +44,25 @@ export function beginActiveGeneration(
         activeGenerations.delete(key);
       }
     },
+    ...(previous?.durableRunId
+      ? { replacedDurableRunId: previous.durableRunId }
+      : {}),
+  };
+}
+
+export function cancelActiveGenerationWithRunId(
+  userId: string,
+  conversationId: string,
+): CancelledActiveGeneration {
+  const key = generationKey(userId, conversationId);
+  const entry = activeGenerations.get(key);
+  if (!entry) return { cancelled: false };
+
+  activeGenerations.delete(key);
+  entry.controller.abort();
+  return {
+    cancelled: true,
+    ...(entry.durableRunId ? { durableRunId: entry.durableRunId } : {}),
   };
 }
 
@@ -42,13 +70,7 @@ export function cancelActiveGeneration(
   userId: string,
   conversationId: string,
 ): boolean {
-  const key = generationKey(userId, conversationId);
-  const entry = activeGenerations.get(key);
-  if (!entry) return false;
-
-  activeGenerations.delete(key);
-  entry.controller.abort();
-  return true;
+  return cancelActiveGenerationWithRunId(userId, conversationId).cancelled;
 }
 
 /**
