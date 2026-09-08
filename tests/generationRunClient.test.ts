@@ -5,7 +5,7 @@ import type { GenerationRunSnapshot } from '../shared/generationRun';
 import {
   durableBrepProgressSteps,
   generationRunModelLabel,
-} from '../src/components/brep/BrepCreationProgress';
+} from '../src/lib/brepGenerationProgress';
 import {
   generationRunRowToClientSnapshot,
   shouldPollGenerationRun,
