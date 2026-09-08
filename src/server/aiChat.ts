@@ -1,7 +1,4 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { chatTools, type AppUIMessage, type AppTools } from '@shared/chatAi';
 import {
   resolveActiveBrepAiSource,
@@ -15,7 +12,6 @@ import {
 } from '@shared/aiInstructionCatalog';
 import {
   cleanAssistantText,
-  getParametricText,
   isParametricArtifact,
 } from '@shared/parametricParts';
 import {
@@ -23,7 +19,6 @@ import {
   type OpenScadProjectAsset,
 } from '@shared/openScadProject';
 import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
-import { normalizeConversationSuggestions } from '@shared/suggestions';
 import { normalizeModelId } from '@shared/models';
 import {
   opencodeChatModel,
@@ -38,22 +33,17 @@ import {
   consumeStream,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  generateText,
   hasToolCall,
-  Output,
   smoothStream,
   stepCountIs,
   streamText,
   type LanguageModel,
-  type UIMessageStreamWriter,
 } from 'ai';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import imageType from 'image-type';
-import { z } from 'zod';
 import { corsHeaders, isRecord } from './api';
 import {
   loadBuiltinProviderRuntimeOverrides,
-  type BuiltinProviderDriver,
   type BuiltinProviderRuntimeOverrides,
 } from './builtinProviderOverrides';
 import { env } from './env';
@@ -183,107 +173,37 @@ function collectAuthoritativeOpenScadAssets(
 }
 
 type ChatProvider =
-  'anthropic' | 'google' | 'openrouter' | 'local' | 'opencode' | 'cli-agent';
+  | 'custom'
+  | 'local'
+  | 'opencode'
+  | 'cli-agent'
+  | 'unsupported';
 
 function providerFor(modelId: string): ChatProvider {
-  if (modelId.startsWith('anthropic/')) return 'anthropic';
-  if (modelId.startsWith('google/')) return 'google';
+  if (isCustomProviderModel(modelId)) return 'custom';
   if (modelId.startsWith('local/')) return 'local';
   if (modelId.startsWith('opencode/')) return 'opencode';
   if (isCliAgentModel(modelId)) return 'cli-agent';
-  return 'openrouter';
+  return 'unsupported';
 }
 
-function builtinDriverForModelId(
-  modelId: string,
-): BuiltinProviderDriver | undefined {
-  if (
-    isCustomProviderModel(modelId) ||
-    modelId.startsWith('opencode/') ||
-    isCliAgentModel(modelId)
-  ) {
-    return undefined;
-  }
-  if (modelId.startsWith('anthropic/')) return 'anthropic';
-  if (modelId.startsWith('google/')) return 'google';
-  if (modelId.startsWith('local/')) return 'openai-compatible';
-  return 'openrouter';
-}
-
-type AnthropicProvider = ReturnType<typeof createAnthropic>;
-type GoogleProvider = ReturnType<typeof createGoogleGenerativeAI>;
 type LocalProvider = ReturnType<typeof createOpenAICompatible>;
 
-function normalizedAnthropicBaseURL(rawOverride?: string): string | undefined {
-  const raw = (rawOverride ?? env('ANTHROPIC_BASE_URL')).trim();
-  if (!raw) return undefined;
-  const base = raw.replace(/\/+$/, '');
-  return base.endsWith('/v1') ? base : `${base}/v1`;
-}
-
 type ChatProviders = {
-  anthropic: () => AnthropicProvider;
-  google: () => GoogleProvider;
-  openrouter: () => ReturnType<typeof createOpenRouter>;
   local: () => LocalProvider;
 };
-
-function enabledBuiltinOverride(
-  overrides: BuiltinProviderRuntimeOverrides,
-  driver: BuiltinProviderDriver,
-) {
-  const override = overrides[driver];
-  if (override?.enabled === false) {
-    throw new Error(`${driver} provider is disabled in AI Settings`);
-  }
-  return override;
-}
 
 function createChatProviders(
   overrides: BuiltinProviderRuntimeOverrides = {},
 ): ChatProviders {
-  let anthropic: AnthropicProvider | undefined;
-  let google: GoogleProvider | undefined;
-  let openrouter: ReturnType<typeof createOpenRouter> | undefined;
   let local: LocalProvider | undefined;
   return {
-    anthropic: () => {
-      if (!anthropic) {
-        const override = enabledBuiltinOverride(overrides, 'anthropic');
-        const key = override?.credential ?? env('ANTHROPIC_API_KEY');
-        const baseURL = normalizedAnthropicBaseURL(override?.baseUrl);
-        anthropic = createAnthropic({
-          apiKey: key,
-          ...(baseURL ? { baseURL } : {}),
-        });
-      }
-      return anthropic;
-    },
-    google: () => {
-      if (!google) {
-        const override = enabledBuiltinOverride(overrides, 'google');
-        const baseURL = override?.baseUrl || env('GOOGLE_BASE_URL').trim();
-        google = createGoogleGenerativeAI({
-          apiKey: override?.credential ?? env('GOOGLE_API_KEY'),
-          ...(baseURL ? { baseURL } : {}),
-        });
-      }
-      return google;
-    },
-    openrouter: () => {
-      if (!openrouter) {
-        const override = enabledBuiltinOverride(overrides, 'openrouter');
-        const baseURL = override?.baseUrl || env('OPENROUTER_BASE_URL').trim();
-        openrouter = createOpenRouter({
-          apiKey: override?.credential ?? env('OPENROUTER_API_KEY'),
-          ...(baseURL ? { baseURL } : {}),
-        });
-      }
-      return openrouter;
-    },
     local: () => {
       if (!local) {
-        const override = enabledBuiltinOverride(overrides, 'openai-compatible');
+        const override = overrides['openai-compatible'];
+        if (override?.enabled === false) {
+          throw new Error('Local OpenAI provider is disabled in AI Settings');
+        }
         local = createOpenAICompatible({
           name: 'local',
           baseURL:
@@ -308,57 +228,6 @@ function buildChatModel(
   openCodeRuntime: OpenCodeRuntimeOptions,
 ): { model: LanguageModel; providerOptions?: ProviderOptions } {
   const hasCappedThinkingBudget = thinking && thinkingBudgetOverridden;
-
-  if (providerFor(modelId) === 'openrouter') {
-    return {
-      model: providers.openrouter().chat(modelId, {
-        ...(thinking ? { reasoning: { max_tokens: thinkingBudget } } : {}),
-        usage: { include: true },
-      }),
-    };
-  }
-
-  if (modelId.startsWith('anthropic/')) {
-    const id = modelId.slice('anthropic/'.length).replace(/\./g, '-');
-    const adaptiveThinking = usesAdaptiveAnthropicThinking(id);
-    return {
-      model: providers.anthropic()(id),
-      providerOptions: thinking
-        ? {
-            anthropic: {
-              ...(adaptiveThinking
-                ? {
-                    thinking: {
-                      type: 'adaptive' as const,
-                      display: 'summarized' as const,
-                    },
-                    effort: hasCappedThinkingBudget ? 'low' : 'high',
-                  }
-                : {
-                    thinking: {
-                      type: 'enabled' as const,
-                      budgetTokens: thinkingBudget,
-                    },
-                  }),
-            },
-          }
-        : undefined,
-    };
-  }
-
-  if (modelId.startsWith('google/')) {
-    const id = modelId.slice('google/'.length);
-    return {
-      model: providers.google()(id),
-      providerOptions: {
-        google: {
-          thinkingConfig: {
-            includeThoughts: true,
-          },
-        },
-      },
-    };
-  }
 
   if (modelId.startsWith('local/')) {
     const id = modelId.slice('local/'.length);
@@ -390,16 +259,6 @@ function buildChatModel(
 function bareModelId(modelId: string): string {
   const id = modelId.slice(modelId.lastIndexOf('/') + 1);
   return id.replace(/\./g, '-');
-}
-
-function isClaude5Model(modelId: string): boolean {
-  return /^claude-[a-z]+-5\b/.test(bareModelId(modelId));
-}
-
-function usesAdaptiveAnthropicThinking(modelId: string) {
-  if (isClaude5Model(modelId)) return true;
-  const match = /^claude-(?:opus|sonnet)-4-(\d+)/.exec(bareModelId(modelId));
-  return match ? Number(match[1]) >= 6 : false;
 }
 
 function rejectsForcedToolChoice(modelId: string): boolean {
@@ -551,73 +410,6 @@ async function loadBranchFromDb({
     branch: path.map((row) => messageRowToUIMessage(row, conversationId)),
     leafRole: path[path.length - 1].role,
   };
-}
-
-async function generateConversationTitle({
-  anthropic,
-  firstMessage,
-  systemInstruction,
-}: {
-  anthropic: AnthropicProvider;
-  firstMessage: AppUIMessage;
-  systemInstruction: string;
-}) {
-  const text = getParametricText(firstMessage.parts) || 'New conversation';
-  try {
-    const result = await generateText({
-      model: anthropic('claude-haiku-4-5'),
-      system: systemInstruction,
-      prompt: text,
-      output: Output.object({
-        schema: z.object({ title: z.string().min(1) }),
-      }),
-    });
-    return result.output.title.slice(0, 80);
-  } catch {
-    return text.trim().split(/\s+/).slice(0, 5).join(' ') || 'New Creation';
-  }
-}
-
-async function generateConversationSuggestions({
-  anthropic,
-  branch,
-  systemInstruction,
-}: {
-  anthropic: AnthropicProvider;
-  branch: AppUIMessage[];
-  systemInstruction: string;
-}): Promise<string[]> {
-  const firstUserText =
-    getParametricText(branch.find((m) => m.role === 'user')?.parts ?? []) || '';
-  const lastAssistantText = getParametricText(
-    branch
-      .slice()
-      .reverse()
-      .find((m) => m.role === 'assistant')?.parts ?? [],
-  );
-  const summary = `User request: ${firstUserText.slice(0, 400)}\n\nMost recent assistant reply: ${lastAssistantText.slice(0, 400)}`;
-  try {
-    const result = await generateText({
-      model: anthropic('claude-haiku-4-5'),
-      system: systemInstruction,
-      prompt: summary,
-      output: Output.object({
-        schema: z.object({
-          suggestions: z.array(z.string().min(1).max(80)).length(2),
-        }),
-      }),
-    });
-    return normalizeConversationSuggestions(result.output.suggestions);
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: 500,
-      userId: '',
-      conversationId: '',
-      additionalContext: { operation: 'suggestion_generate_text' },
-    });
-    return [];
-  }
 }
 
 function creativeTools({
@@ -947,9 +739,6 @@ export async function handleAiChatRequest(req: Request) {
   let creativeReferenceTemplate: string;
   let meshPreferencesTemplate: string;
   let inspectionOutputTemplate: string;
-  let titleInstruction: string;
-  let parametricSuggestionsInstruction: string;
-  let creativeSuggestionsInstruction: string;
   let openCodeTransportInstruction: string;
   let codexTransportInstruction: string;
   let openCodeBrepTransportInstruction: string;
@@ -965,9 +754,6 @@ export async function handleAiChatRequest(req: Request) {
       creativeReferenceTemplate,
       meshPreferencesTemplate,
       inspectionOutputTemplate,
-      titleInstruction,
-      parametricSuggestionsInstruction,
-      creativeSuggestionsInstruction,
       openCodeTransportInstruction,
       codexTransportInstruction,
       openCodeBrepTransportInstruction,
@@ -982,9 +768,6 @@ export async function handleAiChatRequest(req: Request) {
       aiRuntime.template('context.creative_reference_mesh'),
       aiRuntime.template('context.mesh_preferences'),
       aiRuntime.template('context.parametric_inspection_output'),
-      aiRuntime.instruction('conversation.title'),
-      aiRuntime.instruction('suggestions.parametric'),
-      aiRuntime.instruction('suggestions.creative'),
       aiRuntime.instruction('transport.opencode'),
       aiRuntime.instruction('transport.codex'),
       aiRuntime.instruction('transport.opencode_brep'),
@@ -1103,15 +886,6 @@ export async function handleAiChatRequest(req: Request) {
       503,
     );
   }
-
-  const anthropicAuxiliaryAvailable =
-    builtinProviderOverrides.anthropic?.enabled !== false &&
-    Boolean(
-      builtinProviderOverrides.anthropic?.credential ||
-      env('ANTHROPIC_API_KEY'),
-    );
-
-  const isFirstUserTurn = branchMessages.length === 1 && leafRole === 'user';
 
   const hydratedMessages = await Promise.all(
     branchMessages.map(async (message) => ({
@@ -1260,10 +1034,7 @@ export async function handleAiChatRequest(req: Request) {
     provider: resolvedProvider,
   };
 
-  const thinkingEnabled =
-    (rawBody.thinking ?? false) ||
-    (resolvedProvider === 'anthropic' &&
-      usesAdaptiveAnthropicThinking(actualModelId));
+  const thinkingEnabled = rawBody.thinking ?? false;
   const thinkingBudget = aiRuntime.number('chat.thinkingBudgetTokens');
   const thinkingBudgetOverridden = Object.prototype.hasOwnProperty.call(
     aiRuntime.preferences.runtimeOverrides,
@@ -1317,7 +1088,6 @@ export async function handleAiChatRequest(req: Request) {
       : {}),
     ...turnProvenance,
   };
-
   let generationRun: AiGenerationRunLifecycle;
   try {
     generationRun = await AiGenerationRunLifecycle.create({
@@ -1360,7 +1130,6 @@ export async function handleAiChatRequest(req: Request) {
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
   let customSupportsVision: boolean | undefined;
-  const _builtinDriver = builtinDriverForModelId(actualModelId);
   try {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
@@ -1477,8 +1246,6 @@ export async function handleAiChatRequest(req: Request) {
   const streamingOpenCode = transport.kind === 'streaming-opencode';
   const forceBuildToolChoice =
     !streamingOpenCode && supportsForcedToolChoice(actualModelId);
-  const disableThinkingForBuildStep =
-    forceBuildToolChoice && thinkingEnabled && resolvedProvider === 'anthropic';
   const usingAutoToolChoiceFallback =
     conversation.type === 'parametric' &&
     leafRole === 'user' &&
@@ -1521,13 +1288,6 @@ export async function handleAiChatRequest(req: Request) {
                   type: 'tool' as const,
                   toolName: buildToolName as never,
                 },
-                ...(disableThinkingForBuildStep
-                  ? {
-                      providerOptions: {
-                        anthropic: { thinking: { type: 'disabled' as const } },
-                      },
-                    }
-                  : {}),
               }
             : {}),
         };
@@ -1615,17 +1375,6 @@ export async function handleAiChatRequest(req: Request) {
       return `Model call failed (${resolvedProvider}/${actualModelId}): ${message}`;
     },
     execute: async ({ writer }) => {
-      if (isFirstUserTurn && anthropicAuxiliaryAvailable) {
-        void emitConversationTitle({
-          writer,
-          anthropic: providers.anthropic(),
-          supabaseClient,
-          conversation,
-          firstMessage: branchMessages[0],
-          systemInstruction: titleInstruction,
-        });
-      }
-
       writer.merge(
         result.toUIMessageStream<AppUIMessage>({
           originalMessages: branchMessages,
@@ -1729,23 +1478,6 @@ export async function handleAiChatRequest(req: Request) {
                 Boolean(activeBrepSource),
               );
             }
-
-            if (!error && !hasPendingToolCall && anthropicAuxiliaryAvailable) {
-              await emitConversationSuggestions({
-                writer,
-                anthropic: providers.anthropic(),
-                supabaseClient,
-                conversation,
-                branch: [
-                  ...branchMessages,
-                  { ...responseMessage, parts: finalizedParts },
-                ],
-                systemInstruction:
-                  conversation.type === 'creative'
-                    ? creativeSuggestionsInstruction
-                    : parametricSuggestionsInstruction,
-              });
-            }
           },
         }),
       );
@@ -1757,100 +1489,4 @@ export async function handleAiChatRequest(req: Request) {
     headers: corsHeaders,
     consumeSseStream: consumeStream,
   });
-}
-
-async function emitConversationTitle({
-  writer,
-  anthropic,
-  supabaseClient,
-  conversation,
-  firstMessage,
-  systemInstruction,
-}: {
-  writer: UIMessageStreamWriter<AppUIMessage>;
-  anthropic: AnthropicProvider;
-  supabaseClient: SupabaseAnon;
-  conversation: ConversationAccess;
-  firstMessage: AppUIMessage;
-  systemInstruction: string;
-}) {
-  try {
-    const title = await generateConversationTitle({
-      anthropic,
-      firstMessage,
-      systemInstruction,
-    });
-    await supabaseClient
-      .from('conversations')
-      .update({ title })
-      .eq('id', conversation.id);
-    writer.write({
-      transient: true,
-      type: 'data-title-update',
-      data: { conversationId: conversation.id, title },
-    });
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: 500,
-      userId: '',
-      conversationId: conversation.id,
-      additionalContext: { operation: 'title_update' },
-    });
-  }
-}
-
-async function emitConversationSuggestions({
-  writer,
-  anthropic,
-  supabaseClient,
-  conversation,
-  branch,
-  systemInstruction,
-}: {
-  writer: UIMessageStreamWriter<AppUIMessage>;
-  anthropic: AnthropicProvider;
-  supabaseClient: SupabaseAnon;
-  conversation: ConversationAccess;
-  branch: AppUIMessage[];
-  systemInstruction: string;
-}) {
-  try {
-    const suggestions = await generateConversationSuggestions({
-      anthropic,
-      branch,
-      systemInstruction,
-    });
-    if (suggestions.length === 0) return;
-
-    const { data: convRow } = await supabaseClient
-      .from('conversations')
-      .select('settings')
-      .eq('id', conversation.id)
-      .single();
-    const currentSettings =
-      convRow?.settings &&
-      typeof convRow.settings === 'object' &&
-      !Array.isArray(convRow.settings)
-        ? (convRow.settings as Record<string, unknown>)
-        : {};
-    await supabaseClient
-      .from('conversations')
-      .update({ settings: { ...currentSettings, suggestions } })
-      .eq('id', conversation.id);
-
-    writer.write({
-      transient: true,
-      type: 'data-suggestions-update',
-      data: { conversationId: conversation.id, suggestions },
-    });
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: 500,
-      userId: '',
-      conversationId: conversation.id,
-      additionalContext: { operation: 'suggestions_update' },
-    });
-  }
 }
