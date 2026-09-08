@@ -21,7 +21,7 @@ a53165efdfd1d1abd47aaf9c61f124d4a2071c47
 Assert current BRep creation UX in GHX acceptance
 ```
 
-The preceding repository gates were green. The new ROBUST-1 hardening must receive its own Quality Gate/Grasshopper Build evidence after commit.
+ROBUST-1 request-correlation hardening repository evidence on `e83d7df49aaad241655a048d8ffce09f5f9b3f9d`: Quality Gate #632 / run `34248181725` — PASS; Grasshopper Build #205 / run `34248181695` — PASS. This documentation-only reconciliation follows those gates.
 
 Evidence boundary: repository gates prove tests/typecheck/lint/build/diff-check and retained Grasshopper build compatibility. They do **not** replace the still-open manual visual/browser check of the prompt hierarchy, Attach behavior, provenance labels, panel width, revision-name presentation, or durable edit-lock recovery in the user's real local runtime.
 
