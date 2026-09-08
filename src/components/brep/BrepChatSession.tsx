@@ -13,6 +13,10 @@ import {
   messageRowToChatMessage,
   type ChatMessage,
 } from '@/lib/aiMessages';
+import {
+  getLatestBrepGenerationRun,
+  useLatestBrepGenerationRun,
+} from '@/services/generationRunService';
 import { shouldPollForPendingAssistant } from '@/services/messageService';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -20,13 +24,17 @@ import type {
   ConversationSuggestionsUpdate,
   ConversationTitleUpdate,
 } from '@shared/chatAi';
+import {
+  isGenerationRunAiEditing,
+  isGenerationRunTerminal,
+} from '@shared/generationRun';
 import Tree from '@shared/Tree';
 import type { Conversation, Message, Model } from '@shared/types';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useQueryClient } from '@tanstack/react-query';
 import posthog from 'posthog-js';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface BrepChatSessionProps {
   conversation: Conversation;
@@ -49,6 +57,51 @@ interface BrepChatSessionProps {
   branchForLeaf: (leafId: string) => AppUIMessage[];
   onChangeRating: (messageId: string, rating: number) => void;
   onLoadingChange?: (isLoading: boolean) => void;
+}
+
+type PersistedBrepAttempt = {
+  requestMessageId: string;
+  baselineRunId: string | null;
+  model: Model;
+  createdAt: number;
+};
+
+const BREP_ATTEMPT_MAX_AGE_MS = 10 * 60_000;
+
+function attemptStorageKey(conversationId: string): string {
+  return `brepia:brep-generation-attempt:${conversationId}`;
+}
+
+function readPersistedAttempt(
+  conversationId: string,
+): PersistedBrepAttempt | null {
+  if (typeof window === 'undefined') return null;
+  const key = attemptStorageKey(conversationId);
+  const raw = window.sessionStorage.getItem(key);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<PersistedBrepAttempt>;
+    if (
+      typeof parsed.requestMessageId !== 'string' ||
+      typeof parsed.model !== 'string' ||
+      typeof parsed.createdAt !== 'number' ||
+      Date.now() - parsed.createdAt >= BREP_ATTEMPT_MAX_AGE_MS
+    ) {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return {
+      requestMessageId: parsed.requestMessageId,
+      baselineRunId:
+        typeof parsed.baselineRunId === 'string' ? parsed.baselineRunId : null,
+      model: parsed.model,
+      createdAt: parsed.createdAt,
+    };
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
 }
 
 /**
@@ -83,6 +136,79 @@ export function BrepChatSession({
   // auto-continuation/callback state into the native BRep workspace.
   const chatCacheId = `brep:${conversation.id}`;
   const submitInFlightRef = useRef(false);
+  const [persistedAttempt, setPersistedAttempt] =
+    useState<PersistedBrepAttempt | null>(() =>
+      readPersistedAttempt(conversation.id),
+    );
+
+  const persistAttempt = useCallback(
+    (attempt: Omit<PersistedBrepAttempt, 'createdAt'>) => {
+      const next = { ...attempt, createdAt: Date.now() };
+      setPersistedAttempt(next);
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(
+          attemptStorageKey(conversation.id),
+          JSON.stringify(next),
+        );
+      }
+    },
+    [conversation.id],
+  );
+
+  const clearPersistedAttempt = useCallback(() => {
+    setPersistedAttempt(null);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(attemptStorageKey(conversation.id));
+    }
+  }, [conversation.id]);
+
+  const currentLeafMessage = useMemo(
+    () =>
+      dbMessages.find(
+        (message) => message.id === conversation.current_message_leaf_id,
+      ),
+    [conversation.current_message_leaf_id, dbMessages],
+  );
+  const inferredPendingRequestMessageId =
+    currentLeafMessage?.role === 'user' &&
+    shouldPollForPendingAssistant([currentLeafMessage])
+      ? currentLeafMessage.id
+      : undefined;
+  const trackedRequestMessageId =
+    persistedAttempt?.requestMessageId ?? inferredPendingRequestMessageId;
+  const trackedBaselineRunId =
+    persistedAttempt?.requestMessageId === trackedRequestMessageId
+      ? persistedAttempt.baselineRunId
+      : undefined;
+  const { data: durableGenerationRun } = useLatestBrepGenerationRun({
+    conversationId: conversation.id,
+    requestMessageId: trackedRequestMessageId,
+    baselineRunId: trackedBaselineRunId,
+    pollWhenMissing: Boolean(trackedRequestMessageId),
+  });
+  const durableGenerationActive = Boolean(
+    durableGenerationRun && !isGenerationRunTerminal(durableGenerationRun.status),
+  );
+  const durableSourceEditing = Boolean(
+    durableGenerationRun && isGenerationRunAiEditing(durableGenerationRun),
+  );
+  const durableHandoffPending = Boolean(
+    trackedRequestMessageId && !durableGenerationRun,
+  );
+  const displayedModel =
+    (durableGenerationActive ? durableGenerationRun?.requestedModelId : undefined) ??
+    (durableHandoffPending ? persistedAttempt?.model : undefined) ??
+    model;
+
+  useEffect(() => {
+    if (!persistedAttempt || !durableGenerationRun) return;
+    if (
+      !persistedAttempt.baselineRunId ||
+      durableGenerationRun.id !== persistedAttempt.baselineRunId
+    ) {
+      clearPersistedAttempt();
+    }
+  }, [clearPersistedAttempt, durableGenerationRun, persistedAttempt]);
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const token = (await supabase.auth.getSession()).data.session?.access_token;
@@ -207,14 +333,26 @@ export function BrepChatSession({
     !!chatError &&
     userFacingChatError(chatError).message === CONNECTION_INTERRUPTED_MESSAGE &&
     shouldPollForPendingAssistant(dbMessages);
-  const isLoading =
+  const sdkLoading =
     status === 'submitted' ||
     status === 'streaming' ||
     isRecoveringInterruptedTurn;
+  const isLoading =
+    sdkLoading || durableGenerationActive || durableHandoffPending;
 
   useEffect(() => {
-    onLoadingChange?.(isLoading);
-  }, [isLoading, onLoadingChange]);
+    // The chat can remain visibly busy through native evaluation after the new
+    // immutable revision is saved. Only source-owning phases should keep the
+    // project editor locked; revision_saved deliberately releases that lock.
+    onLoadingChange?.(
+      sdkLoading || durableSourceEditing || durableHandoffPending,
+    );
+  }, [
+    durableHandoffPending,
+    durableSourceEditing,
+    onLoadingChange,
+    sdkLoading,
+  ]);
 
   const treeMessages = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
@@ -287,6 +425,11 @@ export function BrepChatSession({
         });
 
         const { userMessageId } = await onSendParts(parts);
+        persistAttempt({
+          requestMessageId: userMessageId,
+          baselineRunId: null,
+          model,
+        });
         await sendMessage(
           { id: userMessageId, parts, metadata: { model } },
           { body: { model } },
@@ -295,29 +438,61 @@ export function BrepChatSession({
         submitInFlightRef.current = false;
       }
     },
-    [conversation.id, conversation.type, model, onSendParts, sendMessage, toast],
+    [
+      conversation.id,
+      conversation.type,
+      model,
+      onSendParts,
+      persistAttempt,
+      sendMessage,
+      toast,
+    ],
   );
 
   const handleEditUserText = useCallback(
     async (original: ChatMessage, text: string) => {
       const parts: AppUIMessage['parts'] = [{ type: 'text', text }];
       const { newUserMessageId, parentPath } = await onEdit(original, parts);
+      persistAttempt({
+        requestMessageId: newUserMessageId,
+        baselineRunId: null,
+        model,
+      });
       setMessages(parentPath);
       await sendMessage(
         { id: newUserMessageId, parts, metadata: { model } },
         { body: { model } },
       );
     },
-    [model, onEdit, sendMessage, setMessages],
+    [model, onEdit, persistAttempt, sendMessage, setMessages],
   );
 
   const handleRetry = useCallback(
     async (assistant: ChatMessage, nextModel: Model) => {
+      const requestMessageId = assistant.parent_message_id;
       if (nextModel !== model) setModel(nextModel);
+      if (requestMessageId) {
+        const baselineRun = await getLatestBrepGenerationRun({
+          conversationId: conversation.id,
+          requestMessageId,
+        });
+        persistAttempt({
+          requestMessageId,
+          baselineRunId: baselineRun?.id ?? null,
+          model: nextModel,
+        });
+      }
       await onRetry(assistant);
       await regenerate({ messageId: assistant.id, body: { model: nextModel } });
     },
-    [model, onRetry, regenerate, setModel],
+    [
+      conversation.id,
+      model,
+      onRetry,
+      persistAttempt,
+      regenerate,
+      setModel,
+    ],
   );
 
   const handleRestore = useCallback(
@@ -359,7 +534,7 @@ export function BrepChatSession({
                 message={node}
                 isLoading={isLoading}
                 isLastMessage={isLastMessage}
-                currentModel={model}
+                currentModel={displayedModel}
                 onSelectLeaf={(id) => void handleSelectLeaf(id)}
                 onEditUserText={
                   node.role === 'user' ? handleEditUserText : undefined
@@ -404,7 +579,7 @@ export function BrepChatSession({
           placeholder="Describe the next BRep edit..."
           isLoading={isLoading}
           stopGenerating={() => void stopGeneration()}
-          model={model}
+          model={displayedModel}
           setModel={setModel}
           conversation={conversation}
           executionMode={executionMode}
