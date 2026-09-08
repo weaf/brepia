@@ -125,6 +125,12 @@ export function PromptView() {
   );
 
   const [model, setModel] = useState<Model>(UNCONFIGURED_MODEL_ID);
+  const parametricModelReady = useMemo(
+    () =>
+      model !== UNCONFIGURED_MODEL_ID &&
+      parametricModels.some((candidate) => candidate.id === model),
+    [model, parametricModels],
+  );
   const [instructionProfileId, setInstructionProfileId] =
     useState<AiInstructionProfileId>(DEFAULT_AI_INSTRUCTION_PROFILE_ID);
   const initialDefaultAppliedRef = useRef(false);
@@ -265,6 +271,11 @@ export function PromptView() {
   const { mutate: handleGenerate, isPending: isGenerating } = useMutation({
     mutationFn: async (parts: AppUIMessage['parts']) => {
       if (!user?.id) throw new Error('User must be authenticated');
+      if (type === 'parametric' && !parametricModelReady) {
+        throw new Error(
+          'No selectable Parametric AI model is ready. Wait for model settings to load or select an available model.',
+        );
+      }
       const conversationId = draftConversationId;
       const isNativeBrep =
         type === 'parametric' && parametricSourceKind === 'brep';
@@ -579,6 +590,15 @@ export function PromptView() {
   });
 
   const handlePromptSubmit = (parts: AppUIMessage['parts']) => {
+    if (type === 'parametric' && !parametricModelReady) {
+      toast({
+        title: 'AI model is still loading',
+        description:
+          'Wait for an available Parametric model to load before starting generation.',
+      });
+      return;
+    }
+
     if (
       type === 'parametric' &&
       parametricSourceKind === 'brep' &&
