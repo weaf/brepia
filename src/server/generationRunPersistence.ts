@@ -32,10 +32,6 @@ export type DurableGenerationRunTransition = Omit<
   updatedAt?: string;
 };
 
-function optional<T>(value: T | null): T | undefined {
-  return value == null ? undefined : value;
-}
-
 export function generationRunRowToSnapshot(
   row: GenerationRunRow,
 ): GenerationRunSnapshot {
@@ -237,10 +233,11 @@ export function generationRunKindForConversation(
 
 export function generationRunFailureFields(
   code: string,
+  now = new Date().toISOString(),
 ): Pick<DurableGenerationRunTransition, 'status' | 'completedAt' | 'errorCode'> {
   return {
     status: 'failed',
-    completedAt: new Date().toISOString(),
+    completedAt: now,
     errorCode: code,
   };
 }
