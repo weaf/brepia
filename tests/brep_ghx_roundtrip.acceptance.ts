@@ -86,6 +86,56 @@ function widthInput(page: Page) {
     .first();
 }
 
+async function waitForBrepEditorReady(page: Page) {
+  const parameters = page.getByText('Parameters', { exact: true });
+  const terminalCreation = page
+    .getByRole('heading', {
+      name: /Native BRep creation (?:failed|stopped)/,
+    })
+    .first();
+
+  const timeout = 180000;
+  try {
+    const outcome = await Promise.race([
+      parameters
+        .waitFor({ state: 'visible', timeout })
+        .then(() => 'ready' as const),
+      terminalCreation
+        .waitFor({ state: 'visible', timeout })
+        .then(() => 'terminal' as const),
+    ]);
+
+    if (outcome === 'ready') return;
+  } catch (error) {
+    const heading =
+      (await page.locator('h1').first().textContent().catch(() => null))?.trim() ??
+      'none';
+    const durableStage =
+      (await page
+        .locator('[aria-live="polite"]')
+        .first()
+        .textContent()
+        .catch(() => null))?.trim() ?? 'none';
+    throw new Error(
+      `BRep editor did not become ready within ${timeout / 1000}s. ` +
+        `URL=${page.url()} heading=${JSON.stringify(heading)} ` +
+        `durableStage=${JSON.stringify(durableStage)}. ` +
+        `Original error: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const durableStage =
+    (await page
+      .locator('[aria-live="polite"]')
+      .first()
+      .textContent()
+      .catch(() => null))?.trim() ?? 'none';
+  throw new Error(
+    `BRep creation reached a terminal failure before the editor became ready. ` +
+      `URL=${page.url()} durableStage=${JSON.stringify(durableStage)}.`,
+  );
+}
+
 async function ensureRevisionHistoryOpen(page: Page) {
   const revisionButtons = page
     .getByRole('button')
@@ -150,9 +200,7 @@ test('prompt -> Brepia preview -> GHX export -> parameter edit -> GHX import -> 
   await generationRunRead;
 
   await page.waitForURL(/\/brep\/[0-9a-f-]+$/i, { timeout: 180000 });
-  await expect(page.getByText('Parameters', { exact: true })).toBeVisible({
-    timeout: 60000,
-  });
+  await waitForBrepEditorReady(page);
 
   const width = widthInput(page);
   await expect(width).toHaveValue('1200', { timeout: 60000 });
