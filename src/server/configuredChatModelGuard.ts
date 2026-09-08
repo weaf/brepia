@@ -5,13 +5,15 @@ type ChatModelGuardMode = 'parametric' | 'creative';
 
 type RequestHandler = (request: Request) => Promise<Response> | Response;
 
+function isCancelRequest(body: unknown): boolean {
+  return isRecord(body) && body.action === 'cancel';
+}
+
 function requestedModelId(
   body: unknown,
   mode: ChatModelGuardMode,
 ): string | null {
   if (!isRecord(body)) return null;
-  if (body.action === 'cancel') return null;
-
   const value = mode === 'creative' ? body.agentModel : body.model;
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
@@ -34,6 +36,10 @@ export async function withConfiguredChatModel(
   } catch {
     return handler(request);
   }
+
+  // Cancellation owns no model selection and must reach the existing durable
+  // generation cancellation lifecycle unchanged.
+  if (isCancelRequest(body)) return handler(request);
 
   const modelId = requestedModelId(body, mode);
 
