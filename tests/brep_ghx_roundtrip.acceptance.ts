@@ -136,6 +136,21 @@ async function waitForBrepEditorReady(page: Page) {
   );
 }
 
+async function waitForConfiguredParametricModel(page: Page) {
+  const promptInput = page.locator('textarea').first();
+  await expect(promptInput).toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        page
+          .getByRole('button')
+          .filter({ hasText: '__unconfigured__' })
+          .count(),
+      { timeout: 30000 },
+    )
+    .toBe(0);
+}
+
 async function ensureRevisionHistoryOpen(page: Page) {
   const revisionButtons = page
     .getByRole('button')
@@ -182,6 +197,7 @@ test('prompt -> Brepia preview -> GHX export -> parameter edit -> GHX import -> 
   await expect(nativeBrepButton).toHaveAttribute('aria-pressed', 'true');
   await expect(openScadButton).toHaveAttribute('aria-pressed', 'false');
   await expect(attachButton).toBeDisabled();
+  await waitForConfiguredParametricModel(page);
 
   const generationRunRead = page.waitForRequest(
     (request) =>
@@ -190,7 +206,6 @@ test('prompt -> Brepia preview -> GHX export -> parameter edit -> GHX import -> 
     { timeout: 30000 },
   );
   const promptInput = page.locator('textarea').first();
-  await expect(promptInput).toBeVisible();
   await promptInput.fill(PROMPT);
   await promptInput.press('Enter');
 
