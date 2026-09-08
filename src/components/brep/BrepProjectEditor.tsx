@@ -169,6 +169,7 @@ function geometryFromResult(
 
 export function BrepProjectEditorProvider({
   project,
+  conversationId,
   packageTitle,
   revisions,
   activeRevisionId,
@@ -182,6 +183,7 @@ export function BrepProjectEditorProvider({
   children,
 }: {
   project: BrepProject;
+  conversationId?: string;
   packageTitle?: string;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
@@ -278,6 +280,14 @@ export function BrepProjectEditorProvider({
               body: JSON.stringify({
                 project: requestProject,
                 parameterValues: requestValues,
+                ...(conversationId && activeRevisionId
+                  ? {
+                      generationContext: {
+                        conversationId,
+                        revisionMessageId: activeRevisionId,
+                      },
+                    }
+                  : {}),
               }),
             });
             const payload: unknown = await response.json();
@@ -326,7 +336,7 @@ export function BrepProjectEditorProvider({
     }, BREP_EVALUATION_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [evaluationNonce, project, values]);
+  }, [activeRevisionId, conversationId, evaluationNonce, project, values]);
 
   const reEvaluate = useCallback(() => {
     setEvaluationNonce((current) => current + 1);

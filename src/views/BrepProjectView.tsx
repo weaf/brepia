@@ -469,6 +469,7 @@ function BrepProjectWorkspace() {
   return (
     <BrepProjectEditorProvider
       project={activeSource.artifact.source.source}
+      conversationId={conversation.id}
       packageTitle={activeSource.artifact.title}
       activeRevisionId={activeSource.messageId}
       revisions={editorRevisions}
