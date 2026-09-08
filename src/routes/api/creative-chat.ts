@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { handleAiChatRequest } from '@/server/aiChat';
 import { withConversationWorkspaceLifecycle } from '@/server/conversationWorkspaceLifecycle';
+import { withConfiguredChatModel } from '@/server/configuredChatModelGuard';
 
 const handleRequest = (request: Request) =>
-  withConversationWorkspaceLifecycle(request, handleAiChatRequest);
+  withConfiguredChatModel(request, 'creative', (guardedRequest) =>
+    withConversationWorkspaceLifecycle(guardedRequest, handleAiChatRequest),
+  );
 
 export const Route = createFileRoute('/api/creative-chat')({
   server: {
