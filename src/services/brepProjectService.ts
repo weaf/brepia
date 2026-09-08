@@ -218,45 +218,47 @@ async function requireBrepProjectRevision(
   if (error) throw error;
   if (!data) return null;
   const artifact = getBrepProjectArtifact(data.parts);
-  return artifact ? { ...data, artifact } : null;
+  return artifact
+    ? { id: data.id, parentMessageId: data.parent_message_id, artifact }
+    : null;
 }
 
-export async function restoreBrepProjectRevision({
-  conversationId,
-  sourceMessageId,
-  parentMessageId,
-}: {
-  conversationId: string;
-  sourceMessageId: string;
-  parentMessageId: string;
-}): Promise<{ messageId: string; artifact: BrepProjectArtifactData }> {
-  const revision = await requireBrepProjectRevision(
-    conversationId,
-    sourceMessageId,
+export function hiddenBrepRevisionIds(settings: unknown): string[] {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    return [];
+  }
+  const value = (settings as { brepHiddenRevisionIds?: unknown })
+    .brepHiddenRevisionIds;
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(value.filter((item): item is string => typeof item === 'string')),
   );
-  if (!revision) throw new Error('BRep revision was not found.');
-  return persistNormalizedBrepProjectRevision({
-    conversationId,
-    parentMessageId,
-    artifact: revision.artifact,
-    staleLabel: 'restore',
-  });
 }
 
+/**
+ * Product-level revision deletion is intentionally a safe removal from the
+ * revision picker, not a physical message DELETE. BRep source revisions are
+ * immutable lineage nodes and parent_message_id has no database FK that could
+ * protect descendants from being orphaned by arbitrary deletion. Keeping the
+ * underlying node preserves branch/retry/source ancestry while letting users
+ * clean experimental revisions out of the working UI.
+ */
 export async function removeBrepProjectRevisionFromHistory({
   conversationId,
   messageId,
-  activeMessageId,
+  activeRevisionId,
 }: {
   conversationId: string;
   messageId: string;
-  activeMessageId: string;
+  activeRevisionId: string;
 }): Promise<void> {
-  if (messageId === activeMessageId) {
-    throw new Error('The active BRep revision cannot be removed from history.');
+  if (messageId === activeRevisionId) {
+    throw new Error('Switch to another BRep revision before deleting this one.');
   }
   const revision = await requireBrepProjectRevision(conversationId, messageId);
-  if (!revision) throw new Error('BRep revision was not found.');
+  if (!revision) {
+    throw new Error('BRep source revision was not found in this conversation.');
+  }
 
   const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
@@ -264,28 +266,57 @@ export async function removeBrepProjectRevisionFromHistory({
     .eq('id', conversationId)
     .single();
   if (conversationError) throw conversationError;
+
   const currentSettings =
-    conversation.settings && typeof conversation.settings === 'object'
+    conversation.settings &&
+    typeof conversation.settings === 'object' &&
+    !Array.isArray(conversation.settings)
       ? conversation.settings
       : {};
-  const existing = hiddenBrepRevisionIds(currentSettings);
-  if (existing.includes(messageId)) return;
-  const { error } = await supabase
+  const hidden = hiddenBrepRevisionIds(currentSettings);
+  if (hidden.includes(messageId)) return;
+
+  const nextSettings = {
+    ...currentSettings,
+    brepHiddenRevisionIds: [...hidden, messageId],
+  };
+  const { error: updateError } = await supabase
     .from('conversations')
-    .update({
-      settings: {
-        ...currentSettings,
-        hiddenBrepRevisionIds: [...existing, messageId],
-      },
-    })
+    .update({ settings: JSON.parse(JSON.stringify(nextSettings)) })
     .eq('id', conversationId);
-  if (error) throw error;
+  if (updateError) throw updateError;
 }
 
-export function hiddenBrepRevisionIds(settings: unknown): string[] {
-  if (!settings || typeof settings !== 'object') return [];
-  const value = (settings as { hiddenBrepRevisionIds?: unknown })
-    .hiddenBrepRevisionIds;
-  if (!Array.isArray(value)) return [];
-  return value.filter((id): id is string => typeof id === 'string' && !!id);
+export async function restoreBrepProjectRevision({
+  conversationId,
+  sourceMessageId,
+}: {
+  conversationId: string;
+  sourceMessageId: string;
+}): Promise<string> {
+  const source = await requireBrepProjectRevision(
+    conversationId,
+    sourceMessageId,
+  );
+  if (!source) {
+    throw new Error('BRep source revision was not found in this conversation.');
+  }
+  const restoredArtifact = createBrepProjectArtifact(source.artifact);
+  const restoredMessageId = crypto.randomUUID();
+  const { error: messageError } = await supabase.from('messages').insert({
+    id: restoredMessageId,
+    conversation_id: conversationId,
+    role: 'assistant',
+    parent_message_id: source.parentMessageId,
+    parts: JSON.parse(
+      JSON.stringify([{ type: 'data-brep-project', data: restoredArtifact }]),
+    ),
+    metadata: {},
+  });
+  if (messageError) throw messageError;
+  await selectBrepProjectRevision({
+    conversationId,
+    messageId: restoredMessageId,
+  });
+  return restoredMessageId;
 }
