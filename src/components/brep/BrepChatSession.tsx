@@ -178,7 +178,7 @@ export function BrepChatSession({
     persistedAttempt?.requestMessageId ?? inferredPendingRequestMessageId;
   const trackedBaselineRunId =
     persistedAttempt?.requestMessageId === trackedRequestMessageId
-      ? persistedAttempt.baselineRunId
+      ? persistedAttempt?.baselineRunId
       : undefined;
   const { data: durableGenerationRun } = useLatestBrepGenerationRun({
     conversationId: conversation.id,
