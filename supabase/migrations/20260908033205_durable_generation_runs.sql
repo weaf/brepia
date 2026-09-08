@@ -116,6 +116,3 @@ grant update on table "public"."generation_runs" to "service_role";
 using (((auth.uid() = user_id) AND (EXISTS ( SELECT 1
    FROM public.conversations
   WHERE ((conversations.id = generation_runs.conversation_id) AND (conversations.user_id = auth.uid()))))));
-
-
-
