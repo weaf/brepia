@@ -1,6 +1,7 @@
 import type { Database } from '@shared/database';
 import {
   applyGenerationRunTransition,
+  isGenerationRunTerminal,
   type GenerationRunExecutionMode,
   type GenerationRunKind,
   type GenerationRunSnapshot,
@@ -151,6 +152,8 @@ export async function transitionGenerationRun(
 ): Promise<GenerationRunSnapshot> {
   const client = options.client ?? getServiceRoleSupabaseClient();
   const current = await loadGenerationRun(client, runId, userId);
+  if (isGenerationRunTerminal(current.status)) return current;
+
   const next = applyGenerationRunTransition(current, {
     ...transition,
     sequence: current.sequence + 1,
@@ -175,15 +178,27 @@ export async function transitionGenerationRun(
   // have won the optimistic race. Return the durable winner when it is already
   // terminal instead of trying to overwrite it with stale in-memory progress.
   const winner = await loadGenerationRun(client, runId, userId);
-  if (
-    winner.status === 'completed' ||
-    winner.status === 'failed' ||
-    winner.status === 'cancelled'
-  ) {
-    return winner;
-  }
+  if (isGenerationRunTerminal(winner.status)) return winner;
   throw new Error(
     `Generation run ${runId} changed concurrently at sequence ${current.sequence}.`,
+  );
+}
+
+export async function cancelGenerationRun(
+  runId: string,
+  userId: string,
+  options: { client?: ServiceRoleClient; now?: string; detail?: string } = {},
+): Promise<GenerationRunSnapshot> {
+  const now = options.now ?? new Date().toISOString();
+  return transitionGenerationRun(
+    runId,
+    userId,
+    {
+      status: 'cancelled',
+      completedAt: now,
+      detail: options.detail ?? 'Generation cancelled.',
+    },
+    { client: options.client, now },
   );
 }
 
@@ -204,23 +219,14 @@ export async function cancelLatestInFlightGenerationRun(
     .maybeSingle();
 
   if (error) {
-    throw new Error(
-      `Active generation run lookup failed: ${error.message}`,
-    );
+    throw new Error(`Active generation run lookup failed: ${error.message}`);
   }
   if (!data) return undefined;
 
-  const current = generationRunRowToSnapshot(data);
-  return transitionGenerationRun(
-    current.id,
-    userId,
-    {
-      status: 'cancelled',
-      completedAt: options.now ?? new Date().toISOString(),
-      detail: 'Generation cancelled.',
-    },
-    { client, now: options.now },
-  );
+  return cancelGenerationRun(data.id, userId, {
+    client,
+    now: options.now,
+  });
 }
 
 export function generationRunKindForConversation(
