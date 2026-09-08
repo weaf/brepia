@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS "generation_runs_conversation_created_idx"
     ON "public"."generation_runs" USING btree ("conversation_id", "created_at" DESC);
 CREATE INDEX IF NOT EXISTS "generation_runs_user_updated_idx"
     ON "public"."generation_runs" USING btree ("user_id", "updated_at" DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS "generation_runs_request_message_id_key"
+CREATE INDEX IF NOT EXISTS "generation_runs_request_message_id_idx"
     ON "public"."generation_runs" USING btree ("request_message_id");
 
 ALTER TABLE "public"."generation_runs"
@@ -106,7 +106,7 @@ ALTER TABLE "public"."generation_runs"
     );
 ALTER TABLE "public"."generation_runs"
     ADD CONSTRAINT "generation_runs_sequence_check"
-    CHECK ("sequence" > 0);
+    CHECK ("sequence" > 0 AND "sequence" <= 9007199254740991);
 ALTER TABLE "public"."generation_runs"
     ADD CONSTRAINT "generation_runs_detail_length_check"
     CHECK ("detail" IS NULL OR char_length("detail") <= 240);
@@ -125,7 +125,10 @@ ALTER TABLE "public"."generation_runs"
     );
 ALTER TABLE "public"."generation_runs"
     ADD CONSTRAINT "generation_runs_failed_error_code_check"
-    CHECK ("status" <> 'failed' OR "error_code" IS NOT NULL);
+    CHECK (
+        "status" <> 'failed'
+        OR ("error_code" IS NOT NULL AND char_length(btrim("error_code")) > 0)
+    );
 
 ALTER TABLE "public"."generation_runs" ENABLE ROW LEVEL SECURITY;
 
@@ -143,8 +146,11 @@ CREATE POLICY "generation_runs_select_own"
         )
     );
 
--- No authenticated INSERT/UPDATE/DELETE policies by design. The browser is an
--- observer. Trusted server code owns lifecycle writes through service_role.
+-- Supabase's role default privileges are intentionally narrowed here. Browser
+-- roles can only observe owned rows through the SELECT policy; lifecycle writes
+-- remain server-owned through service_role.
+REVOKE ALL ON TABLE "public"."generation_runs" FROM anon;
+REVOKE ALL ON TABLE "public"."generation_runs" FROM authenticated;
 GRANT SELECT ON TABLE "public"."generation_runs" TO authenticated;
 GRANT ALL ON TABLE "public"."generation_runs" TO service_role;
 GRANT ALL ON TABLE "public"."generation_runs" TO postgres;
