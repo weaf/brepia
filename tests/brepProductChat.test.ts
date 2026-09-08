@@ -46,7 +46,7 @@ describe('BRep product chat client boundary', () => {
     );
     assert.match(
       brepViewSource,
-      /parametersSlot={<BrepProjectParametersPanel \/>}/,
+      /parametersSlot={\s*<fieldset disabled={isAiEditing} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
     );
     assert.match(
       brepViewSource,
@@ -54,8 +54,9 @@ describe('BRep product chat client boundary', () => {
     );
     assert.match(
       brepViewSource,
-      /mobileParametersSlot={<BrepProjectParametersPanel \/>}/,
+      /mobileParametersSlot={\s*<fieldset disabled={isAiEditing} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
     );
+    assert.match(brepViewSource, /sourceEditingDisabled={isAiEditing}/);
     assert.match(brepViewSource, /<BrepFeatureWorkspaceProvider>/);
     assert.match(brepViewSource, /setMobilePreviewVersion/);
     assert.match(brepViewSource, /\bWorkspace\b/);
