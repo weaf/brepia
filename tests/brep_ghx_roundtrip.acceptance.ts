@@ -102,18 +102,52 @@ test('prompt -> Brepia preview -> GHX export -> parameter edit -> GHX import -> 
   await signIn(page);
 
   await page.goto(`${ORIGIN}/`);
+
+  const parametricButton = page.getByRole('button', {
+    name: 'Parametric',
+    exact: true,
+  });
+  const meshButton = page.getByRole('button', { name: 'Mesh', exact: true });
+  const openScadButton = page.getByRole('button', {
+    name: 'OpenSCAD',
+    exact: true,
+  });
   const nativeBrepButton = page.getByRole('button', {
     name: 'Native BRep',
     exact: true,
   });
-  await expect(nativeBrepButton).toBeVisible();
+  const attachButton = page.getByRole('button', {
+    name: 'Attach files',
+    exact: true,
+  });
+
+  await expect(page.getByText('Parametric source', { exact: true })).toBeVisible();
+  await expect(parametricButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(meshButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(openScadButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(nativeBrepButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(attachButton).toBeEnabled();
+
   await nativeBrepButton.click();
   await expect(nativeBrepButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(openScadButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(attachButton).toBeDisabled();
 
+  const generationRunRead = page.waitForRequest(
+    (request) =>
+      request.method() === 'GET' &&
+      request.url().includes('/rest/v1/generation_runs'),
+    { timeout: 30000 },
+  );
   const promptInput = page.locator('textarea').first();
   await expect(promptInput).toBeVisible();
   await promptInput.fill(PROMPT);
   await promptInput.press('Enter');
+
+  await expect(
+    page.getByRole('heading', { name: 'Creating native BRep', exact: true }),
+  ).toBeVisible({ timeout: 10000 });
+  await generationRunRead;
 
   await page.waitForURL(/\/brep\/[0-9a-f-]+$/i, { timeout: 180000 });
   await expect(page.getByText('Parameters', { exact: true })).toBeVisible({
