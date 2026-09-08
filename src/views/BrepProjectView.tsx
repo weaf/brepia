@@ -19,6 +19,7 @@ import {
 } from '@/lib/aiMessages';
 import { normalizeModelId } from '@shared/models';
 import { supabase } from '@/lib/supabase';
+import { useLatestBrepGenerationRun } from '@/services/generationRunService';
 import {
   isRecentPendingBrepCreation,
   persistUserMessage,
@@ -445,8 +446,27 @@ function BrepProjectWorkspace() {
     conversation,
     dbMessages,
   );
+  const {
+    data: generationRun,
+    isFetched: isGenerationRunFetched,
+  } = useLatestBrepGenerationRun({
+    conversationId: conversation.id,
+    enabled: Boolean(user?.id),
+    pollWhenMissing: pendingBrepCreation,
+  });
+  const durableCreationWithoutSource =
+    !activeSource &&
+    Boolean(generationRun) &&
+    generationRun?.status !== 'completed';
+  const generationRunLookupPending = !activeSource && !isGenerationRunFetched;
 
-  if (!areMessagesFetched || !leafPresentInMessages || pendingBrepCreation) {
+  if (
+    !areMessagesFetched ||
+    !leafPresentInMessages ||
+    pendingBrepCreation ||
+    durableCreationWithoutSource ||
+    generationRunLookupPending
+  ) {
     return (
       <BrepCreationProgress
         messages={dbMessages}
@@ -454,6 +474,7 @@ function BrepProjectWorkspace() {
         leafPresent={leafPresentInMessages}
         model={model}
         executionMode={executionMode}
+        generationRun={generationRun}
       />
     );
   }
