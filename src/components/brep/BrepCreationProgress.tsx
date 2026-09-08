@@ -202,8 +202,9 @@ export function BrepCreationProgress({
             </p>
           ) : null}
           <p className="mt-2 text-xs leading-5 text-adam-neutral-400">
-            Generation progress is persisted by the server. You can leave this
-            page; Brepia will resume showing the durable state when you return.
+            {generationRun
+              ? 'Generation progress is persisted by the server. You can leave this page; Brepia will resume showing the durable state when you return.'
+              : 'Brepia is synchronizing the generation state. If you leave this page, the persisted project state will be reconciled when you return.'}
           </p>
         </div>
       </section>
