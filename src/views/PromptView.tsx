@@ -356,6 +356,9 @@ export function PromptView() {
         conversation_id: conversationId,
       });
 
+      // Pin the complete repository instruction package independently from the
+      // mode-specific custom prompt profile. Existing conversations therefore
+      // keep their selected CADAM/Standard lineage when defaults change.
       const promptProfileId = aiPreferences?.defaultPromptProfileId ?? null;
       const creativePromptProfileId =
         aiPreferences?.defaultCreativePromptProfileId ?? null;
