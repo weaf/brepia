@@ -2,6 +2,7 @@ import type { AiTurnProvenance } from './aiTurnProvenance';
 import { logError } from './serverLog';
 import {
   cancelGenerationRun,
+  cancelLatestInFlightGenerationRun,
   createGenerationRun,
   generationRunFailureFields,
   transitionGenerationRun,
@@ -177,5 +178,25 @@ export async function cancelDurableGenerationRun(
         generationRunId: runId,
       },
     });
+  }
+}
+
+export async function cancelLatestDurableGenerationRun(
+  userId: string,
+  conversationId: string,
+): Promise<boolean> {
+  try {
+    return Boolean(
+      await cancelLatestInFlightGenerationRun(userId, conversationId),
+    );
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-generation-run',
+      statusCode: 500,
+      userId,
+      conversationId,
+      additionalContext: { operation: 'cancel_latest_durable_run' },
+    });
+    return false;
   }
 }
