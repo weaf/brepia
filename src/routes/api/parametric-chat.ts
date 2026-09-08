@@ -5,12 +5,15 @@ import {
   isConversationWorkspaceExportRequest,
 } from '@/server/conversationWorkspaceExportRequest';
 import { withConversationWorkspaceLifecycle } from '@/server/conversationWorkspaceLifecycle';
+import { withConfiguredChatModel } from '@/server/configuredChatModelGuard';
 
 const handleRequest = (request: Request) => {
   if (isConversationWorkspaceExportRequest(request)) {
     return handleConversationWorkspaceExportRequest(request);
   }
-  return withConversationWorkspaceLifecycle(request, handleAiChatRequest);
+  return withConfiguredChatModel(request, 'parametric', (guardedRequest) =>
+    withConversationWorkspaceLifecycle(guardedRequest, handleAiChatRequest),
+  );
 };
 
 export const Route = createFileRoute('/api/parametric-chat')({
