@@ -2,7 +2,6 @@ import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
 import { loadBundledInstruction } from './aiInstructionCatalog.ts';
 import {
-  brepAiBuildInputSchema,
   brepAiBuildOutputSchema,
   brepAiBuildProviderInputSchema,
 } from './brepAiTool.ts';
