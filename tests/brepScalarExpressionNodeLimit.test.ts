@@ -52,8 +52,13 @@ describe('BRep M1 scalar expression node bound', () => {
       resultNodeId: 'body',
     };
 
-    expect(() => normalizeBrepProject(project)).toThrowError(
-      expect.objectContaining<BrepProjectError>({ code: 'invalid_node' }),
-    );
+    try {
+      normalizeBrepProject(project);
+    } catch (error) {
+      expect(error).toBeInstanceOf(BrepProjectError);
+      expect((error as BrepProjectError).code).toBe('invalid_node');
+      return;
+    }
+    throw new Error('Expected the over-limit scalar expression to be rejected.');
   });
 });
