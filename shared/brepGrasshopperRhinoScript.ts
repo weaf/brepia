@@ -406,6 +406,7 @@ function buildGraphSource(
       const edgeDirection = `${variable}EdgeDirection`;
       const edgeDot = `${variable}EdgeDot`;
 
+      lines.push('from System import Array, Double, Int32');
       lines.push(`${variable}Input = ${input}.DuplicateBrep()`);
       lines.push(`${variable}Radius = float(${radius})`);
       lines.push(`if ${variable}Radius <= 0.0:`);
@@ -413,26 +414,17 @@ function buildGraphSource(
         `    raise ValueError(${pythonString(`Brepia fillet node ${node.id} radius must be greater than zero.`)})`,
       );
       lines.push(`${variable}EdgeIndices = []`);
-
-      if (node.selector.kind === 'all') {
-        lines.push(`for ${edge} in ${variable}Input.Edges:`);
-        lines.push(`    ${variable}EdgeIndices.append(${edge}.EdgeIndex)`);
-      } else {
-        lines.push(
-          `${variable}Axis = ${filletAxisExpression(node.selector.axis)}`,
-        );
-        lines.push(`for ${edge} in ${variable}Input.Edges:`);
-        lines.push(`    ${edgeParameter} = ${edge}.Domain.ParameterAt(0.5)`);
-        lines.push(`    ${edgeDirection} = ${edge}.TangentAt(${edgeParameter})`);
-        lines.push(`    if not ${edgeDirection}.Unitize():`);
-        lines.push('        continue');
-        lines.push(
-          `    ${edgeDot} = (${edgeDirection}.X * ${variable}Axis.X + ${edgeDirection}.Y * ${variable}Axis.Y + ${edgeDirection}.Z * ${variable}Axis.Z)`,
-        );
-        lines.push(`    if abs(abs(${edgeDot}) - 1.0) <= 1e-3:`);
-        lines.push(`        ${variable}EdgeIndices.append(${edge}.EdgeIndex)`);
-      }
-
+      lines.push(`${variable}Axis = ${filletAxisExpression(node.selector.axis)}`);
+      lines.push(`for ${edge} in ${variable}Input.Edges:`);
+      lines.push(`    ${edgeParameter} = ${edge}.Domain.ParameterAt(0.5)`);
+      lines.push(`    ${edgeDirection} = ${edge}.TangentAt(${edgeParameter})`);
+      lines.push(`    if not ${edgeDirection}.Unitize():`);
+      lines.push('        continue');
+      lines.push(
+        `    ${edgeDot} = (${edgeDirection}.X * ${variable}Axis.X + ${edgeDirection}.Y * ${variable}Axis.Y + ${edgeDirection}.Z * ${variable}Axis.Z)`,
+      );
+      lines.push(`    if abs(abs(${edgeDot}) - 1.0) <= 1e-3:`);
+      lines.push(`        ${variable}EdgeIndices.append(${edge}.EdgeIndex)`);
       lines.push(`if len(${variable}EdgeIndices) == 0:`);
       lines.push(
         `    raise ValueError(${pythonString(`Brepia fillet selector for node ${node.id} matched no edges.`)})`,
@@ -457,11 +449,6 @@ function buildGraphSource(
         `    raise RuntimeError(${pythonString(`Rhino fillet for Brepia node ${node.id} did not produce exactly one Brep.`)})`,
       );
       lines.push(`${variable} = ${variable}Parts[0]`);
-    } else {
-      throw new BrepGrasshopperRhinoScriptError(
-        'unsupported_model',
-        `Rhino GHX host generation does not yet support canonical node type ${node.type}.`,
-      );
     }
 
     visiting.delete(nodeId);
@@ -530,7 +517,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino\nimport Rhino.Geometry as rg\nfrom System import Array, Double, Int32\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
