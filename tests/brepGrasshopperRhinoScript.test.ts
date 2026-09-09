@@ -233,23 +233,78 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     );
   });
 
-  it('fails closed for fillets until Rhino edge-selection parity is separately proven', async () => {
-    const unsupported = cloneFixture();
-    unsupported.source.nodes.push({
+  it('emits canonical parallel-axis fillets using normalized edge-midpoint tangents', async () => {
+    const withFillet = cloneFixture();
+    withFillet.source.nodes.push({
       id: 'filletedBody',
       type: 'fillet',
       input: 'body',
       radius: 5,
       selector: { kind: 'parallelToAxis', axis: 'z' },
     });
-    unsupported.source.resultNodeId = 'filletedBody';
+    withFillet.source.resultNodeId = 'filletedBody';
 
-    await assert.rejects(
-      () => createBrepGrasshopperRhinoScriptPlan(unsupported),
-      (error: unknown) =>
-        error instanceof BrepGrasshopperRhinoScriptError &&
-        error.code === 'unsupported_model' &&
-        /fillet/.test(error.message),
+    const script = await createBrepGrasshopperRhinoScriptPlan(withFillet);
+
+    assert.match(script.source, /from System import Array, Double, Int32/);
+    assert.match(script.source, /brepiaNode1Input = brepiaNode0\.DuplicateBrep\(\)/);
+    assert.match(script.source, /brepiaNode1Radius = float\(5\)/);
+    assert.match(script.source, /brepiaNode1Axis = rg\.Vector3d\(0, 0, 1\)/);
+    assert.match(
+      script.source,
+      /brepiaNode1EdgeParameter = brepiaNode1Edge\.Domain\.ParameterAt\(0\.5\)/,
     );
+    assert.match(
+      script.source,
+      /brepiaNode1EdgeDirection = brepiaNode1Edge\.TangentAt\(brepiaNode1EdgeParameter\)/,
+    );
+    assert.match(script.source, /if not brepiaNode1EdgeDirection\.Unitize\(\):/);
+    assert.match(
+      script.source,
+      /if abs\(abs\(brepiaNode1EdgeDot\) - 1\.0\) <= 1e-3:/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode1EdgeArray = Array\[Int32\]\(brepiaNode1EdgeIndices\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode1Radii = Array\[Double\]\(\[brepiaNode1Radius\] \* len\(brepiaNode1EdgeIndices\)\)/,
+    );
+    assert.match(script.source, /brepiaNode1Parts = rg\.Brep\.CreateFilletEdges\(/);
+    assert.match(script.source, /rg\.BlendType\.Fillet/);
+    assert.match(script.source, /rg\.RailType\.RollingBall/);
+    assert.match(script.source, /brepiaTolerance/);
+    assert.match(
+      script.source,
+      /Brepia fillet selector for node filletedBody matched no edges/,
+    );
+    assert.match(
+      script.source,
+      /Result = brepia_place_brep\(brepiaNode1, brepiaTransform\)/,
+    );
+  });
+
+  it('supports all-edge fillets and keeps parameter-backed radii dynamic', async () => {
+    const withFillet = cloneFixture();
+    withFillet.source.nodes.push({
+      id: 'filletedBody',
+      type: 'fillet',
+      input: 'body',
+      radius: { parameter: 'width' },
+      selector: { kind: 'all' },
+    });
+    withFillet.source.resultNodeId = 'filletedBody';
+
+    const script = await createBrepGrasshopperRhinoScriptPlan(withFillet);
+
+    assert.match(script.source, /brepiaNode1Radius = float\(Width\)/);
+    assert.match(script.source, /for brepiaNode1Edge in brepiaNode1Input\.Edges:/);
+    assert.match(
+      script.source,
+      /brepiaNode1EdgeIndices\.append\(brepiaNode1Edge\.EdgeIndex\)/,
+    );
+    assert.doesNotMatch(script.source, /brepiaNode1Axis =/);
+    assert.match(script.source, /brepiaNode1Parts = rg\.Brep\.CreateFilletEdges\(/);
   });
 });
