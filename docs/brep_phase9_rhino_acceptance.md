@@ -2,38 +2,47 @@
 
 ## Status
 
-**Active; partial installed-host evidence exists. Full product-loop acceptance is not yet complete.**
+**In progress with real installed-host evidence.**
 
-Phase 9 remains intentionally separated from repository-only Phase 8 evidence. Repository CI is necessary, but only a real installed Rhino 8 / Grasshopper host can prove that a Brepia-exported GHX opens, solves, saves and reopens correctly.
+Phase 9 is intentionally separated from Phase 8 because repository CI cannot prove installed Rhino 8 / Grasshopper runtime behavior.
 
-On 2026-09-09 the first installed-host session exposed two assumptions that repository validation had not proven:
+Phase 8 is repository-complete through the strict GHX export/import boundary. Phase 9 supplies the real-runtime interoperability evidence and feeds narrowly scoped host-compatibility fixes back into the GHX compiler when required.
 
-1. the hand-written executable GHX used an incomplete Grasshopper document envelope and failed during Grasshopper IO with `Object reference not set to an instance of an object`;
-2. the original embedded C# Script path was not the simplest proven zero-install execution carrier for the target Rhino 8 host.
+## Current installed-host evidence — 2026-09-09
 
-The host diagnosis then established a working direction:
+Real Rhino 8 / Grasshopper testing has now established the following:
 
-- a document using the envelope shape from a real Grasshopper-saved GHX opened successfully;
-- the same envelope with Brepia numeric controls also opened successfully;
-- a modern built-in Rhino 8 **Python 3 Script** component loaded without a Brepia GHA;
-- the first Python probe reached script execution but exposed a case-sensitive port/source-name mismatch (`width`/`height` versus `Width`/`Height`);
-- after making the Python source identifiers exactly match the serialized script-port identifiers, the box solved and became visible;
-- the corrected Python diagnostic loaded quickly in the installed host.
+1. The original reduced hand-written executable GHX envelope did **not** open in the installed host. Grasshopper IO reported `Object reference not set to an instance of an object` before the definition was usable.
+2. Removing the embedded executable component did not remove that error, which isolated the first defect to the GHX document/archive envelope rather than the model script itself.
+3. Moving the same Brepia objects into an envelope derived from a Grasshopper-saved document opened successfully.
+4. A built-in Rhino 8 **Python 3 Script** component, using `RhinoCodePluginGH`, opened without installing `Brepia.Grasshopper.gha`.
+5. A focused Python 3 diagnostic with Height/Width inputs and a Result Brep solved successfully, displayed the expected box and loaded quickly in the installed host once the Python source identifiers exactly matched the runtime-visible serialized port names.
+6. The production GHX compiler was then updated to the fuller host-compatible envelope plus the built-in Python 3 carrier. A fresh GHX exported by Brepia now opens successfully in the installed host, proving that the product export no longer fails at the Grasshopper IO boundary.
+7. That first fresh product export exposed a second, narrower runtime defect: its canvas ports were `Height`, `Width` and `Plane`, but its embedded Python source still referenced the old internal identifiers `brepiaP0`, `brepiaP1` and `brepiaPlacement`. Rhino therefore loaded the component but could not solve it.
+8. The production script plan has now been corrected so serialized Python port names and generated source identifiers are the same deterministic names. For the current box fixture this means `Height`, `Width`, `Plane` inputs and `Result`, `Footprint`, `Clearance`, `Maintenance`, `Connections`, `Mounting`, `Cable`, `Metadata` outputs. The old `brepiaP*`/`brepiaPlacement` names are regression-tested as forbidden in generated source.
 
-This is strong host evidence for the **document-envelope + Rhino 8 Python 3 Script** direction. It is not yet evidence that the product exporter on the current branch has completed the full acceptance sequence below.
+Current code checkpoint for the runtime-port correction:
 
-## Current implementation correction
+```text
+abc9537ad97305817126776e1d96e76348fb98c7
+Satisfy Rhino Python port lint gate
+```
 
-The active GHX implementation on `feature/brep-grasshopper-gh-packaging` is being corrected to preserve the existing canonical/round-trip architecture while changing only the host-facing persistence/runtime carrier:
+Exact-head repository evidence:
 
-- canonical `BrepProject` and immutable revision authority remain unchanged;
-- generated native Number/Slider controls and stable parameter/control identities remain unchanged;
-- the executable bridge uses the built-in Rhino 8 Python 3 Script component (`719467e6-7cf5-4848-99b0-c5dd57e5442c`) through `RhinoCodePluginGH`;
-- Python source and serialized `InputParam`/`OutputParam` names are generated from the same script plan so case-sensitive identifiers cannot drift;
-- the product executable GHX receives the fuller Grasshopper document envelope required by installed-host evidence, including standard document metadata, `GHALibraries` and a Thumbnail archive chunk;
-- strict returned-GHX validation still freezes Brepia-owned graph, wiring, script source/runtime state and published parameter identity while allowing only the already-supported bounded parameter edits.
+- Quality Gate #687 — PASS;
+  - dependency audit PASS;
+  - tests PASS;
+  - typecheck PASS;
+  - lint PASS;
+  - build PASS;
+  - diff check PASS;
+- Grasshopper Build #259 — PASS;
+  - plugin build PASS;
+  - Ubuntu package PASS;
+  - Windows package PASS.
 
-The internal parameter-shell codec remains an implementation/parser foundation; installed-host compatibility is required of the **product executable GHX**.
+This is still **partial Phase 9 evidence**. The corrected `abc9537...` product export has not yet been re-opened and solved in Rhino after the runtime-port correction, so full Phase 9 acceptance must not yet be claimed.
 
 ## Scope
 
@@ -42,7 +51,7 @@ Validate the zero-install GHX baseline in an actual Rhino 8 / Grasshopper host w
 Required acceptance sequence:
 
 1. create a supported canonical Brepia model and verify native Brepia 3D preview;
-2. export `.ghx` from the saved immutable Brepia revision using the current product exporter;
+2. export `.ghx` from the saved immutable Brepia revision;
 3. open the generated GHX in Grasshopper without installing `Brepia.Grasshopper.gha`;
 4. verify standard controls and the embedded Rhino 8 Python 3 Script component load correctly;
 5. solve the definition and verify expected native Rhino Brep geometry and Brepia semantic outputs;
@@ -54,11 +63,11 @@ Required acceptance sequence:
 11. continue editing the canonical model with Brepia AI;
 12. export a fresh GHX and reopen/solve it successfully in Grasshopper.
 
-The diagnostic Python GHX accepted on 2026-09-09 proves the runtime carrier can work, but it does **not** substitute for steps 2–12 using the actual current Brepia exporter and import lifecycle.
+Steps 1–3 are now proven for a fresh product export on the current path. Step 4 is proven through component load; the post-port-fix solve required for Step 5 is the next acceptance action.
 
 ## Acceptance boundaries
 
-This phase tests the product loop already implemented around the strict canonical boundary. It is not an invitation to broaden the v1 round-trip contract.
+This phase tests the product loop already implemented in Phase 8. It is not an invitation to broaden the v1 round-trip contract.
 
 Still unsupported unless separately implemented and validated:
 
@@ -74,7 +83,7 @@ If the returned file contains unsupported changes, Brepia should continue to fai
 
 Repository CI evidence is necessary but not sufficient for this phase.
 
-Required final evidence must come from the installed Rhino/Grasshopper host and should record:
+Required evidence must come from the installed Rhino/Grasshopper host and should record:
 
 - Rhino and Grasshopper versions;
 - exported GHX source Brepia revision;
@@ -86,10 +95,8 @@ Required final evidence must come from the installed Rhino/Grasshopper host and 
 - recovered parameter values;
 - successful continuation/regeneration result.
 
-Negative host findings are also evidence and should remain recorded when they explain an implementation correction, as with the original incomplete document envelope and the superseded C# executable candidate.
-
 ## Relationship to Phase 8
 
-Historical Phase 8 documentation may refer to the installed-runtime work as `8H` or describe the pre-host C# executable candidate. Those references are implementation history, not current installed-host proof.
+Historical Phase 8 documentation may refer to the same runtime work as `8H`. Those references are superseded by this document: installed Rhino/Grasshopper acceptance is **Phase 9**, not a blocking Phase 8 sub-step.
 
-The Brepia-side Phase 8H round-trip remains separately accepted. Installed Rhino/Grasshopper open/solve/edit/save/reopen acceptance is **Phase 9** and must not be inferred from repository CI or from the earlier browser-only round-trip.
+Phase 8 can therefore be reviewed independently from the installed-host acceptance evidence. Phase 9 remains open until the full product loop above is completed.
