@@ -1,5 +1,6 @@
 """Constrained build123d evaluator. Input is normalized Brepia JSON, never user Python."""
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -20,10 +21,50 @@ PROJECT_OBJECT_ROLE_FIELDS = (
     ("clearanceEnvelope", "clearanceEnvelopeNodeId"),
     ("maintenanceEnvelope", "maintenanceEnvelopeNodeId"),
 )
+SCALAR_MAX_ABS_VALUE = 1_000_000_000
+SCALAR_MAX_DEPTH = 12
 
 
-def scalar(value, parameters):
-    return parameters[value["parameter"]] if isinstance(value, dict) else value
+def checked_scalar(value, label):
+    value = float(value)
+    if not math.isfinite(value) or abs(value) > SCALAR_MAX_ABS_VALUE:
+        raise ValueError(
+            f"invalid_parameter_value: {label} must be finite with absolute value <= {SCALAR_MAX_ABS_VALUE}"
+        )
+    return 0.0 if value == 0.0 else value
+
+
+def scalar(value, parameters, depth=0):
+    if depth > SCALAR_MAX_DEPTH:
+        raise ValueError(f"invalid_parameter_value: scalar expression exceeds maximum depth {SCALAR_MAX_DEPTH}")
+    if not isinstance(value, dict):
+        return checked_scalar(value, "scalar literal")
+    if "parameter" in value:
+        parameter = value["parameter"]
+        if parameter not in parameters:
+            raise ValueError(f"invalid_parameter_value: missing scalar parameter {parameter}")
+        return checked_scalar(parameters[parameter], f"scalar parameter {parameter}")
+
+    op = value.get("op")
+    args = value.get("args")
+    if op == "neg" and isinstance(args, list) and len(args) == 1:
+        return checked_scalar(-scalar(args[0], parameters, depth + 1), "scalar neg result")
+    if op not in {"add", "sub", "mul", "div"} or not isinstance(args, list) or len(args) != 2:
+        raise ValueError("invalid_parameter_value: malformed canonical scalar expression")
+
+    left = scalar(args[0], parameters, depth + 1)
+    right = scalar(args[1], parameters, depth + 1)
+    if op == "add":
+        result = left + right
+    elif op == "sub":
+        result = left - right
+    elif op == "mul":
+        result = left * right
+    else:
+        if right == 0.0:
+            raise ValueError("invalid_parameter_value: scalar expression divides by zero")
+        result = left / right
+    return checked_scalar(result, f"scalar {op} result")
 
 
 def vector(value, parameters):
@@ -228,9 +269,6 @@ def write_3dm(project, result, exact_step_paths, three_dm_path):
     if not model.Write(str(three_dm_path), THREEDM_VERSION):
         raise ValueError("3dm_export_failed: rhino3dm could not write model.3dm")
 
-    # Fail closed inside the native sandbox too: independently re-open the
-    # written document, verify the semantic/exact contracts and prove that all
-    # embedded exact STEP artifacts survive the 3DM serialization round trip.
     check = rhino3dm.File3dm.Read(str(three_dm_path))
     if check is None:
         raise ValueError("3dm_export_failed: rhino3dm could not re-open model.3dm")
