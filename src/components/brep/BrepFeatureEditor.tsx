@@ -33,8 +33,13 @@ import {
   setBrepProjectResultNode,
   suggestBrepNodeId,
 } from '@shared/brepProjectEditing';
+import {
+  formatBrepScalar,
+  isBrepParameterReference,
+} from '@shared/brepScalar';
 
 const LITERAL_VALUE = '__literal__';
+const EXPRESSION_VALUE = '__expression__';
 const fieldClass =
   'h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue-dark disabled:cursor-not-allowed disabled:opacity-60';
 const NODE_TYPES: BrepNode['type'][] = [
@@ -135,8 +140,20 @@ function ScalarField({
     () => project.parameters.filter((parameter) => parameter.unit === unit),
     [project.parameters, unit],
   );
+  const parameterReference =
+    typeof value === 'number' ? false : isBrepParameterReference(value);
   const selected =
-    typeof value === 'number' ? LITERAL_VALUE : `parameter:${value.parameter}`;
+    typeof value === 'number'
+      ? LITERAL_VALUE
+      : parameterReference
+        ? `parameter:${value.parameter}`
+        : EXPRESSION_VALUE;
+  const displayValue =
+    typeof value === 'number'
+      ? ''
+      : parameterReference
+        ? value.parameter
+        : formatBrepScalar(value);
 
   return (
     <label className="grid gap-1.5 text-xs text-adam-neutral-300">
@@ -147,11 +164,14 @@ function ScalarField({
           value={selected}
           disabled={disabled}
           onChange={(event) => {
+            if (event.target.value === EXPRESSION_VALUE) return;
             if (event.target.value === LITERAL_VALUE) {
               if (typeof value === 'number') return;
-              const parameter = project.parameters.find(
-                (candidate) => candidate.id === value.parameter,
-              );
+              const parameter = parameterReference
+                ? project.parameters.find(
+                    (candidate) => candidate.id === value.parameter,
+                  )
+                : undefined;
               onChange(parameter?.default ?? 0);
               return;
             }
@@ -161,6 +181,9 @@ function ScalarField({
           }}
         >
           <option value={LITERAL_VALUE}>Literal value</option>
+          {selected === EXPRESSION_VALUE ? (
+            <option value={EXPRESSION_VALUE}>Expression · derived</option>
+          ) : null}
           {compatibleParameters.map((parameter) => (
             <option key={parameter.id} value={`parameter:${parameter.id}`}>
               {parameter.label} · {parameter.id}
@@ -176,8 +199,11 @@ function ScalarField({
             onChange={(event) => onChange(Number(event.target.value))}
           />
         ) : (
-          <div className="flex h-9 items-center rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/50 px-2 font-mono text-[11px] text-adam-neutral-400">
-            {value.parameter}
+          <div
+            className="flex h-9 min-w-0 items-center truncate rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/50 px-2 font-mono text-[11px] text-adam-neutral-400"
+            title={displayValue}
+          >
+            {displayValue}
           </div>
         )}
       </div>
