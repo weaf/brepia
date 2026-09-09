@@ -93,18 +93,24 @@ Grasshopper `.gh` and `.ghx` represent the same Grasshopper archive structure; `
 
 A user may later save the document as `.gh` in Grasshopper. Brepia does not need to make binary `.gh` generation the primary server-side workflow.
 
+The executable GHX document envelope is a compatibility-sensitive Grasshopper archive contract, not arbitrary XML decoration. Its supported shape must be grounded in Grasshopper's own `GH_IO` / `GH_DocumentIO` serialization model and real Grasshopper-saved fixtures, then proven in an installed Rhino/Grasshopper host. A simplified internal parameter-shell fixture is not sufficient evidence that a product GHX will open in Grasshopper.
+
+The 2026-09-09 Phase 9 host session demonstrated this distinction directly: the earlier reduced hand-written envelope failed during Grasshopper IO, while the same Brepia objects inside a real Grasshopper document envelope opened successfully. Product executable GHX generation therefore includes the host-compatible document metadata/library/thumbnail structure covered by current tests and installed-host evidence.
+
 ## Zero-install baseline; GHA is optional
 
 The baseline product direction is **not** to require `Brepia.Grasshopper.gha`.
 
-Prefer a zero-install Rhino 8 / Grasshopper workflow using standard Grasshopper objects and, where an executable bridge is required, a built-in Rhino 8 Script/C# Script component whose script is embedded in the GHX document.
+Prefer a zero-install Rhino 8 / Grasshopper workflow using standard Grasshopper objects and, where an executable bridge is required, the built-in Rhino 8 **Python 3 Script** component with embedded RhinoCommon code.
+
+This Python 3 carrier is evidence-backed rather than stylistic: in the 2026-09-09 installed-host session the modern Rhino 8 Python 3 component loaded without a Brepia GHA, executed the Brepia box geometry and displayed the native Brep after script-port identifiers were made exactly consistent with the embedded source. The previous C# Script implementation remains historical repository evidence but is no longer the active executable GHX baseline.
 
 A Brepia `.gha` may remain useful as:
 
 - a reference implementation;
 - a development probe;
 - an optional richer integration later;
-- a fallback if the built-in Script component cannot satisfy a concrete runtime, UX, security or compatibility requirement.
+- a fallback if the built-in Python 3 Script component cannot satisfy a concrete runtime, UX, security or compatibility requirement.
 
 It must not become a hidden requirement unless a later evidence-backed architecture decision explicitly changes this document.
 
@@ -145,7 +151,7 @@ The validator should be layered and produce machine-readable diagnostics that AI
    - reject malformed XML and unsafe XML features.
 
 2. **GHX structural validation**
-   - expected Grasshopper archive/document structure;
+   - expected Grasshopper archive/document structure, including the host-compatible executable envelope where applicable;
    - bounded object and connection counts;
    - required identifiers/state for the Brepia-supported GHX subset;
    - unique instance identities and valid connection references.
@@ -161,8 +167,9 @@ The validator should be layered and produce machine-readable diagnostics that AI
    - `supported`: Brepia-owned structure is recognized and only explicitly supported changes are present;
    - `unsupported`: the definition contains structural/code/graph changes that Brepia cannot safely reconcile in the current version.
 
-5. **Optional Rhino/Grasshopper runtime acceptance**
-   - when a supported Rhino-owned runtime is available, parse/open/solve/save-reopen the generated GHX as the strongest interoperability evidence.
+5. **Rhino/Grasshopper runtime acceptance**
+   - repository validation does not replace installed-host evidence;
+   - Phase 9 must open/solve/edit/save/reopen current product exports in an installed Rhino 8 / Grasshopper runtime before that exact product path is claimed as accepted.
 
 The first round-trip version should be intentionally strict. Recover recognized parameter changes and Brepia-owned provenance. If an imported GHX contains unknown or unsupported semantic graph changes, do not manufacture a canonical Brepia revision from them. Explain that the model is no longer safely round-trippable in the current version.
 
