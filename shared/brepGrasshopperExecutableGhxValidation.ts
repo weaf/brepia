@@ -12,7 +12,7 @@ import {
 } from './brepGrasshopperGhx.ts';
 import { createBrepGrasshopperPackagePlan } from './brepGrasshopperPackagePlan.ts';
 import {
-  BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID,
+  BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID,
   BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
   BREP_GRASSHOPPER_SCRIPT_OBJECT_HINT_GUID,
   BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID,
@@ -300,33 +300,56 @@ function validateOutput(
   }
 }
 
+function validateHostEnvelope(
+  root: BrepGrasshopperGhxArchiveNode,
+  definition: BrepGrasshopperGhxArchiveNode,
+  diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
+): void {
+  if (!ghxChunk(root, 'Thumbnail')) {
+    error(diagnostics, 'missing_thumbnail', 'Executable GHX is missing the Grasshopper Thumbnail archive chunk.');
+  }
+  const libraries = ghxChunk(definition, 'GHALibraries');
+  const hasRhinoCode = libraries
+    ? ghxChunks(libraries, 'Library').some(
+        (library) => guidText(library, 'Id') === BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
+      )
+    : false;
+  if (!hasRhinoCode) {
+    error(
+      diagnostics,
+      'missing_rhinocode_library',
+      'Executable GHX does not declare the RhinoCodePluginGH library required by its Python 3 Script.',
+    );
+  }
+}
+
 function validateScript(
   object: BrepGrasshopperGhxArchiveNode,
   expected: BrepGrasshopperRhinoScriptPlan,
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = 'DefinitionObjects/BrepiaScript';
-  if (guidText(object, 'GUID') !== BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID) {
-    error(diagnostics, 'script_type_changed', 'Brepia C# Script component type changed.', path);
+  if (guidText(object, 'GUID') !== BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID) {
+    error(diagnostics, 'script_type_changed', 'Brepia Python 3 Script component type changed.', path);
   }
   if (guidText(object, 'Lib') !== BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID) {
-    error(diagnostics, 'script_library_changed', 'Brepia C# Script library identity changed.', path);
+    error(diagnostics, 'script_library_changed', 'Brepia Python 3 Script library identity changed.', path);
   }
   const container = objectContainer(object);
   if (!container) {
-    error(diagnostics, 'missing_script_container', 'Brepia C# Script Container is missing.', path);
+    error(diagnostics, 'missing_script_container', 'Brepia Python 3 Script Container is missing.', path);
     return;
   }
   if (guidText(container, 'InstanceGuid') !== expected.componentInstanceGuid.toLowerCase()) {
-    error(diagnostics, 'script_identity_changed', 'Brepia C# Script instance identity changed.', path);
+    error(diagnostics, 'script_identity_changed', 'Brepia Python 3 Script instance identity changed.', path);
   }
   if (
-    ghxItemText(container, 'Name') !== 'C# Script' ||
+    ghxItemText(container, 'Name') !== 'Python 3 Script' ||
     ghxItemText(container, 'NickName') !== expected.componentNickname ||
     ghxItemText(container, 'GraftStandardOutputLines') !== 'true' ||
-    ghxItemText(container, 'MarshGuids') !== 'false' ||
-    ghxItemText(container, 'MarshInputs') !== 'false' ||
-    ghxItemText(container, 'MarshOutputs') !== 'false' ||
+    ghxItemText(container, 'MarshGuids') !== 'true' ||
+    ghxItemText(container, 'MarshInputs') !== 'true' ||
+    ghxItemText(container, 'MarshOutputs') !== 'true' ||
     ghxItemText(container, 'UsingLibraryInputParam') !== 'false' ||
     ghxItemText(container, 'UsingScriptInputParam') !== 'false' ||
     ghxItemText(container, 'UsingScriptOutputParam') !== 'false' ||
@@ -335,30 +358,30 @@ function validateScript(
     error(
       diagnostics,
       'script_runtime_settings_changed',
-      'Brepia C# Script runtime settings changed.',
+      'Brepia Python 3 Script runtime settings changed.',
       path,
     );
   }
   if (ghxItemText(container, 'ScriptComponentVersion') !== '3') {
-    error(diagnostics, 'script_version_changed', 'Brepia C# Script persistence version changed.', path);
+    error(diagnostics, 'script_version_changed', 'Brepia Python 3 Script persistence version changed.', path);
   }
 
   const parameterData = ghxChunk(container, 'ParameterData');
   if (!parameterData) {
-    error(diagnostics, 'missing_script_parameters', 'Brepia C# Script ParameterData is missing.', path);
+    error(diagnostics, 'missing_script_parameters', 'Brepia Python 3 Script ParameterData is missing.', path);
     return;
   }
   if (
     ghxItemText(parameterData, 'InputCount') !== String(expected.inputs.length) ||
     ghxChunks(parameterData, 'InputParam').length !== expected.inputs.length
   ) {
-    error(diagnostics, 'script_input_count_changed', 'Brepia C# Script input count changed.', path);
+    error(diagnostics, 'script_input_count_changed', 'Brepia Python 3 Script input count changed.', path);
   }
   if (
     ghxItemText(parameterData, 'OutputCount') !== String(expected.outputs.length) ||
     ghxChunks(parameterData, 'OutputParam').length !== expected.outputs.length
   ) {
-    error(diagnostics, 'script_output_count_changed', 'Brepia C# Script output count changed.', path);
+    error(diagnostics, 'script_output_count_changed', 'Brepia Python 3 Script output count changed.', path);
   }
   expected.inputs.forEach((input, index) =>
     validateInput(parameterData, input, index, diagnostics),
@@ -369,19 +392,19 @@ function validateScript(
 
   const script = ghxChunk(container, 'Script');
   if (!script) {
-    error(diagnostics, 'missing_script_source', 'Brepia C# Script source chunk is missing.', path);
+    error(diagnostics, 'missing_script_source', 'Brepia Python 3 Script source chunk is missing.', path);
     return;
   }
   if (
-    ghxItemText(script, 'MarshGuids') !== 'false' ||
-    ghxItemText(script, 'MarshInputs') !== 'false' ||
-    ghxItemText(script, 'MarshOutputs') !== 'false' ||
+    ghxItemText(script, 'MarshGuids') !== 'true' ||
+    ghxItemText(script, 'MarshInputs') !== 'true' ||
+    ghxItemText(script, 'MarshOutputs') !== 'true' ||
     ghxItemText(script, 'Title') !== 'Brepia'
   ) {
     error(
       diagnostics,
       'script_runtime_settings_changed',
-      'Embedded Brepia C# Script settings changed.',
+      'Embedded Brepia Python 3 Script settings changed.',
       path,
     );
   }
@@ -389,15 +412,15 @@ function validateScript(
     error(
       diagnostics,
       'script_source_changed',
-      'Embedded Brepia C# source changed and is not safe for automatic round-trip.',
+      'Embedded Brepia Python source changed and is not safe for automatic round-trip.',
       path,
     );
   }
   const language = ghxChunk(script, 'LanguageSpec');
   if (
     !language ||
-    ghxItemText(language, 'Taxon') !== '*.*.csharp' ||
-    ghxItemText(language, 'Version') !== '*.*'
+    ghxItemText(language, 'Taxon') !== '*.*.python' ||
+    ghxItemText(language, 'Version') !== '3.*'
   ) {
     error(diagnostics, 'script_language_changed', 'Brepia script language/version changed.', path);
   }
@@ -427,10 +450,11 @@ export async function validateBrepGrasshopperExecutableGhx(
   }
   const definition = ghxChunk(root, 'Definition');
   const definitionObjects = definition ? ghxChunk(definition, 'DefinitionObjects') : undefined;
-  if (!definitionObjects) {
+  if (!definition || !definitionObjects) {
     error(diagnostics, 'missing_definition_objects', 'GHX DefinitionObjects chunk is missing.');
     return { accepted: false, compatibility: 'unsupported', diagnostics, parameters };
   }
+  validateHostEnvelope(root, definition, diagnostics);
 
   let packagePlan;
   let scriptPlan;
@@ -494,10 +518,10 @@ export async function validateBrepGrasshopperExecutableGhx(
       );
       return;
     }
-    if (guid === BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID) {
+    if (guid === BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID) {
       scriptCount += 1;
       if (scriptCount > 1) {
-        error(diagnostics, 'duplicate_script', 'GHX contains more than one Brepia C# Script.');
+        error(diagnostics, 'duplicate_script', 'GHX contains more than one Brepia Python 3 Script.');
       } else {
         validateScript(object, scriptPlan, diagnostics);
       }
@@ -521,7 +545,7 @@ export async function validateBrepGrasshopperExecutableGhx(
     }
   }
   if (scriptCount !== 1) {
-    error(diagnostics, 'missing_script', 'Expected exactly one Brepia C# Script component.');
+    error(diagnostics, 'missing_script', 'Expected exactly one Brepia Python 3 Script component.');
   }
 
   const accepted = diagnostics.length === 0;
