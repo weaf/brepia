@@ -1,3 +1,4 @@
+import { zodSchema } from 'ai';
 import { z } from 'zod';
 import {
   BREP_PROJECT_MAX_ABS_SCALAR,
@@ -228,6 +229,19 @@ export const brepAiBuildInputSchema = z
     project: brepAiProjectSchema,
   })
   .strict();
+
+/**
+ * AI SDK defaults to reference-free JSON Schema conversion so providers that
+ * require OpenAPI-like schemas can consume ordinary Zod inputs. M1 scalar
+ * expressions are genuinely recursive (`z.lazy`), so reference-free
+ * conversion would replace recursive operands with `{}` / `any` and weaken
+ * the model-facing tool contract. Keep the original Zod schema authoritative
+ * for validation, but opt this provider-facing wrapper into JSON references.
+ */
+export const brepAiBuildProviderInputSchema = zodSchema(
+  brepAiBuildInputSchema,
+  { useReferences: true },
+);
 
 export const brepAiBuildOutputSchema = z
   .object({
