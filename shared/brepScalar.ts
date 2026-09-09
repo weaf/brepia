@@ -368,19 +368,26 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
   return scalars;
 }
 
+export function validateBrepProjectScalarValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const scalar of projectScalars(project)) {
+    try {
+      resolveBrepScalar(scalar.value, parameterValues);
+    } catch (error) {
+      throw new BrepScalarEvaluationError(
+        `${scalar.field} evaluation failed: ${error instanceof Error ? error.message : 'unknown scalar error'}`,
+      );
+    }
+  }
+}
+
 export function validateBrepProjectScalarDefaults(project: BrepProject): void {
   const defaults = Object.fromEntries(
     project.parameters.map((parameter) => [parameter.id, parameter.default]),
   );
-  for (const scalar of projectScalars(project)) {
-    try {
-      resolveBrepScalar(scalar.value, defaults);
-    } catch (error) {
-      throw new BrepScalarEvaluationError(
-        `${scalar.field} default evaluation failed: ${error instanceof Error ? error.message : 'unknown scalar error'}`,
-      );
-    }
-  }
+  validateBrepProjectScalarValues(project, defaults);
 }
 
 export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
