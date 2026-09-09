@@ -28,9 +28,14 @@ import {
   replaceBrepProjectObjectDefinition,
   suggestBrepProjectObjectPointId,
 } from '@shared/brepProjectEditing';
+import {
+  formatBrepScalar,
+  isBrepParameterReference,
+} from '@shared/brepScalar';
 
 const NONE_NODE = '__none__';
 const LITERAL_VALUE = '__literal__';
+const EXPRESSION_VALUE = '__expression__';
 const fieldClass =
   'h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue-dark disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -123,8 +128,20 @@ function SemanticScalarField({
     () => parameters.filter((parameter) => parameter.unit === unit),
     [parameters, unit],
   );
+  const parameterReference =
+    typeof value === 'number' ? false : isBrepParameterReference(value);
   const selected =
-    typeof value === 'number' ? LITERAL_VALUE : `parameter:${value.parameter}`;
+    typeof value === 'number'
+      ? LITERAL_VALUE
+      : parameterReference
+        ? `parameter:${value.parameter}`
+        : EXPRESSION_VALUE;
+  const displayValue =
+    typeof value === 'number'
+      ? ''
+      : parameterReference
+        ? value.parameter
+        : formatBrepScalar(value);
 
   return (
     <div className="grid grid-cols-[28px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
@@ -134,11 +151,12 @@ function SemanticScalarField({
         value={selected}
         disabled={disabled}
         onChange={(event) => {
+          if (event.target.value === EXPRESSION_VALUE) return;
           if (event.target.value === LITERAL_VALUE) {
             if (typeof value === 'number') return;
-            const parameter = parameters.find(
-              (candidate) => candidate.id === value.parameter,
-            );
+            const parameter = parameterReference
+              ? parameters.find((candidate) => candidate.id === value.parameter)
+              : undefined;
             onChange(parameter?.default ?? 0);
             return;
           }
@@ -146,6 +164,9 @@ function SemanticScalarField({
         }}
       >
         <option value={LITERAL_VALUE}>Literal</option>
+        {selected === EXPRESSION_VALUE ? (
+          <option value={EXPRESSION_VALUE}>Expression · derived</option>
+        ) : null}
         {compatible.map((parameter) => (
           <option key={parameter.id} value={`parameter:${parameter.id}`}>
             {parameter.label} · {parameter.id}
@@ -161,8 +182,11 @@ function SemanticScalarField({
           onChange={(event) => onChange(Number(event.target.value))}
         />
       ) : (
-        <div className="flex h-9 items-center rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/50 px-2 font-mono text-[10px] text-adam-neutral-400">
-          {value.parameter}
+        <div
+          className="flex h-9 min-w-0 items-center truncate rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/50 px-2 font-mono text-[10px] text-adam-neutral-400"
+          title={displayValue}
+        >
+          {displayValue}
         </div>
       )}
     </div>
