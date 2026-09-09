@@ -670,7 +670,7 @@ export function BrepProjectViewerPanel({
         </div>
       ) : null}
       {error ? (
-        <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-destructive bg-adam-bg-secondary-dark/95 p-3 text-sm text-destructive">
+        <div className="absolute left-3 right-3 top-3 rounded-lg border border-destructive bg-adam-bg-secondary-dark/95 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
