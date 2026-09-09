@@ -33,6 +33,9 @@ Do not use Codex unless it is genuinely needed.
 Read first:
 
 - `docs/brep_ai_context_budget_plan.md`;
+- `docs/brep_c1_context_observability_closeout.md`;
+- `docs/brep_c1_runtime_evidence_2026-09-09.md`;
+- `docs/brep_c2_provider_schema_closeout.md`;
 - `docs/brep_modeling_capability_expansion_plan.md`;
 - `docs/brep_m0_parameter_integrity_closeout.md`;
 - `docs/brep_m1_scalar_expression_closeout.md`;
@@ -135,16 +138,24 @@ A simple `$ref`-based fix was considered but rejected as the final local-provide
 The current split is intentional:
 
 - canonical/tool-validation schema remains fully recursive with M1 depth `12` and node limit `64`;
-- provider/model-facing schema is finite and reference-free with `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3`;
+- provider/model-facing schema is finite and reference-free with `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 2` after C2;
+- ordinary M1 authoring such as `Width - 2 * WallThickness` is explicitly tested at the finite provider boundary;
 - the provider wrapper delegates every received value to the full `brepAiBuildInputSchema.safeParseAsync(...)` validator before acceptance;
-- `tests/brepAiToolJsonSchema.test.ts` verifies no recursive-reference warning, no `$ref`, explicit M1 operator vocabulary, actual tool wiring and preservation of deeper canonical validation.
+- a deliberately deeper expression is rejected by the finite provider authoring schema but remains accepted by the full canonical validator;
+- `tests/brepAiToolJsonSchema.test.ts` verifies no recursive-reference warning, no `$ref`, explicit M1 operator vocabulary, actual tool wiring and a serialized provider-schema regression ceiling below `180000` bytes.
 
 The provider depth is a constrained-generation/authoring bound only. It is not a persistence migration and does not reduce the canonical M1 contract.
 
-Closeout:
+M1 closeout:
 
 ```text
 docs/brep_m1_scalar_expression_closeout.md
+```
+
+C2 provider-schema closeout:
+
+```text
+docs/brep_c2_provider_schema_closeout.md
 ```
 
 ## Why M0/M1 were needed
@@ -167,9 +178,9 @@ The fillet node was not `resultNodeId`, so the authoritative result remained unf
 
 `rotateDeg` remained `[0,0,0]`; M1 intentionally does not broaden that boundary.
 
-## Next active engineering phase — AI context budget / projection
+## Active engineering phase — AI context budget / projection
 
-**Planned and documented; implementation has not started. This is the next active activity before M2.**
+**C1 is empirically complete. C2 is repository-complete and CI-accepted. Runtime re-measurement of C2 is the only next gate before C3.**
 
 Plan:
 
@@ -177,21 +188,124 @@ Plan:
 docs/brep_ai_context_budget_plan.md
 ```
 
-Trigger observed in the real local runtime:
+Original trigger in the real local runtime:
 
 ```text
 request (169503 tokens) exceeds the available context size (131072 tokens)
 ```
 
-The overflow followed the M1 provider-schema hardening and exposed several token multipliers in the current request construction:
+### C1 result
 
-- the finite reference-free provider schema repeats scalar-expression shapes across many BRep fields;
-- the complete active message branch is converted to model messages;
-- historical `build_brep_project` calls can carry superseded complete project snapshots;
-- current canonical BRep state is also injected separately in system context;
-- historical images can be rehydrated to base64.
+C1 added bounded observability and reproduced the overflow on:
 
-Architectural rule for this phase:
+```text
+local/qwen3.8-27b-mtp-128k
+```
+
+The reproduced fixture was a first-turn Native BRep creation with:
+
+- no current canonical BRep;
+- one ordinary user message;
+- no historical `build_brep_project` calls;
+- no historical `data-brep-project` snapshots;
+- no images.
+
+Yet the diagnostics reported:
+
+```text
+system/instruction estimate             2077 tokens
+provider-visible tool-schema estimate 105743 tokens
+ordinary history estimate                 29 tokens
+effective model messages                  42 tokens
+total deterministic estimate          107862 tokens
+llama.cpp request count                169503 tokens
+```
+
+The provider-visible schema therefore dominated before history existed. This falsified the idea that C3 history projection could be the primary fix for the original first-turn failure.
+
+C1 also showed that the deterministic byte/token estimator materially under-counts llama.cpp tokenization for this schema-heavy request. C5 must use provider/tokenizer-aware or deliberately conservative preflight accounting rather than treating `bytes / 4` as exact.
+
+Runtime evidence:
+
+```text
+docs/brep_c1_runtime_evidence_2026-09-09.md
+```
+
+### C2 result
+
+C2 reduced only the finite provider authoring depth:
+
+```text
+BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3 -> 2
+```
+
+while preserving canonical M1 depth `12` and node limit `64`.
+
+C2 also added:
+
+- an explicit provider-authoring regression for `Width - 2 * WallThickness`;
+- proof that deeper canonical input remains valid behind the finite provider boundary;
+- a serialized provider-schema ceiling below `180000` bytes;
+- preservation of the no-recursive-warning / no-`$ref` provider baseline.
+
+C2 accepted code/test checkpoint:
+
+```text
+93a4aac680b3fe529e19515d45df47d11e847452
+Test compact BRep provider schema depth
+```
+
+Exact evidence:
+
+- Quality Gate #770 — **PASS**;
+- tests — **PASS**;
+- typecheck — **PASS**;
+- lint — **PASS**;
+- production build — **PASS**;
+- diff check — **PASS**;
+- Grasshopper Build #342 — **PASS**.
+
+### Next action — C2 runtime re-measurement
+
+Update/restart the local Brepia runtime on the current branch and repeat the same first-turn Native BRep fixture with:
+
+```text
+local/qwen3.8-27b-mtp-128k
+```
+
+Capture:
+
+```text
+ai context diagnostics
+```
+
+and, if the request succeeds:
+
+```text
+ai context actual usage
+```
+
+Compare against the C1 baseline:
+
+```text
+provider schema bytes       422971
+schema estimated tokens     105743
+total estimated input       107862
+llama.cpp request tokens    169503
+context window              131072
+```
+
+Do **not** start C3 until this runtime re-measurement shows the residual problem after C2.
+
+### Remaining sequence after that gate
+
+1. **C3 — BRep model-context projection** only if/when multi-turn evidence shows superseded BRep tool payloads are material;
+2. re-measure representative long multi-turn BRep conversations;
+3. **C4 — image projection** where historical image payloads are material;
+4. **C5 — hard model-aware input budget** with tokenizer-aware/conservative preflight, reserved output and safety margin;
+5. **C6 — rolling intent summary only if still justified after structured-state deduplication**.
+
+Architectural rule remains:
 
 ```text
 Database / immutable revisions = durable history and source authority
@@ -199,18 +313,6 @@ Model context window           = bounded working memory for the current turn
 ```
 
 For BRep, the current canonical project is structured truth. Historical complete BRep snapshots must not be repeatedly sent merely because they remain correctly persisted.
-
-Implement in this order:
-
-1. **C1 — context observability**: measure/log bounded token/category estimates before dispatch;
-2. **C2 — compact provider schema**: assess `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH` `3 -> 2` and add schema/token-size regression without changing canonical M1 depth `12` / node limit `64`;
-3. **C3 — BRep model-context projection**: remove/compact superseded complete BRep tool/project snapshots while preserving current canonical source exactly once and recent relevant user intent;
-4. re-measure the original failure class;
-5. **C4 — image projection**: stop automatically rehydrating irrelevant historical images;
-6. **C5 — hard model-aware input budget** with reserved output and safety margin before provider dispatch;
-7. **C6 — rolling intent summary only if still justified after structured-state deduplication**.
-
-For a 131072-token model, target normal operation materially below the ceiling (roughly 60k-90k input as an initial target), not merely `130k` input. Exact budgets must be model/configuration driven.
 
 Do not solve this primarily by increasing llama.cpp context size. Larger context may be separately useful, but duplicate structured state should be removed first.
 
@@ -247,7 +349,7 @@ For the M1 host fixture, verify specifically that only independent published inp
 
 ## Next modeling milestone — M2, not started
 
-M2 remains the next modeling-capability milestone in `docs/brep_modeling_capability_expansion_plan.md`, but **no M2 implementation has started** and context-budget/projection work now comes first.
+M2 remains the next modeling-capability milestone in `docs/brep_modeling_capability_expansion_plan.md`, but **no M2 implementation has started** and context-budget/projection work comes first.
 
 Potential M2 scope remains bounded additive Boolean composition:
 
@@ -269,15 +371,14 @@ Do not combine M2 with pattern/mirror, profile/extrude, shell/wall abstractions,
 
 ## Suggested next chat first action
 
-Begin with **AI context budget / projection only**.
+Begin with **C2 runtime re-measurement only**.
 
 First reconcile current branch implementation against:
 
 - `AGENTS.md`;
 - `docs/brep_ai_context_budget_plan.md`;
-- this handover;
-- `docs/brep_m1_scalar_expression_closeout.md`.
+- `docs/brep_c1_runtime_evidence_2026-09-09.md`;
+- `docs/brep_c2_provider_schema_closeout.md`;
+- this handover.
 
-Then implement **C1 context observability before any compaction**, using the observed `169503 > 131072` local request as the motivating failure class. Measure current system/tool/current-BRep/history/tool-payload/image contributions so C2/C3 decisions are evidence-driven.
-
-Do not start M2, do not claim installed Rhino acceptance from repository tests, and do not merge PR #36 without explicit stacked-branch reconciliation.
+Do not start C3 until the same first-turn fixture has been re-run on the depth-2 provider schema. Do not start M2, do not claim installed Rhino acceptance from repository tests, and do not merge PR #36 without explicit stacked-branch reconciliation.
