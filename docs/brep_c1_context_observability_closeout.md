@@ -1,6 +1,6 @@
 # BRep AI C1 context observability closeout
 
-Status: **repository-complete and CI-accepted; real failing-conversation measurement pending**
+Status: **repository-complete, CI-accepted and empirically closed on the original failure class**
 
 Date: 2026-09-09
 
@@ -12,13 +12,13 @@ Branch: `feature/brep-grasshopper-gh-packaging`
 
 C1 adds request-level observability for the BRep AI context budget without changing model-history projection, persisted conversation history, immutable revisions, canonical BRep authority, or M0/M1 semantics.
 
-The triggering runtime failure remains:
+The triggering runtime failure was:
 
 ```text
 request (169503 tokens) exceeds the available context size (131072 tokens)
 ```
 
-C1 is deliberately diagnostic. C2/C3 must not be selected from intuition alone; the real failing conversation should first be re-run with these diagnostics enabled.
+C1 was deliberately diagnostic. The original failure class has now been re-run with the instrumentation enabled, and the result decisively ranked the provider-visible tool schema as the dominant first-turn contributor. The full measurement is recorded in `docs/brep_c1_runtime_evidence_2026-09-09.md`.
 
 ## Reconciliation finding
 
@@ -37,7 +37,7 @@ The last distinction is important: a historical `data-brep-project` snapshot may
 
 ### `src/server/aiContextDiagnostics.ts`
 
-A dedicated diagnostics module now computes bounded size/count telemetry for:
+A dedicated diagnostics module computes bounded size/count telemetry for:
 
 - resolved system/instruction prompt;
 - system bytes before current BRep injection and bytes added by BRep context;
@@ -93,16 +93,16 @@ safetyMargin = clamp(contextWindow / 16, 8192, 12288)
 usableInputBudget = contextWindow - reservedOutput - safetyMargin
 ```
 
-For the observed `131072` context class with `8192` reserved output this yields:
+The observed runtime route currently reserves `64000` output tokens. For the configured `131072` context model that produces:
 
 ```text
 context window       131072
-reserved output        8192
+reserved output       64000
 safety margin           8192
-usable input budget   114688
+usable input budget    58880
 ```
 
-This is observability only. C5 remains responsible for hard pre-dispatch enforcement.
+This is observability only. C5 remains responsible for hard pre-dispatch enforcement and for deciding how model output limits and route reservations should interact.
 
 ## Tests
 
@@ -146,37 +146,40 @@ CI on exact head `5570d653...`:
 
 PR #36 remains open, draft, and stacked on `feature/brep-grasshopper-smart-component`. C1 does not alter that merge boundary.
 
-## Required runtime evidence before C2
+## Empirical failure-class result
 
-Re-run the representative long Native BRep conversation on the local model class that previously produced the 169503/131072 overflow and capture the bounded log entry:
-
-```text
-ai context diagnostics
-```
-
-If a call succeeds, also capture:
+The first-turn Native BRep fixture was re-run on:
 
 ```text
-ai context actual usage
+local/qwen3.8-27b-mtp-128k
 ```
 
-Only the numeric/count object is needed; do not copy raw prompts or project data.
+The bounded C1 diagnostics reported:
 
-The measurement should answer, at minimum:
+```text
+system/instructions                    8308 bytes / ~2077 tokens
+provider-visible tool schemas        422971 bytes / ~105743 tokens
+current canonical BRep               absent
+ordinary history                        113 bytes / ~29 tokens
+historical build_brep_project calls       0
+historical data-brep-project snapshots    0
+images                                    0
+effective model messages                168 bytes / ~42 tokens
+total deterministic estimate         107862 tokens
+llama.cpp request count               169503 tokens
+```
 
-- how much is system/BRep system context;
-- how large the finite provider tool schema is;
-- how much comes from effective model history;
-- how many historical BRep tool payloads exist and their aggregate size;
-- whether historical image/base64 content is material;
-- configured model context/output limits and derived budget;
-- estimated total versus provider-reported successful usage where available.
+This proves that the original failure class exists before historical BRep state or image history can contribute materially. C3/C4 therefore cannot be the primary fix for that first-turn overflow.
+
+The provider-visible schema is the dominant measured category. This evidence authorized C2 provider-depth reduction and schema-size regression.
+
+The deterministic estimator also materially under-counted llama.cpp's tokenizer for this schema-heavy prompt. C5 must therefore not treat the simple `bytes / 4` estimate as a tokenizer-exact hard guard.
+
+Current llama.cpp structured overflow evidence identifies the error's `request (N tokens)` value with `n_prompt_tokens`; it is not the sum of prompt tokens and Brepia's `maxOutputTokens` reservation.
 
 ## Phase boundary
 
-C1 is repository-complete and CI-accepted, but the diagnostic phase is not considered empirically closed until the real failure-class conversation has been measured.
-
-Do not begin C2 provider-depth reduction or C3 history projection based only on the existence of likely duplication. Use the C1 evidence to rank the contributors first.
+C1 is now empirically closed. C2 has been implemented separately and is repository-complete/CI-accepted; its local runtime re-measurement is the next gate before C3.
 
 All previous locks remain unchanged:
 
