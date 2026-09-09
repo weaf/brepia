@@ -238,12 +238,12 @@ export type BrepAiBuildInput = Omit<
 /**
  * Keep the model-facing schema reference-free for OpenAI-compatible/local
  * providers whose JSON-schema-to-grammar paths do not reliably support nested
- * `$ref`. Three expression levels cover the ordinary derived relationships M1
+ * `$ref`. Two expression levels cover the ordinary derived relationships M1
  * is intended to author (`width - 2 * wallThickness`, half offsets, scaled
  * spacing, etc.). The canonical validator below remains authoritative and
  * still accepts the full M1 depth/node limits for persisted/imported projects.
  */
-export const BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3;
+export const BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 2;
 
 function createBrepProviderScalarSchema(depth: number): z.ZodTypeAny {
   const leafSchema = z.union([
@@ -362,7 +362,7 @@ const brepAiProviderProjectSchema = z
     resultNodeId: brepIdSchema,
   })
   .strict();
-const brepAiProviderBuildInputZodSchema = z
+export const brepAiProviderBuildInputZodSchema = z
   .object({
     title: z.string().min(1).max(BREP_PROJECT_MAX_NAME_CHARS),
     version: z.string().min(1).max(32).default('v1'),
