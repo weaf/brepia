@@ -47,9 +47,12 @@ Particularly relevant reviewed examples include:
 - `grasshopper/cs/SampleGhFileAnalysis/Program.cs` — reads GH/GHX through `GH_Archive`, inspects `Definition`, `DocumentHeader`, `DefinitionProperties`, `DefinitionObjects` and `GHALibraries`, and reports archive messages;
 - `rhinocommon/snippets/py/boolean-difference.py` — uses the document absolute tolerance and `Rhino.Geometry.Brep.CreateBooleanDifference(...)`;
 - `rhinocommon/snippets/py/transform-breps.py` — applies a Brep translation with `Rhino.Geometry.Transform.Translation(...)`;
+- `rhinocommon/cs/SampleCsCommands/SampleCsCurveDirection.cs` — maps a normalized curve position through `curve.Domain.ParameterAt(d)` before evaluating `curve.TangentAt(t)`, the same RhinoCommon parameterization pattern used by Brepia's semantic fillet edge selector;
 - corresponding C# RhinoCommon samples when overload behavior or collection semantics need clarification.
 
 For the current first multi-node host candidate (`box -> cylinder -> translate -> subtract`), the branch-8 review used the boolean-difference and transform-breps Python samples above. Those references confirm the RhinoCommon boolean and translation API patterns; primitive centering, canonical placement, graph ordering and topology/result semantics remain Brepia responsibilities and must be checked against the native build123d evaluator and the installed Rhino 8 host.
+
+For canonical fillets, no direct branch-8 developer-sample implementing `Brep.CreateFilletEdges(...)` was found in the reviewed sample set. The version-specific official RhinoCommon 8 API is therefore the direct SDK authority for that call: `https://developer.rhino3d.com/api/rhinocommon/rhino.geometry.brep/createfilletedges?version=8.x`. Its seven-argument overload accepts edge indices, start/end radius collections, `BlendType`, `RailType` and tolerance and is available since Rhino 6, so it is within the Rhino 8 compatibility floor. Brepia uses `BlendType.Fillet`, `RailType.RollingBall` and the active document absolute tolerance.
 
 ## Grasshopper GH/GHX persistence rules
 
@@ -81,6 +84,8 @@ Before adding or changing a canonical BRep DAG node translation to RhinoCommon:
 For boolean operations, follow RhinoCommon's tolerance-aware pattern. The McNeel Rhino 8 Python boolean-difference sample uses the active document's `ModelAbsoluteTolerance` with `Brep.CreateBooleanDifference(...)`.
 
 For translation, the reviewed Rhino 8 `transform-breps.py` sample uses `Rhino.Geometry.Transform.Translation(...)`. Brepia applies that transformation to duplicated local Breps so the canonical source DAG remains immutable while derived nodes receive their canonical translation.
+
+For fillets, Brepia preserves the native build123d selector contract instead of exposing raw Rhino edge numbers as canonical state. `all` selects every edge. `parallelToAxis` evaluates each Rhino Brep edge tangent at the normalized midpoint (`Domain.ParameterAt(0.5)` then `TangentAt(...)`), unitizes it and applies the native selector threshold `abs(abs(dot(axis)) - 1.0) <= 1e-3`. The selected topology indices and one constant radius per edge are passed as explicit .NET arrays to `Brep.CreateFilletEdges(...)`. Empty selection, non-positive radius or a result other than exactly one Brep fails closed. This is repository translation support only until the exact fillet graph is accepted in the installed Rhino 8 host.
 
 Primitive origin/alignment semantics must be checked against Brepia's authoritative native BRep evaluator rather than assumed from Rhino defaults.
 
