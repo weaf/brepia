@@ -5,6 +5,10 @@ import {
   type BrepScalar,
   type BrepVector3,
 } from './brepProject.ts';
+import {
+  brepNodeScalarParameterReferences,
+  brepScalarParameterReferences,
+} from './brepScalar.ts';
 
 export type BrepParameterEffectiveness =
   | 'effective'
@@ -47,11 +51,13 @@ function nodeDependencies(node: BrepNode): string[] {
   }
 }
 
-function appendScalarParameter(
+function appendScalarParameters(
   parameters: Set<string>,
   scalar: BrepScalar,
 ): void {
-  if (typeof scalar !== 'number') parameters.add(scalar.parameter);
+  for (const parameter of brepScalarParameterReferences(scalar)) {
+    parameters.add(parameter);
+  }
 }
 
 function appendVectorParameters(
@@ -59,32 +65,7 @@ function appendVectorParameters(
   vector: BrepVector3 | undefined,
 ): void {
   if (!vector) return;
-  for (const scalar of vector) appendScalarParameter(parameters, scalar);
-}
-
-function nodeParameterReferences(node: BrepNode): string[] {
-  const parameters = new Set<string>();
-  switch (node.type) {
-    case 'box':
-      appendScalarParameter(parameters, node.width);
-      appendScalarParameter(parameters, node.depth);
-      appendScalarParameter(parameters, node.height);
-      break;
-    case 'cylinder':
-      appendScalarParameter(parameters, node.radius);
-      appendScalarParameter(parameters, node.height);
-      break;
-    case 'transform':
-      appendVectorParameters(parameters, node.translate);
-      appendVectorParameters(parameters, node.rotateDeg);
-      break;
-    case 'fillet':
-      appendScalarParameter(parameters, node.radius);
-      break;
-    case 'subtract':
-      break;
-  }
-  return sorted(parameters);
+  for (const scalar of vector) appendScalarParameters(parameters, scalar);
 }
 
 function semanticParameterReferences(project: BrepProject): Set<string> {
@@ -126,7 +107,7 @@ function parameterReferencesForNodes(
   const parameters = new Set<string>();
   for (const node of project.nodes) {
     if (!nodeIds.has(node.id)) continue;
-    for (const parameterId of nodeParameterReferences(node)) {
+    for (const parameterId of brepNodeScalarParameterReferences(node)) {
       parameters.add(parameterId);
     }
   }
@@ -139,14 +120,14 @@ function parameterReferencesForNodes(
  * analysis boundary: legacy/manual/imported v1 projects remain valid canonical
  * snapshots even when this analysis reports graph-integrity diagnostics.
  *
- * A parameter is effective when it directly influences a feature in the
- * dependency closure of resultNodeId or an explicit project-object geometry
- * role. References from placement and semantic points are classified as
- * semantic-only when the parameter is not referenced by any feature node.
- * Parameters referenced by orphan feature nodes remain orphan-only even when
- * they are also referenced by semantic data, because they still expose an
- * unintended disconnected geometry dependency. Parameters with no references
- * are unused.
+ * A parameter is effective when it influences a feature in the dependency
+ * closure of resultNodeId or an explicit project-object geometry role,
+ * including references nested inside M1 scalar expressions. References from
+ * placement and semantic points are classified as semantic-only when the
+ * parameter is not referenced by any feature node. Parameters referenced by
+ * orphan feature nodes remain orphan-only even when they are also referenced
+ * by semantic data, because they still expose a disconnected geometry
+ * dependency. Parameters with no references are unused.
  */
 export function analyzeBrepProjectIntegrity(
   projectInput: unknown,
