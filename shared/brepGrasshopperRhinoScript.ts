@@ -257,6 +257,12 @@ function isLiteralZero(value: BrepScalar): boolean {
   return typeof value === 'number' && value === 0;
 }
 
+function filletAxisExpression(axis: 'x' | 'y' | 'z'): string {
+  if (axis === 'x') return 'rg.Vector3d(1, 0, 0)';
+  if (axis === 'y') return 'rg.Vector3d(0, 1, 0)';
+  return 'rg.Vector3d(0, 0, 1)';
+}
+
 function assertSupportedRhinoContract(contract: BrepGrasshopperContract): void {
   if (contract.source.nodes.length === 0) {
     throw new BrepGrasshopperRhinoScriptError(
@@ -266,12 +272,6 @@ function assertSupportedRhinoContract(contract: BrepGrasshopperContract): void {
   }
 
   for (const node of contract.source.nodes) {
-    if (node.type === 'fillet') {
-      throw new BrepGrasshopperRhinoScriptError(
-        'unsupported_model',
-        'Rhino GHX host generation does not yet support canonical fillet nodes.',
-      );
-    }
     if (
       node.type === 'transform' &&
       node.rotateDeg != null &&
@@ -398,6 +398,65 @@ function buildGraphSource(
         );
         lines.push(`${variable} = ${parts}[0]`);
       });
+    } else if (node.type === 'fillet') {
+      const input = emitNode(node.input);
+      const radius = scalarExpression(node.radius, variables);
+      const edge = `${variable}Edge`;
+      const edgeParameter = `${variable}EdgeParameter`;
+      const edgeDirection = `${variable}EdgeDirection`;
+      const edgeDot = `${variable}EdgeDot`;
+
+      lines.push(`${variable}Input = ${input}.DuplicateBrep()`);
+      lines.push(`${variable}Radius = float(${radius})`);
+      lines.push(`if ${variable}Radius <= 0.0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia fillet node ${node.id} radius must be greater than zero.`)})`,
+      );
+      lines.push(`${variable}EdgeIndices = []`);
+
+      if (node.selector.kind === 'all') {
+        lines.push(`for ${edge} in ${variable}Input.Edges:`);
+        lines.push(`    ${variable}EdgeIndices.append(${edge}.EdgeIndex)`);
+      } else {
+        lines.push(
+          `${variable}Axis = ${filletAxisExpression(node.selector.axis)}`,
+        );
+        lines.push(`for ${edge} in ${variable}Input.Edges:`);
+        lines.push(`    ${edgeParameter} = ${edge}.Domain.ParameterAt(0.5)`);
+        lines.push(`    ${edgeDirection} = ${edge}.TangentAt(${edgeParameter})`);
+        lines.push(`    if not ${edgeDirection}.Unitize():`);
+        lines.push('        continue');
+        lines.push(
+          `    ${edgeDot} = (${edgeDirection}.X * ${variable}Axis.X + ${edgeDirection}.Y * ${variable}Axis.Y + ${edgeDirection}.Z * ${variable}Axis.Z)`,
+        );
+        lines.push(`    if abs(abs(${edgeDot}) - 1.0) <= 1e-3:`);
+        lines.push(`        ${variable}EdgeIndices.append(${edge}.EdgeIndex)`);
+      }
+
+      lines.push(`if len(${variable}EdgeIndices) == 0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia fillet selector for node ${node.id} matched no edges.`)})`,
+      );
+      lines.push(
+        `${variable}EdgeArray = Array[Int32](${variable}EdgeIndices)`,
+      );
+      lines.push(
+        `${variable}Radii = Array[Double]([${variable}Radius] * len(${variable}EdgeIndices))`,
+      );
+      lines.push(`${variable}Parts = rg.Brep.CreateFilletEdges(`);
+      lines.push(`    ${variable}Input,`);
+      lines.push(`    ${variable}EdgeArray,`);
+      lines.push(`    ${variable}Radii,`);
+      lines.push(`    ${variable}Radii,`);
+      lines.push('    rg.BlendType.Fillet,');
+      lines.push('    rg.RailType.RollingBall,');
+      lines.push('    brepiaTolerance,');
+      lines.push(')');
+      lines.push(`if ${variable}Parts is None or len(${variable}Parts) != 1:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino fillet for Brepia node ${node.id} did not produce exactly one Brep.`)})`,
+      );
+      lines.push(`${variable} = ${variable}Parts[0]`);
     } else {
       throw new BrepGrasshopperRhinoScriptError(
         'unsupported_model',
@@ -471,7 +530,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino\nimport Rhino.Geometry as rg\nfrom System import Array, Double, Int32\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
