@@ -9,6 +9,10 @@ import {
   type BrepScalar,
   type BrepVector3,
 } from './brepProject';
+import {
+  BrepScalarEvaluationError,
+  resolveBrepScalar,
+} from './brepScalar.ts';
 
 export const BREP_EVALUATION_MAX_BODY_COUNT = 64;
 export const BREP_EVALUATION_MAX_VIEWER_VERTICES = 500_000;
@@ -174,7 +178,14 @@ function resolveScalar(
   value: BrepScalar,
   parameterValues: Readonly<BrepParameterValues>,
 ): number {
-  return typeof value === 'number' ? value : parameterValues[value.parameter];
+  try {
+    return resolveBrepScalar(value, parameterValues);
+  } catch (error) {
+    if (error instanceof BrepScalarEvaluationError) {
+      throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
+    }
+    throw error;
+  }
 }
 
 function resolveVector(
@@ -312,10 +323,7 @@ export function normalizeBrepEvaluationRequest(
 
   const parameterValues: BrepParameterValues = {};
   for (const parameter of project.parameters) {
-    const rawValue = Object.prototype.hasOwnProperty.call(
-      overrides,
-      parameter.id,
-    )
+    const rawValue = Object.prototype.hasOwnProperty.call(overrides, parameter.id)
       ? overrides[parameter.id]
       : parameter.default;
     const normalized = normalizeOverride(rawValue, parameter.id);
