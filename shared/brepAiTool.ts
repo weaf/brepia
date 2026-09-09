@@ -29,10 +29,24 @@ const brepParameterReferenceSchema = z
   .object({ parameter: brepIdSchema })
   .strict();
 
-const brepScalarSchema = z.union([
-  brepScalarNumberSchema,
-  brepParameterReferenceSchema,
-]);
+const brepScalarSchema: z.ZodTypeAny = z.lazy(() =>
+  z.union([
+    brepScalarNumberSchema,
+    brepParameterReferenceSchema,
+    z
+      .object({
+        op: z.enum(['add', 'sub', 'mul', 'div']),
+        args: z.tuple([brepScalarSchema, brepScalarSchema]),
+      })
+      .strict(),
+    z
+      .object({
+        op: z.literal('neg'),
+        args: z.tuple([brepScalarSchema]),
+      })
+      .strict(),
+  ]),
+);
 
 const brepVector3Schema = z.tuple([
   brepScalarSchema,
@@ -173,9 +187,9 @@ const brepNodeSchema = z.discriminatedUnion('type', [
 ]);
 
 /**
- * Provider-visible JSON shape for a complete canonical BRep project.
- * The explicit Zod structure gives tool-capable providers a bounded schema,
- * while the canonical normalizer remains the final semantic authority.
+ * Provider-visible JSON shape for a complete canonical BRep project. Scalar
+ * expressions are recursive but remain bounded by the canonical normalizer;
+ * this Zod surface describes only the allowed operation vocabulary and arity.
  */
 export const brepAiProjectSchema = z
   .object({
