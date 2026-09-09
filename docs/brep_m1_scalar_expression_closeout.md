@@ -1,6 +1,6 @@
 # BRep M1 scalar expression closeout
 
-Status: **repository-complete and CI-accepted for M1**. Installed Rhino 8 / Grasshopper host acceptance for the new derived-expression behavior remains a separate evidence boundary.
+Status: **repository-complete and CI-accepted for M1**. The post-closeout AI provider-schema regression is also corrected and CI-accepted. Installed Rhino 8 / Grasshopper host acceptance for the new derived-expression behavior remains a separate evidence boundary.
 
 Date: 2026-09-09
 
@@ -28,6 +28,28 @@ CI on that exact code checkpoint:
 - Grasshopper Build #323 — **PASS**;
 - Grasshopper plugin test/build on Ubuntu — **PASS**;
 - Grasshopper plugin build on Windows — **PASS**.
+
+Post-closeout provider-schema hardening checkpoint:
+
+```text
+b696e14d5c0ce2790adb37ce4a4ddc28575473a1
+Remove stale direct BRep tool schema import
+```
+
+CI on that exact hardening checkpoint:
+
+- Quality Gate #759 — **PASS**;
+- 127 test files — **PASS**;
+- 811 tests — **PASS**;
+- dependency audit — **PASS**;
+- TypeScript typecheck — **PASS**;
+- ESLint with zero warnings — **PASS**;
+- production build — **PASS**;
+- `git diff --check` — **PASS**;
+- Grasshopper Build #331 — **PASS**;
+- Grasshopper plugin build — **PASS**;
+- Ubuntu package build — **PASS**;
+- Windows package build — **PASS**.
 
 ## Scope accepted
 
@@ -155,6 +177,59 @@ is represented canonically as a derived AST rather than a synthetic `innerWidth`
 
 The AI boundary has explicit regression coverage for accepting the bounded AST and rejecting source-like expression payloads.
 
+## Post-closeout AI provider-schema correction
+
+A real local runtime invocation after the initial M1 closeout exposed a provider-schema conversion defect. The AI SDK emitted repeated diagnostics of the form:
+
+```text
+Recursive reference detected at .../properties/args/items/...! Defaulting to any
+```
+
+### Root cause
+
+The canonical M1 Zod schema correctly uses `z.lazy()` because `BrepScalar` is recursive. The AI SDK's default Zod-to-JSON-Schema path is reference-free. When it encounters that recursive `z.lazy()` graph it cannot inline the recursion indefinitely, so recursive operands are degraded to an unconstrained schema (`{}` / `any`).
+
+Runtime/canonical validation remained strict, but the **model-facing tool schema was weaker than intended**. That was not an acceptable M1 boundary because constrained tool generation could no longer rely on the declared scalar grammar at recursive operands.
+
+### Why `$ref` was not used as the final fix
+
+AI SDK supports preserving recursive schemas with JSON Schema references. That would remove the warning for providers with robust `$ref` support. Brepia's supported local OpenAI-compatible path also includes llama.cpp, whose JSON-schema-to-grammar path has documented limitations around nested references.
+
+The final fix therefore deliberately avoids provider-facing nested `$ref` rather than merely silencing the AI SDK diagnostic.
+
+### Final provider boundary
+
+The tool now has two deliberately separate schema layers:
+
+1. **provider/model-facing authoring schema** — finite, reference-free and explicitly expanded to `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3`;
+2. **authoritative tool validation** — the original full recursive M1 Zod/canonical path, retaining canonical depth `12`, expression-node limit `64`, unit validation, reference validation and all other M1 invariants.
+
+The provider-facing depth is an **authoring/constrained-generation bound**, not a persistence migration and not a reduction of the canonical M1 contract. It is sufficient for the ordinary relationships M1 was introduced to express, including nested relations such as:
+
+```text
+width - 2 * wallThickness
+width / 2
+baseOffset + spacing * indexScale
+```
+
+A deeper canonical AST that is loaded/imported or otherwise reaches the actual tool validator is still checked by the full recursive canonical schema.
+
+`build_brep_project` is wired to the provider-safe wrapper, whose custom validation delegates every received value to `brepAiBuildInputSchema.safeParseAsync(...)` before the tool input is accepted.
+
+### Regression coverage
+
+`tests/brepAiToolJsonSchema.test.ts` now verifies the actual provider boundary:
+
+- materializing `build_brep_project` JSON Schema emits no `Recursive reference detected` warning;
+- the serialized provider schema contains no `$ref`;
+- `add`, `sub`, `mul`, `div` and `neg` remain explicitly represented;
+- the actual `chatTools.build_brep_project` uses the provider-safe schema;
+- the wrapper's validator still accepts a canonical expression deeper than the provider authoring depth, proving that the full recursive validator remains behind the bounded provider schema.
+
+This correction changes no native geometry semantics, no GHX semantics, no persistence schema and no M0/M1 authority rule.
+
+Local runtime confirmation is still useful after updating/restarting the Brepia server: the previously observed recursive-reference warnings should no longer be emitted when `build_brep_project` is registered or invoked.
+
 ## Key regression coverage
 
 Relevant focused coverage includes:
@@ -163,6 +238,7 @@ Relevant focused coverage includes:
 - `tests/brepScalarExpressionNodeLimit.test.ts` — independent 64-expression-node bound;
 - `tests/brepProvider.test.ts` — runtime override division-by-zero and overflow rejection before provider execution;
 - `tests/brepAiTool.test.ts` — bounded AI AST acceptance and source-like expression rejection;
+- `tests/brepAiToolJsonSchema.test.ts` — provider JSON Schema stays reference-free/strict and delegates actual validation to the full recursive M1 schema;
 - `tests/brepScalarExpressionUi.test.ts` — expression-preserving editor contract;
 - `tests/brepGrasshopperComplexGraph.test.ts` — Rhino scalar-expression translation in a non-trivial graph;
 - `tests/brepGrasshopperRhinoScript.test.ts` and `tests/brepGrasshopperExecutableGhx.test.ts` — bounded generated scalar helper expectations;
@@ -185,9 +261,9 @@ M1 does not change these accepted boundaries:
 - non-zero rotation remains unsupported;
 - OpenSCAD behavior remains unchanged.
 
-## Branch / PR reconciliation at the code checkpoint
+## Branch / PR reconciliation at the original M1 code checkpoint
 
-The M1 code checkpoint was reconciled against the intended stacked base:
+The original M1 code checkpoint was reconciled against the intended stacked base:
 
 ```text
 base: 87c134c0248d362192ccdc654aa3f85757144489
@@ -196,7 +272,9 @@ behind_by: 0
 merge_base: 87c134c0248d362192ccdc654aa3f85757144489
 ```
 
-PR #36 remains the draft stacked PR for `feature/brep-grasshopper-gh-packaging` over `feature/brep-grasshopper-smart-component`. M1 closeout does not authorize merging it across that boundary.
+The post-closeout provider hardening remains on the same stacked branch and does not alter the merge boundary.
+
+PR #36 remains the draft stacked PR for `feature/brep-grasshopper-gh-packaging` over `feature/brep-grasshopper-smart-component`. M1 closeout and provider hardening do not authorize merging it across that boundary.
 
 ## Installed Rhino 8 host acceptance still open
 
