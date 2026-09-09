@@ -90,7 +90,7 @@ describe('M1 bounded BRep scalar expressions', () => {
     expect(body(normalized).depth).toBe(600);
   });
 
-  it('normalizes and resolves derived add/sub/div/neg relationships deterministically', () => {
+  it('normalizes and resolves derived sub/div/neg relationships deterministically', () => {
     const source = project();
     const expression: BrepScalar = {
       op: 'sub',
@@ -105,8 +105,8 @@ describe('M1 bounded BRep scalar expressions', () => {
     const normalizedExpression = body(normalized).width;
 
     expect(normalizedExpression).toEqual(expression);
-    expect(resolveBrepScalar(normalizedExpression, { width: 1200 })).toBe(625);
-    expect(resolveBrepScalar(normalizedExpression, { width: 1600 })).toBe(825);
+    expect(resolveBrepScalar(normalizedExpression, { width: 1200 })).toBe(575);
+    expect(resolveBrepScalar(normalizedExpression, { width: 1600 })).toBe(775);
     expect(formatBrepScalar(normalizedExpression)).toBe(
       '((width / 2) - -(-25))',
     );
@@ -139,23 +139,23 @@ describe('M1 bounded BRep scalar expressions', () => {
   });
 
   it('rejects malformed expression arity and unsupported operators', () => {
-    const wrongArity = project() as unknown as BrepProject & {
+    const wrongArity = project() as unknown as Omit<BrepProject, 'nodes'> & {
       nodes: Array<Record<string, unknown>>;
     };
     wrongArity.nodes[0]!.width = {
       op: 'add',
       args: [{ parameter: 'width' }],
     };
-    expectProjectError(wrongArity, 'invalid_node');
+    expectProjectError(wrongArity as unknown as BrepProject, 'invalid_node');
 
-    const unsupported = project() as unknown as BrepProject & {
+    const unsupported = project() as unknown as Omit<BrepProject, 'nodes'> & {
       nodes: Array<Record<string, unknown>>;
     };
     unsupported.nodes[0]!.width = {
       op: 'pow',
       args: [{ parameter: 'width' }, 2],
     };
-    expectProjectError(unsupported, 'invalid_node');
+    expectProjectError(unsupported as unknown as BrepProject, 'invalid_node');
   });
 
   it('rejects expression trees deeper than the canonical bound', () => {
