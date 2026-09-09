@@ -10,8 +10,8 @@ import type {
   BrepVector3,
 } from './brepProject.ts';
 
-export const BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID =
-  'b6ba1144-02d6-4a2d-b53c-ec62e290eeb7';
+export const BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID =
+  '719467e6-7cf5-4848-99b0-c5dd57e5442c';
 export const BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID =
   '066d0a87-236f-4eae-a0f4-9e42f5327962';
 export const BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID =
@@ -50,7 +50,7 @@ export type BrepGrasshopperRhinoScriptOutput = {
 };
 
 export type BrepGrasshopperRhinoScriptPlan = {
-  kind: 'brepia-rhino-csharp-script-plan';
+  kind: 'brepia-rhino-python3-script-plan';
   schemaVersion: 1;
   projectId: string;
   sourceRevisionId: string;
@@ -123,15 +123,14 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function csharpNumber(value: number): string {
+function pythonNumber(value: number): string {
   if (!Number.isFinite(value)) {
     throw new BrepGrasshopperRhinoScriptError(
       'invalid_model',
       'Rhino script numeric literals must be finite.',
     );
   }
-  const normalized = Object.is(value, -0) ? 0 : value;
-  return `${String(normalized)}d`;
+  return String(Object.is(value, -0) ? 0 : value);
 }
 
 function parameterVariables(contract: BrepGrasshopperContract): Map<string, string> {
@@ -147,7 +146,7 @@ function scalarExpression(
   value: BrepScalar,
   variables: ReadonlyMap<string, string>,
 ): string {
-  if (typeof value === 'number') return csharpNumber(value);
+  if (typeof value === 'number') return pythonNumber(value);
   const variable = variables.get(value.parameter);
   if (!variable) {
     throw new BrepGrasshopperRhinoScriptError(
@@ -164,17 +163,13 @@ function vectorExpression(
   kind: 'point' | 'vector',
 ): string {
   const type = kind === 'point' ? 'Point3d' : 'Vector3d';
-  return `new ${type}(${value
+  return `rg.${type}(${value
     .map((entry) => scalarExpression(entry, variables))
     .join(', ')})`;
 }
 
-function csharpString(value: string): string {
-  return `"${value
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n')}"`;
+function pythonString(value: string): string {
+  return JSON.stringify(value);
 }
 
 function stableJson(value: unknown): string {
@@ -203,7 +198,7 @@ function pointConstruction(
   variables: ReadonlyMap<string, string>,
 ): string {
   const position = vectorExpression(point.position, variables, 'point');
-  return `TransformPoint(${position}, brepiaTransform)`;
+  return `brepia_transform_point(${position}, brepiaTransform)`;
 }
 
 function pointsForKind(
@@ -214,17 +209,17 @@ function pointsForKind(
   const points = (contract.source.projectObject?.points ?? []).filter(
     (point) => point.kind === kind,
   );
-  if (points.length === 0) return 'new List<Point3d>()';
-  return `new List<Point3d> { ${points
+  if (points.length === 0) return '[]';
+  return `[${points
     .map((point) => pointConstruction(point, variables))
-    .join(', ')} }`;
+    .join(', ')}]`;
 }
 
 function roleExpression(
   nodeId: string | undefined,
   resultNodeId: string,
 ): string {
-  if (!nodeId) return 'null';
+  if (!nodeId) return 'None';
   if (nodeId !== resultNodeId) {
     throw new BrepGrasshopperRhinoScriptError(
       'unsupported_model',
@@ -287,12 +282,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  const numericArguments = contract.source.parameters
-    .map((parameter) => `double ${variables.get(parameter.id)}`)
-    .join(', ');
-  const argumentsPrefix = numericArguments.length > 0 ? `${numericArguments}, ` : '';
-
-  return `// Brepia Rhino C# script v1\n// projectId: ${contract.model.projectId}\n// sourceRevisionId: ${contract.model.sourceRevisionId}\nusing System;\nusing System.Collections.Generic;\nusing Rhino.Geometry;\nusing Grasshopper.Kernel;\n\npublic class Script_Instance : GH_ScriptInstance\n{\n  private void RunScript(${argumentsPrefix}object brepiaPlacement, ref object result, ref object footprint, ref object clearanceEnvelope, ref object maintenanceEnvelope, ref object connectionPoints, ref object mountingPoints, ref object cablePoints, ref object metadata)\n  {\n    var brepiaWidth = ${width};\n    var brepiaDepth = ${depth};\n    var brepiaHeight = ${height};\n    if (!(brepiaWidth > 0d) || !(brepiaDepth > 0d) || !(brepiaHeight > 0d))\n      throw new ArgumentOutOfRangeException("Brepia box dimensions must be greater than zero.");\n\n    var brepiaLocal = new Box(\n      Plane.WorldXY,\n      new Interval(-brepiaWidth / 2d, brepiaWidth / 2d),\n      new Interval(-brepiaDepth / 2d, brepiaDepth / 2d),\n      new Interval(0d, brepiaHeight)).ToBrep();\n\n    var brepiaDefaultPlane = NormalizePlane(new Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis}));\n    var brepiaTargetPlane = brepiaPlacement is Plane suppliedPlane\n      ? NormalizePlane(suppliedPlane)\n      : brepiaDefaultPlane;\n    var brepiaTransform = Transform.PlaneToPlane(Plane.WorldXY, brepiaTargetPlane);\n    if (!brepiaLocal.Transform(brepiaTransform))\n      throw new InvalidOperationException("Rhino could not apply Brepia placement.");\n\n    var brepiaResult = brepiaLocal;\n    result = brepiaResult;\n    footprint = ${footprint};\n    clearanceEnvelope = ${clearance};\n    maintenanceEnvelope = ${maintenance};\n    connectionPoints = ${connections};\n    mountingPoints = ${mounting};\n    cablePoints = ${cable};\n    metadata = ${csharpString(metadataEnvelope)};\n  }\n\n  private static Plane NormalizePlane(Plane source)\n  {\n    if (!source.IsValid) throw new ArgumentException("Brepia target Plane is invalid.");\n    var x = source.XAxis;\n    var y = source.YAxis;\n    if (!x.Unitize()) throw new ArgumentException("Brepia target Plane X axis is invalid.");\n    y -= Vector3d.Multiply(y, x) * x;\n    if (!y.Unitize()) throw new ArgumentException("Brepia target Plane axes are collinear.");\n    var normalized = new Plane(source.Origin, x, y);\n    if (!normalized.IsValid) throw new ArgumentException("Brepia target Plane could not be normalized.");\n    return normalized;\n  }\n\n  private static Point3d TransformPoint(Point3d point, Transform transform)\n  {\n    point.Transform(transform);\n    return point;\n  }\n}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia target Plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\nbrepiaWidth = float(${width})\nbrepiaDepth = float(${depth})\nbrepiaHeight = float(${height})\nif brepiaWidth <= 0.0 or brepiaDepth <= 0.0 or brepiaHeight <= 0.0:\n    raise ValueError("Brepia box dimensions must be greater than zero.")\n\nbrepiaLocal = rg.Box(\n    rg.Plane.WorldXY,\n    rg.Interval(-brepiaWidth / 2.0, brepiaWidth / 2.0),\n    rg.Interval(-brepiaDepth / 2.0, brepiaDepth / 2.0),\n    rg.Interval(0.0, brepiaHeight),\n).ToBrep()\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTargetPlane = (\n    brepia_normalize_plane(brepiaPlacement)\n    if isinstance(brepiaPlacement, rg.Plane)\n    else brepiaDefaultPlane\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaTargetPlane)\nif not brepiaLocal.Transform(brepiaTransform):\n    raise RuntimeError("Rhino could not apply Brepia placement.")\n\nbrepiaResult = brepiaLocal\nresult = brepiaResult\nfootprint = ${footprint}\nclearanceEnvelope = ${clearance}\nmaintenanceEnvelope = ${maintenance}\nconnectionPoints = ${connections}\nmountingPoints = ${mounting}\ncablePoints = ${cable}\nmetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
@@ -360,7 +350,7 @@ export async function createBrepGrasshopperRhinoScriptPlan(
 
   const source = buildSource(contract, box, variables);
   return {
-    kind: 'brepia-rhino-csharp-script-plan',
+    kind: 'brepia-rhino-python3-script-plan',
     schemaVersion: 1,
     projectId: contract.model.projectId,
     sourceRevisionId: contract.model.sourceRevisionId,
