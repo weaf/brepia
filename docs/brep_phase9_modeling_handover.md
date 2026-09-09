@@ -55,14 +55,14 @@ docs/brep_m0_parameter_integrity_closeout.md
 
 **Repository-complete and CI-accepted.** Installed Rhino 8 host evidence for the newly added derived-expression behavior remains separate.
 
-Accepted M1 code checkpoint:
+Original accepted M1 code checkpoint:
 
 ```text
 4ebfa486519c23d03996c514c326a2f2fff0e084
 Remove stale M1 scalar editing import
 ```
 
-Exact checkpoint evidence:
+Original checkpoint evidence:
 
 - Quality Gate #751 — **PASS**;
 - 126 test files / 808 tests — **PASS**;
@@ -71,6 +71,27 @@ Exact checkpoint evidence:
 - production build — **PASS**;
 - diff check — **PASS**;
 - Grasshopper Build #323 — **PASS** on Ubuntu and Windows packaging/build paths.
+
+Post-closeout provider-schema hardening checkpoint:
+
+```text
+b696e14d5c0ce2790adb37ce4a4ddc28575473a1
+Remove stale direct BRep tool schema import
+```
+
+Exact hardening evidence:
+
+- Quality Gate #759 — **PASS**;
+- 127 test files / 811 tests — **PASS**;
+- dependency audit — **PASS**;
+- typecheck — **PASS**;
+- lint — **PASS**;
+- production build — **PASS**;
+- diff check — **PASS**;
+- Grasshopper Build #331 — **PASS**;
+- plugin build — **PASS**;
+- Ubuntu package build — **PASS**;
+- Windows package build — **PASS**.
 
 M1 adds an additive canonical `schemaVersion: 1` scalar AST:
 
@@ -97,6 +118,27 @@ Safety/semantic contract:
 - `build_brep_project` teaches the AI to represent derived relationships as ASTs rather than fake published sliders;
 - GHX remains parameter-only at the supported return/import boundary;
 - expression-backed rotation remains fail closed even when the expression resolves to zero.
+
+#### Provider-safe AI tool boundary
+
+Do **not** wire the recursive `z.lazy()` scalar schema directly into the provider-facing `tool()` input again.
+
+The direct recursive schema caused AI SDK JSON Schema conversion warnings of the form:
+
+```text
+Recursive reference detected at ...! Defaulting to any
+```
+
+A simple `$ref`-based fix was considered but rejected as the final local-provider strategy because Brepia's OpenAI-compatible local path includes llama.cpp and its JSON-schema-to-grammar implementation has known nested-reference limitations.
+
+The current split is intentional:
+
+- canonical/tool-validation schema remains fully recursive with M1 depth `12` and node limit `64`;
+- provider/model-facing schema is finite and reference-free with `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3`;
+- the provider wrapper delegates every received value to the full `brepAiBuildInputSchema.safeParseAsync(...)` validator before acceptance;
+- `tests/brepAiToolJsonSchema.test.ts` verifies no recursive-reference warning, no `$ref`, explicit M1 operator vocabulary, actual tool wiring and preservation of deeper canonical validation.
+
+The provider depth is a constrained-generation/authoring bound only. It is not a persistence migration and does not reduce the canonical M1 contract.
 
 Closeout:
 
@@ -169,6 +211,6 @@ Do not combine M2 with pattern/mirror, profile/extrude, shell/wall abstractions,
 
 If continuing the modeling-capability track, begin with **analysis and scope for M2 only** after reconciling the branch, M0/M1 closeouts and the still-open Phase 9 host-acceptance boundary.
 
-If prioritizing host evidence instead, run the focused M1 derived-expression fixture first and continue the existing Phase 9 save/reopen/import/activate/native-preview loop.
+If prioritizing host evidence instead, first update/restart the local Brepia runtime and confirm that `build_brep_project` no longer emits the M1 recursive-reference warnings. Then run the focused M1 derived-expression fixture and continue the existing Phase 9 save/reopen/import/activate/native-preview loop.
 
 In either case, do not infer installed Rhino parity from repository CI and do not merge PR #36 without explicit stacked-branch reconciliation.
