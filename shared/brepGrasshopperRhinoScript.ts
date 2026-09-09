@@ -151,7 +151,7 @@ function pythonPortName(
 ): string {
   const words = inputId
     .normalize('NFKD')
-    .replace(/[^\x00-\x7f]/g, '')
+    .replace(/\p{M}+/gu, '')
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean);
   let base = words
@@ -333,7 +333,7 @@ export async function createBrepGrasshopperRhinoScriptPlan(
   const variables = parameterVariables(contract);
 
   const numberInputs = await Promise.all(
-    packagePlan.controls.map(async (control, index): Promise<BrepGrasshopperRhinoScriptInput> => {
+    packagePlan.controls.map(async (control): Promise<BrepGrasshopperRhinoScriptInput> => {
       const variableName = variables.get(control.inputId);
       if (!variableName) {
         throw new BrepGrasshopperRhinoScriptError(
