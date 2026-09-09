@@ -78,8 +78,8 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     );
 
     assert.match(script.source, /import Rhino\.Geometry as rg/);
-    assert.match(script.source, /brepiaNode0Width = float\(Width\)/);
-    assert.match(script.source, /brepiaNode0Height = float\(Height\)/);
+    assert.match(script.source, /brepiaNode0Width = float\(brepia_scalar\(Width\)\)/);
+    assert.match(script.source, /brepiaNode0Height = float\(brepia_scalar\(Height\)\)/);
     assert.match(script.source, /brepiaNode0 = rg\.Box\(/);
     assert.match(
       script.source,
@@ -298,7 +298,7 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
 
     const script = await createBrepGrasshopperRhinoScriptPlan(withFillet);
 
-    assert.match(script.source, /brepiaNode1Radius = float\(Width\)/);
+    assert.match(script.source, /brepiaNode1Radius = float\(brepia_scalar\(Width\)\)/);
     assert.match(script.source, /brepiaNode1Axis = rg\.Vector3d\(0, 0, 1\)/);
     assert.match(script.source, /brepiaNode1Parts = rg\.Brep\.CreateFilletEdges\(/);
   });
