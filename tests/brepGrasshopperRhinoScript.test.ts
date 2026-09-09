@@ -54,30 +54,33 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
       script.inputs.map((input) => [
         input.inputId,
         input.variableName,
+        input.nickname,
         input.sourceObjectGuid,
         input.converterType,
       ]),
       [
-        ['height', 'brepiaP0', packagePlan.controls[0]?.instanceGuid, 'System.Double'],
-        ['width', 'brepiaP1', packagePlan.controls[1]?.instanceGuid, 'System.Double'],
-        ['placement', 'brepiaPlacement', null, 'System.Object'],
+        ['height', 'Height', 'Height', packagePlan.controls[0]?.instanceGuid, 'System.Double'],
+        ['width', 'Width', 'Width', packagePlan.controls[1]?.instanceGuid, 'System.Double'],
+        ['placement', 'Plane', 'Plane', null, 'System.Object'],
       ],
     );
     assert.deepEqual(
-      script.outputs.map((output) => output.outputId),
+      script.outputs.map((output) => [output.outputId, output.variableName, output.nickname]),
       [
-        'result',
-        'footprint',
-        'clearanceEnvelope',
-        'maintenanceEnvelope',
-        'connectionPoints',
-        'mountingPoints',
-        'cablePoints',
-        'metadata',
+        ['result', 'Result', 'Result'],
+        ['footprint', 'Footprint', 'Footprint'],
+        ['clearanceEnvelope', 'Clearance', 'Clearance'],
+        ['maintenanceEnvelope', 'Maintenance', 'Maintenance'],
+        ['connectionPoints', 'Connections', 'Connections'],
+        ['mountingPoints', 'Mounting', 'Mounting'],
+        ['cablePoints', 'Cable', 'Cable'],
+        ['metadata', 'Metadata', 'Metadata'],
       ],
     );
 
     assert.match(script.source, /import Rhino\.Geometry as rg/);
+    assert.match(script.source, /brepiaWidth = float\(Width\)/);
+    assert.match(script.source, /brepiaHeight = float\(Height\)/);
     assert.match(script.source, /brepiaLocal = rg\.Box\(/);
     assert.match(
       script.source,
@@ -92,12 +95,14 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
       script.source,
       /rg\.Transform\.PlaneToPlane\(rg\.Plane\.WorldXY, brepiaTargetPlane\)/,
     );
-    assert.match(script.source, /isinstance\(brepiaPlacement, rg\.Plane\)/);
-    assert.match(script.source, /footprint = brepiaResult\.DuplicateBrep\(\)/);
+    assert.match(script.source, /isinstance\(Plane, rg\.Plane\)/);
+    assert.match(script.source, /Result = brepiaResult/);
+    assert.match(script.source, /Footprint = brepiaResult\.DuplicateBrep\(\)/);
     assert.match(
       script.source,
-      /cablePoints = \[brepia_transform_point\(rg\.Point3d\(0, 100, 0\), brepiaTransform\)\]/,
+      /Cable = \[brepia_transform_point\(rg\.Point3d\(0, 100, 0\), brepiaTransform\)\]/,
     );
+    assert.doesNotMatch(script.source, /brepiaP0|brepiaP1|brepiaPlacement/);
     assert.match(script.source, /sourceRevisionId/);
     assert.doesNotMatch(script.source, /BREPIA_GRASSHOPPER_TOKEN/);
     assert.doesNotMatch(script.source, /HttpClient/);
