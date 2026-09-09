@@ -183,7 +183,38 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
 
     assert.match(
       script.source,
-      /rg\.Transform\.Translation\(rg\.Vector3d\(Width, 0, 0\)\)/,
+      /rg\.Transform\.Translation\(rg\.Vector3d\(brepia_scalar\(Width\), 0, 0\)\)/,
     );
+  });
+
+  it('compiles bounded scalar expressions without adding Grasshopper controls for derived values', async () => {
+    const candidate = throughHoleFixture();
+    const positionedHole = candidate.source.nodes.find(
+      (node) => node.id === 'positionedHole',
+    );
+    assert.ok(positionedHole);
+    positionedHole.translate = [
+      {
+        op: 'sub',
+        args: [
+          { op: 'div', args: [{ parameter: 'width' }, 2] },
+          25,
+        ],
+      },
+      0,
+      0,
+    ];
+
+    const script = await createBrepGrasshopperRhinoScriptPlan(candidate);
+    const ghx = await compileBrepGrasshopperExecutableGhx(candidate);
+
+    assert.match(
+      script.source,
+      /rg\.Vector3d\(brepia_sub\(brepia_div\(brepia_scalar\(Width\), 2\), 25\), 0, 0\)/,
+    );
+    assert.match(script.source, /def brepia_div\(left, right\):/);
+    assert.match(script.source, /if right == 0\.0:/);
+    assert.equal((ghx.match(/>Width<\/item>/g) ?? []).length > 0, true);
+    assert.doesNotMatch(ghx, />Derived<\/item>/);
   });
 });
