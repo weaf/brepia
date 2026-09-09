@@ -86,6 +86,10 @@ import {
 import { generationRunKindForConversation } from './generationRunPersistence';
 import { resolveAiTurnProvenance } from './aiTurnProvenance';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
+import {
+  buildAiContextDiagnostics,
+  resolveAiModelBudgetMetadata,
+} from './aiContextDiagnostics';
 
 export const PARAMETRIC_AGENT_PROMPT = loadBundledInstruction('parametric');
 export const CREATIVE_AGENT_PROMPT = loadBundledInstruction('creative');
@@ -827,6 +831,7 @@ export async function handleAiChatRequest(req: Request) {
     }
   }
 
+  const systemPromptBeforeBrepContext = resolvedSystemPrompt;
   resolvedSystemPrompt = withBrepProjectSystemContext({
     systemPrompt: resolvedSystemPrompt,
     contextTemplate: brepProjectContextTemplate,
@@ -1052,6 +1057,10 @@ export async function handleAiChatRequest(req: Request) {
         ? 'chat.creativeThinkingMaxOutputTokens'
         : 'chat.creativeMaxOutputTokens',
   );
+  const modelBudgetMetadata = await resolveAiModelBudgetMetadata(
+    user.id,
+    actualModelId,
+  );
   const openCodeRuntime: OpenCodeRuntimeOptions = {
     transportInstruction: activeBrepSource
       ? openCodeBrepTransportInstruction
@@ -1252,6 +1261,37 @@ export async function handleAiChatRequest(req: Request) {
     !streamingOpenCode &&
     !forceBuildToolChoice;
 
+  try {
+    const contextDiagnostics = await buildAiContextDiagnostics({
+      systemPrompt: resolvedSystemPrompt,
+      systemPromptBeforeBrepContext,
+      tools: tools as Record<string, unknown>,
+      branchMessages,
+      modelMessages,
+      currentBrepProject: activeBrepSource?.project,
+      modelContextLimit: modelBudgetMetadata.contextLimit,
+      modelOutputLimit: modelBudgetMetadata.outputLimit,
+      reservedOutputTokens: maxOutputTokens,
+    });
+    console.info('ai context diagnostics', {
+      modelId: actualModelId,
+      transportKind: transport.kind,
+      modelBudgetSource: modelBudgetMetadata.source,
+      ...contextDiagnostics,
+    });
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-chat',
+      statusCode: 200,
+      userId: user.id,
+      conversationId: conversation.id,
+      additionalContext: {
+        ...baseLogContext,
+        operation: 'context_diagnostics',
+      },
+    });
+  }
+
   const activeGeneration = beginActiveGeneration(
     user.id,
     conversation.id,
@@ -1327,6 +1367,22 @@ export async function handleAiChatRequest(req: Request) {
     onFinish: ({ steps }) => {
       activeGeneration.finish();
       void generationRun.responseReceived();
+      const inputTokens = steps.reduce(
+        (total, step) => total + (step.usage.inputTokens ?? 0),
+        0,
+      );
+      const outputTokens = steps.reduce(
+        (total, step) => total + (step.usage.outputTokens ?? 0),
+        0,
+      );
+      console.info('ai context actual usage', {
+        modelId: actualModelId,
+        transportKind: transport.kind,
+        stepCount: steps.length,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      });
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
         step.toolCalls?.some((call) => call.toolName === buildToolName),
