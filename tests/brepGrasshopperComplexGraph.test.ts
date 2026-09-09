@@ -135,23 +135,32 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     const booleanMatches = script.source.match(/rg\.Brep\.CreateBooleanDifference\(/g) ?? [];
     assert.equal(booleanMatches.length, 2);
 
+    assert.match(
+      script.source,
+      /brepiaNode5Parts0 = rg\.Brep\.CreateBooleanDifference\(brepiaNode5, brepiaNode2, brepiaTolerance\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode5Parts1 = rg\.Brep\.CreateBooleanDifference\(brepiaNode5, brepiaNode4, brepiaTolerance\)/,
+    );
+
     const positiveTranslation = script.source.indexOf(
       'rg.Transform.Translation(rg.Vector3d(250, 0, 0))',
     );
     const negativeTranslation = script.source.indexOf(
       'rg.Transform.Translation(rg.Vector3d(-250, 0, 0))',
     );
-    const firstBoolean = script.source.indexOf('rg.Brep.CreateBooleanDifference(');
+    const firstBoolean = script.source.indexOf(
+      'brepiaNode5Parts0 = rg.Brep.CreateBooleanDifference(',
+    );
     const secondBoolean = script.source.indexOf(
-      'rg.Brep.CreateBooleanDifference(',
-      firstBoolean + 1,
+      'brepiaNode5Parts1 = rg.Brep.CreateBooleanDifference(',
     );
 
     assert.ok(positiveTranslation >= 0);
-    assert.ok(negativeTranslation >= 0);
-    assert.ok(firstBoolean > positiveTranslation);
-    assert.ok(negativeTranslation > firstBoolean);
-    assert.ok(secondBoolean > negativeTranslation);
+    assert.ok(negativeTranslation > positiveTranslation);
+    assert.ok(firstBoolean > negativeTranslation);
+    assert.ok(secondBoolean > firstBoolean);
   });
 
   it('keeps general translation parameterized instead of baking current values into Rhino source', async () => {
