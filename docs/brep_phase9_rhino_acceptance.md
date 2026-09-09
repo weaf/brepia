@@ -44,11 +44,11 @@ The executable Python/GHX compiler currently has repository support for:
 - canonical translation-only `transform` nodes, including parameter-backed translation scalars;
 - canonical `subtract` nodes;
 - multiple subtract tools applied deterministically in canonical `tools[]` order, with each boolean step required to produce exactly one Brep;
-- canonical `fillet` nodes using the existing semantic selectors `all` and `parallelToAxis`;
+- canonical `fillet` nodes using the currently accepted semantic `parallelToAxis` selector;
 - parameter-backed fillet radii;
 - exact project-object role-node reuse where the referenced node is supported.
 
-The fillet translation mirrors the authoritative native evaluator's selector semantics rather than exposing Rhino edge indices as Brepia state. `parallelToAxis` samples the normalized edge midpoint tangent and applies the same `1e-3` axis-parallel threshold. Rhino execution uses `Brep.CreateFilletEdges(...)` with `BlendType.Fillet`, `RailType.RollingBall` and document absolute tolerance. Non-positive radius, empty selector result or a Rhino result other than exactly one Brep fails closed. The Rhino 8 upstream/API review is recorded in `docs/references/rhino8_mcneel_sources.md`.
+The fillet translation mirrors the authoritative native evaluator's accepted selector semantics rather than exposing Rhino edge indices as Brepia state. `parallelToAxis` samples the normalized edge midpoint tangent and applies the same `1e-3` axis-parallel threshold. Rhino execution uses `Brep.CreateFilletEdges(...)` with `BlendType.Fillet`, `RailType.RollingBall` and document absolute tolerance. Non-positive radius, empty selector result or a Rhino result other than exactly one Brep fails closed. Canonical v1 normalization does not currently admit an `all` selector, and the GHX exporter does not broaden that boundary independently. The Rhino 8 upstream/API review is recorded in `docs/references/rhino8_mcneel_sources.md`.
 
 **Fillet support is repository-level only at this checkpoint.** No installed Rhino 8 host parity is claimed until a fresh Brepia fillet export opens, solves and produces the expected topology in the real host.
 
