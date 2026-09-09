@@ -17,32 +17,42 @@ Real Rhino 8 / Grasshopper testing has now established the following:
 3. Moving the same Brepia objects into an envelope derived from a Grasshopper-saved document opened successfully.
 4. A built-in Rhino 8 **Python 3 Script** component, using `RhinoCodePluginGH`, opened without installing `Brepia.Grasshopper.gha`.
 5. A focused Python 3 diagnostic with Height/Width inputs and a Result Brep solved successfully, displayed the expected box and loaded quickly in the installed host once the Python source identifiers exactly matched the runtime-visible serialized port names.
-6. The production GHX compiler was then updated to the fuller host-compatible envelope plus the built-in Python 3 carrier. A fresh GHX exported by Brepia now opens successfully in the installed host, proving that the product export no longer fails at the Grasshopper IO boundary.
-7. That first fresh product export exposed a second, narrower runtime defect: its canvas ports were `Height`, `Width` and `Plane`, but its embedded Python source still referenced the old internal identifiers `brepiaP0`, `brepiaP1` and `brepiaPlacement`. Rhino therefore loaded the component but could not solve it.
-8. The production script plan has now been corrected so serialized Python port names and generated source identifiers are the same deterministic names. For the current box fixture this means `Height`, `Width`, `Plane` inputs and `Result`, `Footprint`, `Clearance`, `Maintenance`, `Connections`, `Mounting`, `Cable`, `Metadata` outputs. The old `brepiaP*`/`brepiaPlacement` names are regression-tested as forbidden in generated source.
+6. The production GHX compiler was updated to the fuller host-compatible envelope plus the built-in Python 3 carrier.
+7. The first fresh product export exposed a runtime identifier mismatch between serialized ports and embedded Python source. The production script plan was corrected so both are generated from the same deterministic names.
+8. A **fresh Brepia product export after that correction has now been opened and solved successfully in the installed Rhino 8 / Grasshopper host**. The native box geometry is visible and solves quickly.
+9. `Height` and `Width` are working Grasshopper inputs and drive the product geometry as intended.
+10. The former editable `Plane` product input has been removed. Canonical Brepia placement remains internal and is applied by the generated Python carrier, preserving the product's placement authority rather than exposing it as a casual Grasshopper parameter.
 
-Current code checkpoint for the runtime-port correction:
+This advances the zero-install single-box product path beyond the earlier port-correction checkpoint. It does **not** complete Phase 9 as a whole: save/reopen, returned-GHX import/activation/continuation and the broader canonical BRep operation surface remain separately evidenced acceptance work.
+
+The next geometry-runtime acceptance target is the repository-supported canonical graph:
 
 ```text
-abc9537ad97305817126776e1d96e76348fb98c7
-Satisfy Rhino Python port lint gate
+box -> cylinder -> translate -> subtract
 ```
 
-Exact-head repository evidence:
+That through-hole path is covered by deterministic repository generation tests but has **not yet been accepted in the installed Rhino 8 host**. Do not describe it as runtime parity until a fresh Brepia export has opened, solved and produced the expected cut geometry in that host.
 
-- Quality Gate #687 — PASS;
-  - dependency audit PASS;
-  - tests PASS;
-  - typecheck PASS;
-  - lint PASS;
-  - build PASS;
-  - diff check PASS;
-- Grasshopper Build #259 — PASS;
-  - plugin build PASS;
-  - Ubuntu package PASS;
-  - Windows package PASS.
+The current RhinoCommon implementation review for this graph is pinned through `docs/references/rhino8_mcneel_sources.md`. The reviewed McNeel Rhino 8 branch-8 Python examples cover tolerance-aware `Brep.CreateBooleanDifference(...)` and `Transform.Translation(...)`; Brepia still owns and tests primitive centering, canonical placement, graph ordering, result cardinality and fail-closed semantics.
 
-This is still **partial Phase 9 evidence**. The corrected `abc9537...` product export has not yet been re-opened and solved in Rhino after the runtime-port correction, so full Phase 9 acceptance must not yet be claimed.
+## Current repository scope for complex geometry
+
+The executable Python/GHX compiler currently has repository support for:
+
+- centered canonical `box` primitives;
+- centered canonical `cylinder` primitives;
+- canonical translation-only `transform` nodes, including parameter-backed translation scalars;
+- canonical `subtract` nodes;
+- multiple subtract tools applied deterministically in canonical `tools[]` order, with each boolean step required to produce exactly one Brep;
+- exact project-object role-node reuse where the referenced node is supported.
+
+Still intentionally fail-closed on the active Rhino/GHX path:
+
+- non-zero transform rotation;
+- fillet nodes;
+- canonical node types that have not been explicitly mapped and tested in the Rhino compiler.
+
+Repository support is not installed-host acceptance. The sequence remains: compare against the authoritative native build123d evaluator, inspect the Rhino 8 upstream reference, add deterministic tests, then obtain real Rhino 8 host evidence before claiming parity.
 
 ## Scope
 
@@ -63,7 +73,9 @@ Required acceptance sequence:
 11. continue editing the canonical model with Brepia AI;
 12. export a fresh GHX and reopen/solve it successfully in Grasshopper.
 
-Steps 1–3 are now proven for a fresh product export on the current path. Step 4 is proven through component load; the post-port-fix solve required for Step 5 is the next acceptance action.
+For the current simple-box product path, steps 1–5 are now proven with a fresh product export, and the working Height/Width controls provide parameter-response evidence toward step 6. The remaining sequence must still be completed before full Phase 9 acceptance is claimed.
+
+For each newly broadened canonical geometry operation, opening and solving the simple box is not transferable runtime evidence. The exact broadened graph must separately pass installed-host acceptance.
 
 ## Acceptance boundaries
 
