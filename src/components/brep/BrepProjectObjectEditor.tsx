@@ -129,18 +129,18 @@ function SemanticScalarField({
     [parameters, unit],
   );
   const parameterReference =
-    typeof value === 'number' ? false : isBrepParameterReference(value);
+    typeof value !== 'number' && isBrepParameterReference(value) ? value : null;
   const selected =
     typeof value === 'number'
       ? LITERAL_VALUE
       : parameterReference
-        ? `parameter:${value.parameter}`
+        ? `parameter:${parameterReference.parameter}`
         : EXPRESSION_VALUE;
   const displayValue =
     typeof value === 'number'
       ? ''
       : parameterReference
-        ? value.parameter
+        ? parameterReference.parameter
         : formatBrepScalar(value);
 
   return (
@@ -155,7 +155,9 @@ function SemanticScalarField({
           if (event.target.value === LITERAL_VALUE) {
             if (typeof value === 'number') return;
             const parameter = parameterReference
-              ? parameters.find((candidate) => candidate.id === value.parameter)
+              ? parameters.find(
+                  (candidate) => candidate.id === parameterReference.parameter,
+                )
               : undefined;
             onChange(parameter?.default ?? 0);
             return;
