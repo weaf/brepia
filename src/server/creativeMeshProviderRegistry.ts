@@ -9,6 +9,7 @@ import {
   type CreativeMeshProvider,
 } from '@shared/creativeMeshModels';
 import { env } from './env';
+import { anchorActiveCreativeMeshReferenceImages } from './creativeMeshReferenceImages';
 import { handleNativeCreativeMeshRequest } from './nativeCreativeMesh';
 
 type CreativeMeshHandler = (
@@ -52,7 +53,11 @@ const PROVIDERS: readonly CreativeMeshProviderAdapter[] = [
     optional: false,
     models: CORE_CREATIVE_MESH_MODELS,
     configured: () => true,
-    handleRequest: handleNativeCreativeMeshRequest,
+    handleRequest: async (request, parsedBody) =>
+      handleNativeCreativeMeshRequest(
+        request,
+        await anchorActiveCreativeMeshReferenceImages(request, parsedBody),
+      ),
     singleFlight: true,
     syncGeneratedMeshesAfterSuccess: true,
   },
