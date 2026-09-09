@@ -39,7 +39,7 @@ function cloneFixture(): MutableFixture {
 }
 
 describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
-  it('maps the existing package identity to a self-contained RhinoCommon box script', async () => {
+  it('maps the existing package identity to a self-contained canonical-placement box script', async () => {
     const script = await createBrepGrasshopperRhinoScriptPlan(fixture);
     const packagePlan = await createBrepGrasshopperPackagePlan(fixture);
 
@@ -61,7 +61,6 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
       [
         ['height', 'Height', 'Height', packagePlan.controls[0]?.instanceGuid, 'System.Double'],
         ['width', 'Width', 'Width', packagePlan.controls[1]?.instanceGuid, 'System.Double'],
-        ['placement', 'Plane', 'Plane', null, 'System.Object'],
       ],
     );
     assert.deepEqual(
@@ -79,25 +78,25 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     );
 
     assert.match(script.source, /import Rhino\.Geometry as rg/);
-    assert.match(script.source, /brepiaWidth = float\(Width\)/);
-    assert.match(script.source, /brepiaHeight = float\(Height\)/);
-    assert.match(script.source, /brepiaLocal = rg\.Box\(/);
+    assert.match(script.source, /brepiaNode0Width = float\(Width\)/);
+    assert.match(script.source, /brepiaNode0Height = float\(Height\)/);
+    assert.match(script.source, /brepiaNode0 = rg\.Box\(/);
+    assert.match(script.source, /rg\.Interval\(0\.0, brepiaNode0Width\)/);
+    assert.match(script.source, /rg\.Interval\(0\.0, brepiaNode0Depth\)/);
+    assert.match(script.source, /rg\.Interval\(0\.0, brepiaNode0Height\)/);
     assert.match(
       script.source,
-      /rg\.Interval\(-brepiaWidth \/ 2\.0, brepiaWidth \/ 2\.0\)/,
+      /rg\.Transform\.PlaneToPlane\(rg\.Plane\.WorldXY, brepiaDefaultPlane\)/,
+    );
+    assert.doesNotMatch(script.source, /isinstance\(Plane|\bPlane\b/);
+    assert.match(
+      script.source,
+      /Result = brepia_place_brep\(brepiaNode0, brepiaTransform\)/,
     );
     assert.match(
       script.source,
-      /rg\.Interval\(-brepiaDepth \/ 2\.0, brepiaDepth \/ 2\.0\)/,
+      /Footprint = brepia_place_brep\(brepiaNode0, brepiaTransform\)/,
     );
-    assert.match(script.source, /rg\.Interval\(0\.0, brepiaHeight\)/);
-    assert.match(
-      script.source,
-      /rg\.Transform\.PlaneToPlane\(rg\.Plane\.WorldXY, brepiaTargetPlane\)/,
-    );
-    assert.match(script.source, /isinstance\(Plane, rg\.Plane\)/);
-    assert.match(script.source, /Result = brepiaResult/);
-    assert.match(script.source, /Footprint = brepiaResult\.DuplicateBrep\(\)/);
     assert.match(
       script.source,
       /Cable = \[brepia_transform_point\(rg\.Point3d\(0, 100, 0\), brepiaTransform\)\]/,
@@ -138,41 +137,106 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     assert.match(revised.source, /sourceRevisionId: revision-43/);
   });
 
-  it('fails closed for canonical node graphs that are not yet proven equivalent in RhinoCommon', async () => {
-    const unsupported = cloneFixture();
-    unsupported.source.nodes.push({
-      id: 'movedBody',
-      type: 'transform',
-      input: 'body',
-      translate: [10, 0, 0],
-    });
-    unsupported.source.resultNodeId = 'movedBody';
-    unsupported.source.projectObject.footprintNodeId = 'movedBody';
+  it('emits the first canonical through-hole graph as box, cylinder, translate and subtract', async () => {
+    const withHole = cloneFixture();
+    const body = withHole.source.nodes[0];
+    assert.ok(body);
+    withHole.source.nodes = [
+      body,
+      { id: 'hole', type: 'cylinder', radius: 40, height: 520 },
+      {
+        id: 'positionedHole',
+        type: 'transform',
+        input: 'hole',
+        translate: [600, 250, -10],
+      },
+      {
+        id: 'bodyWithHole',
+        type: 'subtract',
+        base: 'body',
+        tools: ['positionedHole'],
+      },
+    ];
+    withHole.source.resultNodeId = 'bodyWithHole';
 
-    await assert.rejects(
-      () => createBrepGrasshopperRhinoScriptPlan(unsupported),
-      (error: unknown) =>
-        error instanceof BrepGrasshopperRhinoScriptError &&
-        error.code === 'unsupported_model',
+    const script = await createBrepGrasshopperRhinoScriptPlan(withHole);
+
+    assert.match(
+      script.source,
+      /brepiaNode1Cylinder = rg\.Cylinder\(rg\.Circle\(rg\.Plane\.WorldXY, brepiaNode1Radius\), brepiaNode1Height\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode2\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode3Parts0 = rg\.Brep\.CreateBooleanDifference\(brepiaNode3, brepiaNode2, brepiaTolerance\)/,
+    );
+    assert.match(
+      script.source,
+      /Result = brepia_place_brep\(brepiaNode3, brepiaTransform\)/,
+    );
+    assert.match(
+      script.source,
+      /Footprint = brepia_place_brep\(brepiaNode0, brepiaTransform\)/,
     );
   });
 
-  it('fails closed when an auxiliary exact role cannot be represented by the single-box subset', async () => {
-    const unsupported = cloneFixture();
-    unsupported.source.nodes.push({
+  it('supports exact auxiliary role nodes instead of forcing them to reuse the result', async () => {
+    const withClearance = cloneFixture();
+    withClearance.source.nodes.push({
       id: 'clearance',
       type: 'box',
       width: 1300,
       depth: 600,
       height: 2200,
     });
-    unsupported.source.projectObject.clearanceEnvelopeNodeId = 'clearance';
+    withClearance.source.projectObject.clearanceEnvelopeNodeId = 'clearance';
+
+    const script = await createBrepGrasshopperRhinoScriptPlan(withClearance);
+    assert.match(
+      script.source,
+      /Clearance = brepia_place_brep\(brepiaNode1, brepiaTransform\)/,
+    );
+  });
+
+  it('fails closed for transform rotations that have not yet been host-parity accepted', async () => {
+    const unsupported = cloneFixture();
+    unsupported.source.nodes.push({
+      id: 'rotatedBody',
+      type: 'transform',
+      input: 'body',
+      rotateDeg: [0, 0, 90],
+    });
+    unsupported.source.resultNodeId = 'rotatedBody';
 
     await assert.rejects(
       () => createBrepGrasshopperRhinoScriptPlan(unsupported),
       (error: unknown) =>
         error instanceof BrepGrasshopperRhinoScriptError &&
-        error.code === 'unsupported_model',
+        error.code === 'unsupported_model' &&
+        /rotation/.test(error.message),
+    );
+  });
+
+  it('fails closed for fillets until Rhino edge-selection parity is separately proven', async () => {
+    const unsupported = cloneFixture();
+    unsupported.source.nodes.push({
+      id: 'filletedBody',
+      type: 'fillet',
+      input: 'body',
+      radius: 5,
+      selector: { kind: 'parallelToAxis', axis: 'z' },
+    });
+    unsupported.source.resultNodeId = 'filletedBody';
+
+    await assert.rejects(
+      () => createBrepGrasshopperRhinoScriptPlan(unsupported),
+      (error: unknown) =>
+        error instanceof BrepGrasshopperRhinoScriptError &&
+        error.code === 'unsupported_model' &&
+        /fillet/.test(error.message),
     );
   });
 });

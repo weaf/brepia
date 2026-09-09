@@ -81,7 +81,7 @@ describe('BRep Phase 8E executable GHX', () => {
     assert.doesNotMatch(ghx, /Brepia\.Grasshopper\.gha/i);
   });
 
-  it('stores the exact deterministic Brepia RhinoCommon Python source as UTF-8 base64', async () => {
+  it('stores the exact deterministic canonical Brepia RhinoCommon Python source as UTF-8 base64', async () => {
     const [ghx, script] = await Promise.all([
       compileBrepGrasshopperExecutableGhx(fixture),
       createBrepGrasshopperRhinoScriptPlan(fixture),
@@ -92,21 +92,28 @@ describe('BRep Phase 8E executable GHX', () => {
     assert.ok(match?.[1]);
     assert.equal(decodeBase64Utf8(match[1]), script.source);
     assert.match(script.source, /import Rhino\.Geometry as rg/);
-    assert.match(script.source, /brepiaWidth = float\(Width\)/);
-    assert.match(script.source, /brepiaHeight = float\(Height\)/);
-    assert.match(script.source, /brepiaLocal = rg\.Box\(/);
-    assert.match(script.source, /Result = brepiaResult/);
+    assert.match(script.source, /brepiaNode0Width = float\(Width\)/);
+    assert.match(script.source, /brepiaNode0Height = float\(Height\)/);
+    assert.match(script.source, /brepiaNode0 = rg\.Box\(/);
+    assert.match(
+      script.source,
+      /Result = brepia_place_brep\(brepiaNode0, brepiaTransform\)/,
+    );
     assert.doesNotMatch(script.source, /brepiaP0|brepiaP1|brepiaPlacement/);
     assert.doesNotMatch(script.source, /Script_Instance|GH_ScriptInstance/);
   });
 
-  it('wires every numeric input to its stable native control and leaves placement unconnected', async () => {
-    const [ghx, script] = await Promise.all([
+  it('wires every numeric input to its stable native control and exposes no editable placement port', async () => {
+    const [ghx, packagePlan, script] = await Promise.all([
       compileBrepGrasshopperExecutableGhx(fixture),
+      createBrepGrasshopperPackagePlan(fixture),
       createBrepGrasshopperRhinoScriptPlan(fixture),
     ]);
 
-    for (const input of script.inputs.filter((entry) => entry.kind === 'number')) {
+    assert.equal(script.inputs.length, packagePlan.controls.length);
+    assert.ok(script.inputs.every((entry) => entry.kind === 'number'));
+
+    for (const input of script.inputs) {
       assert.ok(input.sourceObjectGuid);
       assert.equal(input.variableName, input.nickname);
       assert.match(
@@ -129,22 +136,10 @@ describe('BRep Phase 8E executable GHX', () => {
       );
     }
 
-    const placement = script.inputs.find((entry) => entry.kind === 'placement');
-    assert.ok(placement);
-    assert.equal(placement.sourceObjectGuid, null);
-    assert.equal(placement.variableName, 'Plane');
-    assert.equal(placement.nickname, 'Plane');
-    const placementStart = ghx.indexOf(
-      `<item name="InstanceGuid" type_name="gh_guid" type_code="9">${placement.instanceGuid}</item>`,
+    assert.doesNotMatch(
+      ghx,
+      /<item name="NickName" type_name="gh_string" type_code="10">Plane<\/item>/,
     );
-    assert.ok(placementStart >= 0);
-    const placementEnd = ghx.indexOf('</chunk>', placementStart);
-    const placementXml = ghx.slice(placementStart, placementEnd);
-    assert.match(
-      placementXml,
-      /<item name="SourceCount" type_name="gh_int32" type_code="3">0<\/item>/,
-    );
-    assert.doesNotMatch(placementXml, /<item name="Source"/);
   });
 
   it('serializes all eight stable Brepia output ports as runtime-visible Rhino Python outputs', async () => {

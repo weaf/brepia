@@ -4,7 +4,7 @@ import {
 } from './brepGrasshopperContract.ts';
 import { createBrepGrasshopperPackagePlan } from './brepGrasshopperPackagePlan.ts';
 import type {
-  BrepBoxNode,
+  BrepNode,
   BrepProjectObjectPoint,
   BrepScalar,
   BrepVector3,
@@ -23,7 +23,6 @@ export const BREP_GRASSHOPPER_SCRIPT_OBJECT_HINT_GUID =
 
 const SCRIPT_PLAN_NAMESPACE = 'brepia-grasshopper-rhino-script-v1';
 const PYTHON_RESERVED_PORT_NAMES = new Set([
-  'Plane',
   'Result',
   'Footprint',
   'Clearance',
@@ -254,61 +253,200 @@ function pointsForKind(
     .join(', ')}]`;
 }
 
-function roleExpression(
-  nodeId: string | undefined,
-  resultNodeId: string,
-): string {
-  if (!nodeId) return 'None';
-  if (nodeId !== resultNodeId) {
-    throw new BrepGrasshopperRhinoScriptError(
-      'unsupported_model',
-      `Phase 8E box GHX subset cannot emit auxiliary role node ${nodeId}; only the result box may be reused.`,
-    );
-  }
-  return 'brepiaResult.DuplicateBrep()';
+function isLiteralZero(value: BrepScalar): boolean {
+  return typeof value === 'number' && value === 0;
 }
 
-function assertSupportedBoxContract(contract: BrepGrasshopperContract): BrepBoxNode {
-  const nodes = contract.source.nodes;
-  if (nodes.length !== 1 || nodes[0]?.type !== 'box') {
+function assertSupportedRhinoContract(contract: BrepGrasshopperContract): void {
+  if (contract.source.nodes.length === 0) {
     throw new BrepGrasshopperRhinoScriptError(
       'unsupported_model',
-      'Phase 8E Rhino script generation currently supports exactly one box node.',
+      'Rhino script generation requires at least one canonical BRep node.',
     );
   }
-  if (contract.source.resultNodeId !== nodes[0].id) {
+
+  for (const node of contract.source.nodes) {
+    if (node.type === 'fillet') {
+      throw new BrepGrasshopperRhinoScriptError(
+        'unsupported_model',
+        'Rhino GHX host generation does not yet support canonical fillet nodes.',
+      );
+    }
+    if (
+      node.type === 'transform' &&
+      node.rotateDeg != null &&
+      node.rotateDeg.some((entry) => !isLiteralZero(entry))
+    ) {
+      throw new BrepGrasshopperRhinoScriptError(
+        'unsupported_model',
+        `Rhino GHX host generation does not yet support non-zero transform rotation on node ${node.id}.`,
+      );
+    }
+  }
+}
+
+type RhinoGraphSource = {
+  source: string;
+  nodeVariables: Map<string, string>;
+};
+
+function buildGraphSource(
+  contract: BrepGrasshopperContract,
+  variables: ReadonlyMap<string, string>,
+): RhinoGraphSource {
+  const entries = new Map<string, { node: BrepNode; index: number }>(
+    contract.source.nodes.map((node, index) => [node.id, { node, index }]),
+  );
+  const nodeVariables = new Map(
+    contract.source.nodes.map((node, index) => [node.id, `brepiaNode${index}`]),
+  );
+  const emitted = new Set<string>();
+  const visiting = new Set<string>();
+  const lines: string[] = [];
+
+  const emitNode = (nodeId: string): string => {
+    const entry = entries.get(nodeId);
+    const variable = nodeVariables.get(nodeId);
+    if (!entry || !variable) {
+      throw new BrepGrasshopperRhinoScriptError(
+        'invalid_model',
+        `Rhino script generation cannot resolve canonical node ${nodeId}.`,
+      );
+    }
+    if (emitted.has(nodeId)) return variable;
+    if (visiting.has(nodeId)) {
+      throw new BrepGrasshopperRhinoScriptError(
+        'invalid_model',
+        `Rhino script generation encountered a cycle at node ${nodeId}.`,
+      );
+    }
+    visiting.add(nodeId);
+
+    const node = entry.node;
+    if (node.type === 'box') {
+      const width = scalarExpression(node.width, variables);
+      const depth = scalarExpression(node.depth, variables);
+      const height = scalarExpression(node.height, variables);
+      lines.push(`${variable}Width = float(${width})`);
+      lines.push(`${variable}Depth = float(${depth})`);
+      lines.push(`${variable}Height = float(${height})`);
+      lines.push(
+        `if ${variable}Width <= 0.0 or ${variable}Depth <= 0.0 or ${variable}Height <= 0.0:`,
+      );
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia box node ${node.id} dimensions must be greater than zero.`)})`,
+      );
+      lines.push(`${variable} = rg.Box(`);
+      lines.push('    rg.Plane.WorldXY,');
+      lines.push(`    rg.Interval(0.0, ${variable}Width),`);
+      lines.push(`    rg.Interval(0.0, ${variable}Depth),`);
+      lines.push(`    rg.Interval(0.0, ${variable}Height),`);
+      lines.push(').ToBrep()');
+    } else if (node.type === 'cylinder') {
+      const radius = scalarExpression(node.radius, variables);
+      const height = scalarExpression(node.height, variables);
+      lines.push(`${variable}Radius = float(${radius})`);
+      lines.push(`${variable}Height = float(${height})`);
+      lines.push(`if ${variable}Radius <= 0.0 or ${variable}Height <= 0.0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia cylinder node ${node.id} dimensions must be greater than zero.`)})`,
+      );
+      lines.push(
+        `${variable}Cylinder = rg.Cylinder(rg.Circle(rg.Plane.WorldXY, ${variable}Radius), ${variable}Height)`,
+      );
+      lines.push(`${variable} = ${variable}Cylinder.ToBrep(True, True)`);
+      lines.push(`if ${variable} is None:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not create Brepia cylinder node ${node.id}.`)})`,
+      );
+    } else if (node.type === 'transform') {
+      const input = emitNode(node.input);
+      const translate = vectorExpression(
+        node.translate ?? [0, 0, 0],
+        variables,
+        'vector',
+      );
+      lines.push(`${variable} = ${input}.DuplicateBrep()`);
+      lines.push(`if not ${variable}.Transform(rg.Transform.Translation(${translate})):`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not translate Brepia node ${node.id}.`)})`,
+      );
+    } else if (node.type === 'subtract') {
+      const base = emitNode(node.base);
+      lines.push(`${variable} = ${base}.DuplicateBrep()`);
+      node.tools.forEach((toolId, toolIndex) => {
+        const tool = emitNode(toolId);
+        const parts = `${variable}Parts${toolIndex}`;
+        lines.push(
+          `${parts} = rg.Brep.CreateBooleanDifference(${variable}, ${tool}, brepiaTolerance)`,
+        );
+        lines.push(`if ${parts} is None or len(${parts}) != 1:`);
+        lines.push(
+          `    raise RuntimeError(${pythonString(`Rhino boolean difference for Brepia node ${node.id} did not produce exactly one Brep.`)})`,
+        );
+        lines.push(`${variable} = ${parts}[0]`);
+      });
+    } else {
+      throw new BrepGrasshopperRhinoScriptError(
+        'unsupported_model',
+        `Rhino GHX host generation does not yet support canonical node type ${node.type}.`,
+      );
+    }
+
+    visiting.delete(nodeId);
+    emitted.add(nodeId);
+    return variable;
+  };
+
+  for (const node of contract.source.nodes) emitNode(node.id);
+
+  return {
+    source: lines.join('\n'),
+    nodeVariables,
+  };
+}
+
+function roleExpression(
+  nodeId: string | undefined,
+  nodeVariables: ReadonlyMap<string, string>,
+): string {
+  if (!nodeId) return 'None';
+  const variable = nodeVariables.get(nodeId);
+  if (!variable) {
     throw new BrepGrasshopperRhinoScriptError(
-      'unsupported_model',
-      'Phase 8E Rhino script box must be the canonical result node.',
+      'invalid_model',
+      `Rhino script generation cannot resolve project-object role node ${nodeId}.`,
     );
   }
-  return nodes[0];
+  return `brepia_place_brep(${variable}, brepiaTransform)`;
 }
 
 function buildSource(
   contract: BrepGrasshopperContract,
-  box: BrepBoxNode,
   variables: ReadonlyMap<string, string>,
 ): string {
-  const width = scalarExpression(box.width, variables);
-  const depth = scalarExpression(box.depth, variables);
-  const height = scalarExpression(box.height, variables);
+  const graph = buildGraphSource(contract, variables);
+  const resultVariable = graph.nodeVariables.get(contract.source.resultNodeId);
+  if (!resultVariable) {
+    throw new BrepGrasshopperRhinoScriptError(
+      'invalid_model',
+      `Rhino script generation cannot resolve result node ${contract.source.resultNodeId}.`,
+    );
+  }
+
   const placement = contract.source.placement;
   const defaultOrigin = vectorExpression(placement.origin, variables, 'point');
   const defaultXAxis = vectorExpression(placement.xAxis, variables, 'vector');
   const defaultYAxis = vectorExpression(placement.yAxis, variables, 'vector');
   const definition = contract.source.projectObject;
-  const footprint = roleExpression(
-    definition?.footprintNodeId,
-    contract.source.resultNodeId,
-  );
+  const footprint = roleExpression(definition?.footprintNodeId, graph.nodeVariables);
   const clearance = roleExpression(
     definition?.clearanceEnvelopeNodeId,
-    contract.source.resultNodeId,
+    graph.nodeVariables,
   );
   const maintenance = roleExpression(
     definition?.maintenanceEnvelopeNodeId,
-    contract.source.resultNodeId,
+    graph.nodeVariables,
   );
   const connections = pointsForKind(contract, 'connection', variables);
   const mounting = pointsForKind(contract, 'mounting', variables);
@@ -321,14 +459,14 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia target Plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\nbrepiaWidth = float(${width})\nbrepiaDepth = float(${depth})\nbrepiaHeight = float(${height})\nif brepiaWidth <= 0.0 or brepiaDepth <= 0.0 or brepiaHeight <= 0.0:\n    raise ValueError("Brepia box dimensions must be greater than zero.")\n\nbrepiaLocal = rg.Box(\n    rg.Plane.WorldXY,\n    rg.Interval(-brepiaWidth / 2.0, brepiaWidth / 2.0),\n    rg.Interval(-brepiaDepth / 2.0, brepiaDepth / 2.0),\n    rg.Interval(0.0, brepiaHeight),\n).ToBrep()\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTargetPlane = (\n    brepia_normalize_plane(Plane)\n    if isinstance(Plane, rg.Plane)\n    else brepiaDefaultPlane\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaTargetPlane)\nif not brepiaLocal.Transform(brepiaTransform):\n    raise RuntimeError("Rhino could not apply Brepia placement.")\n\nbrepiaResult = brepiaLocal\nResult = brepiaResult\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
   value: unknown,
 ): Promise<BrepGrasshopperRhinoScriptPlan> {
   const contract = normalizeBrepGrasshopperContract(value);
-  const box = assertSupportedBoxContract(contract);
+  assertSupportedRhinoContract(contract);
   const packagePlan = await createBrepGrasshopperPackagePlan(contract);
   const variables = parameterVariables(contract);
 
@@ -358,21 +496,6 @@ export async function createBrepGrasshopperRhinoScriptPlan(
     }),
   );
 
-  const placementInput: BrepGrasshopperRhinoScriptInput = {
-    inputId: 'placement',
-    variableName: 'Plane',
-    nickname: 'Plane',
-    kind: 'placement',
-    instanceGuid: await stableGuid([
-      contract.model.projectId,
-      'script-input',
-      'placement',
-    ]),
-    sourceObjectGuid: null,
-    converterType: 'System.Object',
-    typeHintGuid: BREP_GRASSHOPPER_SCRIPT_OBJECT_HINT_GUID,
-  };
-
   const outputDefinitions = [
     ['result', 'Result'],
     ['footprint', 'Footprint'],
@@ -396,7 +519,7 @@ export async function createBrepGrasshopperRhinoScriptPlan(
     })),
   );
 
-  const source = buildSource(contract, box, variables);
+  const source = buildSource(contract, variables);
   return {
     kind: 'brepia-rhino-python3-script-plan',
     schemaVersion: 1,
@@ -404,7 +527,7 @@ export async function createBrepGrasshopperRhinoScriptPlan(
     sourceRevisionId: contract.model.sourceRevisionId,
     componentInstanceGuid: packagePlan.component.instanceGuid,
     componentNickname: contract.model.projectName,
-    inputs: [...numberInputs, placementInput],
+    inputs: numberInputs,
     outputs,
     source,
     sourceSha256: await sha256Hex(source),
