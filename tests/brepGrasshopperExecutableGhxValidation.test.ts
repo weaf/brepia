@@ -159,11 +159,11 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
     );
   });
 
-  it('rejects script runtime-setting mutation', async () => {
+  it('rejects Python script runtime-setting mutation', async () => {
     const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
     const changed = ghx.replace(
-      '<item name="MarshInputs" type_name="gh_bool" type_code="1">false</item>',
       '<item name="MarshInputs" type_name="gh_bool" type_code="1">true</item>',
+      '<item name="MarshInputs" type_name="gh_bool" type_code="1">false</item>',
     );
     assert.notEqual(changed, ghx);
 
@@ -178,6 +178,23 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
         (entry) => entry.code === 'script_runtime_settings_changed',
       ),
     );
+  });
+
+  it('rejects missing Rhino host-envelope evidence', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+    const changed = ghx.replace(
+      '<chunk name="Thumbnail"><items count="1">',
+      '<chunk name="ThumbnailRemoved"><items count="1">',
+    );
+    assert.notEqual(changed, ghx);
+
+    const result = await validateBrepGrasshopperExecutableGhx(
+      changed,
+      fixture,
+      'returned',
+    );
+    assert.equal(result.accepted, false);
+    assert.ok(result.diagnostics.some((entry) => entry.code === 'missing_thumbnail'));
   });
 
   it('rejects inconsistent Grasshopper object indexes', async () => {
@@ -202,7 +219,7 @@ describe('BRep Phase 8E strict executable GHX gate', () => {
   it('rejects unknown graph objects instead of trying to interpret them into canonical Brepia state', async () => {
     const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
     const changed = ghx.replace(
-      'b6ba1144-02d6-4a2d-b53c-ec62e290eeb7',
+      '719467e6-7cf5-4848-99b0-c5dd57e5442c',
       '22222222-2222-4222-8222-222222222222',
     );
 
