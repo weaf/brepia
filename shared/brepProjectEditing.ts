@@ -8,7 +8,6 @@ import {
   type BrepProjectObjectPointKind,
   type BrepProjectPlacement,
   type BrepPublishedNumberParameter,
-  type BrepScalar,
   type BrepVector3,
 } from './brepProject.ts';
 import { resolveBrepProjectPlacement } from './brepProvider.ts';
