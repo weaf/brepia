@@ -38,9 +38,14 @@ describe('BRep Phase 8F product GHX export', () => {
     assert.match(result.ghx, /^<\?xml version="1\.0" encoding="utf-8" standalone="yes"\?>/);
     assert.match(
       result.ghx,
-      /<item name="Name" type_name="gh_string" type_code="10">C# Script<\/item>/,
+      /<item name="Name" type_name="gh_string" type_code="10">Python 3 Script<\/item>/,
+    );
+    assert.match(
+      result.ghx,
+      /<item name="Taxon" type_name="gh_string" type_code="10">\*\.\*\.python<\/item>/,
     );
     assert.match(result.ghx, /<item name="Title" type_name="gh_string" type_code="10">Brepia<\/item>/);
+    assert.match(result.ghx, /<chunk name="Thumbnail">/);
     assert.doesNotMatch(result.ghx, /BREPIA_GRASSHOPPER_TOKEN|HttpClient/);
   });
 
