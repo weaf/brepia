@@ -56,6 +56,8 @@ For AI-created/AI-edited BRep snapshots, reject or repair `unused`/`orphan-only`
 
 A generated project may not present a geometry parameter slider that cannot affect an authoritative geometry output. A finishing node intended by the model must not silently remain outside the authoritative result chain.
 
+M0 is repository-complete and recorded separately in `docs/brep_m0_parameter_integrity_closeout.md`.
+
 ## M1 — safe scalar expression graph
 
 The current scalar form is only a literal or direct parameter reference. That cannot express ordinary relationships such as:
@@ -74,19 +76,109 @@ Extend scalar semantics with a bounded expression AST rather than strings or exe
 type BrepScalar =
   | number
   | { parameter: string }
-  | { op: 'add' | 'sub' | 'mul' | 'div' | 'neg'; args: BrepScalar[] };
+  | { op: 'add' | 'sub' | 'mul' | 'div'; args: [BrepScalar, BrepScalar] }
+  | { op: 'neg'; args: [BrepScalar] };
 ```
 
-The final schema should use tighter arity per operator, finite-value checks, unit checking, depth/node-count limits and explicit divide-by-zero validation.
+The extension remains additive to canonical `schemaVersion: 1`; existing literal scalars and direct parameter references remain valid without migration.
 
 ### Requirements
 
-- deterministic shared evaluator used by native build123d and Rhino compiler;
+- deterministic shared semantics across canonical validation, native build123d execution and Rhino compilation;
 - unit-aware validation (`mm`, `deg`, `none`);
-- no arbitrary functions, variables or source strings;
+- no arbitrary functions, variables, source strings or executable expressions;
 - no cyclic expression references;
 - GHX returns only published input values, never edits the canonical expression graph;
 - deterministic serialization for export/import identity.
+
+### M1 implementation contract
+
+M1 is deliberately bounded rather than a general expression language.
+
+Canonical operators and arity:
+
+- `add`, `sub`, `mul`, `div`: exactly two scalar arguments;
+- `neg`: exactly one scalar argument;
+- leaves: finite numeric literals or `{ parameter: '<id>' }` references only.
+
+Safety bounds:
+
+- maximum absolute scalar/intermediate value: `1e9`;
+- maximum expression depth: `12`;
+- maximum expression-node count: `64`;
+- every intermediate result must remain finite and within bounds;
+- division by zero fails closed both for defaults and runtime parameter overrides.
+
+Unit algebra:
+
+- numeric literals are contextually typable as `mm`, `deg` or `none`;
+- `add`/`sub` require compatible equal dimensions;
+- `mul` permits only dimensionless scaling (`none * X` or `X * none`);
+- `div` permits `X / none -> X` and same-dimension `X / X -> none`;
+- implicit derived dimensions such as `mm * mm` or `deg * mm` are rejected.
+
+Editor behavior for M1 is expression-preserving, not a free-form expression authoring surface:
+
+- literals remain editable as literals;
+- direct parameter references remain selectable from published parameters;
+- an existing AST is rendered as a derived expression and preserved byte-for-byte semantically unless the user deliberately replaces it with a literal or published parameter;
+- the UI must never flatten an AST into a literal merely by opening/saving a field.
+
+Runtime parity requirements:
+
+1. canonical normalization validates expression shape, units and default evaluation;
+2. request normalization validates the full project expression set again against the effective runtime parameter values before native execution;
+3. the native build123d driver evaluates the same bounded operator set;
+4. the Rhino/GHX compiler emits only bounded helper calls for the same operator set;
+5. expression-backed `rotateDeg` does not unlock rotation: only the already-supported literal zero remains accepted until M6.
+
+AI contract:
+
+- generated derived geometry relationships should use the AST instead of adding fake/duplicate published parameters;
+- only user-facing independent inputs should become published parameters;
+- AI must not emit source strings, `eval`, arbitrary functions, undeclared variables or unbounded expression trees.
+
+Example:
+
+```json
+{
+  "width": {
+    "op": "sub",
+    "args": [
+      { "parameter": "overall_width" },
+      {
+        "op": "mul",
+        "args": [
+          { "parameter": "wall_thickness" },
+          2
+        ]
+      }
+    ]
+  }
+}
+```
+
+This represents `inner_width = overall_width - 2 * wall_thickness` without publishing a synthetic `inner_width` slider.
+
+### M1 acceptance sequence
+
+Repository closeout requires one exact checkpoint with:
+
+1. expression-preserving placement, feature and project-object editors;
+2. canonical/default and runtime-override validation parity;
+3. native driver and Rhino compiler regression coverage for nested arithmetic, unary negation, division by zero, overflow and unit failures;
+4. M0 parameter-effectiveness analysis following parameter references through nested ASTs;
+5. AI schema/instruction coverage for the bounded AST;
+6. full tests, typecheck, lint, build and diff checks green;
+7. Grasshopper Build green on the same checkpoint.
+
+Installed Rhino 8 acceptance remains a separate host-evidence boundary. Repository completion may be recorded from deterministic compiler/runtime tests, but full host acceptance should additionally exercise a real derived relation such as:
+
+`InnerWidth = Width - 2 * WallThickness`
+
+and confirm that changing the published `Width`/`WallThickness` controls updates the solved Rhino geometry while the GHX round trip still changes only published parameter values.
+
+M1 must not start M2 Boolean expansion, new modeling-node families or non-zero rotation work.
 
 ### Immediate product benefit
 
