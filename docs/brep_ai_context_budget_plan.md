@@ -1,12 +1,14 @@
 # BRep AI context budget and projection plan
 
-Status: **next active implementation phase — planned, not started**
+Status: **C1 repository-complete / CI-accepted; runtime measurement pending before C2**
 
 Date: 2026-09-09
 
 Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
+
+C1 implementation/CI closeout is recorded in `docs/brep_c1_context_observability_closeout.md`. The next action is to re-run the real 169503/131072 failure class and inspect the bounded C1 breakdown. Do not begin C2 or C3 until that measurement has ranked the actual contributors.
 
 ## Trigger
 
@@ -68,30 +70,42 @@ Increasing llama.cpp context size is not the primary solution. A larger context 
 
 ## C1 — context observability
 
-Implement request-level context diagnostics before destructive compaction is introduced.
+Status: **repository-complete and CI-accepted; empirical failure-class measurement pending**.
 
-Measure/log a deterministic approximate breakdown at the point immediately before the final model request, including at least:
+Implemented request-level context diagnostics before destructive compaction is introduced.
 
-- resolved system/instruction text;
-- provider-visible tool schemas;
-- current canonical BRep context;
-- ordinary recent message text;
-- historical tool-call/tool-result payloads;
-- images or image-data parts;
+The diagnostics now measure/log a deterministic approximate breakdown immediately before the final model request, including:
+
+- resolved system/instruction size and BRep-context increment;
+- provider-visible tool-schema size, including per-tool breakdown;
+- current canonical BRep size;
+- ordinary persisted message text/reasoning size and counts;
+- historical `build_brep_project` input/result payload size and call count;
+- historical `data-brep-project` persisted size/count separately from provider-facing messages;
+- images/base64 in effective model messages;
+- effective converted model-message size;
 - estimated total input;
-- configured model context window;
+- configured local-model context/output limits from Settings metadata where available;
 - reserved output tokens;
-- selected input budget.
+- safety margin, selected usable input budget and estimated headroom.
 
-The logging must be bounded and must never dump full sensitive prompt/project payloads. Log sizes/counts, not raw content.
+The logging is bounded and never includes full prompt/project/image payloads. Tests assert that raw fixture user text, BRep markers and base64 data are absent from the serialized diagnostics object.
 
-Where provider usage/tokenization data is available after successful calls, record actual usage separately so estimates can be calibrated.
+Where provider usage/tokenization data is available after successful calls, actual usage is logged separately for later calibration.
 
-Acceptance:
+Repository evidence on `5570d6539c94d890d23fb3f91edf9da9cddc9431`:
 
-- a failing/large conversation exposes which category dominates context;
-- ordinary requests continue unchanged;
-- logging itself does not duplicate or persist full prompt content.
+- Quality Gate #766 — PASS;
+- Grasshopper Build #338 — PASS.
+
+Acceptance remaining before C2:
+
+- re-run the real long Native BRep conversation / representative failure class;
+- capture the bounded `ai context diagnostics` object;
+- where the call succeeds, also capture `ai context actual usage`;
+- use those numbers to determine which category actually dominates.
+
+Ordinary request construction itself remains unchanged by C1.
 
 ## C2 — compact provider schema
 
@@ -212,7 +226,7 @@ It must not replace exact current parameter/node/project state.
 
 Implement in this sequence:
 
-1. **C1 — observability**;
+1. **C1 — observability** — repository complete; obtain real failure-class measurement next;
 2. **C2 — provider-schema size reduction + size regression**;
 3. **C3 — BRep history projection / superseded snapshot removal**;
 4. re-measure the original failing conversation;
@@ -220,7 +234,7 @@ Implement in this sequence:
 6. **C5 — hard model-aware input budget**;
 7. **C6 — rolling summary** only if measurements justify it.
 
-The expectation is that C2 + C3 will produce the largest immediate reduction for the observed Native BRep case.
+The earlier expectation was that C2 + C3 would produce the largest immediate reduction for the observed Native BRep case. C1 exists specifically to verify or falsify that expectation before those changes are made.
 
 ## Acceptance fixture
 
