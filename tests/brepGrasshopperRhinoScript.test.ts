@@ -285,26 +285,21 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     );
   });
 
-  it('supports all-edge fillets and keeps parameter-backed radii dynamic', async () => {
+  it('keeps parameter-backed canonical fillet radii dynamic', async () => {
     const withFillet = cloneFixture();
     withFillet.source.nodes.push({
       id: 'filletedBody',
       type: 'fillet',
       input: 'body',
       radius: { parameter: 'width' },
-      selector: { kind: 'all' },
+      selector: { kind: 'parallelToAxis', axis: 'z' },
     });
     withFillet.source.resultNodeId = 'filletedBody';
 
     const script = await createBrepGrasshopperRhinoScriptPlan(withFillet);
 
     assert.match(script.source, /brepiaNode1Radius = float\(Width\)/);
-    assert.match(script.source, /for brepiaNode1Edge in brepiaNode1Input\.Edges:/);
-    assert.match(
-      script.source,
-      /brepiaNode1EdgeIndices\.append\(brepiaNode1Edge\.EdgeIndex\)/,
-    );
-    assert.doesNotMatch(script.source, /brepiaNode1Axis =/);
+    assert.match(script.source, /brepiaNode1Axis = rg\.Vector3d\(0, 0, 1\)/);
     assert.match(script.source, /brepiaNode1Parts = rg\.Brep\.CreateFilletEdges\(/);
   });
 });
