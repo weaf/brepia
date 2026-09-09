@@ -28,133 +28,147 @@ Keep:
 
 Do not use Codex unless it is genuinely needed.
 
-## Latest functional/product checkpoints before this handover
+## Current modeling-track state
 
-Relevant recent branch history:
+Read first:
 
-```text
-19bd921b8577b8120da2561484d0841e9ba819ce  Record broader Rhino 8 GHX host acceptance
-34004c406bbea4335fd9007dce33ec7951e69c0e  Cover ScrollArea width containment
-335cc19f8e84bc576d6c4d781e8d5aca3fe47f52  Cover canonical local BRep runner wiring
-f7edd338b0a722ce451984958e7b7e0228c20b95  Narrow Rhino fillets to canonical selector scope
-```
-
-The right Parameters panel width bug found with long feature/dependency text is fixed: Radix ScrollArea content is constrained to the selected panel width rather than expanding from intrinsic text width.
-
-The canonical local launcher `./start.sh` now supplies the default local BRep runner when no explicit `PCAD_BREP_RUNNER` is configured.
-
-## CI
-
-The ScrollArea/product checkpoint was green:
-
-- Quality Gate #714 — PASS;
-- Grasshopper Build #286 — PASS.
-
-Documentation commits after that checkpoint record the exact host-model audit and the future modeling plan. Confirm their current CI status before declaring the final branch checkpoint green.
-
-## Installed Rhino 8 / Grasshopper evidence
-
-The operator has now successfully opened two non-trivial fresh Brepia GHX definitions in the installed Rhino 8 / Grasshopper host.
-
-Read:
-
+- `docs/brep_modeling_capability_expansion_plan.md`;
+- `docs/brep_m0_parameter_integrity_closeout.md`;
+- `docs/brep_m1_scalar_expression_closeout.md`;
 - `docs/brep_phase9_rhino_acceptance.md`;
 - `docs/brep_phase9_host_model_evidence_2026-09-09.md`;
 - `docs/references/rhino8_mcneel_sources.md`.
 
-Exact audited model evidence:
+### M0 — parameter effectiveness + graph integrity
 
-### Room project
+**Repository-complete and CI-accepted.**
 
-Canonical graph uses boxes + literal transforms + one subtract with **eight** ordered cutters. This supplies real-host evidence for complex multi-node box/translation/subtract generation and eight-tool subtraction.
+M0 introduced shared deterministic reachability/effectiveness analysis that classifies nodes/parameters as authoritative/role reachable, orphan, effective, semantic-only, orphan-only or unused. AI-created/AI-edited snapshots fail closed on ineffective geometry controls and unintended orphan feature branches while legacy/manual/import compatibility remains preserved.
 
-Important product defect found in the source snapshot: 10 published parameters but only 5 are referenced by result geometry. `cabinet_gap`, `cabinet_height`, `cabinet_width`, `door_height` and `wall_thickness` are published but disconnected. Numerous intended relationships are hard-coded literals, so even some connected room dimensions are not fully relational.
+Closeout:
 
-### Rectangular plate project
-
-Canonical graph contains box, two cylinders, literal + parameter-backed translation, two-tool subtract and a fillet node.
-
-This supplies real-host evidence for box, cylinder, translation, parameter-backed translation and multiple-cutter subtraction.
-
-The fillet node is **not** `resultNodeId`; the authoritative result is the unfilleted `plate_with_hole`. A successful host solve is useful execution-level evidence that the fillet translation did not fail, but it is not sufficient visual/topological fillet-Result acceptance. Do not overclaim it.
-
-`rotateDeg` is `[0,0,0]`, so rotation remains unaccepted.
-
-The plate also exposes ineffective parameters: `hole_diameter`, `parameter`, `parameter2`, plus `fillet_radius` does not affect the authoritative Result because the fillet branch is orphaned from `resultNodeId`.
-
-## Remaining Phase 9 acceptance
-
-Do not confuse richer modeling work with completion of the existing GHX product loop.
-
-Still separately required:
-
-1. dedicated authoritative fillet Result host test if fillet parity is to be claimed;
-2. non-zero rotation analysis + implementation + host test before enabling rotation;
-3. Grasshopper save/reopen evidence;
-4. returned Rhino-saved GHX import to Brepia;
-5. verify deterministic compatibility validation and parameter recovery;
-6. activate the imported immutable revision;
-7. verify native Brepia preview;
-8. continue editing with Brepia AI;
-9. export a fresh GHX again and open/solve it in Grasshopper.
-
-## New modeling-capability track
-
-Read `docs/brep_modeling_capability_expansion_plan.md`.
-
-The main product limitation is now clear: canonical schema v1 is too weak to express ordinary relational modeling cleanly. AI therefore tends to emit Boolean-heavy box constructions with baked literals and can publish sliders that do not reach authoritative geometry.
-
-Recommended order:
-
-### M0 — parameter effectiveness + orphan graph analysis
-
-Implement first. Shared deterministic analysis should classify:
-
-- authoritative-result/role-reachable nodes;
-- orphan nodes;
-- effective parameters;
-- semantic-only parameters;
-- orphan-only parameters;
-- unused parameters.
-
-For AI-created/AI-edited projects, stop persisting fake geometry sliders and unintended orphan finishing branches. Prefer an AI-boundary validation/repair contract rather than making old imported/manual v1 files globally invalid immediately.
-
-This should catch both real audited examples:
-
-- Room: five published but disconnected parameters;
-- Plate: three totally unused parameters plus a fillet parameter attached only to an orphan result branch.
+```text
+docs/brep_m0_parameter_integrity_closeout.md
+```
 
 ### M1 — bounded scalar expression AST
 
-The current `BrepScalar = number | { parameter }` cannot represent derived relationships. Introduce a deterministic, unit-checked expression AST rather than strings/code so ordinary formulas such as half-height, wall offsets and repeated spacing remain parametric.
+**Repository-complete and CI-accepted.** Installed Rhino 8 host evidence for the newly added derived-expression behavior remains separate.
 
-Keep GHX round-trip parameter-only: Grasshopper edits published inputs, not the canonical expression graph.
+Accepted M1 code checkpoint:
 
-### M2+ — richer geometry vocabulary
+```text
+4ebfa486519c23d03996c514c326a2f2fff0e084
+Remove stale M1 scalar editing import
+```
 
-After M0/M1:
+Exact checkpoint evidence:
 
-- union/intersection;
-- linear pattern/mirror;
-- bounded profile + extrusion;
-- only then evaluate whether dedicated wall/plate/shell semantics are still needed.
+- Quality Gate #751 — **PASS**;
+- 126 test files / 808 tests — **PASS**;
+- typecheck — **PASS**;
+- lint — **PASS**;
+- production build — **PASS**;
+- diff check — **PASS**;
+- Grasshopper Build #323 — **PASS** on Ubuntu and Windows packaging/build paths.
 
-Every new operation must be implemented first in canonical/native build123d semantics, then translated to Rhino/GHX with branch-8 McNeel reference review and real host acceptance.
+M1 adds an additive canonical `schemaVersion: 1` scalar AST:
+
+```ts
+type BrepScalar =
+  | number
+  | { parameter: string }
+  | { op: 'add' | 'sub' | 'mul' | 'div'; args: [BrepScalar, BrepScalar] }
+  | { op: 'neg'; args: [BrepScalar] };
+```
+
+Safety/semantic contract:
+
+- max absolute literal/parameter/intermediate value `1e9`;
+- max expression depth `12`;
+- max expression-node count `64`;
+- finite bounded evaluation at every intermediate;
+- division by zero fails closed;
+- deterministic `mm` / `deg` / `none` unit algebra;
+- default-time and runtime-override validation before native execution;
+- native build123d driver and Rhino/GHX compiler share the same bounded operator semantics;
+- M0 recursively follows parameter references through ASTs;
+- placement, feature and project-object editors preserve existing ASTs but do not expose a free-form expression editor;
+- `build_brep_project` teaches the AI to represent derived relationships as ASTs rather than fake published sliders;
+- GHX remains parameter-only at the supported return/import boundary;
+- expression-backed rotation remains fail closed even when the expression resolves to zero.
+
+Closeout:
+
+```text
+docs/brep_m1_scalar_expression_closeout.md
+```
+
+## Why M0/M1 were needed
+
+Installed Rhino 8 / Grasshopper evidence exposed product-level deficiencies in otherwise successfully solved Brepia definitions:
+
+### Room project
+
+The canonical graph uses boxes + literal transforms + one subtract with eight ordered cutters. It supplied useful real-host evidence for complex multi-node box/translation/subtract generation and eight-tool subtraction.
+
+However, only five of ten published parameters reached result geometry. `cabinet_gap`, `cabinet_height`, `cabinet_width`, `door_height` and `wall_thickness` were disconnected, and several intended relationships were hard-coded literals.
+
+M0 prevents new AI-authored snapshots from presenting ineffective geometry sliders; M1 provides a safe representation for the previously baked derived relationships.
+
+### Rectangular plate project
+
+The canonical graph contains box, two cylinders, literal + parameter-backed translation, two-tool subtract and a fillet node.
+
+The fillet node was not `resultNodeId`, so the authoritative result remained unfilleted. The model also exposed ineffective parameters. M0 addresses the authoritative/orphan graph defect; M1 allows dependent positions/dimensions to remain relational rather than numerically baked.
+
+`rotateDeg` remained `[0,0,0]`; M1 intentionally does not broaden that boundary.
+
+## Remaining Phase 9 installed-host acceptance
+
+Do not confuse repository-complete modeling milestones with completion of the existing GHX product loop.
+
+Still separately required:
+
+1. focused M1 derived-expression host fixture, for example `InnerWidth = Width - 2 * WallThickness`;
+2. dedicated authoritative fillet Result host test if fillet parity is to be claimed;
+3. non-zero rotation analysis + implementation + host test before enabling rotation;
+4. Grasshopper save/reopen evidence;
+5. returned Rhino-saved GHX import to Brepia;
+6. deterministic compatibility validation and parameter recovery;
+7. explicit activation of the imported immutable revision;
+8. native Brepia preview after activation;
+9. continued editing with Brepia AI;
+10. export a fresh GHX again and open/solve it in Grasshopper.
+
+For the M1 host fixture, verify specifically that only independent published inputs become Grasshopper controls, changing them updates the derived geometry, and GHX return/import changes only those published numeric values while the canonical AST remains Brepia source authority.
+
+## Next modeling milestone — M2, not started
+
+M2 is the next item in `docs/brep_modeling_capability_expansion_plan.md`, but **no M2 implementation has started**.
+
+Potential M2 scope is bounded additive Boolean composition:
+
+- `union`;
+- `intersect`.
+
+Before implementation, perform a separate analysis/scope pass covering:
+
+- canonical node shape and deterministic result-cardinality rules;
+- ordered inputs and DAG/reference semantics;
+- build123d/OCCT authoritative behavior;
+- Rhino 8 / RhinoCommon translation against branch-8 McNeel upstream references;
+- fail-closed behavior for unsupported multi-body ambiguity;
+- M0 reachability/effectiveness integration;
+- AI schema/instructions;
+- repository parity fixtures and the installed-host evidence required before any Rhino parity claim.
+
+Do not combine M2 with pattern/mirror, profile/extrude, shell/wall abstractions, topology-selector expansion or rotation.
 
 ## Suggested next chat first action
 
-Begin with **analysis and scope for M0 only**, while keeping the Phase 9 acceptance list open.
+If continuing the modeling-capability track, begin with **analysis and scope for M2 only** after reconciling the branch, M0/M1 closeouts and the still-open Phase 9 host-acceptance boundary.
 
-Inspect:
+If prioritizing host evidence instead, run the focused M1 derived-expression fixture first and continue the existing Phase 9 save/reopen/import/activate/native-preview loop.
 
-- `shared/brepProject.ts`;
-- `shared/brepProjectEditing.ts` and existing parameter-usage helpers;
-- `shared/brepAiProject.ts`;
-- `src/server/brepAiTurn.ts`;
-- native evaluator dependency/scalar resolution;
-- GHX compiler parameter collection;
-- relevant BRep AI creation/follow-up tests.
-
-Determine the narrowest shared graph/parameter-effectiveness API and where AI-created/edited snapshots should reject or repair ineffective public parameters without breaking legacy/manual/imported v1 projects.
-
-Do not begin M1 expression-schema changes until M0 is repository-complete and accepted.
+In either case, do not infer installed Rhino parity from repository CI and do not merge PR #36 without explicit stacked-branch reconciliation.
