@@ -1,4 +1,4 @@
-import { zodSchema } from 'ai';
+import { jsonSchema, zodSchema } from 'ai';
 import { z } from 'zod';
 import {
   BREP_PROJECT_MAX_ABS_SCALAR,
@@ -49,11 +49,11 @@ const brepScalarSchema: z.ZodTypeAny = z.lazy(() =>
   ]),
 );
 
-const brepVector3Schema = z.tuple([
-  brepScalarSchema,
-  brepScalarSchema,
-  brepScalarSchema,
-]);
+function brepVector3SchemaFor(scalarSchema: z.ZodTypeAny) {
+  return z.tuple([scalarSchema, scalarSchema, scalarSchema]);
+}
+
+const brepVector3Schema = brepVector3SchemaFor(brepScalarSchema);
 
 const brepPlacementSchema = z
   .object({
@@ -230,17 +230,163 @@ export const brepAiBuildInputSchema = z
   })
   .strict();
 
+export type BrepAiBuildInput = Omit<
+  z.infer<typeof brepAiBuildInputSchema>,
+  'project'
+> & { project: BrepProject };
+
 /**
- * AI SDK defaults to reference-free JSON Schema conversion so providers that
- * require OpenAPI-like schemas can consume ordinary Zod inputs. M1 scalar
- * expressions are genuinely recursive (`z.lazy`), so reference-free
- * conversion would replace recursive operands with `{}` / `any` and weaken
- * the model-facing tool contract. Keep the original Zod schema authoritative
- * for validation, but opt this provider-facing wrapper into JSON references.
+ * Keep the model-facing schema reference-free for OpenAI-compatible/local
+ * providers whose JSON-schema-to-grammar paths do not reliably support nested
+ * `$ref`. Three expression levels cover the ordinary derived relationships M1
+ * is intended to author (`width - 2 * wallThickness`, half offsets, scaled
+ * spacing, etc.). The canonical validator below remains authoritative and
+ * still accepts the full M1 depth/node limits for persisted/imported projects.
  */
-export const brepAiBuildProviderInputSchema = zodSchema(
-  brepAiBuildInputSchema,
-  { useReferences: true },
+export const BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3;
+
+function createBrepProviderScalarSchema(depth: number): z.ZodTypeAny {
+  const leafSchema = z.union([
+    brepScalarNumberSchema,
+    brepParameterReferenceSchema,
+  ]);
+  if (depth <= 0) return leafSchema;
+
+  const childSchema = createBrepProviderScalarSchema(depth - 1);
+  return z.union([
+    brepScalarNumberSchema,
+    brepParameterReferenceSchema,
+    z
+      .object({
+        op: z.enum(['add', 'sub', 'mul', 'div']),
+        args: z.tuple([childSchema, childSchema]),
+      })
+      .strict(),
+    z
+      .object({
+        op: z.literal('neg'),
+        args: z.tuple([childSchema]),
+      })
+      .strict(),
+  ]);
+}
+
+const brepProviderScalarSchema = createBrepProviderScalarSchema(
+  BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH,
+);
+const brepProviderVector3Schema = brepVector3SchemaFor(
+  brepProviderScalarSchema,
+);
+const brepProviderPlacementSchema = z
+  .object({
+    origin: brepProviderVector3Schema,
+    xAxis: brepProviderVector3Schema,
+    yAxis: brepProviderVector3Schema,
+  })
+  .strict();
+const brepProviderProjectObjectPointSchema = z
+  .object({
+    id: brepIdSchema,
+    kind: z.enum(['connection', 'mounting', 'cable']),
+    position: brepProviderVector3Schema,
+    direction: brepProviderVector3Schema.optional(),
+    label: z.string().min(1).max(BREP_PROJECT_MAX_NAME_CHARS).optional(),
+  })
+  .strict();
+const brepProviderProjectObjectSchema = z
+  .object({
+    footprintNodeId: brepIdSchema.optional(),
+    clearanceEnvelopeNodeId: brepIdSchema.optional(),
+    maintenanceEnvelopeNodeId: brepIdSchema.optional(),
+    points: z
+      .array(brepProviderProjectObjectPointSchema)
+      .max(BREP_PROJECT_MAX_OBJECT_POINTS)
+      .optional(),
+  })
+  .strict();
+const brepProviderBoxNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('box'),
+    width: brepProviderScalarSchema,
+    depth: brepProviderScalarSchema,
+    height: brepProviderScalarSchema,
+  })
+  .strict();
+const brepProviderCylinderNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('cylinder'),
+    radius: brepProviderScalarSchema,
+    height: brepProviderScalarSchema,
+  })
+  .strict();
+const brepProviderTransformNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('transform'),
+    input: brepIdSchema,
+    translate: brepProviderVector3Schema.optional(),
+    rotateDeg: brepProviderVector3Schema.optional(),
+  })
+  .strict();
+const brepProviderFilletNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('fillet'),
+    input: brepIdSchema,
+    radius: brepProviderScalarSchema,
+    selector: brepEdgeSelectorSchema,
+  })
+  .strict();
+const brepProviderNodeSchema = z.discriminatedUnion('type', [
+  brepProviderBoxNodeSchema,
+  brepProviderCylinderNodeSchema,
+  brepProviderTransformNodeSchema,
+  brepSubtractNodeSchema,
+  brepProviderFilletNodeSchema,
+]);
+const brepAiProviderProjectSchema = z
+  .object({
+    schemaVersion: z.literal(BREP_PROJECT_SCHEMA_VERSION),
+    id: brepIdSchema,
+    name: z.string().min(1).max(BREP_PROJECT_MAX_NAME_CHARS),
+    units: z.literal('mm'),
+    placement: brepProviderPlacementSchema,
+    metadata: brepMetadataSchema.optional(),
+    projectObject: brepProviderProjectObjectSchema.optional(),
+    parameters: z
+      .array(brepPublishedNumberParameterSchema)
+      .max(BREP_PROJECT_MAX_PARAMETERS),
+    nodes: z.array(brepProviderNodeSchema).min(1).max(BREP_PROJECT_MAX_NODES),
+    resultNodeId: brepIdSchema,
+  })
+  .strict();
+const brepAiProviderBuildInputZodSchema = z
+  .object({
+    title: z.string().min(1).max(BREP_PROJECT_MAX_NAME_CHARS),
+    version: z.string().min(1).max(32).default('v1'),
+    project: brepAiProviderProjectSchema,
+  })
+  .strict();
+const brepAiProviderJsonSchema = zodSchema(
+  brepAiProviderBuildInputZodSchema,
+);
+
+/**
+ * The provider sees the bounded, reference-free schema above, while every tool
+ * call is validated against the full recursive/canonical schema before use.
+ */
+export const brepAiBuildProviderInputSchema = jsonSchema<BrepAiBuildInput>(
+  () => brepAiProviderJsonSchema.jsonSchema,
+  {
+    validate: async (value) => {
+      const result = await brepAiBuildInputSchema.safeParseAsync(value);
+      return result.success
+        ? { success: true, value: result.data as BrepAiBuildInput }
+        : { success: false, error: result.error };
+    },
+  },
 );
 
 export const brepAiBuildOutputSchema = z
@@ -250,8 +396,4 @@ export const brepAiBuildOutputSchema = z
   })
   .strict();
 
-export type BrepAiBuildInput = Omit<
-  z.infer<typeof brepAiBuildInputSchema>,
-  'project'
-> & { project: BrepProject };
 export type BrepAiBuildOutput = z.infer<typeof brepAiBuildOutputSchema>;
