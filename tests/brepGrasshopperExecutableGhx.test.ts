@@ -92,8 +92,14 @@ describe('BRep Phase 8E executable GHX', () => {
     assert.ok(match?.[1]);
     assert.equal(decodeBase64Utf8(match[1]), script.source);
     assert.match(script.source, /import Rhino\.Geometry as rg/);
-    assert.match(script.source, /brepiaNode0Width = float\(Width\)/);
-    assert.match(script.source, /brepiaNode0Height = float\(Height\)/);
+    assert.match(
+      script.source,
+      /brepiaNode0Width = float\(brepia_scalar\(Width\)\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode0Height = float\(brepia_scalar\(Height\)\)/,
+    );
     assert.match(script.source, /brepiaNode0 = rg\.Box\(/);
     assert.match(
       script.source,
