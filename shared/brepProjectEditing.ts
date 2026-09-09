@@ -12,6 +12,7 @@ import {
   type BrepVector3,
 } from './brepProject.ts';
 import { resolveBrepProjectPlacement } from './brepProvider.ts';
+import { brepScalarReferencesParameter } from './brepScalar.ts';
 
 export function brepNodeDependencies(node: BrepNode): string[] {
   switch (node.type) {
@@ -85,13 +86,6 @@ export function suggestBrepProjectObjectPointId(
   throw new Error(`Could not suggest a unique BRep ${kind} point ID.`);
 }
 
-function scalarReferencesParameter(
-  scalar: BrepScalar,
-  parameterId: string,
-): boolean {
-  return typeof scalar !== 'number' && scalar.parameter === parameterId;
-}
-
 function appendVectorParameterUsages(
   usages: string[],
   vector: BrepVector3 | undefined,
@@ -100,7 +94,7 @@ function appendVectorParameterUsages(
 ): void {
   if (!vector) return;
   vector.forEach((scalar, index) => {
-    if (scalarReferencesParameter(scalar, parameterId)) {
+    if (brepScalarReferencesParameter(scalar, parameterId)) {
       usages.push(`${label}[${index}]`);
     }
   });
@@ -108,9 +102,10 @@ function appendVectorParameterUsages(
 
 /**
  * Return human-readable canonical fields that currently reference a published
- * parameter. Project definition and later project-object authoring use this to
- * make destructive changes explicit rather than relying on missing-reference
- * validation after the fact.
+ * parameter, including references nested in M1 scalar expressions. Project
+ * definition and later project-object authoring use this to make destructive
+ * changes explicit rather than relying on missing-reference validation after
+ * the fact.
  */
 export function brepProjectParameterUsages(
   project: BrepProject,
@@ -155,17 +150,17 @@ export function brepProjectParameterUsages(
   for (const node of project.nodes) {
     switch (node.type) {
       case 'box':
-        if (scalarReferencesParameter(node.width, parameterId))
+        if (brepScalarReferencesParameter(node.width, parameterId))
           usages.push(`${node.id}.width`);
-        if (scalarReferencesParameter(node.depth, parameterId))
+        if (brepScalarReferencesParameter(node.depth, parameterId))
           usages.push(`${node.id}.depth`);
-        if (scalarReferencesParameter(node.height, parameterId))
+        if (brepScalarReferencesParameter(node.height, parameterId))
           usages.push(`${node.id}.height`);
         break;
       case 'cylinder':
-        if (scalarReferencesParameter(node.radius, parameterId))
+        if (brepScalarReferencesParameter(node.radius, parameterId))
           usages.push(`${node.id}.radius`);
-        if (scalarReferencesParameter(node.height, parameterId))
+        if (brepScalarReferencesParameter(node.height, parameterId))
           usages.push(`${node.id}.height`);
         break;
       case 'transform':
@@ -183,7 +178,7 @@ export function brepProjectParameterUsages(
         );
         break;
       case 'fillet':
-        if (scalarReferencesParameter(node.radius, parameterId))
+        if (brepScalarReferencesParameter(node.radius, parameterId))
           usages.push(`${node.id}.radius`);
         break;
       case 'subtract':
