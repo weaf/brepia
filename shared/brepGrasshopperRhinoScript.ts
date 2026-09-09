@@ -22,6 +22,17 @@ export const BREP_GRASSHOPPER_SCRIPT_OBJECT_HINT_GUID =
   '6a184b65-baa3-42d1-a548-3915b401de53';
 
 const SCRIPT_PLAN_NAMESPACE = 'brepia-grasshopper-rhino-script-v1';
+const PYTHON_RESERVED_PORT_NAMES = new Set([
+  'Plane',
+  'Result',
+  'Footprint',
+  'Clearance',
+  'Maintenance',
+  'Connections',
+  'Mounting',
+  'Cable',
+  'Metadata',
+]);
 
 export type BrepGrasshopperRhinoScriptInput = {
   inputId: string;
@@ -133,11 +144,39 @@ function pythonNumber(value: number): string {
   return String(Object.is(value, -0) ? 0 : value);
 }
 
+function pythonPortName(
+  inputId: string,
+  index: number,
+  used: Set<string>,
+): string {
+  const words = inputId
+    .normalize('NFKD')
+    .replace(/[^\x00-\x7f]/g, '')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+  let base = words
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join('');
+  if (!base) base = `Param${index + 1}`;
+  if (/^[0-9]/.test(base)) base = `Param${base}`;
+  if (PYTHON_RESERVED_PORT_NAMES.has(base)) base = `Param${base}`;
+
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${base}${suffix}`;
+    suffix += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
 function parameterVariables(contract: BrepGrasshopperContract): Map<string, string> {
+  const used = new Set(PYTHON_RESERVED_PORT_NAMES);
   return new Map(
     contract.source.parameters.map((parameter, index) => [
       parameter.id,
-      `brepiaP${index}`,
+      pythonPortName(parameter.id, index, used),
     ]),
   );
 }
@@ -282,7 +321,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia target Plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\nbrepiaWidth = float(${width})\nbrepiaDepth = float(${depth})\nbrepiaHeight = float(${height})\nif brepiaWidth <= 0.0 or brepiaDepth <= 0.0 or brepiaHeight <= 0.0:\n    raise ValueError("Brepia box dimensions must be greater than zero.")\n\nbrepiaLocal = rg.Box(\n    rg.Plane.WorldXY,\n    rg.Interval(-brepiaWidth / 2.0, brepiaWidth / 2.0),\n    rg.Interval(-brepiaDepth / 2.0, brepiaDepth / 2.0),\n    rg.Interval(0.0, brepiaHeight),\n).ToBrep()\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTargetPlane = (\n    brepia_normalize_plane(brepiaPlacement)\n    if isinstance(brepiaPlacement, rg.Plane)\n    else brepiaDefaultPlane\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaTargetPlane)\nif not brepiaLocal.Transform(brepiaTransform):\n    raise RuntimeError("Rhino could not apply Brepia placement.")\n\nbrepiaResult = brepiaLocal\nresult = brepiaResult\nfootprint = ${footprint}\nclearanceEnvelope = ${clearance}\nmaintenanceEnvelope = ${maintenance}\nconnectionPoints = ${connections}\nmountingPoints = ${mounting}\ncablePoints = ${cable}\nmetadata = ${pythonString(metadataEnvelope)}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia target Plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\nbrepiaWidth = float(${width})\nbrepiaDepth = float(${depth})\nbrepiaHeight = float(${height})\nif brepiaWidth <= 0.0 or brepiaDepth <= 0.0 or brepiaHeight <= 0.0:\n    raise ValueError("Brepia box dimensions must be greater than zero.")\n\nbrepiaLocal = rg.Box(\n    rg.Plane.WorldXY,\n    rg.Interval(-brepiaWidth / 2.0, brepiaWidth / 2.0),\n    rg.Interval(-brepiaDepth / 2.0, brepiaDepth / 2.0),\n    rg.Interval(0.0, brepiaHeight),\n).ToBrep()\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTargetPlane = (\n    brepia_normalize_plane(Plane)\n    if isinstance(Plane, rg.Plane)\n    else brepiaDefaultPlane\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaTargetPlane)\nif not brepiaLocal.Transform(brepiaTransform):\n    raise RuntimeError("Rhino could not apply Brepia placement.")\n\nbrepiaResult = brepiaLocal\nResult = brepiaResult\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
@@ -294,25 +333,34 @@ export async function createBrepGrasshopperRhinoScriptPlan(
   const variables = parameterVariables(contract);
 
   const numberInputs = await Promise.all(
-    packagePlan.controls.map(async (control, index): Promise<BrepGrasshopperRhinoScriptInput> => ({
-      inputId: control.inputId,
-      variableName: variables.get(control.inputId) ?? `brepiaP${index}`,
-      nickname: control.label,
-      kind: 'number',
-      instanceGuid: await stableGuid([
-        contract.model.projectId,
-        'script-input',
-        control.inputId,
-      ]),
-      sourceObjectGuid: control.instanceGuid,
-      converterType: 'System.Double',
-      typeHintGuid: BREP_GRASSHOPPER_SCRIPT_DOUBLE_HINT_GUID,
-    })),
+    packagePlan.controls.map(async (control, index): Promise<BrepGrasshopperRhinoScriptInput> => {
+      const variableName = variables.get(control.inputId);
+      if (!variableName) {
+        throw new BrepGrasshopperRhinoScriptError(
+          'invalid_model',
+          `Published Grasshopper input ${control.inputId} has no canonical Python variable.`,
+        );
+      }
+      return {
+        inputId: control.inputId,
+        variableName,
+        nickname: variableName,
+        kind: 'number',
+        instanceGuid: await stableGuid([
+          contract.model.projectId,
+          'script-input',
+          control.inputId,
+        ]),
+        sourceObjectGuid: control.instanceGuid,
+        converterType: 'System.Double',
+        typeHintGuid: BREP_GRASSHOPPER_SCRIPT_DOUBLE_HINT_GUID,
+      };
+    }),
   );
 
   const placementInput: BrepGrasshopperRhinoScriptInput = {
     inputId: 'placement',
-    variableName: 'brepiaPlacement',
+    variableName: 'Plane',
     nickname: 'Plane',
     kind: 'placement',
     instanceGuid: await stableGuid([
@@ -326,20 +374,20 @@ export async function createBrepGrasshopperRhinoScriptPlan(
   };
 
   const outputDefinitions = [
-    ['result', 'result', 'Result'],
-    ['footprint', 'footprint', 'Footprint'],
-    ['clearanceEnvelope', 'clearanceEnvelope', 'Clearance'],
-    ['maintenanceEnvelope', 'maintenanceEnvelope', 'Maintenance'],
-    ['connectionPoints', 'connectionPoints', 'Connections'],
-    ['mountingPoints', 'mountingPoints', 'Mounting'],
-    ['cablePoints', 'cablePoints', 'Cable'],
-    ['metadata', 'metadata', 'Metadata'],
+    ['result', 'Result'],
+    ['footprint', 'Footprint'],
+    ['clearanceEnvelope', 'Clearance'],
+    ['maintenanceEnvelope', 'Maintenance'],
+    ['connectionPoints', 'Connections'],
+    ['mountingPoints', 'Mounting'],
+    ['cablePoints', 'Cable'],
+    ['metadata', 'Metadata'],
   ] as const;
   const outputs = await Promise.all(
-    outputDefinitions.map(async ([outputId, variableName, nickname]) => ({
+    outputDefinitions.map(async ([outputId, portName]) => ({
       outputId,
-      variableName,
-      nickname,
+      variableName: portName,
+      nickname: portName,
       instanceGuid: await stableGuid([
         contract.model.projectId,
         'script-output',
