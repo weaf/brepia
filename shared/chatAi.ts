@@ -4,6 +4,7 @@ import { loadBundledInstruction } from './aiInstructionCatalog.ts';
 import {
   brepAiBuildInputSchema,
   brepAiBuildOutputSchema,
+  brepAiBuildProviderInputSchema,
 } from './brepAiTool.ts';
 import {
   OPENSCAD_PROJECT_MAX_ASSETS,
@@ -129,7 +130,7 @@ export const chatTools = {
   }),
   build_brep_project: tool({
     description: loadBundledInstruction('tool.build_brep_project'),
-    inputSchema: brepAiBuildInputSchema,
+    inputSchema: brepAiBuildProviderInputSchema,
     outputSchema: brepAiBuildOutputSchema,
   }),
   answer_user: tool({
