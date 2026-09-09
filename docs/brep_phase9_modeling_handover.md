@@ -32,6 +32,7 @@ Do not use Codex unless it is genuinely needed.
 
 Read first:
 
+- `docs/brep_ai_context_budget_plan.md`;
 - `docs/brep_modeling_capability_expansion_plan.md`;
 - `docs/brep_m0_parameter_integrity_closeout.md`;
 - `docs/brep_m1_scalar_expression_closeout.md`;
@@ -166,9 +167,68 @@ The fillet node was not `resultNodeId`, so the authoritative result remained unf
 
 `rotateDeg` remained `[0,0,0]`; M1 intentionally does not broaden that boundary.
 
+## Next active engineering phase — AI context budget / projection
+
+**Planned and documented; implementation has not started. This is the next active activity before M2.**
+
+Plan:
+
+```text
+docs/brep_ai_context_budget_plan.md
+```
+
+Trigger observed in the real local runtime:
+
+```text
+request (169503 tokens) exceeds the available context size (131072 tokens)
+```
+
+The overflow followed the M1 provider-schema hardening and exposed several token multipliers in the current request construction:
+
+- the finite reference-free provider schema repeats scalar-expression shapes across many BRep fields;
+- the complete active message branch is converted to model messages;
+- historical `build_brep_project` calls can carry superseded complete project snapshots;
+- current canonical BRep state is also injected separately in system context;
+- historical images can be rehydrated to base64.
+
+Architectural rule for this phase:
+
+```text
+Database / immutable revisions = durable history and source authority
+Model context window           = bounded working memory for the current turn
+```
+
+For BRep, the current canonical project is structured truth. Historical complete BRep snapshots must not be repeatedly sent merely because they remain correctly persisted.
+
+Implement in this order:
+
+1. **C1 — context observability**: measure/log bounded token/category estimates before dispatch;
+2. **C2 — compact provider schema**: assess `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH` `3 -> 2` and add schema/token-size regression without changing canonical M1 depth `12` / node limit `64`;
+3. **C3 — BRep model-context projection**: remove/compact superseded complete BRep tool/project snapshots while preserving current canonical source exactly once and recent relevant user intent;
+4. re-measure the original failure class;
+5. **C4 — image projection**: stop automatically rehydrating irrelevant historical images;
+6. **C5 — hard model-aware input budget** with reserved output and safety margin before provider dispatch;
+7. **C6 — rolling intent summary only if still justified after structured-state deduplication**.
+
+For a 131072-token model, target normal operation materially below the ceiling (roughly 60k-90k input as an initial target), not merely `130k` input. Exact budgets must be model/configuration driven.
+
+Do not solve this primarily by increasing llama.cpp context size. Larger context may be separately useful, but duplicate structured state should be removed first.
+
+This phase must preserve:
+
+- immutable revision/UI history in the database;
+- current canonical BRep source authority;
+- M0/M1 validation and integrity;
+- provider-safe no-recursive-warning/no-nested-`$ref` baseline;
+- branch/leaf semantics;
+- GHX authority boundaries;
+- model selection through Settings/discovery.
+
+Do not start M2 as part of context-budget work.
+
 ## Remaining Phase 9 installed-host acceptance
 
-Do not confuse repository-complete modeling milestones with completion of the existing GHX product loop.
+Do not confuse repository-complete modeling milestones or context-budget work with completion of the existing GHX product loop.
 
 Still separately required:
 
@@ -187,9 +247,9 @@ For the M1 host fixture, verify specifically that only independent published inp
 
 ## Next modeling milestone — M2, not started
 
-M2 is the next item in `docs/brep_modeling_capability_expansion_plan.md`, but **no M2 implementation has started**.
+M2 remains the next modeling-capability milestone in `docs/brep_modeling_capability_expansion_plan.md`, but **no M2 implementation has started** and context-budget/projection work now comes first.
 
-Potential M2 scope is bounded additive Boolean composition:
+Potential M2 scope remains bounded additive Boolean composition:
 
 - `union`;
 - `intersect`.
@@ -209,8 +269,15 @@ Do not combine M2 with pattern/mirror, profile/extrude, shell/wall abstractions,
 
 ## Suggested next chat first action
 
-If continuing the modeling-capability track, begin with **analysis and scope for M2 only** after reconciling the branch, M0/M1 closeouts and the still-open Phase 9 host-acceptance boundary.
+Begin with **AI context budget / projection only**.
 
-If prioritizing host evidence instead, first update/restart the local Brepia runtime and confirm that `build_brep_project` no longer emits the M1 recursive-reference warnings. Then run the focused M1 derived-expression fixture and continue the existing Phase 9 save/reopen/import/activate/native-preview loop.
+First reconcile current branch implementation against:
 
-In either case, do not infer installed Rhino parity from repository CI and do not merge PR #36 without explicit stacked-branch reconciliation.
+- `AGENTS.md`;
+- `docs/brep_ai_context_budget_plan.md`;
+- this handover;
+- `docs/brep_m1_scalar_expression_closeout.md`.
+
+Then implement **C1 context observability before any compaction**, using the observed `169503 > 131072` local request as the motivating failure class. Measure current system/tool/current-BRep/history/tool-payload/image contributions so C2/C3 decisions are evidence-driven.
+
+Do not start M2, do not claim installed Rhino acceptance from repository tests, and do not merge PR #36 without explicit stacked-branch reconciliation.
