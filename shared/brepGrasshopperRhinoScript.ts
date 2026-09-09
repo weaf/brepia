@@ -9,6 +9,7 @@ import type {
   BrepScalar,
   BrepVector3,
 } from './brepProject.ts';
+import { isBrepParameterReference } from './brepScalar.ts';
 
 export const BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID =
   '719467e6-7cf5-4848-99b0-c5dd57e5442c';
@@ -185,14 +186,21 @@ function scalarExpression(
   variables: ReadonlyMap<string, string>,
 ): string {
   if (typeof value === 'number') return pythonNumber(value);
-  const variable = variables.get(value.parameter);
-  if (!variable) {
-    throw new BrepGrasshopperRhinoScriptError(
-      'invalid_model',
-      `Unknown parameter reference ${value.parameter} in Rhino script generation.`,
-    );
+  if (isBrepParameterReference(value)) {
+    const variable = variables.get(value.parameter);
+    if (!variable) {
+      throw new BrepGrasshopperRhinoScriptError(
+        'invalid_model',
+        `Unknown parameter reference ${value.parameter} in Rhino script generation.`,
+      );
+    }
+    return `brepia_scalar(${variable})`;
   }
-  return variable;
+
+  const left = scalarExpression(value.args[0], variables);
+  if (value.op === 'neg') return `brepia_neg(${left})`;
+  const right = scalarExpression(value.args[1], variables);
+  return `brepia_${value.op}(${left}, ${right})`;
 }
 
 function vectorExpression(
@@ -517,7 +525,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport math\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_scalar(value):\n    value = float(value)\n    if not math.isfinite(value) or abs(value) > 1000000000.0:\n        raise ValueError("Brepia scalar value must be finite and bounded.")\n    return 0.0 if value == 0.0 else value\n\ndef brepia_add(left, right):\n    return brepia_scalar(brepia_scalar(left) + brepia_scalar(right))\n\ndef brepia_sub(left, right):\n    return brepia_scalar(brepia_scalar(left) - brepia_scalar(right))\n\ndef brepia_mul(left, right):\n    return brepia_scalar(brepia_scalar(left) * brepia_scalar(right))\n\ndef brepia_div(left, right):\n    left = brepia_scalar(left)\n    right = brepia_scalar(right)\n    if right == 0.0:\n        raise ValueError("Brepia scalar expression divides by zero.")\n    return brepia_scalar(left / right)\n\ndef brepia_neg(value):\n    return brepia_scalar(-brepia_scalar(value))\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
