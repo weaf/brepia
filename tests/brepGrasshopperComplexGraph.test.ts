@@ -135,32 +135,40 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     const booleanMatches = script.source.match(/rg\.Brep\.CreateBooleanDifference\(/g) ?? [];
     assert.equal(booleanMatches.length, 2);
 
-    assert.match(
+    const firstBoolean = /^(brepiaNode\d+)Parts0 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
-      /brepiaNode5Parts0 = rg\.Brep\.CreateBooleanDifference\(brepiaNode5, brepiaNode2, brepiaTolerance\)/,
     );
-    assert.match(
+    const secondBoolean = /^(brepiaNode\d+)Parts1 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
-      /brepiaNode5Parts1 = rg\.Brep\.CreateBooleanDifference\(brepiaNode5, brepiaNode4, brepiaTolerance\)/,
+    );
+    const positiveTranslation = /^if not (brepiaNode\d+)\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(250, 0, 0\)\)\):$/m.exec(
+      script.source,
+    );
+    const negativeTranslation = /^if not (brepiaNode\d+)\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(-250, 0, 0\)\)\):$/m.exec(
+      script.source,
     );
 
-    const positiveTranslation = script.source.indexOf(
-      'rg.Transform.Translation(rg.Vector3d(250, 0, 0))',
-    );
-    const negativeTranslation = script.source.indexOf(
-      'rg.Transform.Translation(rg.Vector3d(-250, 0, 0))',
-    );
-    const firstBoolean = script.source.indexOf(
-      'brepiaNode5Parts0 = rg.Brep.CreateBooleanDifference(',
-    );
-    const secondBoolean = script.source.indexOf(
-      'brepiaNode5Parts1 = rg.Brep.CreateBooleanDifference(',
-    );
+    assert.ok(firstBoolean);
+    assert.ok(secondBoolean);
+    assert.ok(positiveTranslation);
+    assert.ok(negativeTranslation);
 
-    assert.ok(positiveTranslation >= 0);
-    assert.ok(negativeTranslation > positiveTranslation);
-    assert.ok(firstBoolean > negativeTranslation);
-    assert.ok(secondBoolean > firstBoolean);
+    assert.equal(firstBoolean[1], firstBoolean[2]);
+    assert.equal(secondBoolean[1], secondBoolean[2]);
+    assert.equal(secondBoolean[1], firstBoolean[1]);
+    assert.equal(firstBoolean[3], positiveTranslation[1]);
+    assert.equal(secondBoolean[3], negativeTranslation[1]);
+    assert.notEqual(firstBoolean[3], secondBoolean[3]);
+
+    const positiveOffset = script.source.indexOf(positiveTranslation[0]);
+    const firstBooleanOffset = script.source.indexOf(firstBoolean[0]);
+    const negativeOffset = script.source.indexOf(negativeTranslation[0]);
+    const secondBooleanOffset = script.source.indexOf(secondBoolean[0]);
+
+    assert.ok(positiveOffset >= 0);
+    assert.ok(firstBooleanOffset > positiveOffset);
+    assert.ok(negativeOffset > firstBooleanOffset);
+    assert.ok(secondBooleanOffset > negativeOffset);
   });
 
   it('keeps general translation parameterized instead of baking current values into Rhino source', async () => {
