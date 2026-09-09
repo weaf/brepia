@@ -338,9 +338,15 @@ function buildGraphSource(
       );
       lines.push(`${variable} = rg.Box(`);
       lines.push('    rg.Plane.WorldXY,');
-      lines.push(`    rg.Interval(0.0, ${variable}Width),`);
-      lines.push(`    rg.Interval(0.0, ${variable}Depth),`);
-      lines.push(`    rg.Interval(0.0, ${variable}Height),`);
+      lines.push(
+        `    rg.Interval(-${variable}Width / 2.0, ${variable}Width / 2.0),`,
+      );
+      lines.push(
+        `    rg.Interval(-${variable}Depth / 2.0, ${variable}Depth / 2.0),`,
+      );
+      lines.push(
+        `    rg.Interval(-${variable}Height / 2.0, ${variable}Height / 2.0),`,
+      );
       lines.push(').ToBrep()');
     } else if (node.type === 'cylinder') {
       const radius = scalarExpression(node.radius, variables);
@@ -358,6 +364,12 @@ function buildGraphSource(
       lines.push(`if ${variable} is None:`);
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino could not create Brepia cylinder node ${node.id}.`)})`,
+      );
+      lines.push(
+        `if not ${variable}.Transform(rg.Transform.Translation(rg.Vector3d(0, 0, -${variable}Height / 2.0))):`,
+      );
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not center Brepia cylinder node ${node.id}.`)})`,
       );
     } else if (node.type === 'transform') {
       const input = emitNode(node.input);

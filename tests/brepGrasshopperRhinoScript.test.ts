@@ -81,9 +81,18 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     assert.match(script.source, /brepiaNode0Width = float\(Width\)/);
     assert.match(script.source, /brepiaNode0Height = float\(Height\)/);
     assert.match(script.source, /brepiaNode0 = rg\.Box\(/);
-    assert.match(script.source, /rg\.Interval\(0\.0, brepiaNode0Width\)/);
-    assert.match(script.source, /rg\.Interval\(0\.0, brepiaNode0Depth\)/);
-    assert.match(script.source, /rg\.Interval\(0\.0, brepiaNode0Height\)/);
+    assert.match(
+      script.source,
+      /rg\.Interval\(-brepiaNode0Width \/ 2\.0, brepiaNode0Width \/ 2\.0\)/,
+    );
+    assert.match(
+      script.source,
+      /rg\.Interval\(-brepiaNode0Depth \/ 2\.0, brepiaNode0Depth \/ 2\.0\)/,
+    );
+    assert.match(
+      script.source,
+      /rg\.Interval\(-brepiaNode0Height \/ 2\.0, brepiaNode0Height \/ 2\.0\)/,
+    );
     assert.match(
       script.source,
       /rg\.Transform\.PlaneToPlane\(rg\.Plane\.WorldXY, brepiaDefaultPlane\)/,
@@ -137,7 +146,7 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     assert.match(revised.source, /sourceRevisionId: revision-43/);
   });
 
-  it('emits the first canonical through-hole graph as box, cylinder, translate and subtract', async () => {
+  it('emits the first canonical through-hole graph as centered box, centered cylinder, translate and subtract', async () => {
     const withHole = cloneFixture();
     const body = withHole.source.nodes[0];
     assert.ok(body);
@@ -164,6 +173,10 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     assert.match(
       script.source,
       /brepiaNode\d+Cylinder = rg\.Cylinder\(rg\.Circle\(rg\.Plane\.WorldXY, brepiaNode\d+Radius\), brepiaNode\d+Height\)/,
+    );
+    assert.match(
+      script.source,
+      /\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(0, 0, -brepiaNode\d+Height \/ 2\.0\)\)\)/,
     );
     assert.match(
       script.source,
