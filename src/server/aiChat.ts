@@ -1228,7 +1228,7 @@ export async function handleAiChatRequest(req: Request) {
     transport.kind,
     customSupportsVision,
   );
-  if (conversation.type === 'parametric' && !directVision) {
+  if (!directVision) {
     chatLanguageModel = withVisionFallback(chatLanguageModel, user.id);
   }
   console.info('vision routing', {
