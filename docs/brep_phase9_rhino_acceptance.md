@@ -22,16 +22,19 @@ Real Rhino 8 / Grasshopper testing has now established the following:
 8. A **fresh Brepia product export after that correction has now been opened and solved successfully in the installed Rhino 8 / Grasshopper host**. The native box geometry is visible and solves quickly.
 9. `Height` and `Width` are working Grasshopper inputs and drive the product geometry as intended.
 10. The former editable `Plane` product input has been removed. Canonical Brepia placement remains internal and is applied by the generated Python carrier, preserving the product's placement authority rather than exposing it as a casual Grasshopper parameter.
+11. Two additional, more complex Brepia-generated GHX models have now also been opened successfully in the installed Rhino 8 / Grasshopper host. This demonstrates that the zero-install Python 3 carrier and host-compatible GHX envelope are not limited to the original single-box diagnostic.
 
-This advances the zero-install single-box product path beyond the earlier port-correction checkpoint. It does **not** complete Phase 9 as a whole: save/reopen, returned-GHX import/activation/continuation and the broader canonical BRep operation surface remain separately evidenced acceptance work.
+The broader two-model host result is deliberately recorded as **definition-level interoperability evidence**, not as an unqualified parity claim for every canonical operation. Exact operation-level acceptance remains tied to the concrete canonical node graph exercised by a host test; operations whose presence in those two models has not been recorded must not inherit acceptance by implication.
 
-The next geometry-runtime acceptance target is the repository-supported canonical graph:
+This advances the zero-install product path beyond the earlier single-box checkpoint. It does **not** complete Phase 9 as a whole: save/reopen, returned-GHX import/activation/continuation and the broader canonical BRep operation surface remain separately evidenced acceptance work.
+
+The next explicit geometry-runtime acceptance target remains the repository-supported canonical graph:
 
 ```text
 box -> cylinder -> translate -> subtract
 ```
 
-That through-hole path is covered by deterministic repository generation tests but has **not yet been accepted in the installed Rhino 8 host**. Do not describe it as runtime parity until a fresh Brepia export has opened, solved and produced the expected cut geometry in that host.
+That through-hole path is covered by deterministic repository generation tests. If one of the newly accepted complex definitions is confirmed to contain this exact canonical graph, record that graph-level evidence explicitly before describing it as installed-host parity; otherwise keep the graph-specific acceptance open.
 
 The current RhinoCommon implementation review for this graph is pinned through `docs/references/rhino8_mcneel_sources.md`. The reviewed McNeel Rhino 8 branch-8 Python examples cover tolerance-aware `Brep.CreateBooleanDifference(...)` and `Transform.Translation(...)`; Brepia still owns and tests primitive centering, canonical placement, graph ordering, result cardinality and fail-closed semantics.
 
@@ -50,7 +53,7 @@ The executable Python/GHX compiler currently has repository support for:
 
 The fillet translation mirrors the authoritative native evaluator's accepted selector semantics rather than exposing Rhino edge indices as Brepia state. `parallelToAxis` samples the normalized edge midpoint tangent and applies the same `1e-3` axis-parallel threshold. Rhino execution uses `Brep.CreateFilletEdges(...)` with `BlendType.Fillet`, `RailType.RollingBall` and document absolute tolerance. Non-positive radius, empty selector result or a Rhino result other than exactly one Brep fails closed. Canonical v1 normalization does not currently admit an `all` selector, and the GHX exporter does not broaden that boundary independently. The Rhino 8 upstream/API review is recorded in `docs/references/rhino8_mcneel_sources.md`.
 
-**Fillet support is repository-level only at this checkpoint.** No installed Rhino 8 host parity is claimed until a fresh Brepia fillet export opens, solves and produces the expected topology in the real host.
+**Fillet support is repository-level only at this checkpoint unless a recorded installed-host test is confirmed to include a canonical fillet node.** Do not infer fillet host parity from a complex-model success without recording that the exercised graph actually contained the fillet operation and produced the expected topology.
 
 Still intentionally fail-closed on the active Rhino/GHX path:
 
@@ -78,9 +81,9 @@ Required acceptance sequence:
 11. continue editing the canonical model with Brepia AI;
 12. export a fresh GHX and reopen/solve it successfully in Grasshopper.
 
-For the current simple-box product path, steps 1–5 are now proven with a fresh product export, and the working Height/Width controls provide parameter-response evidence toward step 6. The remaining sequence must still be completed before full Phase 9 acceptance is claimed.
+For the current simple-box product path, steps 1–5 are proven with a fresh product export, and the working Height/Width controls provide parameter-response evidence toward step 6. Two additional nontrivial product definitions have also opened successfully, broadening the definition-level host evidence. The remaining sequence must still be completed before full Phase 9 acceptance is claimed.
 
-For each newly broadened canonical geometry operation, opening and solving the simple box is not transferable runtime evidence. The exact broadened graph must separately pass installed-host acceptance.
+For each newly broadened canonical geometry operation, opening and solving another model is only transferable runtime evidence when the exact exercised graph is recorded. The broadened graph must separately pass installed-host acceptance before operation-level parity is claimed.
 
 ## Acceptance boundaries
 
