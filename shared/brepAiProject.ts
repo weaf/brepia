@@ -4,6 +4,7 @@ import {
   type BrepProject,
   type BrepPublishedNumberParameter,
 } from './brepProject.ts';
+import { analyzeBrepProjectIntegrity } from './brepProjectIntegrity.ts';
 
 export type BrepProjectCollectionDiff<T> = {
   added: string[];
@@ -35,7 +36,8 @@ export class BrepAiProjectError extends Error {
     public readonly code:
       | 'invalid_candidate'
       | 'project_id_changed'
-      | 'unstable_node_identity',
+      | 'unstable_node_identity'
+      | 'graph_integrity',
     message: string,
   ) {
     super(message);
@@ -65,15 +67,47 @@ export function normalizeBrepAiProjectCandidate(value: unknown): BrepProject {
   }
 }
 
+function assertBrepAiProjectIntegrity(project: BrepProject): void {
+  const analysis = analyzeBrepProjectIntegrity(project);
+  if (
+    analysis.orphanNodeIds.length === 0 &&
+    analysis.orphanOnlyParameterIds.length === 0 &&
+    analysis.unusedParameterIds.length === 0
+  ) {
+    return;
+  }
+
+  const defects: string[] = [];
+  if (analysis.orphanNodeIds.length > 0) {
+    defects.push(`orphan nodes: ${analysis.orphanNodeIds.join(', ')}`);
+  }
+  if (analysis.orphanOnlyParameterIds.length > 0) {
+    defects.push(
+      `orphan-only parameters: ${analysis.orphanOnlyParameterIds.join(', ')}`,
+    );
+  }
+  if (analysis.unusedParameterIds.length > 0) {
+    defects.push(`unused parameters: ${analysis.unusedParameterIds.join(', ')}`);
+  }
+
+  throw new BrepAiProjectError(
+    'graph_integrity',
+    `AI BRep project candidate has graph-integrity defects (${defects.join('; ')}). Every feature node must contribute to resultNodeId or an explicit project-object geometry role. Every published parameter must affect authoritative geometry or intentionally control placement or semantic point data.`,
+  );
+}
+
 /**
  * Validate the first AI-authored native BRep source as standalone canonical
  * creation. There is intentionally no previous project and therefore no
- * continuity diff or fabricated identity anchor on this path.
+ * continuity diff or fabricated identity anchor on this path. M0 graph
+ * integrity is enforced only at this AI boundary, not as global v1 validity.
  */
 export function validateBrepAiCreation(
   candidateInput: unknown,
 ): BrepAiCreationValidation {
-  return { project: normalizeBrepAiProjectCandidate(candidateInput) };
+  const project = normalizeBrepAiProjectCandidate(candidateInput);
+  assertBrepAiProjectIntegrity(project);
+  return { project };
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {
@@ -244,6 +278,9 @@ function sharedIds<T extends { id: string }>(
  * Validate an ordinary AI follow-up against the exact source snapshot it was
  * generated from. Standalone schema validity is insufficient because an LLM
  * can otherwise return a valid project with gratuitously replaced identities.
+ * M0 integrity applies to the returned candidate only, allowing legacy/manual
+ * source snapshots to remain readable while requiring the AI edit to repair
+ * disconnected feature/parameter state before it can become a new revision.
  */
 export function validateBrepAiFollowUp(
   previousInput: unknown,
@@ -271,5 +308,6 @@ export function validateBrepAiFollowUp(
     );
   }
 
+  assertBrepAiProjectIntegrity(project);
   return { project, diff: diffBrepProjects(previous, project) };
 }
