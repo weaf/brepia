@@ -4,7 +4,7 @@ import { describe, it } from 'vitest';
 
 import { compileBrepGrasshopperExecutableGhx } from '../shared/brepGrasshopperExecutableGhx.ts';
 import {
-  BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID,
+  BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID,
   BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
   createBrepGrasshopperRhinoScriptPlan,
 } from '../shared/brepGrasshopperRhinoScript.ts';
@@ -24,8 +24,23 @@ function decodeBase64Utf8(value: string): string {
   return Buffer.from(value, 'base64').toString('utf8');
 }
 
-describe('BRep Phase 8E executable GHX candidate', () => {
-  it('embeds one modern Rhino C# Script after the native Brepia parameter controls', async () => {
+describe('BRep Phase 8E executable GHX', () => {
+  it('emits the Rhino-host-compatible archive envelope proven in installed Grasshopper', async () => {
+    const ghx = await compileBrepGrasshopperExecutableGhx(fixture);
+
+    assert.match(ghx, /<Archive name="Root">/);
+    assert.match(ghx, /<chunks count="2"><chunk name="Definition">/);
+    assert.match(ghx, /<chunk name="DocumentHeader"><items count="5">/);
+    assert.match(ghx, /<item name="PreviewNormal" type_name="gh_drawing_color" type_code="36">/);
+    assert.match(ghx, /<item name="PreviewSelected" type_name="gh_drawing_color" type_code="36">/);
+    assert.match(ghx, /<chunk name="DefinitionProperties"><items count="4">/);
+    assert.match(ghx, /<item name="KeepOpen" type_name="gh_bool" type_code="1">false<\/item>/);
+    assert.match(ghx, /<chunk name="GHALibraries">/);
+    assert.match(ghx, new RegExp(BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID));
+    assert.match(ghx, /<chunk name="Thumbnail">/);
+  });
+
+  it('embeds one modern Rhino Python 3 Script after the native Brepia parameter controls', async () => {
     const [ghx, packagePlan, script] = await Promise.all([
       compileBrepGrasshopperExecutableGhx(fixture),
       createBrepGrasshopperPackagePlan(fixture),
@@ -40,8 +55,7 @@ describe('BRep Phase 8E executable GHX candidate', () => {
         }</item>`,
       ),
     );
-    assert.match(ghx, new RegExp(BREP_GRASSHOPPER_RHINO_CSHARP_COMPONENT_GUID));
-    assert.match(ghx, new RegExp(BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID));
+    assert.match(ghx, new RegExp(BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID));
     assert.match(
       ghx,
       new RegExp(
@@ -54,12 +68,20 @@ describe('BRep Phase 8E executable GHX candidate', () => {
     );
     assert.match(
       ghx,
-      /<item name="Taxon" type_name="gh_string" type_code="10">\*\.\*\.csharp<\/item>/,
+      /<item name="Taxon" type_name="gh_string" type_code="10">\*\.\*\.python<\/item>/,
+    );
+    assert.match(
+      ghx,
+      /<item name="Version" type_name="gh_string" type_code="10">3\.\*<\/item>/,
+    );
+    assert.match(
+      ghx,
+      /<item name="Name" type_name="gh_string" type_code="10">Python 3 Script<\/item>/,
     );
     assert.doesNotMatch(ghx, /Brepia\.Grasshopper\.gha/i);
   });
 
-  it('stores the exact deterministic Brepia RhinoCommon source as UTF-8 base64', async () => {
+  it('stores the exact deterministic Brepia RhinoCommon Python source as UTF-8 base64', async () => {
     const [ghx, script] = await Promise.all([
       compileBrepGrasshopperExecutableGhx(fixture),
       createBrepGrasshopperRhinoScriptPlan(fixture),
@@ -69,9 +91,10 @@ describe('BRep Phase 8E executable GHX candidate', () => {
     );
     assert.ok(match?.[1]);
     assert.equal(decodeBase64Utf8(match[1]), script.source);
-    assert.match(script.source, /public class Script_Instance : GH_ScriptInstance/);
-    assert.match(script.source, /private void RunScript\(/);
-    assert.match(script.source, /using Rhino\.Geometry;/);
+    assert.match(script.source, /import Rhino\.Geometry as rg/);
+    assert.match(script.source, /brepiaLocal = rg\.Box\(/);
+    assert.match(script.source, /result = brepiaResult/);
+    assert.doesNotMatch(script.source, /Script_Instance|GH_ScriptInstance/);
   });
 
   it('wires every numeric input to its stable native control and leaves placement unconnected', async () => {
