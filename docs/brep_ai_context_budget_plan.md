@@ -1,6 +1,6 @@
 # BRep AI context budget and projection plan
 
-Status: **C1 repository-complete / CI-accepted; runtime measurement pending before C2**
+Status: **C1 empirically complete; C2 repository-complete / CI-accepted; runtime re-measurement pending before C3**
 
 Date: 2026-09-09
 
@@ -8,7 +8,7 @@ Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
 
-C1 implementation/CI closeout is recorded in `docs/brep_c1_context_observability_closeout.md`. The next action is to re-run the real 169503/131072 failure class and inspect the bounded C1 breakdown. Do not begin C2 or C3 until that measurement has ranked the actual contributors.
+C1 implementation/CI closeout is recorded in `docs/brep_c1_context_observability_closeout.md`. The reproduced failure-class measurement is recorded in `docs/brep_c1_runtime_evidence_2026-09-09.md`. C2 is now repository-complete and CI-accepted. The next action is to re-run the same first-turn Native BRep fixture with the depth-2 provider schema and compare the new diagnostics/provider outcome before C3 is started.
 
 ## Trigger
 
@@ -70,14 +70,12 @@ Increasing llama.cpp context size is not the primary solution. A larger context 
 
 ## C1 — context observability
 
-Status: **repository-complete and CI-accepted; empirical failure-class measurement pending**.
+Status: **repository-complete, CI-accepted and empirically measured on the original failure class**.
 
-Implemented request-level context diagnostics before destructive compaction is introduced.
-
-The diagnostics now measure/log a deterministic approximate breakdown immediately before the final model request, including:
+C1 added bounded request-level diagnostics immediately before `streamText(...)`, including:
 
 - resolved system/instruction size and BRep-context increment;
-- provider-visible tool-schema size, including per-tool breakdown;
+- provider-visible tool-schema size;
 - current canonical BRep size;
 - ordinary persisted message text/reasoning size and counts;
 - historical `build_brep_project` input/result payload size and call count;
@@ -91,30 +89,57 @@ The diagnostics now measure/log a deterministic approximate breakdown immediatel
 
 The logging is bounded and never includes full prompt/project/image payloads. Tests assert that raw fixture user text, BRep markers and base64 data are absent from the serialized diagnostics object.
 
-Where provider usage/tokenization data is available after successful calls, actual usage is logged separately for later calibration.
-
 Repository evidence on `5570d6539c94d890d23fb3f91edf9da9cddc9431`:
 
 - Quality Gate #766 — PASS;
 - Grasshopper Build #338 — PASS.
 
-Acceptance remaining before C2:
+### C1 runtime result
 
-- re-run the real long Native BRep conversation / representative failure class;
-- capture the bounded `ai context diagnostics` object;
-- where the call succeeds, also capture `ai context actual usage`;
-- use those numbers to determine which category actually dominates.
+The original overflow was reproduced on:
 
-Ordinary request construction itself remains unchanged by C1.
+```text
+local/qwen3.8-27b-mtp-128k
+```
+
+The first-turn fixture contained no historical BRep state and no images, yet diagnostics reported:
+
+```text
+system/instruction estimate             2077 tokens
+provider-visible tool-schema estimate 105743 tokens
+ordinary history estimate                 29 tokens
+effective model messages                  42 tokens
+total deterministic estimate          107862 tokens
+llama.cpp request count                169503 tokens
+```
+
+The request also had:
+
+```text
+context window          131072
+reserved output          64000
+safety margin             8192
+usable input budget      58880
+```
+
+This ranked the provider schema as the dominant contributor before any history existed. C3 therefore cannot be the primary fix for the observed first-turn overflow.
+
+The deterministic byte/token estimator materially under-counts the llama.cpp tokenizer for this schema-heavy request. Future C5 enforcement must therefore be provider/tokenizer aware or deliberately conservative; the observed ratio must not simply be hard-coded as a universal multiplier.
 
 ## C2 — compact provider schema
 
-Re-evaluate the M1 provider-facing expression authoring depth.
+Status: **repository-complete and CI-accepted; real runtime re-measurement pending**.
 
-Current provider boundary:
+C1 runtime evidence justified reducing the finite provider authoring depth from:
 
 ```text
 BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3
+```
+
+to:
+
+```text
+BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 2
 ```
 
 The canonical M1 validator remains authoritative with depth `12` and expression-node limit `64`.
@@ -125,17 +150,56 @@ The ordinary M1 relationship:
 InnerWidth = Width - 2 * WallThickness
 ```
 
-requires only a shallow provider-authoring tree. Assess reducing provider authoring depth from `3` to `2` if regression fixtures demonstrate that intended M1 authoring remains covered.
+is explicitly regression-tested against the depth-2 provider-authoring Zod schema and remains accepted. A deliberately deeper expression is rejected by that finite provider boundary while the actual tool wrapper's full recursive/canonical validator still accepts it, proving that C2 changes constrained model authoring only and does not reduce canonical/persisted M1 capability.
 
-Constraints:
+The actual provider JSON Schema remains:
 
-- do not reduce canonical/persisted M1 capability;
-- do not restore recursive `z.lazy()` directly to the provider-facing tool;
-- do not introduce nested `$ref` as the local llama.cpp baseline;
-- retain full canonical validation after the provider call;
-- add a token/schema-size regression so future schema changes cannot silently multiply prompt size again.
+- finite;
+- reference-free;
+- free of nested `$ref`;
+- explicit about `add`, `sub`, `mul`, `div` and `neg`;
+- backed by full canonical validation after provider output.
+
+A schema-size regression now requires the serialized `build_brep_project` provider schema to remain below:
+
+```text
+180000 bytes
+```
+
+This prevents future finite-expression changes from silently restoring the ~423 kB tool-schema class observed by C1.
+
+C2 code/test checkpoint:
+
+```text
+93a4aac680b3fe529e19515d45df47d11e847452
+Test compact BRep provider schema depth
+```
+
+CI on that exact checkpoint:
+
+- Quality Gate #770 — PASS;
+  - dependency audit — PASS;
+  - tests — PASS;
+  - typecheck — PASS;
+  - lint — PASS;
+  - build — PASS;
+  - diff check — PASS;
+- Grasshopper Build #342 — PASS.
+
+Runtime acceptance still required:
+
+- update/restart the local Brepia runtime on the current branch;
+- repeat the same first-turn Native BRep fixture on `local/qwen3.8-27b-mtp-128k`;
+- capture the new bounded `ai context diagnostics` object;
+- confirm the request no longer overflows 131072;
+- if it succeeds, capture `ai context actual usage`;
+- compare provider schema size and request count against the C1 baseline.
+
+Do not begin C3 until this re-measurement shows the residual problem after C2.
 
 ## C3 — BRep model-context projection
+
+Status: **not started; gated on C2 runtime re-measurement**.
 
 Create an explicit projection from persisted `AppUIMessage[]` / branch history to the bounded messages that the model actually needs.
 
@@ -205,6 +269,8 @@ Compaction/drop priority should be explicit and tested. Proposed ordering:
 
 Never send a request known to exceed the selected model's context window.
 
+The C1 failure-class measurement shows that the current deterministic byte estimator is not precise enough to be used blindly as this hard guard for schema-heavy llama.cpp traffic. C5 must therefore use provider/tokenizer-aware counting where practical or a tested conservative bound.
+
 ## C6 — rolling conversation summary, only if needed
 
 Do not begin with summarization as the primary fix.
@@ -226,15 +292,15 @@ It must not replace exact current parameter/node/project state.
 
 Implement in this sequence:
 
-1. **C1 — observability** — repository complete; obtain real failure-class measurement next;
-2. **C2 — provider-schema size reduction + size regression**;
-3. **C3 — BRep history projection / superseded snapshot removal**;
-4. re-measure the original failing conversation;
+1. **C1 — observability** — complete and empirically measured;
+2. **C2 — provider-schema size reduction + size regression** — repository complete / CI accepted; re-measure runtime next;
+3. **C3 — BRep history projection / superseded snapshot removal** — only after C2 runtime evidence;
+4. re-measure representative long multi-turn BRep conversations;
 5. **C4 — image projection** where necessary;
 6. **C5 — hard model-aware input budget**;
 7. **C6 — rolling summary** only if measurements justify it.
 
-The earlier expectation was that C2 + C3 would produce the largest immediate reduction for the observed Native BRep case. C1 exists specifically to verify or falsify that expectation before those changes are made.
+C1 falsified the assumption that history projection was needed to solve the original first-turn failure: the provider schema dominated before history existed. C3 remains important for long sessions, but it is now deliberately sequenced after C2 runtime verification.
 
 ## Acceptance fixture
 
@@ -245,7 +311,9 @@ local model context window: 131072
 observed request:           169503 tokens
 ```
 
-A representative long Native BRep conversation should, after projection, remain comfortably under the model-aware hard budget while preserving:
+The immediate C2 runtime goal is that the same first-turn fixture fits comfortably enough to dispatch successfully without changing llama.cpp context size or weakening canonical M1.
+
+A representative long Native BRep conversation should later, after C3/C4/C5 as needed, remain comfortably under the model-aware hard budget while preserving:
 
 - current canonical project;
 - current user request;
@@ -264,7 +332,9 @@ This phase must not:
 - alter canonical `schemaVersion: 1` BRep authority;
 - weaken M0 parameter/graph integrity;
 - weaken M1 canonical scalar validation;
+- reduce canonical M1 depth `12` or expression-node limit `64`;
 - reintroduce recursive provider schema warnings;
+- introduce nested `$ref` as the llama.cpp baseline;
 - enable unsupported rotation/modeling operations;
 - change GHX parameter-only return/import authority;
 - change immutable revision semantics;
@@ -273,6 +343,6 @@ This phase must not:
 
 ## Relationship to the modeling roadmap
 
-This context-budget phase is the **next active engineering activity before M2** because current long-session behavior can prevent further BRep AI work from reaching the model at all.
+This context-budget phase remains the **next active engineering activity before M2** because current long-session behavior can prevent further BRep AI work from reaching the model at all.
 
 M2 remains planned but not started. Phase 9 installed Rhino/Grasshopper host acceptance remains a separate evidence track and is not closed by context-budget work.
