@@ -12,6 +12,7 @@ import {
 import {
   BrepScalarEvaluationError,
   resolveBrepScalar,
+  validateBrepProjectScalarValues,
 } from './brepScalar.ts';
 
 export const BREP_EVALUATION_MAX_BODY_COUNT = 64;
@@ -342,6 +343,14 @@ export function normalizeBrepEvaluationRequest(
     parameterValues[parameter.id] = normalized;
   }
 
+  try {
+    validateBrepProjectScalarValues(project, parameterValues);
+  } catch (error) {
+    if (error instanceof BrepScalarEvaluationError) {
+      throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
+    }
+    throw error;
+  }
   resolveBrepProjectObjectSemantics(project, parameterValues);
 
   return { project, parameterValues };
