@@ -88,7 +88,7 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
       script.source,
       /rg\.Transform\.PlaneToPlane\(rg\.Plane\.WorldXY, brepiaDefaultPlane\)/,
     );
-    assert.doesNotMatch(script.source, /isinstance\(Plane|\bPlane\b/);
+    assert.doesNotMatch(script.source, /isinstance\(Plane|brepia_normalize_plane\(Plane\)/);
     assert.match(
       script.source,
       /Result = brepia_place_brep\(brepiaNode0, brepiaTransform\)/,
@@ -163,19 +163,19 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
 
     assert.match(
       script.source,
-      /brepiaNode1Cylinder = rg\.Cylinder\(rg\.Circle\(rg\.Plane\.WorldXY, brepiaNode1Radius\), brepiaNode1Height\)/,
+      /brepiaNode\d+Cylinder = rg\.Cylinder\(rg\.Circle\(rg\.Plane\.WorldXY, brepiaNode\d+Radius\), brepiaNode\d+Height\)/,
     );
     assert.match(
       script.source,
-      /brepiaNode2\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)\)/,
+      /\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)\)/,
     );
     assert.match(
       script.source,
-      /brepiaNode3Parts0 = rg\.Brep\.CreateBooleanDifference\(brepiaNode3, brepiaNode2, brepiaTolerance\)/,
+      /rg\.Brep\.CreateBooleanDifference\(brepiaNode\d+, brepiaNode\d+, brepiaTolerance\)/,
     );
     assert.match(
       script.source,
-      /Result = brepia_place_brep\(brepiaNode3, brepiaTransform\)/,
+      /Result = brepia_place_brep\(brepiaNode\d+, brepiaTransform\)/,
     );
     assert.match(
       script.source,

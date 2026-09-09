@@ -52,12 +52,12 @@ describe('BRep Phase 8F product GHX export', () => {
   it('fails closed instead of approximating canonical geometry outside the proven GHX subset', async () => {
     const unsupported = cloneProject();
     unsupported.nodes.push({
-      id: 'movedBody',
+      id: 'rotatedBody',
       type: 'transform',
       input: unsupported.resultNodeId,
-      translate: [10, 0, 0],
+      rotateDeg: [0, 0, 90],
     });
-    unsupported.resultNodeId = 'movedBody';
+    unsupported.resultNodeId = 'rotatedBody';
 
     await assert.rejects(
       () => exportBrepGrasshopperGhx(unsupported, 'revision-unsupported'),
