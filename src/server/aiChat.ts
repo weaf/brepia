@@ -343,7 +343,7 @@ function messageRowToUIMessage(
       ),
       {
         functionName: 'ai-chat',
-        statusCode: 500,
+        statusCode: 200,
         conversationId,
         additionalContext: {
           operation: 'resolve_dangling_tool_parts',
