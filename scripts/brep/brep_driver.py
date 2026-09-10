@@ -126,6 +126,27 @@ def axis_edges(shape, axis):
     return selected
 
 
+def result_solids(value):
+    if value is None:
+        return []
+    if hasattr(value, "solids"):
+        return list(value.solids())
+    solids = []
+    for item in value:
+        if hasattr(item, "solids"):
+            solids.extend(item.solids())
+    return solids
+
+
+def require_single_boolean_solid(value, kind, node_id):
+    solids = result_solids(value)
+    if len(solids) != 1:
+        raise ValueError(
+            f"unsupported_result_cardinality: BRep {kind} {node_id} produced {len(solids)} solids; exactly one is required"
+        )
+    return solids[0]
+
+
 def compact_json(value):
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
@@ -322,6 +343,12 @@ def evaluate(request):
         elif kind == "subtract":
             shape = evaluate_node(node["base"])
             for tool in node["tools"]: shape = shape - evaluate_node(tool)
+        elif kind == "union":
+            inputs = [evaluate_node(input_id) for input_id in node["inputs"]]
+            shape = require_single_boolean_solid(inputs[0].fuse(*inputs[1:]), kind, node_id)
+        elif kind == "intersect":
+            inputs = [evaluate_node(input_id) for input_id in node["inputs"]]
+            shape = require_single_boolean_solid(inputs[0].intersect(*inputs[1:]), kind, node_id)
         elif kind == "fillet":
             input_shape = evaluate_node(node["input"])
             shape = input_shape.fillet(scalar(node["radius"], parameters), axis_edges(input_shape, node["selector"]["axis"]))
