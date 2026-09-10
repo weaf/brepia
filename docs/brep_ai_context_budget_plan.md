@@ -1,14 +1,20 @@
 # BRep AI context budget and projection plan
 
-Status: **C1 empirically complete; C2 repository-complete / CI-accepted; runtime re-measurement pending before C3**
+Status: **C1 empirically complete; C2 repository-complete / CI-accepted with successful post-C2 runtime dispatch; C2.5 is the next active phase before C3**
 
-Date: 2026-09-09
+Date: 2026-09-10
 
 Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
 
-C1 implementation/CI closeout is recorded in `docs/brep_c1_context_observability_closeout.md`. The reproduced failure-class measurement is recorded in `docs/brep_c1_runtime_evidence_2026-09-09.md`. C2 is now repository-complete and CI-accepted. The next action is to re-run the same first-turn Native BRep fixture with the depth-2 provider schema and compare the new diagnostics/provider outcome before C3 is started.
+Detailed evidence and phase plans:
+
+- `docs/brep_c1_context_observability_closeout.md`;
+- `docs/brep_c1_runtime_evidence_2026-09-09.md`;
+- `docs/brep_c2_provider_schema_closeout.md`;
+- `docs/brep_c2_runtime_evidence_2026-09-10.md`;
+- `docs/brep_c25_native_brep_agent_runtime_specialization_plan.md`.
 
 ## Trigger
 
@@ -20,16 +26,6 @@ request (169503 tokens) exceeds the available context size (131072 tokens)
 
 The selected model was a local 128k-class OpenAI-compatible model. This exposed a context-construction problem rather than a reason to simply increase the llama.cpp context window.
 
-The current request path can multiply tokens in several places:
-
-1. the provider-facing `build_brep_project` schema is intentionally reference-free and therefore repeats finite scalar-expression shapes across many BRep fields;
-2. `loadBranchFromDb(...)` reconstructs the entire active conversation branch and that branch is converted to model messages;
-3. historical `build_brep_project` tool calls can contain complete canonical project snapshots even though only the newest canonical BRep revision is current authority;
-4. the current canonical BRep project is also injected into the system context for BRep follow-up turns;
-5. historical images may be hydrated back to base64 before model-message conversion.
-
-The resulting model context can therefore contain multiple copies of information that Brepia already stores authoritatively elsewhere.
-
 ## Architectural principle
 
 Treat these as separate layers:
@@ -39,8 +35,6 @@ Database / immutable revisions = durable history and source authority
 Model context window           = bounded working memory for this turn
 ```
 
-Do not equate persisted conversation history with the complete prompt sent to every model call.
-
 For Native BRep work specifically:
 
 ```text
@@ -48,7 +42,7 @@ canonical BrepProject = current structured truth
 conversation history  = intent, rationale and user interaction history
 ```
 
-An older complete BRep snapshot should not remain in model working memory merely because it remains correctly persisted in immutable revision history.
+Do not equate persisted conversation history with the complete prompt sent to every model call.
 
 ## Context-budget target
 
@@ -87,22 +81,9 @@ C1 added bounded request-level diagnostics immediately before `streamText(...)`,
 - reserved output tokens;
 - safety margin, selected usable input budget and estimated headroom.
 
-The logging is bounded and never includes full prompt/project/image payloads. Tests assert that raw fixture user text, BRep markers and base64 data are absent from the serialized diagnostics object.
+The logging is bounded and never includes full prompt/project/image payloads.
 
-Repository evidence on `5570d6539c94d890d23fb3f91edf9da9cddc9431`:
-
-- Quality Gate #766 — PASS;
-- Grasshopper Build #338 — PASS.
-
-### C1 runtime result
-
-The original overflow was reproduced on:
-
-```text
-local/qwen3.8-27b-mtp-128k
-```
-
-The first-turn fixture contained no historical BRep state and no images, yet diagnostics reported:
+The original overflow fixture contained no historical BRep state and no images, yet diagnostics reported:
 
 ```text
 system/instruction estimate             2077 tokens
@@ -113,24 +94,15 @@ total deterministic estimate          107862 tokens
 llama.cpp request count                169503 tokens
 ```
 
-The request also had:
+The provider schema therefore dominated before history existed. C3 history projection could not be the primary fix for that first-turn failure.
 
-```text
-context window          131072
-reserved output          64000
-safety margin             8192
-usable input budget      58880
-```
-
-This ranked the provider schema as the dominant contributor before any history existed. C3 therefore cannot be the primary fix for the observed first-turn overflow.
-
-The deterministic byte/token estimator materially under-counts the llama.cpp tokenizer for this schema-heavy request. Future C5 enforcement must therefore be provider/tokenizer aware or deliberately conservative; the observed ratio must not simply be hard-coded as a universal multiplier.
+The deterministic byte/token estimator also materially under-counted llama.cpp tokenization for this schema-heavy request. Future C5 enforcement must be provider/tokenizer aware or deliberately conservative.
 
 ## C2 — compact provider schema
 
-Status: **repository-complete and CI-accepted; real runtime re-measurement pending**.
+Status: **repository-complete, CI-accepted and post-C2 runtime dispatch has succeeded**.
 
-C1 runtime evidence justified reducing the finite provider authoring depth from:
+C2 reduced only the finite provider authoring depth from:
 
 ```text
 BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3
@@ -150,62 +122,86 @@ The ordinary M1 relationship:
 InnerWidth = Width - 2 * WallThickness
 ```
 
-is explicitly regression-tested against the depth-2 provider-authoring Zod schema and remains accepted. A deliberately deeper expression is rejected by that finite provider boundary while the actual tool wrapper's full recursive/canonical validator still accepts it, proving that C2 changes constrained model authoring only and does not reduce canonical/persisted M1 capability.
+remains explicitly regression-tested against the depth-2 provider boundary.
 
-The actual provider JSON Schema remains:
+The provider JSON Schema remains finite, reference-free, `$ref`-free and explicit about `add`, `sub`, `mul`, `div` and `neg`, while every received tool value is still validated by the full recursive/canonical validator.
 
-- finite;
-- reference-free;
-- free of nested `$ref`;
-- explicit about `add`, `sub`, `mul`, `div` and `neg`;
-- backed by full canonical validation after provider output.
+A schema-size regression requires the serialized `build_brep_project` provider schema to remain below `180000` bytes.
 
-A schema-size regression now requires the serialized `build_brep_project` provider schema to remain below:
-
-```text
-180000 bytes
-```
-
-This prevents future finite-expression changes from silently restoring the ~423 kB tool-schema class observed by C1.
-
-C2 code/test checkpoint:
+Accepted C2 code/test checkpoint:
 
 ```text
 93a4aac680b3fe529e19515d45df47d11e847452
-Test compact BRep provider schema depth
 ```
 
-CI on that exact checkpoint:
+with Quality Gate #770 and Grasshopper Build #342 passing.
 
-- Quality Gate #770 — PASS;
-  - dependency audit — PASS;
-  - tests — PASS;
-  - typecheck — PASS;
-  - lint — PASS;
-  - build — PASS;
-  - diff check — PASS;
-- Grasshopper Build #342 — PASS.
+### Post-C2 runtime finding
 
-Runtime acceptance still required:
+A real post-C2 Native BRep generation using:
 
-- update/restart the local Brepia runtime on the current branch;
-- repeat the same first-turn Native BRep fixture on `local/qwen3.8-27b-mtp-128k`;
-- capture the new bounded `ai context diagnostics` object;
-- confirm the request no longer overflows 131072;
-- if it succeeds, capture `ai context actual usage`;
-- compare provider schema size and request count against the C1 baseline.
+```text
+local/qwen3.8-27b-mtp-128k
+```
 
-Do not begin C3 until this re-measurement shows the residual problem after C2.
+completed rather than reproducing the 131072-token overflow. However it exposed a new runtime quality/latency class:
+
+```text
+approximately 60 minutes total generation
+stepCount: 12
+provider usage surfaced as inputTokens=0, outputTokens=0, totalTokens=0
+```
+
+The generated room/cabinet model was broadly useful but misplaced a door cutter outside the room. The fresh GHX loaded in installed Rhino 8 / Grasshopper, where Brepia's Rhino Python script raised its own boolean-difference guard on the disjoint door cutter.
+
+This evidence is recorded in:
+
+```text
+docs/brep_c2_runtime_evidence_2026-09-10.md
+```
+
+The successful dispatch means C2 addressed the immediate first-turn overflow sufficiently to expose the next bottlenecks. Do not jump directly to C3 without first resolving the newly isolated first-turn/runtime-loop and CAD-specialization issues.
+
+## C2.5 — Native BRep agent runtime and CAD specialization
+
+Status: **next active engineering phase**.
+
+Detailed plan:
+
+```text
+docs/brep_c25_native_brep_agent_runtime_specialization_plan.md
+```
+
+C2.5 is ordered internally as:
+
+1. **C2.5-A — per-step and provider-usage observability**
+   - measure each model step, elapsed time, tool call, validation outcome and context growth;
+   - request/use llama.cpp/OpenAI-compatible streaming usage metadata where supported;
+   - distinguish repeated validation retries from redundant post-acceptance inference.
+2. **C2.5-B — terminate on accepted canonical BRep build**
+   - invalid/rejected `build_brep_project` calls may retry;
+   - the first fully validated/accepted BRep build should complete the CAD generation turn without requiring an `answer_user` step;
+   - preserve immutable persistence/finalization semantics.
+3. **C2.5-C — source-kind CAD prompt specialization**
+   - keep `Standard` as the high-level profile/package selection;
+   - automatically select an OpenSCAD or Native BRep CAD methodology instruction from the authoritative source kind;
+   - keep tool-contract instructions separate from CAD reasoning methodology;
+   - Native BRep specialization should teach centered extents, half-extents, default-value transform sanity checks, cutter/material intersection checks and authoritative DAG/effectiveness checks;
+   - keep the specialization concise and measure instruction/context cost.
+4. **C2.5-D — Rhino/native disjoint subtract parity**
+   - a provably disjoint cutter may be an explicit no-op, matching native build123d/OCCT behavior;
+   - overlapping/uncertain boolean failures must remain fail-closed;
+   - follow Rhino 8 evidence policy and obtain installed-host evidence before claiming parity.
+
+C2.5 is not M2 and must not broaden the canonical modeling vocabulary.
 
 ## C3 — BRep model-context projection
 
-Status: **not started; gated on C2 runtime re-measurement**.
+Status: **not started; follows C2.5**.
 
 Create an explicit projection from persisted `AppUIMessage[]` / branch history to the bounded messages that the model actually needs.
 
-For BRep follow-up turns:
-
-### Preserve
+For BRep follow-up turns preserve:
 
 - current user turn exactly;
 - current canonical BRep source revision exactly once;
@@ -213,18 +209,14 @@ For BRep follow-up turns:
 - compact successful assistant/tool summaries needed to understand recent decisions;
 - required system/tool instructions.
 
-### Remove or compact
+Remove or compact from model context while leaving DB/UI history untouched:
 
-- complete BRep project inputs from superseded historical `build_brep_project` calls;
+- complete project inputs from superseded historical `build_brep_project` calls;
 - duplicate historical `data-brep-project` snapshots;
-- old BRep state that is already superseded by the current canonical source;
+- old BRep state already superseded by the current canonical source;
 - verbose historical tool mechanics that do not change current intent/state.
 
-Persisted UI/history remains untouched. This is only a model-context projection.
-
 The current canonical project must remain authoritative and must never be reconstructed from a lossy conversation summary.
-
-Initial recent-history policy should be conservative, e.g. a bounded number of recent user turns rather than arbitrary message count. Exact turn count should be validated empirically.
 
 Acceptance:
 
@@ -248,7 +240,7 @@ Do not silently replace image authority with an unverified generated summary whe
 
 ## C5 — hard context budget
 
-After observability and projection exist, enforce a deterministic request budget before `streamText(...)` / provider dispatch.
+After observability and projection exist, enforce a deterministic request budget before provider dispatch.
 
 Conceptually:
 
@@ -256,7 +248,7 @@ Conceptually:
 inputBudget = contextWindow - reservedOutput - safetyMargin
 ```
 
-Compaction/drop priority should be explicit and tested. Proposed ordering:
+Compaction/drop priority should be explicit and tested:
 
 1. omit old non-current image payloads;
 2. compact superseded historical BRep tool/project payloads;
@@ -269,7 +261,7 @@ Compaction/drop priority should be explicit and tested. Proposed ordering:
 
 Never send a request known to exceed the selected model's context window.
 
-The C1 failure-class measurement shows that the current deterministic byte estimator is not precise enough to be used blindly as this hard guard for schema-heavy llama.cpp traffic. C5 must therefore use provider/tokenizer-aware counting where practical or a tested conservative bound.
+C1 showed that `bytes / 4` cannot be treated as exact for schema-heavy llama.cpp traffic. C5 must use provider/tokenizer-aware counting where practical or a tested conservative bound.
 
 ## C6 — rolling conversation summary, only if needed
 
@@ -279,57 +271,58 @@ First remove duplicated structured state. Once C1-C5 show that older natural-lan
 
 The summary must not become BRep geometry authority. Canonical project state and immutable revisions remain authoritative.
 
-A useful summary may include facts such as:
+## Current implementation order
 
-- product/user intent;
-- non-geometric preferences not represented canonically;
-- rationale for recent design decisions;
-- explicit constraints the user asked to preserve.
+Proceed in this sequence:
 
-It must not replace exact current parameter/node/project state.
+1. **C1 — context observability** — complete and empirically measured;
+2. **C2 — compact provider schema** — repository complete / CI accepted; successful post-C2 runtime dispatch captured;
+3. **C2.5 — Native BRep agent runtime and CAD specialization** — next active phase;
+   - A: per-step/usage observability;
+   - B: stop on accepted build;
+   - C: OpenSCAD/BRep source-kind prompt specialization under the shared Standard profile;
+   - D: Rhino/native disjoint-subtract parity;
+4. **C3 — BRep history projection / superseded snapshot removal**;
+5. re-measure representative long multi-turn BRep conversations;
+6. **C4 — image projection** where necessary;
+7. **C5 — hard model-aware input budget**;
+8. **C6 — rolling summary** only if measurements justify it;
+9. **M2 — modeling capability expansion** only after this runtime/context track is sufficiently stable.
 
-## Suggested implementation order
+## Acceptance fixtures
 
-Implement in this sequence:
+Keep both failure classes as regression targets.
 
-1. **C1 — observability** — complete and empirically measured;
-2. **C2 — provider-schema size reduction + size regression** — repository complete / CI accepted; re-measure runtime next;
-3. **C3 — BRep history projection / superseded snapshot removal** — only after C2 runtime evidence;
-4. re-measure representative long multi-turn BRep conversations;
-5. **C4 — image projection** where necessary;
-6. **C5 — hard model-aware input budget**;
-7. **C6 — rolling summary** only if measurements justify it.
-
-C1 falsified the assumption that history projection was needed to solve the original first-turn failure: the provider schema dominated before history existed. C3 remains important for long sessions, but it is now deliberately sequenced after C2 runtime verification.
-
-## Acceptance fixture
-
-Use the real failure class as a regression target:
+Original context failure:
 
 ```text
-local model context window: 131072
-observed request:           169503 tokens
+context window: 131072
+observed request: 169503 tokens
 ```
 
-The immediate C2 runtime goal is that the same first-turn fixture fits comfortably enough to dispatch successfully without changing llama.cpp context size or weakening canonical M1.
+Post-C2 runtime/quality fixture:
 
-A representative long Native BRep conversation should later, after C3/C4/C5 as needed, remain comfortably under the model-aware hard budget while preserving:
+```text
+model: local/qwen3.8-27b-mtp-128k
+result: request completes
+latency: approximately 60 minutes
+stepCount: 12
+usage surfaced: 0 / 0 / 0
+generated CAD: broadly useful room/cabinets, door cutter spatially wrong
+GHX: opens in installed Rhino 8 / Grasshopper
+Rhino Python: fails on second room_result boolean because the door cutter is disjoint
+```
 
-- current canonical project;
-- current user request;
-- recent relevant intent;
-- valid `build_brep_project` tool calling;
-- M0/M1 integrity;
-- immutable revision persistence;
-- BRep AI follow-up correctness.
+After C2.5, rerun the same or equivalent room/cabinets/door fixture before C3 and compare step count, accepted-build step, elapsed time, token usage, canonical geometry and installed-host behavior.
 
-For a 128k model, target normal input well below the hard ceiling rather than merely reducing `169503` to `130000`.
+A representative long Native BRep conversation should later, after C3/C4/C5 as needed, remain comfortably under the model-aware hard budget while preserving current canonical state and user intent.
 
 ## Boundaries
 
-This phase must not:
+This track must not:
 
 - alter canonical `schemaVersion: 1` BRep authority;
+- change `conversation.type = 'parametric'` or create a new BRep conversation type;
 - weaken M0 parameter/graph integrity;
 - weaken M1 canonical scalar validation;
 - reduce canonical M1 depth `12` or expression-node limit `64`;
@@ -338,11 +331,14 @@ This phase must not:
 - enable unsupported rotation/modeling operations;
 - change GHX parameter-only return/import authority;
 - change immutable revision semantics;
+- bypass Settings/discovery model authority;
+- regress OpenSCAD behavior;
+- claim Rhino parity without installed Rhino 8 / Grasshopper evidence;
 - merge PR #36 across its stacked boundary;
-- start M2 `union` / `intersect` implementation.
+- start M2 `union` / `intersect` implementation during C2.5-C6.
 
 ## Relationship to the modeling roadmap
 
-This context-budget phase remains the **next active engineering activity before M2** because current long-session behavior can prevent further BRep AI work from reaching the model at all.
+The context/runtime track remains the active engineering activity before M2 because it directly affects whether BRep AI work can execute efficiently and reliably.
 
-M2 remains planned but not started. Phase 9 installed Rhino/Grasshopper host acceptance remains a separate evidence track and is not closed by context-budget work.
+M2 remains planned but not started. Phase 9 installed Rhino/Grasshopper host acceptance remains a separate evidence track and is not closed by context/runtime work.
