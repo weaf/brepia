@@ -129,6 +129,18 @@ export type BrepSubtractNode = {
   tools: string[];
 };
 
+export type BrepUnionNode = {
+  id: string;
+  type: 'union';
+  inputs: string[];
+};
+
+export type BrepIntersectNode = {
+  id: string;
+  type: 'intersect';
+  inputs: string[];
+};
+
 export type BrepFilletNode = {
   id: string;
   type: 'fillet';
@@ -142,6 +154,8 @@ export type BrepNode =
   | BrepCylinderNode
   | BrepTransformNode
   | BrepSubtractNode
+  | BrepUnionNode
+  | BrepIntersectNode
   | BrepFilletNode;
 
 export type BrepProject = {
@@ -627,6 +641,33 @@ function normalizeNodeReference(value: unknown, field: string): string {
   return normalizeId(value, field);
 }
 
+function normalizeBooleanInputs(
+  value: unknown,
+  nodeId: string,
+  kind: 'union' | 'intersect',
+): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length < 2 ||
+    value.length > BREP_PROJECT_MAX_NODE_INPUTS
+  ) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep ${kind} ${nodeId} must contain between 2 and ${BREP_PROJECT_MAX_NODE_INPUTS} input references.`,
+    );
+  }
+  const inputs = value.map((input, index) =>
+    normalizeNodeReference(input, `BRep ${kind} ${nodeId} inputs[${index}]`),
+  );
+  if (new Set(inputs).size !== inputs.length) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep ${kind} ${nodeId} cannot contain duplicate input references.`,
+    );
+  }
+  return inputs;
+}
+
 function normalizeEdgeSelector(
   value: unknown,
   nodeId: string,
@@ -775,6 +816,14 @@ function normalizeNode(
       };
     }
 
+    case 'union':
+    case 'intersect':
+      return {
+        id,
+        type: value.type,
+        inputs: normalizeBooleanInputs(value.inputs, id, value.type),
+      };
+
     case 'fillet':
       return {
         id,
@@ -808,6 +857,9 @@ function nodeDependencies(node: BrepNode): string[] {
       return [node.input];
     case 'subtract':
       return [node.base, ...node.tools];
+    case 'union':
+    case 'intersect':
+      return node.inputs;
   }
 }
 
