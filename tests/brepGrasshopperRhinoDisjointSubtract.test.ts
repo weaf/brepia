@@ -71,21 +71,34 @@ describe('C2.5-D Rhino/native disjoint subtraction parity', () => {
       /second_box\.Max\.Z < first_box\.Min\.Z - tolerance/,
     );
 
-    const guard =
-      'brepiaNode3Disjoint0 = brepia_bounds_disjoint(brepiaNode3, brepiaNode2, brepiaTolerance)';
-    const conditional = 'if not brepiaNode3Disjoint0:';
-    const boolean =
-      '    brepiaNode3Parts0 = rg.Brep.CreateBooleanDifference(brepiaNode3, brepiaNode2, brepiaTolerance)';
+    const guard = /^(brepiaNode\d+)Disjoint0 = brepia_bounds_disjoint\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+      script.source,
+    );
+    const boolean = /^    (brepiaNode\d+)Parts0 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+      script.source,
+    );
     const failure =
       '        raise RuntimeError("Rhino boolean difference for Brepia node bodyMinusFarCutter did not produce exactly one Brep.")';
 
-    assert.ok(script.source.includes(guard));
+    assert.ok(guard);
+    assert.ok(boolean);
+    assert.equal(guard[1], guard[2]);
+    assert.equal(boolean[1], boolean[2]);
+    assert.equal(boolean[1], guard[1]);
+    assert.equal(boolean[3], guard[3]);
+
+    const conditional = `if not ${guard[1]}Disjoint0:`;
     assert.ok(script.source.includes(conditional));
-    assert.ok(script.source.includes(boolean));
     assert.ok(script.source.includes(failure));
-    assert.ok(script.source.indexOf(guard) < script.source.indexOf(conditional));
-    assert.ok(script.source.indexOf(conditional) < script.source.indexOf(boolean));
-    assert.ok(script.source.indexOf(boolean) < script.source.indexOf(failure));
+
+    const guardOffset = script.source.indexOf(guard[0]);
+    const conditionalOffset = script.source.indexOf(conditional);
+    const booleanOffset = script.source.indexOf(boolean[0]);
+    const failureOffset = script.source.indexOf(failure);
+    assert.ok(guardOffset >= 0);
+    assert.ok(conditionalOffset > guardOffset);
+    assert.ok(booleanOffset > conditionalOffset);
+    assert.ok(failureOffset > booleanOffset);
   });
 
   it('keeps subtract tools ordered and rechecks disjointness against the current accumulated result', async () => {
@@ -107,19 +120,43 @@ describe('C2.5-D Rhino/native disjoint subtraction parity', () => {
     project.source.resultNodeId = 'bodyMinusTwoCutters';
 
     const script = await createBrepGrasshopperRhinoScriptPlan(project);
-    const firstGuard =
-      'brepiaNode3Disjoint0 = brepia_bounds_disjoint(brepiaNode3, brepiaNode1, brepiaTolerance)';
-    const firstUpdate = '    brepiaNode3 = brepiaNode3Parts0[0]';
-    const secondGuard =
-      'brepiaNode3Disjoint1 = brepia_bounds_disjoint(brepiaNode3, brepiaNode2, brepiaTolerance)';
-    const secondUpdate = '    brepiaNode3 = brepiaNode3Parts1[0]';
+    const firstGuard = /^(brepiaNode\d+)Disjoint0 = brepia_bounds_disjoint\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+      script.source,
+    );
+    const secondGuard = /^(brepiaNode\d+)Disjoint1 = brepia_bounds_disjoint\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+      script.source,
+    );
 
-    assert.ok(script.source.includes(firstGuard));
+    assert.ok(firstGuard);
+    assert.ok(secondGuard);
+    assert.equal(firstGuard[1], firstGuard[2]);
+    assert.equal(secondGuard[1], secondGuard[2]);
+    assert.equal(firstGuard[1], secondGuard[1]);
+    assert.notEqual(firstGuard[3], secondGuard[3]);
+
+    const resultVariable = firstGuard[1];
+    const firstUpdate = `    ${resultVariable} = ${resultVariable}Parts0[0]`;
+    const secondUpdate = `    ${resultVariable} = ${resultVariable}Parts1[0]`;
+    const firstBoolean = `    ${resultVariable}Parts0 = rg.Brep.CreateBooleanDifference(${resultVariable}, ${firstGuard[3]}, brepiaTolerance)`;
+    const secondBoolean = `    ${resultVariable}Parts1 = rg.Brep.CreateBooleanDifference(${resultVariable}, ${secondGuard[3]}, brepiaTolerance)`;
+
+    assert.ok(script.source.includes(firstBoolean));
     assert.ok(script.source.includes(firstUpdate));
-    assert.ok(script.source.includes(secondGuard));
+    assert.ok(script.source.includes(secondBoolean));
     assert.ok(script.source.includes(secondUpdate));
-    assert.ok(script.source.indexOf(firstGuard) < script.source.indexOf(firstUpdate));
-    assert.ok(script.source.indexOf(firstUpdate) < script.source.indexOf(secondGuard));
-    assert.ok(script.source.indexOf(secondGuard) < script.source.indexOf(secondUpdate));
+
+    const firstGuardOffset = script.source.indexOf(firstGuard[0]);
+    const firstBooleanOffset = script.source.indexOf(firstBoolean);
+    const firstUpdateOffset = script.source.indexOf(firstUpdate);
+    const secondGuardOffset = script.source.indexOf(secondGuard[0]);
+    const secondBooleanOffset = script.source.indexOf(secondBoolean);
+    const secondUpdateOffset = script.source.indexOf(secondUpdate);
+
+    assert.ok(firstGuardOffset >= 0);
+    assert.ok(firstBooleanOffset > firstGuardOffset);
+    assert.ok(firstUpdateOffset > firstBooleanOffset);
+    assert.ok(secondGuardOffset > firstUpdateOffset);
+    assert.ok(secondBooleanOffset > secondGuardOffset);
+    assert.ok(secondUpdateOffset > secondBooleanOffset);
   });
 });
