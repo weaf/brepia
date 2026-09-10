@@ -19,12 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type {
-  BrepNode,
-  BrepParameterUnit,
-  BrepProject,
-  BrepScalar,
-  BrepVector3,
+import {
+  BREP_PROJECT_MAX_NODE_INPUTS,
+  type BrepNode,
+  type BrepParameterUnit,
+  type BrepProject,
+  type BrepScalar,
+  type BrepVector3,
 } from '@shared/brepProject';
 import {
   addBrepProjectNode,
@@ -47,6 +48,8 @@ const NODE_TYPES: BrepNode['type'][] = [
   'cylinder',
   'transform',
   'subtract',
+  'union',
+  'intersect',
   'fillet',
 ];
 
@@ -64,6 +67,10 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Transform';
     case 'subtract':
       return 'Subtract';
+    case 'union':
+      return 'Union';
+    case 'intersect':
+      return 'Intersect';
     case 'fillet':
       return 'Fillet';
   }
@@ -117,6 +124,16 @@ function createNodeDraft(
         );
       }
       return { id, type, base: input, tools: [tool] };
+    }
+    case 'union':
+    case 'intersect': {
+      const secondInput = project.nodes.find((node) => node.id !== input)?.id;
+      if (!secondInput) {
+        throw new Error(
+          `${nodeTypeLabel(type)} creation requires at least two existing BRep features.`,
+        );
+      }
+      return { id, type, inputs: [input, secondInput] };
     }
   }
 }
@@ -281,6 +298,130 @@ function NodeReferenceField({
           ))}
       </select>
     </label>
+  );
+}
+
+function OrderedNodeReferencesField({
+  label,
+  values,
+  project,
+  nodeId,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  project: BrepProject;
+  nodeId: string;
+  disabled: boolean;
+  onChange: (values: string[]) => void;
+}) {
+  const availableNodes = project.nodes.filter((node) => node.id !== nodeId);
+  const addCandidate = availableNodes.find((node) => !values.includes(node.id));
+  const canAdd =
+    !disabled &&
+    values.length < BREP_PROJECT_MAX_NODE_INPUTS &&
+    Boolean(addCandidate);
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-adam-neutral-300">{label}</div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!canAdd}
+          className="h-7 px-2 text-[10px]"
+          onClick={() => {
+            if (addCandidate) onChange([...values, addCandidate.id]);
+          }}
+        >
+          <Plus className="mr-1 h-3 w-3" />
+          Add input
+        </Button>
+      </div>
+      <div className="space-y-2 rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/40 p-2">
+        {values.map((value, index) => (
+          <div
+            key={`${value}:${index}`}
+            className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"
+          >
+            <label className="grid gap-1 text-[10px] text-adam-neutral-500">
+              <span>Input {index + 1}</span>
+              <select
+                className={fieldClass}
+                value={value}
+                disabled={disabled}
+                onChange={(event) => {
+                  const next = [...values];
+                  next[index] = event.target.value;
+                  onChange(next);
+                }}
+              >
+                {availableNodes
+                  .filter(
+                    (candidate) =>
+                      candidate.id === value || !values.includes(candidate.id),
+                  )
+                  .map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.id} · {candidate.type}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="flex items-end gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Move Boolean input ${index + 1} up`}
+                disabled={disabled || index === 0}
+                className="h-9 px-2 text-[10px]"
+                onClick={() => {
+                  const next = [...values];
+                  [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                  onChange(next);
+                }}
+              >
+                ↑
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Move Boolean input ${index + 1} down`}
+                disabled={disabled || index === values.length - 1}
+                className="h-9 px-2 text-[10px]"
+                onClick={() => {
+                  const next = [...values];
+                  [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                  onChange(next);
+                }}
+              >
+                ↓
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Remove Boolean input ${index + 1}`}
+                disabled={disabled || values.length <= 2}
+                className="h-9 px-2 text-[10px]"
+                onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}
+              >
+                Remove
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] leading-4 text-adam-neutral-500">
+        Inputs are ordered and unique. Boolean evaluation must resolve to exactly
+        one solid body.
+      </p>
+    </div>
   );
 }
 
@@ -460,6 +601,19 @@ function NodeEditorFields({
             </div>
           </div>
         </div>
+      );
+
+    case 'union':
+    case 'intersect':
+      return (
+        <OrderedNodeReferencesField
+          label={`${nodeTypeLabel(node.type)} input nodes`}
+          values={node.inputs}
+          project={project}
+          nodeId={node.id}
+          disabled={disabled}
+          onChange={(inputs) => onChange({ ...node, inputs })}
+        />
       );
 
     case 'fillet':
@@ -864,7 +1018,11 @@ export function BrepFeatureEditor({
                         <option
                           key={type}
                           value={type}
-                          disabled={type === 'subtract' && project.nodes.length < 2}
+                          disabled={
+                            (type === 'subtract' && project.nodes.length < 2) ||
+                            ((type === 'union' || type === 'intersect') &&
+                              project.nodes.length < 2)
+                          }
                         >
                           {nodeTypeLabel(type)}
                         </option>
