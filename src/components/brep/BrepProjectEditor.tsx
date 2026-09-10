@@ -1107,6 +1107,7 @@ export function BrepProjectParametersPanel() {
     sourceSaving ||
     exporting ||
     Boolean(revisionActionId);
+  const parameterEditingDisabled = saving || sourceSaving || exporting;
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden break-words border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
@@ -1160,34 +1161,75 @@ export function BrepProjectParametersPanel() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="mt-3 flex flex-col gap-3">
-                {project.parameters.map((parameter) => (
-                  <label
-                    className="grid grid-cols-[minmax(0,1fr)_92px_28px] items-center gap-2 text-xs"
-                    key={parameter.id}
-                  >
-                    <span className="min-w-0 truncate text-adam-neutral-300">
-                      {parameter.label}
-                    </span>
-                    <input
-                      className="h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-adam-text-primary outline-none focus:border-adam-blue-dark"
-                      type="number"
-                      min={parameter.min}
-                      max={parameter.max}
-                      step={parameter.step}
-                      value={values[parameter.id]}
-                      disabled={saving || sourceSaving || exporting}
-                      onChange={(event) =>
-                        setParameterValue(
-                          parameter.id,
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                    <span className="truncate text-[10px] text-adam-neutral-400">
-                      {parameter.unit}
-                    </span>
-                  </label>
-                ))}
+                {project.parameters.map((parameter) => {
+                  const hasSliderRange =
+                    typeof parameter.min === 'number' &&
+                    Number.isFinite(parameter.min) &&
+                    typeof parameter.max === 'number' &&
+                    Number.isFinite(parameter.max) &&
+                    parameter.max > parameter.min;
+                  const inputId = `brep-parameter-${parameter.id}`;
+
+                  return (
+                    <div
+                      className="grid grid-cols-[minmax(0,1fr)_92px_28px] items-center gap-x-2 gap-y-1 text-xs"
+                      key={parameter.id}
+                    >
+                      <label
+                        htmlFor={inputId}
+                        className="min-w-0 truncate text-adam-neutral-300"
+                      >
+                        {parameter.label}
+                      </label>
+                      <input
+                        id={inputId}
+                        aria-label={`${parameter.label} value`}
+                        className="h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-adam-text-primary outline-none focus:border-adam-blue-dark"
+                        type="number"
+                        min={parameter.min}
+                        max={parameter.max}
+                        step={parameter.step}
+                        value={values[parameter.id]}
+                        disabled={parameterEditingDisabled}
+                        onChange={(event) =>
+                          setParameterValue(
+                            parameter.id,
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                      <span className="truncate text-[10px] text-adam-neutral-400">
+                        {parameter.unit}
+                      </span>
+                      {hasSliderRange ? (
+                        <div className="col-span-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 pt-1">
+                          <span className="tabular-nums text-[10px] text-adam-neutral-500">
+                            {parameter.min}
+                          </span>
+                          <input
+                            aria-label={`${parameter.label} slider`}
+                            className="h-5 w-full cursor-pointer accent-adam-blue disabled:cursor-not-allowed disabled:opacity-50"
+                            type="range"
+                            min={parameter.min}
+                            max={parameter.max}
+                            step={parameter.step}
+                            value={values[parameter.id]}
+                            disabled={parameterEditingDisabled}
+                            onChange={(event) =>
+                              setParameterValue(
+                                parameter.id,
+                                Number(event.target.value),
+                              )
+                            }
+                          />
+                          <span className="tabular-nums text-[10px] text-adam-neutral-500">
+                            {parameter.max}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </CollapsibleContent>
           </Collapsible>
