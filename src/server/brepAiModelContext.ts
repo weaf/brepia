@@ -13,10 +13,12 @@ export type BrepAiModelContextProjectionDiagnostics = {
   outputMessageCount: number;
   removedBuildToolParts: number;
   removedBrepSnapshotParts: number;
+  removedBuildReasoningParts: number;
   summarizedAcceptedBuilds: number;
   removedBuildInputBytes: number;
   removedBuildOutputBytes: number;
   removedSnapshotBytes: number;
+  removedBuildReasoningBytes: number;
 };
 
 export type BrepAiModelContextProjection = {
@@ -30,9 +32,11 @@ export type BrepProviderModelContextProjectionDiagnostics = {
   outputMessageCount: number;
   removedToolCalls: number;
   removedToolResults: number;
+  removedBuildReasoningParts: number;
   insertedRevisionSummaries: number;
   removedToolInputBytes: number;
   removedToolOutputBytes: number;
+  removedBuildReasoningBytes: number;
 };
 
 export type BrepProviderModelContextProjection = {
@@ -57,6 +61,12 @@ function jsonBytes(value: unknown): number {
   } catch {
     return 0;
   }
+}
+
+function textBytes(value: unknown): number {
+  return typeof value === 'string'
+    ? new TextEncoder().encode(value).byteLength
+    : 0;
 }
 
 function compactAcceptedBuildSummary(part: unknown): string | undefined {
@@ -91,10 +101,12 @@ function projectFollowUpBranch(
     outputMessageCount: messages.length,
     removedBuildToolParts: 0,
     removedBrepSnapshotParts: 0,
+    removedBuildReasoningParts: 0,
     summarizedAcceptedBuilds: 0,
     removedBuildInputBytes: 0,
     removedBuildOutputBytes: 0,
     removedSnapshotBytes: 0,
+    removedBuildReasoningBytes: 0,
   };
   const summariesByToolCallId = new Map<string, string>();
   const projected: AppUIMessage[] = [];
@@ -102,16 +114,25 @@ function projectFollowUpBranch(
   for (const message of messages) {
     if (message.role !== 'assistant') {
       // Preserve user intent, including the current leaf turn, byte-for-byte at
-      // the UI-message layer. Image projection belongs to C4, not C3.
+      // the UI-message layer. Image projection belongs to C4, not C3/C6.
       projected.push(message);
       continue;
     }
 
+    const containsBrepBuild = message.parts.some(
+      (part) => part.type === 'tool-build_brep_project',
+    );
     const parts: AppUIMessage['parts'] = [];
     for (const part of message.parts) {
       if (part.type === 'data-brep-project') {
         diagnostics.removedBrepSnapshotParts += 1;
         diagnostics.removedSnapshotBytes += jsonBytes(part.data);
+        continue;
+      }
+
+      if (containsBrepBuild && part.type === 'reasoning') {
+        diagnostics.removedBuildReasoningParts += 1;
+        diagnostics.removedBuildReasoningBytes += textBytes(part.text);
         continue;
       }
 
@@ -163,10 +184,12 @@ function noopBranchProjection(
       outputMessageCount: messages.length,
       removedBuildToolParts: 0,
       removedBrepSnapshotParts: 0,
+      removedBuildReasoningParts: 0,
       summarizedAcceptedBuilds: 0,
       removedBuildInputBytes: 0,
       removedBuildOutputBytes: 0,
       removedSnapshotBytes: 0,
+      removedBuildReasoningBytes: 0,
     },
     summariesByToolCallId: new Map(),
   };
@@ -200,6 +223,11 @@ export function projectBrepAiModelContext({
  * historical build_brep_project tool inputs/results are removed even if SDK
  * conversion details change, while bounded success summaries are retained.
  *
+ * Historical assistant reasoning attached to a superseded BRep build is also
+ * omitted. It is neither user intent nor geometry authority; the bounded
+ * revision summary plus the separately injected current canonical project are
+ * the provider working-memory representation for that accepted revision.
+ *
  * The current canonical BRep is deliberately not reconstructed here. It is
  * injected exactly once through the authoritative BRep system context.
  */
@@ -221,9 +249,11 @@ export function projectBrepProviderModelMessages({
     outputMessageCount: modelMessages.length,
     removedToolCalls: 0,
     removedToolResults: 0,
+    removedBuildReasoningParts: 0,
     insertedRevisionSummaries: 0,
     removedToolInputBytes: 0,
     removedToolOutputBytes: 0,
+    removedBuildReasoningBytes: 0,
   };
 
   if (!enabled) {
@@ -242,6 +272,10 @@ export function projectBrepProviderModelMessages({
       continue;
     }
 
+    const containsBrepBuild = record.content.some((contentPart) => {
+      const part = asRecord(contentPart);
+      return part?.type === 'tool-call' && part.toolName === BREP_BUILD_TOOL_NAME;
+    });
     const keptContent: unknown[] = [];
     const revisionSummaries: string[] = [];
     for (const contentPart of record.content) {
@@ -254,6 +288,12 @@ export function projectBrepProviderModelMessages({
         if (part.input !== undefined) {
           providerDiagnostics.removedToolInputBytes += jsonBytes(part.input);
         }
+        continue;
+      }
+
+      if (containsBrepBuild && part?.type === 'reasoning') {
+        providerDiagnostics.removedBuildReasoningParts += 1;
+        providerDiagnostics.removedBuildReasoningBytes += textBytes(part.text);
         continue;
       }
 
