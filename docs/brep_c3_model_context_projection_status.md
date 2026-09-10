@@ -1,12 +1,14 @@
 # C3 — BRep model-context projection
 
-Status: **repository-complete and CI-accepted; representative real follow-up remeasurement pending**
+Status: **repository-complete, CI-accepted and runtime-accepted on a representative persisted Native BRep follow-up**
 
 Date: 2026-09-10
 
 Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
+
+Runtime evidence: `docs/brep_c3_runtime_evidence_2026-09-10.md`
 
 ## Purpose
 
@@ -35,16 +37,16 @@ For a persisted Native BRep follow-up turn:
 
 Historical `data-brep-project` parts remain persisted but are excluded from the branch projection because current canonical geometry already has its dedicated authoritative system-context copy.
 
-Successful revision summaries are normalized and bounded to 512 characters. They can preserve useful intent such as a prior accepted edit, but they are never geometry authority.
+Successful revision summaries are normalized and bounded to 512 characters. They preserve useful revision intent but are never geometry authority.
 
 ## Current boundaries
 
-C3 deliberately does **not** yet:
+C3 deliberately does **not**:
 
 - truncate ordinary user conversation history;
-- project or remove historical image/base64 content — that belongs to C4;
-- enforce a hard model-aware token budget — that belongs to C5;
-- add a rolling natural-language summary — that remains C6 only if measurements justify it;
+- project or remove historical image/base64 content — C4 remains separate;
+- itself enforce a hard model-aware token budget — C5 owns that boundary;
+- add a rolling natural-language summary — C6 remains conditional on measurements;
 - change the provider BRep schema;
 - alter canonical BRep validation or persistence.
 
@@ -52,37 +54,30 @@ Creation turns are not projected by C3 because they have no persisted current BR
 
 ## Pre-dispatch safety boundary
 
-The projection is applied at the existing context-diagnostics boundary immediately before `streamText(...)` and mutates the same `modelMessages` array later passed to model dispatch.
+The projection is applied at the context-preflight boundary immediately before model dispatch and mutates the same `modelMessages` array later passed to `streamText(...)`.
 
-A regression test locks this ordering so a future refactor cannot move that boundary after `streamText(...)` without failing CI.
+C5 now makes this preflight fail-closed: if projection/context preparation fails, Brepia does not silently send the unprojected request.
+
+A regression test locks the ordering:
+
+```text
+C3 projection/context preflight
+-> C5 hard-budget derivation/assertion
+-> streamText
+```
 
 ## Diagnostics
 
-`ai context diagnostics` now includes:
+`ai context diagnostics` exposes:
 
 ```text
 brepModelProjection.branch
 brepModelProjection.provider
 ```
 
-Branch diagnostics include:
+Branch diagnostics include persisted BRep build/snapshot removal counts and bytes. Provider diagnostics include removed `build_brep_project` call/result counts, removed bytes and inserted compact revision summaries.
 
-- input/output message counts;
-- removed historical BRep build parts;
-- removed persisted BRep snapshot parts;
-- bounded successful summaries retained;
-- removed BRep build input/output byte counts;
-- removed snapshot byte count.
-
-Provider diagnostics include:
-
-- removed provider `build_brep_project` tool-call count;
-- removed provider tool-result count;
-- inserted revision-summary count;
-- removed tool input/output byte counts;
-- resulting provider message count.
-
-Existing C1 diagnostics still report the complete persisted historical BRep payload sizes separately. This makes the durable-history cost and the actual projected provider-message cost directly comparable.
+Existing C1 diagnostics continue to report complete persisted historical BRep payload sizes separately, so durable-history cost can be compared directly with the projected provider context.
 
 ## Repository acceptance
 
@@ -103,59 +98,69 @@ Quality Gate #826       PASS
 Grasshopper Build #398 PASS
 ```
 
-The Quality Gate covers the new projection behavior plus the existing repository regression suite, typecheck, lint, build and diff check.
+The documentation checkpoint `139d8b61650e14dd88379495a1a675dfa42f51d2` also passed Quality Gate #828 and Grasshopper Build #400.
 
-## Required real runtime remeasurement
+## Runtime acceptance
 
-C3 changes **follow-up** history, so the next representative measurement must not be another first-turn creation fixture.
-
-Use an existing persisted Native BRep conversation and perform one small, unambiguous edit with:
+A real persisted Native BRep follow-up using:
 
 ```text
 local/qwen3.8-27b-mtp-128k
 ```
 
-For example, change one existing published dimension while leaving the rest of the model unchanged.
-
-Capture:
+verified:
 
 ```text
-ai context diagnostics
-ai step started
-ai step diagnostics
-ai context actual usage
+currentCanonicalBrep.present: true
+
+branch projection:
+  removedBuildToolParts:      1
+  removedBrepSnapshotParts:   2
+  summarizedAcceptedBuilds:   1
+  removedBuildInputBytes:  5377
+  removedSnapshotBytes:   10802
+
+provider projection:
+  removedToolCalls:            1
+  removedToolResults:          1
+  insertedRevisionSummaries:   1
+  removedToolInputBytes:    5377
 ```
 
-Specifically verify:
-
-1. `currentCanonicalBrep.present = true`;
-2. `brepModelProjection.branch.removedBuildToolParts > 0` for a branch containing earlier AI BRep revisions;
-3. `brepModelProjection.provider.removedToolCalls > 0` and matching tool results are removed where present;
-4. the first provider step does not contain superseded historical BRep tool payloads;
-5. the current canonical project remains available to the model and the requested edit is semantically correct;
-6. accepted canonical build still terminates the normal Native BRep turn through C2.5-B;
-7. provider-reported input/output/total token usage is captured for comparison.
-
-## Baseline for comparison
-
-The accepted post-C2.5 first-turn fixture reported:
+The first actual provider step contained no superseded BRep tool state:
 
 ```text
-static estimated input: 36,419 tokens
-provider input:         56,413 tokens
-provider output:        25,674 tokens
-provider total:         82,087 tokens
+brepToolCallCount:    0
+brepToolResultCount:  0
+brepToolInputBytes:   0
+brepToolOutputBytes:  0
+brepToolPayloadBytes: 0
+```
+
+The current canonical source remained available and the build was accepted on the first step:
+
+```text
 stepCount:              1
-elapsed:                about 10m33s
+acceptedBrepBuildSteps: [1]
+elapsed:                167207 ms
+provider input:         83612 tokens
+provider output:         2744 tokens
+provider total:         86356 tokens
 ```
 
-That fixture had no prior BRep history, so C3 is not expected to materially change those first-turn numbers. The value of C3 must be measured on a persisted follow-up where superseded BRep tool/project payloads would otherwise accumulate.
+This closes the C3 runtime acceptance boundary. The same run also exposed the estimator/output-reservation evidence that triggered C5; see `docs/brep_c3_runtime_evidence_2026-09-10.md` and `docs/brep_c5_hard_context_budget_status.md`.
 
-## Acceptance boundary
+## C4 decision from C3 evidence
 
-Until the real follow-up measurement succeeds, C3 is **repository-complete / CI-accepted**, not runtime-accepted.
+The accepted C3 follow-up contained:
 
-If the follow-up behaves correctly and the diagnostics prove that historical full-project payloads were removed, continue to the planned remeasurement decision before C4. Do not start M2 as part of C3.
+```text
+images.count:           0
+images.base64Chars:     0
+images.estimatedTokens: 0
+```
+
+There is therefore no evidence that historical images are the next bottleneck on this Native BRep path. C4 remains planned but deferred until an image-bearing fixture demonstrates material historical image cost.
 
 ## Preserved architecture
 
