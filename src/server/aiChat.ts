@@ -90,6 +90,7 @@ import {
   buildAiContextDiagnostics,
   resolveAiModelBudgetMetadata,
 } from './aiContextDiagnostics';
+import { shouldStopAfterAcceptedBrepBuild } from './aiBrepStopCondition';
 import {
   classifyAiToolError,
   measureAiStepContext,
@@ -342,7 +343,7 @@ function messageRowToUIMessage(
       ),
       {
         functionName: 'ai-chat',
-        statusCode: 200,
+        statusCode: 500,
         conversationId,
         additionalContext: {
           operation: 'resolve_dangling_tool_parts',
@@ -1450,7 +1451,15 @@ export async function handleAiChatRequest(req: Request) {
         : streamingOpenCode
           ? hasToolCall('build_parametric_model')
           : activeBrepSource
-            ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
+            ? [
+                ({ steps }) =>
+                  shouldStopAfterAcceptedBrepBuild(
+                    brepBuildAttemptsByStep,
+                    steps.length,
+                  ),
+                hasToolCall('answer_user'),
+                stepCountIs(maxSteps),
+              ]
             : stepCountIs(maxSteps),
     maxOutputTokens,
     abortSignal: activeGeneration.signal,
