@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
 
 import type { AppUIMessage } from '../shared/chatAi';
 import {
@@ -177,7 +178,7 @@ describe('Native BRep provider model-context projection', () => {
       'a2',
       'u2',
     ]);
-    expect(result.messages[1]).toBe(unrelatedAssistant);
+    expect(result.messages[1]).toStrictEqual(unrelatedAssistant);
   });
 
   it('removes the actual provider tool call/result payloads and replaces a successful result with its bounded revision summary', () => {
@@ -263,5 +264,22 @@ describe('Native BRep provider model-context projection', () => {
 
     expect(result.providerDiagnostics.applied).toBe(false);
     expect(result.messages).toEqual(modelMessages);
+  });
+
+  it('keeps the C3 pre-dispatch projection boundary before streamText', () => {
+    const source = fs.readFileSync(
+      new URL('../src/server/aiChat.ts', import.meta.url),
+      'utf8',
+    );
+    const diagnosticsOffset = source.indexOf(
+      'const contextDiagnostics = await buildAiContextDiagnostics({',
+    );
+    const dispatchOffset = source.indexOf('const result = streamText({');
+
+    expect(diagnosticsOffset).toBeGreaterThanOrEqual(0);
+    expect(dispatchOffset).toBeGreaterThan(diagnosticsOffset);
+    expect(
+      source.slice(diagnosticsOffset, dispatchOffset),
+    ).toContain('modelMessages,');
   });
 });
