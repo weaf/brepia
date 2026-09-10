@@ -2,6 +2,11 @@ import { zodSchema } from 'ai';
 import { z } from 'zod';
 import type { AppUIMessage } from '@shared/chatAi';
 import { getLocalModelMetadataById } from './localModels';
+import {
+  projectBrepProviderModelMessages,
+  type BrepAiModelContextProjectionDiagnostics,
+  type BrepProviderModelContextProjectionDiagnostics,
+} from './brepAiModelContext';
 
 const ORDINARY_UTF8_BYTES_PER_TOKEN = 4;
 const BASE64_CHARS_PER_TOKEN = 2;
@@ -56,6 +61,10 @@ export type AiContextDiagnostics = {
     count: number;
     persistedBytes: number;
     providerEstimatedTokens: 0;
+  };
+  brepModelProjection: {
+    branch: BrepAiModelContextProjectionDiagnostics;
+    provider: BrepProviderModelContextProjectionDiagnostics;
   };
   images: {
     count: number;
@@ -340,6 +349,12 @@ export async function resolveAiModelBudgetMetadata(
   }
 }
 
+/**
+ * Pre-dispatch context boundary. For persisted Native BRep follow-up turns the
+ * C3 projection is applied to the mutable provider message array before any
+ * diagnostics are calculated; the same array is subsequently passed to
+ * streamText by aiChat. Durable branchMessages remain untouched.
+ */
 export async function buildAiContextDiagnostics({
   systemPrompt,
   systemPromptBeforeBrepContext,
@@ -355,12 +370,21 @@ export async function buildAiContextDiagnostics({
   systemPromptBeforeBrepContext: string;
   tools: Record<string, unknown>;
   branchMessages: readonly AppUIMessage[];
-  modelMessages: readonly unknown[];
+  modelMessages: unknown[];
   currentBrepProject?: unknown;
   modelContextLimit: number | null;
   modelOutputLimit: number | null;
   reservedOutputTokens: number;
 }): Promise<AiContextDiagnostics> {
+  const brepProjection = projectBrepProviderModelMessages({
+    modelMessages,
+    branchMessages,
+    enabled: currentBrepProject !== undefined,
+  });
+  if (brepProjection.providerDiagnostics.applied) {
+    modelMessages.splice(0, modelMessages.length, ...brepProjection.messages);
+  }
+
   const systemSize = sizeText(systemPrompt);
   const baseSystemBytes = utf8Bytes(systemPromptBeforeBrepContext);
   const providerToolSchemas = await estimateProviderToolSchemas(tools);
@@ -397,6 +421,10 @@ export async function buildAiContextDiagnostics({
     ordinaryConversationHistory: persisted.ordinary,
     historicalBrepToolPayloads: persisted.brepToolPayloads,
     historicalBrepSnapshots: persisted.brepSnapshots,
+    brepModelProjection: {
+      branch: brepProjection.branchDiagnostics,
+      provider: brepProjection.providerDiagnostics,
+    },
     images: effective.images,
     effectiveModelMessages: effective.messages,
     total: { estimatedInputTokens },
