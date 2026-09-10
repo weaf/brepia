@@ -169,6 +169,22 @@ const brepSubtractNodeSchema = z
   })
   .strict();
 
+const brepUnionNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('union'),
+    inputs: z.array(brepIdSchema).min(2).max(BREP_PROJECT_MAX_NODE_INPUTS),
+  })
+  .strict();
+
+const brepIntersectNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('intersect'),
+    inputs: z.array(brepIdSchema).min(2).max(BREP_PROJECT_MAX_NODE_INPUTS),
+  })
+  .strict();
+
 const brepFilletNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -184,6 +200,8 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepCylinderNodeSchema,
   brepTransformNodeSchema,
   brepSubtractNodeSchema,
+  brepUnionNodeSchema,
+  brepIntersectNodeSchema,
   brepFilletNodeSchema,
 ]);
 
@@ -344,6 +362,8 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderCylinderNodeSchema,
   brepProviderTransformNodeSchema,
   brepSubtractNodeSchema,
+  brepUnionNodeSchema,
+  brepIntersectNodeSchema,
   brepProviderFilletNodeSchema,
 ]);
 const brepAiProviderProjectSchema = z
