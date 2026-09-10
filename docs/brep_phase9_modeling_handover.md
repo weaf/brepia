@@ -17,87 +17,47 @@ PR #36 remains **draft**, stacked on `feature/brep-grasshopper-smart-component`,
 Keep:
 
 - `conversation.type = 'parametric'`;
-- `parametricSourceKind = 'brep'`;
+- `parametricSourceKind = 'brep'` for Native BRep;
 - canonical BRep + immutable revision authority;
+- build123d/OCCT as authoritative native geometry evaluator;
 - strict parameter-only GHX return/import boundary;
 - Rhino 8 built-in Python 3 as the zero-install executable carrier;
 - Settings/discovery as the only LLM-model authority;
 - OpenSCAD regressions unchanged;
 - unsupported geometry operations fail closed;
+- non-zero rotation remains unsupported/fail-closed;
 - no installed-host parity claim without real Rhino 8 / Grasshopper evidence.
 
 Do not use Codex unless it is genuinely needed.
 
-## Current modeling-track state
+## Read first
 
-Read first:
-
+- `AGENTS.md`;
 - `docs/brep_ai_context_budget_plan.md`;
-- `docs/brep_c1_context_observability_closeout.md`;
-- `docs/brep_c1_runtime_evidence_2026-09-09.md`;
+- `docs/brep_c25_native_brep_agent_runtime_specialization_plan.md`;
+- `docs/brep_c2_runtime_evidence_2026-09-10.md`;
 - `docs/brep_c2_provider_schema_closeout.md`;
-- `docs/brep_modeling_capability_expansion_plan.md`;
-- `docs/brep_m0_parameter_integrity_closeout.md`;
+- `docs/brep_c1_runtime_evidence_2026-09-09.md`;
 - `docs/brep_m1_scalar_expression_closeout.md`;
+- `docs/brep_m0_parameter_integrity_closeout.md`;
 - `docs/brep_phase9_rhino_acceptance.md`;
-- `docs/brep_phase9_host_model_evidence_2026-09-09.md`;
 - `docs/references/rhino8_mcneel_sources.md`.
+
+Reconcile those documents against actual implementation before changing behavior.
+
+## Accepted modeling baseline
 
 ### M0 — parameter effectiveness + graph integrity
 
 **Repository-complete and CI-accepted.**
 
-M0 introduced shared deterministic reachability/effectiveness analysis that classifies nodes/parameters as authoritative/role reachable, orphan, effective, semantic-only, orphan-only or unused. AI-created/AI-edited snapshots fail closed on ineffective geometry controls and unintended orphan feature branches while legacy/manual/import compatibility remains preserved.
-
-Closeout:
-
-```text
-docs/brep_m0_parameter_integrity_closeout.md
-```
+M0 provides deterministic reachability/effectiveness analysis and prevents new AI-authored snapshots from exposing ineffective geometry controls or unintended orphan feature branches while preserving legacy/manual/import compatibility.
 
 ### M1 — bounded scalar expression AST
 
-**Repository-complete and CI-accepted.** Installed Rhino 8 host evidence for the newly added derived-expression behavior remains separate.
+**Repository-complete and CI-accepted.**
 
-Original accepted M1 code checkpoint:
-
-```text
-4ebfa486519c23d03996c514c326a2f2fff0e084
-Remove stale M1 scalar editing import
-```
-
-Original checkpoint evidence:
-
-- Quality Gate #751 — **PASS**;
-- 126 test files / 808 tests — **PASS**;
-- typecheck — **PASS**;
-- lint — **PASS**;
-- production build — **PASS**;
-- diff check — **PASS**;
-- Grasshopper Build #323 — **PASS** on Ubuntu and Windows packaging/build paths.
-
-Post-closeout provider-schema hardening checkpoint:
-
-```text
-b696e14d5c0ce2790adb37ce4a4ddc28575473a1
-Remove stale direct BRep tool schema import
-```
-
-Exact hardening evidence:
-
-- Quality Gate #759 — **PASS**;
-- 127 test files / 811 tests — **PASS**;
-- dependency audit — **PASS**;
-- typecheck — **PASS**;
-- lint — **PASS**;
-- production build — **PASS**;
-- diff check — **PASS**;
-- Grasshopper Build #331 — **PASS**;
-- plugin build — **PASS**;
-- Ubuntu package build — **PASS**;
-- Windows package build — **PASS**.
-
-M1 adds an additive canonical `schemaVersion: 1` scalar AST:
+Canonical `schemaVersion: 1` supports:
 
 ```ts
 type BrepScalar =
@@ -107,167 +67,219 @@ type BrepScalar =
   | { op: 'neg'; args: [BrepScalar] };
 ```
 
-Safety/semantic contract:
+Canonical safety remains:
 
 - max absolute literal/parameter/intermediate value `1e9`;
 - max expression depth `12`;
 - max expression-node count `64`;
-- finite bounded evaluation at every intermediate;
-- division by zero fails closed;
+- finite/intermediate checks;
+- division by zero fail-closed;
 - deterministic `mm` / `deg` / `none` unit algebra;
-- default-time and runtime-override validation before native execution;
-- native build123d driver and Rhino/GHX compiler share the same bounded operator semantics;
-- M0 recursively follows parameter references through ASTs;
-- placement, feature and project-object editors preserve existing ASTs but do not expose a free-form expression editor;
-- `build_brep_project` teaches the AI to represent derived relationships as ASTs rather than fake published sliders;
-- GHX remains parameter-only at the supported return/import boundary;
-- expression-backed rotation remains fail closed even when the expression resolves to zero.
+- default/runtime validation before native execution;
+- M0 follows nested references;
+- GHX remains parameter-only on return/import;
+- expression-backed rotation remains fail-closed.
 
-#### Provider-safe AI tool boundary
-
-Do **not** wire the recursive `z.lazy()` scalar schema directly into the provider-facing `tool()` input again.
-
-The direct recursive schema caused AI SDK JSON Schema conversion warnings of the form:
+Original M1 accepted code checkpoint:
 
 ```text
-Recursive reference detected at ...! Defaulting to any
+4ebfa486519c23d03996c514c326a2f2fff0e084
 ```
 
-A simple `$ref`-based fix was considered but rejected as the final local-provider strategy because Brepia's OpenAI-compatible local path includes llama.cpp and its JSON-schema-to-grammar implementation has known nested-reference limitations.
+with Quality Gate #751 and Grasshopper Build #323 passing.
 
-The current split is intentional:
+### Provider-safe M1 boundary
 
-- canonical/tool-validation schema remains fully recursive with M1 depth `12` and node limit `64`;
-- provider/model-facing schema is finite and reference-free with `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 2` after C2;
-- ordinary M1 authoring such as `Width - 2 * WallThickness` is explicitly tested at the finite provider boundary;
-- the provider wrapper delegates every received value to the full `brepAiBuildInputSchema.safeParseAsync(...)` validator before acceptance;
-- a deliberately deeper expression is rejected by the finite provider authoring schema but remains accepted by the full canonical validator;
-- `tests/brepAiToolJsonSchema.test.ts` verifies no recursive-reference warning, no `$ref`, explicit M1 operator vocabulary, actual tool wiring and a serialized provider-schema regression ceiling below `180000` bytes.
+Do not wire recursive `z.lazy()` directly into provider-facing tool JSON Schema.
 
-The provider depth is a constrained-generation/authoring bound only. It is not a persistence migration and does not reduce the canonical M1 contract.
+The accepted architecture is:
 
-M1 closeout:
+- full recursive/canonical validator remains authoritative;
+- provider-facing schema is finite and reference-free;
+- no nested `$ref` baseline for llama.cpp;
+- after C2, `BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 2`;
+- ordinary M1 authoring such as `Width - 2 * WallThickness` remains supported;
+- provider schema size is regression-bounded below `180000` serialized bytes.
+
+Provider-hardening checkpoint:
 
 ```text
-docs/brep_m1_scalar_expression_closeout.md
+b696e14d5c0ce2790adb37ce4a4ddc28575473a1
 ```
 
-C2 provider-schema closeout:
-
-```text
-docs/brep_c2_provider_schema_closeout.md
-```
-
-## Why M0/M1 were needed
-
-Installed Rhino 8 / Grasshopper evidence exposed product-level deficiencies in otherwise successfully solved Brepia definitions:
-
-### Room project
-
-The canonical graph uses boxes + literal transforms + one subtract with eight ordered cutters. It supplied useful real-host evidence for complex multi-node box/translation/subtract generation and eight-tool subtraction.
-
-However, only five of ten published parameters reached result geometry. `cabinet_gap`, `cabinet_height`, `cabinet_width`, `door_height` and `wall_thickness` were disconnected, and several intended relationships were hard-coded literals.
-
-M0 prevents new AI-authored snapshots from presenting ineffective geometry sliders; M1 provides a safe representation for the previously baked derived relationships.
-
-### Rectangular plate project
-
-The canonical graph contains box, two cylinders, literal + parameter-backed translation, two-tool subtract and a fillet node.
-
-The fillet node was not `resultNodeId`, so the authoritative result remained unfilleted. The model also exposed ineffective parameters. M0 addresses the authoritative/orphan graph defect; M1 allows dependent positions/dimensions to remain relational rather than numerically baked.
-
-`rotateDeg` remained `[0,0,0]`; M1 intentionally does not broaden that boundary.
-
-## Active engineering phase — AI context budget / projection
-
-**C1 is empirically complete. C2 is repository-complete and CI-accepted. Runtime re-measurement of C2 is the only next gate before C3.**
-
-Plan:
-
-```text
-docs/brep_ai_context_budget_plan.md
-```
-
-Original trigger in the real local runtime:
-
-```text
-request (169503 tokens) exceeds the available context size (131072 tokens)
-```
-
-### C1 result
-
-C1 added bounded observability and reproduced the overflow on:
-
-```text
-local/qwen3.8-27b-mtp-128k
-```
-
-The reproduced fixture was a first-turn Native BRep creation with:
-
-- no current canonical BRep;
-- one ordinary user message;
-- no historical `build_brep_project` calls;
-- no historical `data-brep-project` snapshots;
-- no images.
-
-Yet the diagnostics reported:
-
-```text
-system/instruction estimate             2077 tokens
-provider-visible tool-schema estimate 105743 tokens
-ordinary history estimate                 29 tokens
-effective model messages                  42 tokens
-total deterministic estimate          107862 tokens
-llama.cpp request count                169503 tokens
-```
-
-The provider-visible schema therefore dominated before history existed. This falsified the idea that C3 history projection could be the primary fix for the original first-turn failure.
-
-C1 also showed that the deterministic byte/token estimator materially under-counts llama.cpp tokenization for this schema-heavy request. C5 must use provider/tokenizer-aware or deliberately conservative preflight accounting rather than treating `bytes / 4` as exact.
-
-Runtime evidence:
-
-```text
-docs/brep_c1_runtime_evidence_2026-09-09.md
-```
-
-### C2 result
-
-C2 reduced only the finite provider authoring depth:
-
-```text
-BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 3 -> 2
-```
-
-while preserving canonical M1 depth `12` and node limit `64`.
-
-C2 also added:
-
-- an explicit provider-authoring regression for `Width - 2 * WallThickness`;
-- proof that deeper canonical input remains valid behind the finite provider boundary;
-- a serialized provider-schema ceiling below `180000` bytes;
-- preservation of the no-recursive-warning / no-`$ref` provider baseline.
+with Quality Gate #759 and Grasshopper Build #331 passing.
 
 C2 accepted code/test checkpoint:
 
 ```text
 93a4aac680b3fe529e19515d45df47d11e847452
-Test compact BRep provider schema depth
 ```
 
-Exact evidence:
+with Quality Gate #770 and Grasshopper Build #342 passing.
 
-- Quality Gate #770 — **PASS**;
-- tests — **PASS**;
-- typecheck — **PASS**;
-- lint — **PASS**;
-- production build — **PASS**;
-- diff check — **PASS**;
-- Grasshopper Build #342 — **PASS**.
+## Context/runtime track
 
-### Next action — C2 runtime re-measurement
+### C1 — complete
 
-Update/restart the local Brepia runtime on the current branch and repeat the same first-turn Native BRep fixture with:
+The original local-model failure was:
+
+```text
+request (169503 tokens) exceeds the available context size (131072 tokens)
+```
+
+C1 observability showed that the first-turn failure had no BRep history or images and was dominated by the provider-visible tool schema:
+
+```text
+system/instruction estimate             2077 tokens
+provider-visible tool-schema estimate 105743 tokens
+effective model messages                  42 tokens
+llama.cpp request count                169503 tokens
+```
+
+This justified C2 before C3 history projection.
+
+### C2 — complete in repository; real post-C2 dispatch succeeded
+
+C2 reduced only provider authoring depth `3 -> 2`, preserving canonical M1 depth `12` / node limit `64`.
+
+A real post-C2 Native BRep run on:
+
+```text
+local/qwen3.8-27b-mtp-128k
+```
+
+completed instead of reproducing the context overflow.
+
+However the run exposed the next failure class:
+
+```text
+approximately 60 minutes total generation
+stepCount: 12
+ai context actual usage: inputTokens=0, outputTokens=0, totalTokens=0
+```
+
+The generated room/cabinet model was broadly useful but spatially misplaced the door cutter. At defaults it placed the door near `X=-2920 mm` while the centered 3000 mm-wide room occupies approximately `X=-1500..+1500 mm`, so the cutter did not intersect the wall.
+
+The resulting fresh GHX loaded in installed Rhino 8 / Grasshopper, but the Rhino Python script reached Brepia's own boolean-difference guard and raised on the second `room_result` subtraction. This is runtime evidence, not a Python syntax failure.
+
+Detailed evidence:
+
+```text
+docs/brep_c2_runtime_evidence_2026-09-10.md
+```
+
+A small immediate improvement was already added to `tool.build_brep_project`: models are now explicitly told to sanity-check centered extents, default-value transforms and cutter/material intersection before emission. Treat this as a tool-contract improvement, not yet the full source-kind CAD specialization.
+
+## Next active phase — C2.5 Native BRep agent runtime and CAD specialization
+
+**C2.5 is the next activity. Do not start C3 or M2 first.**
+
+Plan:
+
+```text
+docs/brep_c25_native_brep_agent_runtime_specialization_plan.md
+```
+
+Execute in this order.
+
+### C2.5-A — per-step and provider-usage observability
+
+Instrument each model step with bounded metadata:
+
+- step number;
+- step and cumulative duration;
+- tool calls;
+- accepted/rejected `build_brep_project` outcome;
+- validation/tool error class;
+- context growth where available;
+- provider-reported usage where supported.
+
+Enable/request llama.cpp/OpenAI-compatible streaming usage metadata where supported so `0/0/0` is not mistaken for real zero usage.
+
+The first goal is to distinguish:
+
+```text
+12 genuine validation retries
+```
+
+from:
+
+```text
+an accepted build succeeded early but inference continued unnecessarily
+```
+
+### C2.5-B — terminate on accepted canonical BRep build
+
+If A confirms redundant post-acceptance inference, change the normal Native BRep loop so:
+
+- rejected build -> model may retry within bounded max steps;
+- fully validated accepted build -> generation turn completes;
+- `answer_user` is not required merely to terminate a successful CAD build;
+- immutable revision persistence/finalization remains unchanged.
+
+Stop based on the request-local accepted canonical candidate, not merely the presence of a tool call.
+
+### C2.5-C — source-kind CAD prompt specialization
+
+Keep `Standard` as the high-level product/profile selection.
+
+Do **not** require the user to manually choose `Standard OpenSCAD` versus `Standard BRep` for each project. Brepia already knows the active source kind.
+
+Layer instructions conceptually as:
+
+```text
+Standard
+├── shared profile/package behavior
+├── Parametric OpenSCAD CAD specialization
+│   └── tool.build_parametric_model contract
+└── Parametric Native BRep CAD specialization
+    └── tool.build_brep_project contract
+```
+
+Implement equivalent instruction scopes that fit the existing instruction catalog, for example:
+
+```text
+parametric.openscad
+parametric.brep
+```
+
+Selection must be automatic from authoritative source kind while preserving `conversation.type = 'parametric'`.
+
+The Native BRep CAD methodology should stay concise and teach:
+
+- coordinate-system and centered-primitive reasoning;
+- full extents versus half-extents;
+- independent parameters versus derived M1 relationships;
+- default-value transform evaluation;
+- cutter/material intersection checks;
+- wall-center and wall-thickness placement;
+- ordinary floor-reaching openings unless intentionally offset;
+- authoritative DAG/result and parameter-effectiveness checks.
+
+Keep the BRep CAD methodology distinct from the concrete `build_brep_project` schema/tool contract. Remove/avoid OpenSCAD-only methodology from BRep turns rather than duplicating two monolithic system prompts. Measure instruction/context size so specialization improves quality without recreating the context problem.
+
+UI may continue to display `Standard`; Settings can later expose effective source-kind specialization separately if useful.
+
+### C2.5-D — Rhino/native disjoint subtract parity
+
+The post-C2 host fixture exposed a parity edge:
+
+- native build123d/OCCT treats a provably disjoint subtraction as a no-op;
+- current Rhino Python translation requires `Brep.CreateBooleanDifference(...)` to return exactly one Brep and raises otherwise.
+
+Do not treat every Rhino boolean failure as a no-op.
+
+Design a bounded rule:
+
+- provably disjoint base/cutter -> explicit no-op preserving base;
+- overlapping or uncertain -> execute Rhino boolean with document tolerance;
+- non-disjoint boolean failure or unexpected result cardinality -> remain fail-closed.
+
+Follow `docs/references/rhino8_mcneel_sources.md` before changing Rhino translation. Repository tests do not substitute for installed Rhino 8 acceptance.
+
+## Required C2.5 acceptance rerun
+
+After C2.5-A/B/C/D, re-run the same or equivalent room/cabinets/door Native BRep fixture on:
 
 ```text
 local/qwen3.8-27b-mtp-128k
@@ -275,35 +287,38 @@ local/qwen3.8-27b-mtp-128k
 
 Capture:
 
+- request-level context diagnostics;
+- per-step diagnostics;
+- actual provider usage if available;
+- total generation duration;
+- total step count;
+- accepted-build step number;
+- canonical project;
+- native Brepia preview;
+- fresh GHX;
+- installed Rhino 8 / Grasshopper open/solve result.
+
+Compare against the baseline:
+
 ```text
-ai context diagnostics
+~60 minutes
+12 steps
+0/0/0 surfaced usage
+broadly useful model but door cutter outside room
+GHX opens but Rhino Python raises on second room_result boolean
 ```
 
-and, if the request succeeds:
+## Engineering order after C2.5
 
-```text
-ai context actual usage
-```
-
-Compare against the C1 baseline:
-
-```text
-provider schema bytes       422971
-schema estimated tokens     105743
-total estimated input       107862
-llama.cpp request tokens    169503
-context window              131072
-```
-
-Do **not** start C3 until this runtime re-measurement shows the residual problem after C2.
-
-### Remaining sequence after that gate
-
-1. **C3 — BRep model-context projection** only if/when multi-turn evidence shows superseded BRep tool payloads are material;
-2. re-measure representative long multi-turn BRep conversations;
-3. **C4 — image projection** where historical image payloads are material;
-4. **C5 — hard model-aware input budget** with tokenizer-aware/conservative preflight, reserved output and safety margin;
-5. **C6 — rolling intent summary only if still justified after structured-state deduplication**.
+1. C1 — complete;
+2. C2 — complete / accepted, post-C2 runtime evidence captured;
+3. **C2.5 — next active phase**;
+4. C3 — BRep model-context projection / superseded snapshot removal;
+5. representative long multi-turn re-measurement;
+6. C4 — image-context projection where justified;
+7. C5 — hard model-aware context budget;
+8. C6 — rolling intent summary only if measurements justify it;
+9. M2 — modeling capability expansion after the context/runtime track is stable enough.
 
 Architectural rule remains:
 
@@ -312,73 +327,47 @@ Database / immutable revisions = durable history and source authority
 Model context window           = bounded working memory for the current turn
 ```
 
-For BRep, the current canonical project is structured truth. Historical complete BRep snapshots must not be repeatedly sent merely because they remain correctly persisted.
-
-Do not solve this primarily by increasing llama.cpp context size. Larger context may be separately useful, but duplicate structured state should be removed first.
-
-This phase must preserve:
-
-- immutable revision/UI history in the database;
-- current canonical BRep source authority;
-- M0/M1 validation and integrity;
-- provider-safe no-recursive-warning/no-nested-`$ref` baseline;
-- branch/leaf semantics;
-- GHX authority boundaries;
-- model selection through Settings/discovery.
-
-Do not start M2 as part of context-budget work.
+For BRep, current canonical project state is structured truth and should be present exactly once after C3 projection work.
 
 ## Remaining Phase 9 installed-host acceptance
 
-Do not confuse repository-complete modeling milestones or context-budget work with completion of the existing GHX product loop.
+Separate from C2.5, still required before claiming full GHX product-loop acceptance:
 
-Still separately required:
+1. focused M1 derived-expression host fixture;
+2. authoritative fillet Result host test if fillet parity is claimed;
+3. non-zero rotation analysis/implementation/host test before enabling rotation;
+4. Grasshopper save/reopen;
+5. returned Rhino-saved GHX import;
+6. compatibility validation + parameter recovery;
+7. explicit activation of imported immutable revision;
+8. native Brepia preview;
+9. continued Brepia AI edit;
+10. fresh GHX export and installed-host open/solve again.
 
-1. focused M1 derived-expression host fixture, for example `InnerWidth = Width - 2 * WallThickness`;
-2. dedicated authoritative fillet Result host test if fillet parity is to be claimed;
-3. non-zero rotation analysis + implementation + host test before enabling rotation;
-4. Grasshopper save/reopen evidence;
-5. returned Rhino-saved GHX import to Brepia;
-6. deterministic compatibility validation and parameter recovery;
-7. explicit activation of the imported immutable revision;
-8. native Brepia preview after activation;
-9. continued editing with Brepia AI;
-10. export a fresh GHX again and open/solve it in Grasshopper.
+Do not infer these from repository CI.
 
-For the M1 host fixture, verify specifically that only independent published inputs become Grasshopper controls, changing them updates the derived geometry, and GHX return/import changes only those published numeric values while the canonical AST remains Brepia source authority.
+## M2 — not started
 
-## Next modeling milestone — M2, not started
-
-M2 remains the next modeling-capability milestone in `docs/brep_modeling_capability_expansion_plan.md`, but **no M2 implementation has started** and context-budget/projection work comes first.
-
-Potential M2 scope remains bounded additive Boolean composition:
+M2 remains planned additive Boolean composition:
 
 - `union`;
 - `intersect`.
 
-Before implementation, perform a separate analysis/scope pass covering:
-
-- canonical node shape and deterministic result-cardinality rules;
-- ordered inputs and DAG/reference semantics;
-- build123d/OCCT authoritative behavior;
-- Rhino 8 / RhinoCommon translation against branch-8 McNeel upstream references;
-- fail-closed behavior for unsupported multi-body ambiguity;
-- M0 reachability/effectiveness integration;
-- AI schema/instructions;
-- repository parity fixtures and the installed-host evidence required before any Rhino parity claim.
-
-Do not combine M2 with pattern/mirror, profile/extrude, shell/wall abstractions, topology-selector expansion or rotation.
+Do not start it during C2.5-C6 and do not combine it with pattern/mirror, profile/extrude, shell/wall abstractions, topology-selector expansion or rotation.
 
 ## Suggested next chat first action
 
-Begin with **C2 runtime re-measurement only**.
+Start a **new focused chat** at C2.5.
 
-First reconcile current branch implementation against:
+First reconcile the current branch against:
 
 - `AGENTS.md`;
+- `docs/brep_c25_native_brep_agent_runtime_specialization_plan.md`;
 - `docs/brep_ai_context_budget_plan.md`;
-- `docs/brep_c1_runtime_evidence_2026-09-09.md`;
-- `docs/brep_c2_provider_schema_closeout.md`;
-- this handover.
+- `docs/brep_c2_runtime_evidence_2026-09-10.md`;
+- this handover;
+- relevant runtime files, especially `src/server/aiChat.ts`, `src/server/brepAiTools.ts`, `src/server/brepAiTurn.ts`, `shared/brepAiTool.ts`, `config/ai/instructions/*` and `shared/brepGrasshopperRhinoScript.ts`.
 
-Do not start C3 until the same first-turn fixture has been re-run on the depth-2 provider schema. Do not start M2, do not claim installed Rhino acceptance from repository tests, and do not merge PR #36 without explicit stacked-branch reconciliation.
+Begin with **analysis and C2.5-A observability**, not with stop-loop implementation. First determine whether the 12-step run was repeated validation failure or redundant post-acceptance inference.
+
+Do not start C3 or M2, do not merge PR #36, and do not claim Rhino parity without installed-host evidence.
