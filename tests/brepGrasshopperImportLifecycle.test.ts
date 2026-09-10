@@ -85,9 +85,13 @@ describe('BRep Phase 8G GHX lifecycle integration', () => {
     );
   });
 
-  it('exposes bounded strict GHX import in the BRep workspace and creates no revision for unchanged state', () => {
-    assert.match(workspaceSource, /<BrepGrasshopperImportButton \/>/);
+  it('exposes bounded strict GHX import in the active BRep workspace and disables it for historical preview', () => {
+    assert.match(
+      workspaceSource,
+      /<BrepGrasshopperImportButton disabled=\{readOnly\} \/>/,
+    );
     assert.match(importButtonSource, /accept="\.ghx,application\/xml,text\/xml"/);
+    assert.match(importButtonSource, /if \(disabled \|\| !activeSource/);
     assert.match(importButtonSource, /importBrepGrasshopperGhxFile\(/);
     assert.match(importButtonSource, /changedParameterIds\.length === 0/);
     assert.match(importButtonSource, /persistBrepGrasshopperImportedRevision\(/);
