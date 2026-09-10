@@ -397,14 +397,19 @@ function buildGraphSource(
       node.tools.forEach((toolId, toolIndex) => {
         const tool = emitNode(toolId);
         const parts = `${variable}Parts${toolIndex}`;
+        const disjoint = `${variable}Disjoint${toolIndex}`;
         lines.push(
-          `${parts} = rg.Brep.CreateBooleanDifference(${variable}, ${tool}, brepiaTolerance)`,
+          `${disjoint} = brepia_bounds_disjoint(${variable}, ${tool}, brepiaTolerance)`,
         );
-        lines.push(`if ${parts} is None or len(${parts}) != 1:`);
+        lines.push(`if not ${disjoint}:`);
         lines.push(
-          `    raise RuntimeError(${pythonString(`Rhino boolean difference for Brepia node ${node.id} did not produce exactly one Brep.`)})`,
+          `    ${parts} = rg.Brep.CreateBooleanDifference(${variable}, ${tool}, brepiaTolerance)`,
         );
-        lines.push(`${variable} = ${parts}[0]`);
+        lines.push(`    if ${parts} is None or len(${parts}) != 1:`);
+        lines.push(
+          `        raise RuntimeError(${pythonString(`Rhino boolean difference for Brepia node ${node.id} did not produce exactly one Brep.`)})`,
+        );
+        lines.push(`    ${variable} = ${parts}[0]`);
       });
     } else if (node.type === 'fillet') {
       const input = emitNode(node.input);
@@ -525,7 +530,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
 
-  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport math\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_scalar(value):\n    value = float(value)\n    if not math.isfinite(value) or abs(value) > 1000000000.0:\n        raise ValueError("Brepia scalar value must be finite and bounded.")\n    return 0.0 if value == 0.0 else value\n\ndef brepia_add(left, right):\n    return brepia_scalar(brepia_scalar(left) + brepia_scalar(right))\n\ndef brepia_sub(left, right):\n    return brepia_scalar(brepia_scalar(left) - brepia_scalar(right))\n\ndef brepia_mul(left, right):\n    return brepia_scalar(brepia_scalar(left) * brepia_scalar(right))\n\ndef brepia_div(left, right):\n    left = brepia_scalar(left)\n    right = brepia_scalar(right)\n    if right == 0.0:\n        raise ValueError("Brepia scalar expression divides by zero.")\n    return brepia_scalar(left / right)\n\ndef brepia_neg(value):\n    return brepia_scalar(-brepia_scalar(value))\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
+  return `# Brepia Rhino Python 3 script v1\n# projectId: ${contract.model.projectId}\n# sourceRevisionId: ${contract.model.sourceRevisionId}\nimport math\nimport Rhino\nimport Rhino.Geometry as rg\n\ndef brepia_scalar(value):\n    value = float(value)\n    if not math.isfinite(value) or abs(value) > 1000000000.0:\n        raise ValueError("Brepia scalar value must be finite and bounded.")\n    return 0.0 if value == 0.0 else value\n\ndef brepia_add(left, right):\n    return brepia_scalar(brepia_scalar(left) + brepia_scalar(right))\n\ndef brepia_sub(left, right):\n    return brepia_scalar(brepia_scalar(left) - brepia_scalar(right))\n\ndef brepia_mul(left, right):\n    return brepia_scalar(brepia_scalar(left) * brepia_scalar(right))\n\ndef brepia_div(left, right):\n    left = brepia_scalar(left)\n    right = brepia_scalar(right)\n    if right == 0.0:\n        raise ValueError("Brepia scalar expression divides by zero.")\n    return brepia_scalar(left / right)\n\ndef brepia_neg(value):\n    return brepia_scalar(-brepia_scalar(value))\n\ndef brepia_normalize_plane(source):\n    if source is None or not source.IsValid:\n        raise ValueError("Brepia project placement plane is invalid.")\n    return source\n\ndef brepia_transform_point(point, transform):\n    point.Transform(transform)\n    return point\n\ndef brepia_place_brep(source, transform):\n    placed = source.DuplicateBrep()\n    if not placed.Transform(transform):\n        raise RuntimeError("Rhino could not apply Brepia project placement.")\n    return placed\n\ndef brepia_bounds_disjoint(first, second, tolerance):\n    first_box = first.GetBoundingBox(True)\n    second_box = second.GetBoundingBox(True)\n    if not first_box.IsValid or not second_box.IsValid:\n        return False\n    tolerance = max(0.0, float(tolerance))\n    return (\n        first_box.Max.X < second_box.Min.X - tolerance or\n        second_box.Max.X < first_box.Min.X - tolerance or\n        first_box.Max.Y < second_box.Min.Y - tolerance or\n        second_box.Max.Y < first_box.Min.Y - tolerance or\n        first_box.Max.Z < second_box.Min.Z - tolerance or\n        second_box.Max.Z < first_box.Min.Z - tolerance\n    )\n\nbrepiaDoc = Rhino.RhinoDoc.ActiveDoc\nbrepiaTolerance = brepiaDoc.ModelAbsoluteTolerance if brepiaDoc is not None else 0.01\n\n${graph.source}\n\nbrepiaDefaultPlane = brepia_normalize_plane(\n    rg.Plane(${defaultOrigin}, ${defaultXAxis}, ${defaultYAxis})\n)\nbrepiaTransform = rg.Transform.PlaneToPlane(rg.Plane.WorldXY, brepiaDefaultPlane)\n\nResult = brepia_place_brep(${resultVariable}, brepiaTransform)\nFootprint = ${footprint}\nClearance = ${clearance}\nMaintenance = ${maintenance}\nConnections = ${connections}\nMounting = ${mounting}\nCable = ${cable}\nMetadata = ${pythonString(metadataEnvelope)}\n`;
 }
 
 export async function createBrepGrasshopperRhinoScriptPlan(
