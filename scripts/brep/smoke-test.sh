@@ -20,3 +20,35 @@ for artifact in \
 done
 grep -a -q '^3D Geometry File Format ' "$WORKSPACE/output/model.3dm"
 node -e "const r=require('$WORKSPACE/output/result.json'); const p=r.projectObject; if(r.status!=='success'||r.resultNodeId!=='cut'||r.bodies?.length!==1||!r.bodies[0]?.viewerMesh?.indices?.length||p?.geometry?.footprint?.id!=='body'||p?.geometry?.clearanceEnvelope?.id!=='finished'||p?.geometry?.maintenanceEnvelope?.id!=='body'||p?.points?.[0]?.position?.[0]!==50||p?.placement?.zAxis?.[2]!==1) process.exit(1); console.log(JSON.stringify({result:r.resultNodeId,triangles:r.bodies[0].viewerMesh.indices.length/3,roles:Object.keys(p.geometry),point:p.points[0],artifacts:['model.step','brepia-footprint.step','brepia-clearance-envelope.step','brepia-maintenance-envelope.step','model.3dm']}));"
+
+run_boolean_success() {
+  local kind="$1"
+  local request_path="$WORKSPACE/${kind}.json"
+  local output_path="$WORKSPACE/${kind}-output"
+  cat > "$request_path" <<JSON
+{"project":{"schemaVersion":1,"id":"${kind}Smoke","name":"${kind} smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[],"nodes":[{"id":"outer","type":"box","width":20,"depth":20,"height":20},{"id":"inner","type":"box","width":10,"depth":10,"height":10},{"id":"booleanResult","type":"${kind}","inputs":["outer","inner"]}],"resultNodeId":"booleanResult"},"parameterValues":{}}
+JSON
+  "$RUNNER" --input "$request_path" --output "$output_path"
+  grep -q 'ISO-10303-21' "$output_path/model.step"
+  node -e "const r=require('$output_path/result.json'); if(r.status!=='success'||r.resultNodeId!=='booleanResult'||r.bodies?.length!==1||!r.bodies[0]?.viewerMesh?.indices?.length) process.exit(1); console.log(JSON.stringify({boolean:'$kind',result:r.resultNodeId,triangles:r.bodies[0].viewerMesh.indices.length/3}));"
+}
+
+run_boolean_fail_closed() {
+  local kind="$1"
+  local request_path="$WORKSPACE/${kind}-disjoint.json"
+  local output_path="$WORKSPACE/${kind}-disjoint-output"
+  local error_path="$WORKSPACE/${kind}-disjoint.err"
+  cat > "$request_path" <<JSON
+{"project":{"schemaVersion":1,"id":"${kind}Disjoint","name":"${kind} disjoint","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[],"nodes":[{"id":"left","type":"box","width":10,"depth":10,"height":10},{"id":"right","type":"box","width":10,"depth":10,"height":10},{"id":"rightAt","type":"transform","input":"right","translate":[40,0,0]},{"id":"booleanResult","type":"${kind}","inputs":["left","rightAt"]}],"resultNodeId":"booleanResult"},"parameterValues":{}}
+JSON
+  if "$RUNNER" --input "$request_path" --output "$output_path" 2>"$error_path"; then
+    echo "Expected disjoint ${kind} to fail closed" >&2
+    exit 1
+  fi
+  grep -q 'unsupported_result_cardinality' "$error_path"
+}
+
+run_boolean_success union
+run_boolean_success intersect
+run_boolean_fail_closed union
+run_boolean_fail_closed intersect
