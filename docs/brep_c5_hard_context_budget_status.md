@@ -1,6 +1,6 @@
 # C5 — hard model-aware context budget
 
-Status: **repository-complete and CI-accepted; representative local runtime remeasurement pending**
+Status: **complete, CI-accepted and runtime-accepted**
 
 Date: 2026-09-10
 
@@ -8,9 +8,15 @@ Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
 
+Detailed runtime evidence:
+
+```text
+docs/brep_c5_runtime_evidence_2026-09-10.md
+```
+
 ## Trigger
 
-C3 runtime acceptance proved that superseded Native BRep project payloads are removed correctly, but it also produced the first reliable provider-reported token count for the projected follow-up request:
+C3 runtime acceptance proved that superseded Native BRep project payloads are removed correctly, but it also provided reliable provider-reported token counts for the projected follow-up request:
 
 ```text
 static estimate:          59628 input tokens
@@ -28,7 +34,7 @@ observed ratio:           1.5715
 
 The deterministic byte estimator is therefore useful for decomposition and trend diagnostics but cannot be treated as an exact provider tokenizer.
 
-C3 also exposed a separate accounting issue: the configured Generative maximum output setting was `64000`, and the pre-C5 diagnostic subtracted that entire value from the context window as if every request required a 64000-token completion. The real successful C3 request used only `2744` output tokens.
+C3 also exposed an accounting issue: the configured Generative maximum output setting was `64000`, but a real successful follow-up used only a few thousand output tokens. Treating the whole configured maximum as mandatory reservation made safe requests appear impossible.
 
 ## Implemented C5 policy
 
@@ -36,37 +42,33 @@ C5 introduces a hard pre-dispatch context boundary in `src/server/aiContextBudge
 
 ### Conservative input bound
 
-Until exact provider/tokenizer preflight is available end-to-end, C5 uses:
+Until exact provider/tokenizer preflight is available end-to-end:
 
 ```text
 conservativeInput = ceil(staticEstimatedInput * 1.75)
 ```
 
-`1.75` is deliberately above both measured llama.cpp ratios (`1.4022` and `1.5715`). It is an empirical conservative bound, not a claim of exact tokenization.
-
-Image/base64 message content remains charged more aggressively than ordinary UTF-8 in the per-step estimator. C4 is still separate; C5 does not silently remove images.
+`1.75` is deliberately above the measured llama.cpp ratios `1.4022`, `1.5715`, and the later runtime-acceptance ratio `1.3996`. It is an empirical conservative bound, not exact tokenization.
 
 ### Output reserve
 
-The configured runtime `maxOutputTokens` remains the user's/model route upper bound. It is no longer treated as a mandatory reservation of that full amount for every request.
+The configured runtime `maxOutputTokens` remains an upper bound. It is no longer treated as a mandatory reservation of that full amount.
 
-For a model with known context metadata, C5 reserves:
+For a model with known context metadata:
 
 ```text
 minimumOutputReserve = clamp(contextWindow / 8, 4096, 16384)
 ```
 
-then caps that reserve by the configured/model output cap when smaller.
+capped by the configured/model output cap when smaller.
 
-For a 131072-token context window this gives:
+For the 131072-token local model:
 
 ```text
 minimumOutputReserve = 16384
 ```
 
 ### Hard input gate
-
-With a known context window:
 
 ```text
 hardInputLimit = contextWindow - safetyMargin - minimumOutputReserve
@@ -82,7 +84,7 @@ No provider request is sent in that case.
 
 ### Per-request/per-step output ceiling
 
-When the request fits, C5 derives:
+For a request that fits:
 
 ```text
 maximumSafeOutput = contextWindow - safetyMargin - conservativeInput
@@ -94,75 +96,23 @@ effectiveMaxOutput = min(
 )
 ```
 
-The effective cap is supplied to `streamText(...)` and recalculated in `prepareStep(...)` for every model step. This preserves room for a valid completion while preventing a configured `64000` upper cap from making otherwise safe requests appear impossible.
+The effective cap is supplied to `streamText(...)` and recalculated in `prepareStep(...)` before each later provider step.
 
 ### Retry growth protection
 
-The hard budget is not only checked on the initial request. `prepareStep(...)` measures the current provider messages before every subsequent model step, adds the fixed system/tool-schema estimate, derives a new conservative budget and throws before provider dispatch if a retry has grown beyond the safe boundary.
-
-This matters for Native BRep validation retries: an invalid `build_brep_project` call may still retry under C2.5-B, but retries cannot grow past the configured model context unnoticed.
+An invalid Native BRep build may still retry under C2.5-B, but `prepareStep(...)` remeasures the provider messages and asserts C5 before every retry. A retry cannot grow past the configured model context unnoticed.
 
 ## Fail-closed behavior
 
-The C3 context projection / diagnostics boundary is now a required preflight rather than best-effort logging. If that boundary fails, Brepia does not dispatch an unprojected request.
+The C3 projection/context boundary is a required preflight. If it fails, Brepia does not dispatch an unprojected request.
 
-Initial hard-budget rejection returns HTTP `413` with a bounded product error and records the generation as `context_budget_exceeded`.
+Initial hard-budget rejection returns HTTP `413`, records `context_budget_exceeded`, and sends no provider request. A later per-step budget rejection aborts before the next model step and surfaces a bounded UI error.
 
-A later per-step budget rejection aborts before the next provider step and surfaces a bounded UI error.
-
-Hard-budget logs contain numeric budget metadata only; they do not include prompt, project, image, tool-input or tool-output payloads.
-
-## Calibration fixtures
-
-### C3 real follow-up
-
-```text
-raw estimate:             59628
-conservative x1.75:      104349
-context window:          131072
-safety margin:             8192
-minimum output reserve:   16384
-hard input limit:        106496
-hard input headroom:       2147
-maximum safe output:      18531
-effective max output:     18531
-actual provider input:    83612
-actual provider output:    2744
-result:                    PASS
-```
-
-This known-good request remains admissible.
-
-### Original C1 overflow class
-
-```text
-raw estimate:            107862
-conservative x1.75:      188759
-hard input limit:        106496
-result:                   REJECT before provider dispatch
-```
-
-### Accepted post-C2.5 first-turn fixture
-
-```text
-raw estimate:             36419
-conservative x1.75:       63734
-maximum safe output:      59146
-actual historical output: 25674
-result:                    PASS
-```
-
-The policy therefore does not regress the accepted first-turn fixture merely because the configured route maximum is 64000 output tokens.
-
-## Unknown model metadata
-
-If Settings/discovery does not provide a usable context limit, C5 does **not** invent one. Hard enforcement stays disabled for that model and the configured/model output cap remains in effect.
-
-This preserves Settings/discovery as the sole model-capability authority.
+Hard-budget logs contain numeric metadata only.
 
 ## Repository acceptance
 
-C5 implementation checkpoints:
+Implementation checkpoints:
 
 ```text
 2bff30490237c2d1ac1751494ec7d6f6733725d2  Add conservative C5 hard context budget policy
@@ -178,41 +128,120 @@ Quality Gate #833       PASS
 Grasshopper Build #405 PASS
 ```
 
-Quality Gate includes the seven focused C5 budget tests plus the complete repository test suite, typecheck, lint, build and diff check.
+## Runtime acceptance
 
-## Required runtime remeasurement
-
-Use the same persisted Native BRep conversation and local model used for the accepted C3 follow-up:
+A second persisted Native BRep follow-up using:
 
 ```text
 local/qwen3.8-27b-mtp-128k
 ```
 
-Perform another small unambiguous follow-up edit and capture:
+reported:
 
 ```text
-ai context diagnostics
-ai step started
-ai step diagnostics
-ai context actual usage
+hardBudget.enforced:             true
+hardBudget.fits:                 true
+rawEstimatedInputTokens:        60213
+conservativeInputTokens:       105373
+hardInputLimitTokens:          106496
+hardInputHeadroomTokens:         1123
+configuredMaxOutputTokens:      64000
+effectiveMaxOutputTokens:       17507
+provider input:                 84272
+provider output:                 3147
+provider total:                 87419
+stepCount:                          1
+accepted build step:                1
+elapsed:                       177443 ms
 ```
 
-Verify specifically:
+The real static/provider input ratio was:
 
-1. `hardBudget.enforced = true`;
-2. `hardBudget.fits = true` for the representative accepted-size request;
-3. the effective output cap is below the unsafe configured 64000 ceiling when required;
-4. provider-reported input remains below the context limit;
-5. accepted BRep build still completes and persists immutably;
-6. C2.5-B still terminates at the first accepted build;
-7. C3 continues to remove superseded historical BRep tool payloads;
-8. if the conversation has grown enough to fail C5, the failure happens locally before provider dispatch and the measured remaining cost determines whether C4 or C6 is justified.
+```text
+84272 / 60213 = 1.3996
+```
 
-## C4 and C6 decision boundary
+C3 remained active in the same run:
 
-The accepted C3 runtime fixture contained zero images, so C4 remains deferred until an image-bearing conversation demonstrates material historical image cost.
+```text
+removed historical build tool parts: 2
+removed historical BRep snapshots:   3
+removed provider tool calls:          2
+removed provider tool results:        2
+first-step historical BRep calls:     0
+first-step historical BRep results:   0
+```
 
-C6 rolling natural-language summary also remains deferred. If the C5 follow-up is blocked and diagnostics show older ordinary conversational history is now the dominant removable cost, that is the evidence required to begin C6. The summary must never become BRep geometry authority.
+The current canonical BRep remained present, the accepted build completed on the first step, and C2.5-B terminated the turn immediately.
+
+C5 is therefore runtime-accepted for the representative local Native BRep follow-up path.
+
+## Calibration fixtures retained
+
+Original overflow class:
+
+```text
+raw estimate:       107862
+conservative x1.75: 188759
+hard input limit:   106496
+result:             REJECT before provider dispatch
+```
+
+Post-C2.5 first turn:
+
+```text
+raw estimate:             36419
+conservative x1.75:       63734
+historical provider input:56413
+historical output:        25674
+result:                    PASS
+```
+
+C3 first projected follow-up:
+
+```text
+raw estimate:             59628
+conservative x1.75:      104349
+provider input:           83612
+provider output:           2744
+result:                    PASS
+```
+
+C5 runtime-acceptance follow-up:
+
+```text
+raw estimate:             60213
+conservative x1.75:      105373
+provider input:           84272
+provider output:           3147
+result:                    PASS
+```
+
+## C6 decision from runtime evidence
+
+C5 succeeded, but its conservative hard headroom fell from `2147` to `1123` tokens after one additional small follow-up. The same run reported:
+
+```text
+ordinaryConversationHistory.bytes: 81114
+effectiveModelMessages.bytes:      83312
+images.count:                          0
+```
+
+C3 had already removed superseded structured BRep state. Inspection showed that historical assistant `reasoning` attached to accepted BRep build turns remained in model context.
+
+That evidence is sufficient to begin a narrow C6 projection before introducing any generated rolling summary: omit superseded BRep-build assistant reasoning while preserving all user turns, bounded revision summaries, and exact current canonical geometry.
+
+See:
+
+```text
+docs/brep_c6_reasoning_projection_status.md
+```
+
+C4 remains deferred because the representative C3 and C5 fixtures both contained zero images.
+
+## Unknown model metadata
+
+If Settings/discovery does not provide a usable context limit, C5 does not invent one. Hard enforcement remains disabled for that model and the configured/model output cap remains in effect.
 
 ## Preserved architecture
 
