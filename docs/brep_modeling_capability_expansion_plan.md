@@ -1,6 +1,10 @@
 # BRep modeling capability expansion plan
 
-Status: proposed next product/modeling track after the current Rhino 8 host-acceptance slice is reconciled. This plan is intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0 and M1 complete; M2 repository-complete / CI-accepted with native and installed Rhino 8 runtime evidence next; M3 not started**. This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+
+Detailed current M2 status:
+
+- `docs/brep_m2_boolean_composition_status.md`.
 
 ## Why this track exists
 
@@ -186,16 +190,38 @@ This alone fixes much of the observed broken-parametric behavior without inventi
 
 ## M2 — additive Boolean composition
 
-Canonical v1 currently has subtract only. Add kernel-neutral operations only where both native evaluator and Rhino 8 mapping can be proven:
+Status: **repository-complete and CI-accepted; native runtime and installed Rhino 8 / Grasshopper evidence pending**.
+
+Canonical v1 now includes the two bounded kernel-neutral operations selected for M2:
 
 - `union`;
 - `intersect`.
 
-Use ordered node references, deterministic result-cardinality rules and fail-closed behavior when an operation yields an unsupported multi-body ambiguity.
+Both use an ordered `inputs` array containing 2–32 unique existing node references. They participate in the ordinary canonical reference/DAG checks and M0 reachability analysis. The extension remains additive to canonical `schemaVersion: 1`.
 
-This enables explicit wall/panel/cabinet solids to be composed rather than representing most structure as voids cut from one master block.
+The geometry contract remains single-body and fail-closed. Native build123d/OCCT uses `fuse` / `intersect` and rejects zero- or multi-solid final cardinality. The Rhino 8 GHX compiler uses `Brep.CreateBooleanUnion` / `Brep.CreateBooleanIntersection` with explicit tolerance and requires exactly one final Brep. Disjoint union, empty intersection and other unsupported result cardinalities are not silently converted to compounds or arbitrary selected bodies.
+
+The finite/reference-free provider authoring schema, Native BRep tool instruction and structural feature editor expose the same bounded surface. The editor preserves the canonical input order with explicit add/remove/reorder controls rather than degrading Boolean inputs to an unordered checkbox set.
+
+Repository acceptance checkpoint before status documentation:
+
+```text
+d48d3b5861f9be468afa9f93a502fae823efa9f7
+Quality Gate #856       PASS
+Grasshopper Build #428 PASS
+```
+
+Detailed implementation and acceptance evidence:
+
+```text
+docs/brep_m2_boolean_composition_status.md
+```
+
+M2 is not yet runtime-accepted. The next active step is real build123d/OCCT smoke evidence followed by installed Rhino 8 / Grasshopper evidence for representative union/intersection success plus fail-closed unsupported cardinality. **M3 must not start until that evidence is reconciled and M2 is explicitly closed.**
 
 ## M3 — repetition and symmetry
+
+Status: **not started; blocked on M2 runtime/host acceptance**.
 
 Add modeling operations that eliminate repeated literal transforms:
 
@@ -256,10 +282,10 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 
 ## Suggested implementation order
 
-1. **M0 parameter effectiveness + orphan analysis** — highest immediate correctness gain, low schema risk.
-2. **M1 expression AST** — fixes baked relationships and makes existing primitives genuinely parametric.
-3. **M2 union/intersection** — enables additive construction.
-4. **M3 pattern/mirror** — enables repeated components cleanly.
+1. **M0 parameter effectiveness + orphan analysis** — complete.
+2. **M1 expression AST** — complete.
+3. **M2 union/intersection** — repository/CI complete; runtime/host acceptance active.
+4. **M3 pattern/mirror** — blocked until M2 closes.
 5. **M4 profile/extrude** — broadens geometry vocabulary significantly.
 6. Re-evaluate need for dedicated wall/plate/shell semantics.
 7. **M6 rotation** and **M7 finishing** under their own Rhino/native parity acceptance.
@@ -270,6 +296,7 @@ Build a small canonical corpus that runs through both the native evaluator and G
 
 - centered box with derived dimensions;
 - mounting plate with two holes and authoritative fillet result;
+- union/intersection single-body fixtures plus unsupported-cardinality fail-closed cases;
 - four-hole patterned plate;
 - four-cabinet row using pattern rather than manually placed voids;
 - rectangular room with explicit wall/floor construction, doorway and parameter-driven offsets;
