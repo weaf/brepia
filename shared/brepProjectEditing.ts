@@ -23,6 +23,9 @@ export function brepNodeDependencies(node: BrepNode): string[] {
       return [node.input];
     case 'subtract':
       return [node.base, ...node.tools];
+    case 'union':
+    case 'intersect':
+      return node.inputs;
   }
 }
 
@@ -181,6 +184,8 @@ export function brepProjectParameterUsages(
           usages.push(`${node.id}.radius`);
         break;
       case 'subtract':
+      case 'union':
+      case 'intersect':
         break;
     }
   }
