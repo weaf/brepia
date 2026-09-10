@@ -90,6 +90,13 @@ import {
   buildAiContextDiagnostics,
   resolveAiModelBudgetMetadata,
 } from './aiContextDiagnostics';
+import {
+  classifyAiToolError,
+  measureAiStepContext,
+  summarizeAiToolChoice,
+  type AiStepContextMeasurement,
+  type AiToolErrorClassification,
+} from './aiStepDiagnostics';
 
 export const PARAMETRIC_AGENT_PROMPT = loadBundledInstruction('parametric');
 export const CREATIVE_AGENT_PROMPT = loadBundledInstruction('creative');
@@ -216,6 +223,7 @@ function createChatProviders(
             'http://localhost:11434/v1',
           apiKey:
             (override?.credential ?? env('LOCAL_LLM_API_KEY')) || 'ollama',
+          includeUsage: true,
         });
       }
       return local;
@@ -839,6 +847,15 @@ export async function handleAiChatRequest(req: Request) {
   });
 
   let acceptedBrepBuildInput: BrepAiBuildInput | undefined;
+  let activeAiStepNumber = 0;
+  const brepBuildAttemptsByStep = new Map<
+    number,
+    Array<{
+      accepted: boolean;
+      durationMs: number;
+      error?: AiToolErrorClassification;
+    }>
+  >();
 
   const tools =
     conversation.type === 'creative'
@@ -855,6 +872,15 @@ export async function handleAiChatRequest(req: Request) {
             answerDescription: answerToolDescription,
             onAcceptedBuild: (input) => {
               acceptedBrepBuildInput = input;
+            },
+            onBuildAttempt: ({ accepted, durationMs, error }) => {
+              const attempts = brepBuildAttemptsByStep.get(activeAiStepNumber) ?? [];
+              attempts.push({
+                accepted,
+                durationMs,
+                ...(error ? { error: classifyAiToolError(error) } : {}),
+              });
+              brepBuildAttemptsByStep.set(activeAiStepNumber, attempts);
             },
           })
         : parametricTools({
@@ -1307,6 +1333,14 @@ export async function handleAiChatRequest(req: Request) {
   }
   await generationRun.generating();
 
+  const generationStartedAt = Date.now();
+  const stepStartedAt = new Map<number, number>();
+  const stepContextByNumber = new Map<number, AiStepContextMeasurement>();
+  const stepPolicyByNumber = new Map<
+    number,
+    { activeTools: string[]; toolChoice: string }
+  >();
+
   const result = streamText({
     model: chatLanguageModel,
     providerOptions: chatProviderOptions,
@@ -1314,12 +1348,27 @@ export async function handleAiChatRequest(req: Request) {
     messages: modelMessages,
     tools,
     prepareStep: ({ stepNumber }) => {
-      if (streamingOpenCode) return {};
-      if (
+      activeAiStepNumber = stepNumber;
+      const forceInitialBuild =
+        !streamingOpenCode &&
         conversation.type === 'parametric' &&
         leafRole === 'user' &&
-        stepNumber === 0
-      ) {
+        stepNumber === 0;
+      const stepPolicy = forceInitialBuild
+        ? {
+            activeTools: [buildToolName],
+            toolChoice: forceBuildToolChoice
+              ? `tool:${buildToolName}`
+              : 'auto',
+          }
+        : {
+            activeTools: Object.keys(tools),
+            toolChoice: 'auto',
+          };
+      stepPolicyByNumber.set(stepNumber, stepPolicy);
+
+      if (streamingOpenCode) return {};
+      if (forceInitialBuild) {
         return {
           activeTools: [buildToolName as never],
           ...(forceBuildToolChoice
@@ -1333,6 +1382,67 @@ export async function handleAiChatRequest(req: Request) {
         };
       }
       return {};
+    },
+    experimental_onStepStart: ({ stepNumber, messages }) => {
+      activeAiStepNumber = stepNumber;
+      const startedAt = Date.now();
+      const context = measureAiStepContext(messages);
+      const previousContext = stepContextByNumber.get(stepNumber - 1);
+      stepStartedAt.set(stepNumber, startedAt);
+      stepContextByNumber.set(stepNumber, context);
+      const policy = stepPolicyByNumber.get(stepNumber);
+      console.info('ai step started', {
+        modelId: actualModelId,
+        transportKind: transport.kind,
+        stepNumber: stepNumber + 1,
+        totalElapsedMs: startedAt - generationStartedAt,
+        activeTools: policy?.activeTools ?? Object.keys(tools),
+        toolChoice: summarizeAiToolChoice(policy?.toolChoice ?? 'auto'),
+        context: {
+          ...context,
+          modelMessageGrowthBytes: previousContext
+            ? context.modelMessageBytes - previousContext.modelMessageBytes
+            : 0,
+          brepToolPayloadGrowthBytes: previousContext
+            ? context.brepToolPayloadBytes - previousContext.brepToolPayloadBytes
+            : 0,
+        },
+      });
+    },
+    onStepFinish: ({ stepNumber, finishReason, usage, toolCalls }) => {
+      const finishedAt = Date.now();
+      const context = stepContextByNumber.get(stepNumber);
+      const policy = stepPolicyByNumber.get(stepNumber);
+      const buildAttempts = brepBuildAttemptsByStep.get(stepNumber) ?? [];
+      const usageAvailable =
+        (usage.inputTokens ?? 0) > 0 ||
+        (usage.outputTokens ?? 0) > 0 ||
+        (usage.totalTokens ?? 0) > 0;
+      console.info('ai step diagnostics', {
+        modelId: actualModelId,
+        transportKind: transport.kind,
+        stepNumber: stepNumber + 1,
+        stepDurationMs:
+          finishedAt - (stepStartedAt.get(stepNumber) ?? generationStartedAt),
+        totalElapsedMs: finishedAt - generationStartedAt,
+        finishReason,
+        activeTools: policy?.activeTools ?? Object.keys(tools),
+        toolChoice: summarizeAiToolChoice(policy?.toolChoice ?? 'auto'),
+        toolCalls: toolCalls.map((call) => call.toolName),
+        buildBrepProject: {
+          attemptCount: buildAttempts.length,
+          accepted: buildAttempts.some((attempt) => attempt.accepted),
+          attempts: buildAttempts,
+        },
+        context: context ?? null,
+        providerUsage: usageAvailable
+          ? {
+              inputTokens: usage.inputTokens ?? null,
+              outputTokens: usage.outputTokens ?? null,
+              totalTokens: usage.totalTokens ?? null,
+            }
+          : null,
+      });
     },
     stopWhen:
       activeBrepSource && transport.kind !== 'normal'
@@ -1367,21 +1477,45 @@ export async function handleAiChatRequest(req: Request) {
     onFinish: ({ steps }) => {
       activeGeneration.finish();
       void generationRun.responseReceived();
-      const inputTokens = steps.reduce(
-        (total, step) => total + (step.usage.inputTokens ?? 0),
-        0,
+      const usageAvailable = steps.some(
+        (step) =>
+          (step.usage.inputTokens ?? 0) > 0 ||
+          (step.usage.outputTokens ?? 0) > 0 ||
+          (step.usage.totalTokens ?? 0) > 0,
       );
-      const outputTokens = steps.reduce(
-        (total, step) => total + (step.usage.outputTokens ?? 0),
-        0,
-      );
+      const inputTokens = usageAvailable
+        ? steps.reduce(
+            (total, step) => total + (step.usage.inputTokens ?? 0),
+            0,
+          )
+        : null;
+      const outputTokens = usageAvailable
+        ? steps.reduce(
+            (total, step) => total + (step.usage.outputTokens ?? 0),
+            0,
+          )
+        : null;
+      const totalTokens = usageAvailable
+        ? steps.reduce(
+            (total, step) => total + (step.usage.totalTokens ?? 0),
+            0,
+          )
+        : null;
+      const acceptedBuildSteps = [...brepBuildAttemptsByStep.entries()]
+        .filter(([, attempts]) => attempts.some((attempt) => attempt.accepted))
+        .map(([stepNumber]) => stepNumber + 1)
+        .sort((left, right) => left - right);
       console.info('ai context actual usage', {
         modelId: actualModelId,
         transportKind: transport.kind,
         stepCount: steps.length,
+        providerUsageRequested: actualModelId.startsWith('local/'),
+        providerUsageAvailable: usageAvailable,
         inputTokens,
         outputTokens,
-        totalTokens: inputTokens + outputTokens,
+        totalTokens,
+        totalElapsedMs: Date.now() - generationStartedAt,
+        acceptedBrepBuildSteps,
       });
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
