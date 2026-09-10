@@ -1,6 +1,6 @@
 # C2.5-B — accepted canonical BRep build terminates the turn
 
-Status: **repository-complete and CI-accepted; representative local runtime remeasurement pending**
+Status: **repository-complete, CI-accepted and representative local runtime-accepted**
 
 Date: 2026-09-10
 
@@ -50,7 +50,7 @@ totalTokens = 167097
 
 Step 2 therefore added about 130 seconds of redundant inference after the canonical BRep artifact had already been accepted. It also re-fed the accepted tool interaction, growing provider-facing model messages from 168 bytes to 83449 bytes.
 
-The run later failed while saving the immutable revision because the request-bound Supabase JWT had expired. That is a persistence/session lifetime failure after successful canonical BRep generation; it is not evidence that the accepted geometry/build was invalid.
+The run later failed while saving the immutable revision because the request-bound Supabase JWT had expired. That was a persistence/session lifetime failure after successful canonical BRep generation; it was not evidence that the accepted geometry/build was invalid.
 
 ## Implemented stop semantics
 
@@ -112,18 +112,53 @@ Grasshopper Build #362 PASS
 
 Quality Gate included tests, TypeScript typecheck, lint, build and diff check.
 
-## Required runtime remeasurement
+## Representative runtime acceptance
 
-After pulling the C2.5-B checkpoint, repeat the representative Native BRep fixture. For a first-step accepted build the expected diagnostics are now approximately:
+After C2.5-B and the C2.5-C source-kind package work, the same representative Native BRep fixture was re-run from checkpoint:
 
 ```text
-ai step diagnostics ... stepNumber: 1 ... accepted: true
-ai context actual usage ... stepCount: 1 ... acceptedBrepBuildSteps: [1]
+4b6b7678094a95bfb1c6449bb8f8d08c9b1a1f1f
 ```
 
-There must be no second full model step after that acceptance.
+with:
 
-Refresh/re-authenticate immediately before the long run so a stale/near-expiry access token does not confound the persistence result. A separate persistence robustness decision can be made if a fresh request still crosses the JWT lifetime during a long model step.
+```text
+local/qwen3.8-27b-mtp-128k
+```
+
+The first model step produced one accepted build:
+
+```text
+stepNumber = 1
+finishReason = tool-calls
+build_brep_project attemptCount = 1
+accepted = true
+stepDurationMs = 632996
+provider usage = 56413 input / 25674 output / 82087 total
+```
+
+Final diagnostics were:
+
+```text
+stepCount = 1
+providerUsageRequested = true
+providerUsageAvailable = true
+inputTokens = 56413
+outputTokens = 25674
+totalTokens = 82087
+totalElapsedMs = 633003
+acceptedBrepBuildSteps = [1]
+```
+
+There was no second model step. The accepted canonical source persisted and rendered as a Native BRep project, so the earlier JWT-expiry confounder did not reproduce after fresh authentication.
+
+This is the required runtime proof for C2.5-B: a valid first build stops immediately after canonical acceptance. Invalid/rejected retry behavior remains covered by repository regression tests.
+
+Detailed context-budget and geometry-quality observations from this run are recorded in:
+
+```text
+docs/brep_c25_runtime_evidence_2026-09-10.md
+```
 
 ## Preserved boundaries
 
@@ -143,4 +178,4 @@ C2.5-B does not change:
 - PR #36 merge state;
 - M2 status.
 
-C2.5-C remains the next active engineering step.
+C2.5-C source-kind specialization is implemented and has now been exercised in the real local runtime. Its architecture is validated, but broad model-quality improvement remains mixed rather than proven. The next bounded decision is whether to perform C2.5-D host parity work before continuing to C3 BRep model-context projection.
