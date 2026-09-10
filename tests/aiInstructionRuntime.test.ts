@@ -76,8 +76,20 @@ describe('per-request AI instruction snapshot', () => {
     const runtime = await createUserAiRuntimeContext('user-id');
 
     await expect(
-      runtime.instruction('tool.build_parametric_model'),
+      runtime.template('tool.build_parametric_model'),
     ).resolves.toBe('Custom build instruction');
+    const buildInstruction = await runtime.instruction(
+      'tool.build_parametric_model',
+    );
+    expect(buildInstruction).toContain('# OpenSCAD CAD specialization');
+    expect(buildInstruction).toContain('## Tool contract');
+    expect(buildInstruction).toContain('Custom build instruction');
+    expect(buildInstruction.indexOf('# OpenSCAD CAD specialization')).toBeLessThan(
+      buildInstruction.indexOf('## Tool contract'),
+    );
+    expect(buildInstruction.indexOf('## Tool contract')).toBeLessThan(
+      buildInstruction.indexOf('Custom build instruction'),
+    );
     await expect(
       runtime.instruction('vision.reference', { userRequest: 'make a hook' }),
     ).resolves.toBe('Custom vision instruction make a hook');
