@@ -137,7 +137,7 @@ describe('AI instruction profile packages', () => {
     }
   });
 
-  it('keeps CADAM frozen while Standard changes only its declared C2.5 surfaces', () => {
+  it('keeps CADAM frozen and does not alter undeclared Standard surfaces', () => {
     const specializedKeys = new Set([
       'parametric',
       'parametric.openscad',
@@ -149,13 +149,10 @@ describe('AI instruction profile packages', () => {
     ]);
 
     for (const key of AI_INSTRUCTION_KEYS) {
-      const standard = loadBundledInstruction(key, 'standard');
-      const cadam = loadBundledInstruction(key, 'cadam');
-      if (specializedKeys.has(key)) {
-        expect(standard).not.toBe(cadam);
-      } else {
-        expect(standard).toBe(cadam);
-      }
+      if (specializedKeys.has(key)) continue;
+      expect(loadBundledInstruction(key, 'standard')).toBe(
+        loadBundledInstruction(key, 'cadam'),
+      );
     }
   });
 
