@@ -16,7 +16,11 @@ type ImportStatus = {
   message: string;
 };
 
-export function BrepGrasshopperImportButton() {
+export function BrepGrasshopperImportButton({
+  disabled = false,
+}: {
+  disabled?: boolean;
+}) {
   const { conversation } = useConversation();
   const queryClient = useQueryClient();
   const { data: dbMessages = [] } = useMessagesQuery();
@@ -33,7 +37,7 @@ export function BrepGrasshopperImportButton() {
   );
 
   const importFile = async (file: BrepGrasshopperGhxFileLike) => {
-    if (!activeSource || !leafId || importing) return;
+    if (disabled || !activeSource || !leafId || importing) return;
     setImporting(true);
     setStatus(null);
     try {
@@ -89,6 +93,7 @@ export function BrepGrasshopperImportButton() {
         accept=".ghx,application/xml,text/xml"
         className="hidden"
         aria-label="Import Grasshopper GHX"
+        disabled={disabled}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = '';
@@ -112,8 +117,12 @@ export function BrepGrasshopperImportButton() {
         type="button"
         size="sm"
         variant="ghost"
-        disabled={!activeSource || importing}
-        title="Validate a returned Brepia GHX and import supported parameter edits as a new immutable revision"
+        disabled={disabled || !activeSource || importing}
+        title={
+          disabled
+            ? 'Return to the active BRep revision before importing Grasshopper changes'
+            : 'Validate a returned Brepia GHX and import supported parameter edits as a new immutable revision'
+        }
         onClick={() => inputRef.current?.click()}
         className="h-7 shrink-0 gap-1.5 px-2 text-xs text-adam-neutral-300"
       >
