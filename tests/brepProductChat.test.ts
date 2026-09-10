@@ -88,9 +88,10 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /viewedRevisionId/);
     assert.match(brepViewSource, /const displayedSource = useMemo/);
     assert.match(brepViewSource, /const viewingHistorical = Boolean/);
+    assert.match(brepViewSource, /setViewedRevisionId\(/);
     assert.match(
       brepViewSource,
-      /setViewedRevisionId\([\s\S]*messageId === activeSource\?\.messageId/,
+      /messageId === activeSource\?\.messageId \? null : messageId/,
     );
     assert.match(
       brepViewSource,
