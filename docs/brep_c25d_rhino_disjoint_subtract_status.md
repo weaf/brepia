@@ -1,6 +1,6 @@
 # C2.5-D — Rhino/native disjoint subtract parity
 
-Status: **repository-complete and CI-accepted; installed Rhino 8 / Grasshopper disjoint-fixture acceptance pending**
+Status: **complete — repository/CI accepted and installed Rhino 8 / Grasshopper host accepted**
 
 Date: 2026-09-10
 
@@ -120,19 +120,37 @@ build PASS
 diff check PASS
 ```
 
-## Installed-host acceptance still required
+The documentation checkpoint `ce8de7208a5c4bd506d7c0c0234acf67afcbe8e8` then also passed:
 
-Repository CI cannot prove RhinoCommon runtime semantics. Installed Rhino 8 / Grasshopper remains the authority.
+```text
+Quality Gate #817       PASS
+Grasshopper Build #389 PASS
+```
 
-Preferred acceptance is deliberately cheap and does not require another long AI generation:
+## Installed-host acceptance
 
-1. if the earlier persisted project whose door cutter was outside the wall is still available, pull this checkpoint and export a **fresh GHX** from that unchanged project;
-2. open/solve the fresh GHX in installed Rhino 8 / Grasshopper;
-3. confirm that the formerly disjoint subtraction is now an unchanged/no-op operation rather than a Python runtime error;
-4. confirm the rest of the geometry still solves;
-5. optionally change an intersecting cutter/parameter to verify the real boolean path continues to operate.
+Installed Rhino 8 / Grasshopper acceptance was completed on 2026-09-10 using the earlier persisted room/cabinets model that had previously failed because its door cutter was disjoint from the intended wall.
 
-If the earlier project is no longer available, do not create an expensive new AI fixture solely for D. Keep installed-host acceptance pending until an equivalent deterministic disjoint fixture is available and continue the context/runtime track.
+After pulling the C2.5-D checkpoint, a **fresh GHX export** from that unchanged old model was opened in installed Rhino 8 / Grasshopper.
+
+Observed host result:
+
+```text
+GHX opens/solves without the previous Python boolean error  PASS
+remaining room/cabinet geometry is produced correctly       PASS
+disjoint door subtraction behaves as a no-op                PASS
+```
+
+The visible result intentionally contains no door opening because the persisted source model still places that cutter outside the wall. C2.5-D must not reinterpret that bad source geometry as a valid opening; it only restores parity with the authoritative native no-op semantics.
+
+This host result closes the exact mismatch that motivated D:
+
+```text
+native OCCT disjoint subtraction -> unchanged base
+Rhino GHX disjoint subtraction   -> unchanged base
+```
+
+The separate C2.5-C host fixture already demonstrated that a correctly positioned door cutter and wall-thickness parameters remain genuinely parametric and recompute in Rhino/Grasshopper.
 
 ## Preserved boundaries
 
@@ -153,7 +171,7 @@ C2.5-D does not change:
 
 ## Next phase
 
-After the cheap installed-host D check when available, continue with:
+C2.5-D is complete. Continue with:
 
 ```text
 C3 — BRep model-context projection
