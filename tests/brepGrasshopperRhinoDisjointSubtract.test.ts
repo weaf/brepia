@@ -59,7 +59,7 @@ describe('C2.5-D Rhino/native disjoint subtraction parity', () => {
     assert.match(script.source, /second_box = second\.GetBoundingBox\(True\)/);
     assert.match(
       script.source,
-      /if not first_box\.IsValid or not second_box\.IsValid:\n        return False/,
+      /if not first_box\.IsValid or not second_box\.IsValid:\n {8}return False/,
     );
     assert.match(script.source, /tolerance = max\(0\.0, float\(tolerance\)\)/);
     assert.match(
@@ -74,7 +74,7 @@ describe('C2.5-D Rhino/native disjoint subtraction parity', () => {
     const guard = /^(brepiaNode\d+)Disjoint0 = brepia_bounds_disjoint\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
     );
-    const boolean = /^    (brepiaNode\d+)Parts0 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+    const boolean = /^ {4}(brepiaNode\d+)Parts0 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
     );
     const failure =
