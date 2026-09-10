@@ -1,6 +1,6 @@
 # M2 — additive Boolean composition status
 
-Status: **repository-complete and CI-accepted; native runtime and installed Rhino 8 / Grasshopper evidence pending**
+Status: **repository-complete, CI-accepted and native build123d / OCCT runtime-accepted; installed Rhino 8 / Grasshopper evidence pending**
 
 Date: 2026-09-10
 
@@ -77,7 +77,7 @@ unsupported_result_cardinality
 
 The existing `subtract` behavior is unchanged.
 
-`scripts/brep/smoke-test.sh` now includes deterministic M2 fixtures for:
+`scripts/brep/smoke-test.sh` includes deterministic M2 fixtures for:
 
 1. overlapping/nested union success;
 2. overlapping/nested intersection success;
@@ -119,7 +119,7 @@ provider expression depth: 2
 
 No recursive/nested `$ref` provider baseline was introduced.
 
-The Native BRep tool instruction now tells the model that:
+The Native BRep tool instruction tells the model that:
 
 - Boolean inputs are ordered and unique;
 - a successful Boolean must resolve to exactly one solid/Brep;
@@ -129,7 +129,7 @@ The Native BRep tool instruction now tells the model that:
 
 ## Structural editor
 
-The existing feature editor now exposes both M2 node types.
+The existing feature editor exposes both M2 node types.
 
 Boolean inputs use an ordered editor rather than the existing subtract-tool checkbox set. The user can:
 
@@ -142,7 +142,7 @@ Existing node IDs, immutable revision semantics and result-selection authority r
 
 ## Integrity analysis
 
-M0 reachability analysis now follows `union.inputs` and `intersect.inputs`, so nodes and parameters behind Boolean composition remain part of authoritative reachability when the Boolean node reaches `resultNodeId` or a project-object geometry role.
+M0 reachability analysis follows `union.inputs` and `intersect.inputs`, so nodes and parameters behind Boolean composition remain part of authoritative reachability when the Boolean node reaches `resultNodeId` or a project-object geometry role.
 
 No weakening of orphan/effectiveness diagnostics was introduced.
 
@@ -166,7 +166,7 @@ During implementation an intermediate TypeScript gate correctly found two exhaus
 
 ## Repository acceptance
 
-Final implementation checkpoint before this status document:
+Implementation candidate:
 
 ```text
 d48d3b5861f9be468afa9f93a502fae823efa9f7
@@ -179,43 +179,49 @@ Quality Gate #856       PASS
 Grasshopper Build #428 PASS
 ```
 
-Quality Gate evidence includes:
+The reconciled docs-only checkpoint after repository closeout is:
 
 ```text
-135 test files PASS
-862 tests PASS
-typecheck PASS
-lint PASS
-production build PASS
-git diff --check PASS
+3120cb9987f8f570c186481ebc7ab9a4c7ce3465
 ```
+
+GitHub CI on that exact checkpoint:
+
+```text
+Quality Gate #858       PASS
+Grasshopper Build #430 PASS
+```
+
+Quality Gate evidence includes 135 passing test files / 862 passing tests, typecheck, lint, production build and `git diff --check`.
 
 The dedicated M2 suite contributes 12 passing tests covering canonical normalization, arity/uniqueness, missing references, cycles, canonical/provider schema acceptance, Rhino source generation, native result-cardinality guards and structural-editor exposure.
 
-## Required runtime acceptance next
+## Native runtime acceptance
 
-Repository CI does not prove real kernel or installed-host behavior for the newly translated Boolean operations.
+Real local rootless build123d / OCCT runtime acceptance is complete and recorded in:
 
-Before M2 can be declared runtime-accepted, collect both evidence classes below.
+`docs/brep_m2_native_runtime_evidence_2026-09-10.md`
 
-### 1. Native build123d / OCCT
+The real local runtime was rebuilt and `./scripts/brep/smoke-test.sh` completed successfully.
 
-On the real local Native BRep runtime, rebuild the pinned image if required and run:
+Observed success output:
 
-```bash
-scripts/brep/build-image.sh
-scripts/brep/smoke-test.sh
+```text
+{"result":"cut","triangles":732,"roles":["footprint","clearanceEnvelope","maintenanceEnvelope"],"point":{"id":"cableEntry","kind":"cable","position":[50,10,0],"direction":[0,0,1],"label":"Cable entry"},"artifacts":["model.step","brepia-footprint.step","brepia-clearance-envelope.step","brepia-maintenance-envelope.step","model.3dm"]}
+{"boolean":"union","result":"booleanResult","triangles":12}
+{"boolean":"intersect","result":"booleanResult","triangles":12}
 ```
 
-The smoke must prove:
+The two disjoint fixtures are intentionally silent on success. Because the smoke script completed successfully, it also proved:
 
-- existing box/cylinder/transform/subtract/fillet regression remains green;
-- union success produces one body plus valid STEP;
-- intersection success produces one body plus valid STEP;
-- disjoint union rejects with `unsupported_result_cardinality`;
-- disjoint intersection rejects with `unsupported_result_cardinality`.
+- disjoint union rejected with `unsupported_result_cardinality`;
+- disjoint intersection rejected with `unsupported_result_cardinality`.
 
-### 2. Installed Rhino 8 / Grasshopper
+The native M2 result-cardinality contract is therefore runtime-accepted while the pre-M2 STEP/3DM and project-object smoke remains green.
+
+## Required installed-host acceptance next
+
+The only remaining M2 acceptance boundary is installed Rhino 8 / Grasshopper parity.
 
 Use fresh GHX compiled from the current branch for deterministic representative union and intersection models.
 
@@ -234,7 +240,7 @@ Brepia export
 
 Also exercise at least one unsupported result-cardinality fixture and verify it fails closed rather than silently returning an arbitrary Brep or multi-body result.
 
-Installed-host evidence is required by the permanent Rhino 8 translation policy before claiming parity for the new operations.
+Installed-host evidence is required by the permanent Rhino 8 translation policy before claiming full M2 parity.
 
 ## Preserved boundaries
 
@@ -253,4 +259,4 @@ M2 does not change:
 - OpenSCAD behavior;
 - PR #36 draft/stacked/unmerged state.
 
-M3 must not begin until the M2 runtime/host evidence above has been reconciled and M2 is explicitly closed.
+M3 must not begin until the installed Rhino 8 / Grasshopper evidence above has been reconciled and M2 is explicitly closed.
