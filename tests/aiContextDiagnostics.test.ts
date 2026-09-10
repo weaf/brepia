@@ -130,6 +130,17 @@ describe('AI context diagnostics', () => {
       providerEstimatedTokens: 0,
     });
     expect(diagnostics.historicalBrepSnapshots.persistedBytes).toBeGreaterThan(0);
+    expect(diagnostics.brepModelProjection.branch).toMatchObject({
+      applied: true,
+      removedBuildToolParts: 1,
+      removedBrepSnapshotParts: 1,
+      summarizedAcceptedBuilds: 1,
+    });
+    expect(diagnostics.brepModelProjection.provider).toMatchObject({
+      applied: true,
+      removedToolCalls: 0,
+      removedToolResults: 0,
+    });
     expect(diagnostics.images).toEqual({
       count: 1,
       base64Chars: 128,
@@ -154,6 +165,77 @@ describe('AI context diagnostics', () => {
     expect(serializedDiagnostics).not.toContain(base64);
   });
 
+  it('projects superseded BRep provider tool payloads in place before dispatch diagnostics', async () => {
+    const modelMessages: unknown[] = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Create it.' }],
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'build_brep_project',
+            input: { title: rawProjectMarker, project },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'build_brep_project',
+            output: {
+              status: 'success',
+              message: 'Created canonical native BRep project.',
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Make it taller.' }],
+      },
+    ];
+
+    const diagnostics = await buildAiContextDiagnostics({
+      systemPrompt: 'system with current canonical BRep',
+      systemPromptBeforeBrepContext: 'system',
+      tools: { build_brep_project: chatTools.build_brep_project },
+      branchMessages: branchFixture(),
+      modelMessages,
+      currentBrepProject: project,
+      modelContextLimit: 131072,
+      modelOutputLimit: 16384,
+      reservedOutputTokens: 8192,
+    });
+
+    expect(diagnostics.brepModelProjection.provider).toMatchObject({
+      applied: true,
+      removedToolCalls: 1,
+      removedToolResults: 1,
+      insertedRevisionSummaries: 1,
+    });
+    expect(diagnostics.brepModelProjection.provider.removedToolInputBytes).toBeGreaterThan(
+      0,
+    );
+    expect(diagnostics.brepModelProjection.provider.removedToolOutputBytes).toBeGreaterThan(
+      0,
+    );
+
+    const serializedModelMessages = JSON.stringify(modelMessages);
+    expect(serializedModelMessages).not.toContain('tool-call');
+    expect(serializedModelMessages).not.toContain('tool-result');
+    expect(serializedModelMessages).not.toContain(rawProjectMarker);
+    expect(serializedModelMessages).toContain(
+      'Prior accepted Native BRep revision: Created canonical native BRep project.',
+    );
+  });
+
   it('keeps budget metadata unknown instead of inventing a model context limit', async () => {
     const diagnostics = await buildAiContextDiagnostics({
       systemPrompt: 'system',
@@ -166,6 +248,7 @@ describe('AI context diagnostics', () => {
       reservedOutputTokens: 4096,
     });
 
+    expect(diagnostics.brepModelProjection.provider.applied).toBe(false);
     expect(diagnostics.budget).toMatchObject({
       contextWindowTokens: null,
       modelOutputLimitTokens: null,
