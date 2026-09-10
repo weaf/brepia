@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/button';
 
 export function BrepProjectWorkspacePanel({
   isMobile = false,
+  readOnly = false,
 }: {
   isMobile?: boolean;
+  readOnly?: boolean;
 }) {
   const { view, setView } = useBrepFeatureWorkspace();
 
@@ -51,9 +53,13 @@ export function BrepProjectWorkspacePanel({
         </div>
         <div className="flex min-w-0 items-center gap-3">
           <span className="hidden text-[10px] text-adam-neutral-500 xl:inline">
-            {view === 'model' ? 'Primary BRep result' : 'Feature dependency graph'}
+            {readOnly
+              ? 'Historical BRep preview · read only'
+              : view === 'model'
+                ? 'Primary BRep result'
+                : 'Feature dependency graph'}
           </span>
-          <BrepGrasshopperImportButton />
+          <BrepGrasshopperImportButton disabled={readOnly} />
         </div>
       </div>
 
