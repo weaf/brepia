@@ -66,8 +66,12 @@ describe('durable BRep generation preview lifecycle', () => {
     assert.equal(isRetryableBrepPreviewErrorCode('output_invalid'), false);
   });
 
-  it('wires the active immutable revision into the authenticated preview request', () => {
-    assert.match(projectViewSource, /conversationId=\{conversation\.id\}/);
+  it('wires generation context only for the active immutable revision preview', () => {
+    assert.match(
+      projectViewSource,
+      /conversationId=\{viewingHistorical \? undefined : conversation\.id\}/,
+    );
+    assert.match(projectViewSource, /const viewingHistorical = Boolean/);
     assert.match(editorSource, /generationContext:/);
     assert.match(editorSource, /revisionMessageId: activeRevisionId/);
     assert.match(
