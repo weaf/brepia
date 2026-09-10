@@ -6,6 +6,10 @@ const brepChatSource = fs.readFileSync(
   new URL('../src/components/brep/BrepChatSession.tsx', import.meta.url),
   'utf8',
 );
+const brepIterationCardSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepIterationModelCard.tsx', import.meta.url),
+  'utf8',
+);
 const promptViewSource = fs.readFileSync(
   new URL('../src/views/PromptView.tsx', import.meta.url),
   'utf8',
@@ -26,6 +30,14 @@ const brepProjectServiceSource = fs.readFileSync(
   new URL('../src/services/brepProjectService.ts', import.meta.url),
   'utf8',
 );
+const brepWorkspaceSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
+  'utf8',
+);
+const brepGhxImportSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepGrasshopperImportButton.tsx', import.meta.url),
+  'utf8',
+);
 const brepViewSource = fs.readFileSync(
   new URL('../src/views/BrepProjectView.tsx', import.meta.url),
   'utf8',
@@ -42,24 +54,83 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /<ConversationView/);
     assert.match(
       brepViewSource,
-      /previewSlot={<BrepProjectWorkspacePanel \/>}/,
+      /previewSlot={<BrepProjectWorkspacePanel readOnly={viewingHistorical} \/>}/,
     );
     assert.match(
       brepViewSource,
-      /parametersSlot={\s*<fieldset disabled={isAiEditing} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
+      /parametersSlot={\s*<fieldset disabled={projectEditingDisabled} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
     );
     assert.match(
       brepViewSource,
-      /mobilePreviewSlot={<BrepProjectWorkspacePanel isMobile \/>}/,
+      /<BrepProjectWorkspacePanel isMobile readOnly={viewingHistorical} \/>/,
     );
     assert.match(
       brepViewSource,
-      /mobileParametersSlot={\s*<fieldset disabled={isAiEditing} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
+      /mobileParametersSlot={\s*<fieldset disabled={projectEditingDisabled} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
     );
-    assert.match(brepViewSource, /sourceEditingDisabled={isAiEditing}/);
+    assert.match(
+      brepViewSource,
+      /sourceEditingDisabled={projectEditingDisabled}/,
+    );
     assert.match(brepViewSource, /<BrepFeatureWorkspaceProvider>/);
     assert.match(brepViewSource, /setMobilePreviewVersion/);
     assert.match(brepViewSource, /\bWorkspace\b/);
+  });
+
+  it('loads a visible BRep iteration into the workspace without moving the authoritative chat leaf', () => {
+    assert.match(brepChatSource, /getBrepProjectArtifact\(node\.parts\)/);
+    assert.match(brepChatSource, /<BrepIterationModelCard/);
+    assert.match(brepChatSource, /onViewRevision\(messageId\)/);
+    assert.match(brepChatSource, /setView\('model'\)/);
+    assert.match(brepIterationCardSource, /Load model/);
+    assert.match(brepIterationCardSource, /Active model/);
+
+    assert.match(brepViewSource, /viewedRevisionId/);
+    assert.match(brepViewSource, /const displayedSource = useMemo/);
+    assert.match(brepViewSource, /const viewingHistorical = Boolean/);
+    assert.match(
+      brepViewSource,
+      /setViewedRevisionId\([\s\S]*messageId === activeSource\?\.messageId/,
+    );
+    assert.match(
+      brepViewSource,
+      /onViewRevision={handleViewRevision}/,
+    );
+    assert.match(
+      brepViewSource,
+      /mobilePreviewKey={`brep:\$\{displayedSource\.messageId\}`}/,
+    );
+    assert.doesNotMatch(
+      brepViewSource,
+      /handleViewRevision[\s\S]{0,500}selectBrepProjectRevision/,
+    );
+  });
+
+  it('keeps historical iteration preview read only until an explicit revision action', () => {
+    assert.match(
+      brepViewSource,
+      /const projectEditingDisabled = isAiEditing \|\| viewingHistorical/,
+    );
+    assert.match(
+      brepViewSource,
+      /Restore this historical BRep revision before editing its parameters/,
+    );
+    assert.match(
+      brepViewSource,
+      /Restore this historical BRep revision before editing its features/,
+    );
+    assert.match(brepViewSource, /Back to active/);
+    assert.match(brepViewSource, /Historical preview/);
+    assert.match(brepWorkspaceSource, /readOnly = false/);
+    assert.match(
+      brepWorkspaceSource,
+      /<BrepGrasshopperImportButton disabled={readOnly} \/>/,
+    );
+    assert.match(brepGhxImportSource, /if \(disabled \|\| !activeSource/);
+    assert.match(
+      brepGhxImportSource,
+      /Return to the active BRep revision before importing Grasshopper changes/,
+    );
   });
 
   it('matches the responsive Parametric sidebar hierarchy and exposes canonical BRep JSON', () => {
