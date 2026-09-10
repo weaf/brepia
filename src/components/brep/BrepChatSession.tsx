@@ -1,4 +1,6 @@
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { BrepIterationModelCard } from '@/components/brep/BrepIterationModelCard';
+import { useBrepFeatureWorkspace } from '@/components/brep/BrepFeatureWorkspace';
 import { SuggestionPills } from '@/components/chat/SuggestionPills';
 import TextAreaChat from '@/components/TextAreaChat';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,6 +21,7 @@ import {
 } from '@/services/generationRunService';
 import { shouldPollForPendingAssistant } from '@/services/messageService';
 import { supabase } from '@/lib/supabase';
+import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import type {
   AppUIMessage,
   ConversationSuggestionsUpdate,
@@ -56,6 +59,9 @@ interface BrepChatSessionProps {
   onSelectLeaf: (messageId: string) => Promise<void>;
   branchForLeaf: (leafId: string) => AppUIMessage[];
   onChangeRating: (messageId: string, rating: number) => void;
+  onViewRevision: (messageId: string) => void;
+  displayedRevisionId: string;
+  activeRevisionId: string;
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
@@ -126,10 +132,14 @@ export function BrepChatSession({
   onSelectLeaf,
   branchForLeaf,
   onChangeRating,
+  onViewRevision,
+  displayedRevisionId,
+  activeRevisionId,
   onLoadingChange,
 }: BrepChatSessionProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { setView } = useBrepFeatureWorkspace();
   // /editor and /brep can address the same persisted conversation, but their
   // chat runtimes have different client-tool semantics. Keep the cached Chat
   // instances separate so a previously mounted OpenSCAD editor cannot leak
@@ -511,6 +521,14 @@ export function BrepChatSession({
     [branchForLeaf, onSelectLeaf, setMessages],
   );
 
+  const handleViewRevision = useCallback(
+    (messageId: string) => {
+      setView('model');
+      onViewRevision(messageId);
+    },
+    [onViewRevision, setView],
+  );
+
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const viewport = scrollRef.current?.querySelector(
@@ -528,35 +546,49 @@ export function BrepChatSession({
         <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-6 md:gap-8 md:pb-4">
           {branchNodes.map((node, index) => {
             const isLastMessage = index === branchNodes.length - 1;
+            const brepArtifact =
+              node.role === 'assistant'
+                ? getBrepProjectArtifact(node.parts)
+                : undefined;
             return (
-              <MessageBubble
-                key={node.id}
-                message={node}
-                isLoading={isLoading}
-                isLastMessage={isLastMessage}
-                currentModel={displayedModel}
-                onSelectLeaf={(id) => void handleSelectLeaf(id)}
-                onEditUserText={
-                  node.role === 'user' ? handleEditUserText : undefined
-                }
-                onViewArtifact={() => {}}
-                onViewMesh={() => {}}
-                onChangeRating={
-                  node.role === 'assistant'
-                    ? (rating) => onChangeRating(node.id, rating)
-                    : undefined
-                }
-                onRetry={
-                  node.role === 'assistant'
-                    ? (nextModel) => void handleRetry(node, nextModel)
-                    : undefined
-                }
-                onRestore={
-                  node.role === 'assistant' && !isLastMessage
-                    ? () => void handleRestore(node)
-                    : undefined
-                }
-              />
+              <div key={node.id} className="flex min-w-0 flex-col gap-2">
+                <MessageBubble
+                  message={node}
+                  isLoading={isLoading}
+                  isLastMessage={isLastMessage}
+                  currentModel={displayedModel}
+                  onSelectLeaf={(id) => void handleSelectLeaf(id)}
+                  onEditUserText={
+                    node.role === 'user' ? handleEditUserText : undefined
+                  }
+                  onViewArtifact={() => {}}
+                  onViewMesh={() => {}}
+                  onChangeRating={
+                    node.role === 'assistant'
+                      ? (rating) => onChangeRating(node.id, rating)
+                      : undefined
+                  }
+                  onRetry={
+                    node.role === 'assistant'
+                      ? (nextModel) => void handleRetry(node, nextModel)
+                      : undefined
+                  }
+                  onRestore={
+                    node.role === 'assistant' && !isLastMessage
+                      ? () => void handleRestore(node)
+                      : undefined
+                  }
+                />
+                {brepArtifact ? (
+                  <BrepIterationModelCard
+                    artifact={brepArtifact}
+                    loaded={displayedRevisionId === node.id}
+                    active={activeRevisionId === node.id}
+                    disabled={isLoading && isLastMessage}
+                    onLoad={() => handleViewRevision(node.id)}
+                  />
+                ) : null}
+              </div>
             );
           })}
         </div>
