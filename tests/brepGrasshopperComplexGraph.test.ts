@@ -135,10 +135,10 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     const booleanMatches = script.source.match(/rg\.Brep\.CreateBooleanDifference\(/g) ?? [];
     assert.equal(booleanMatches.length, 2);
 
-    const firstBoolean = /^(brepiaNode\d+)Parts0 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+    const firstBoolean = /^\s+(brepiaNode\d+)Parts0 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
     );
-    const secondBoolean = /^(brepiaNode\d+)Parts1 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
+    const secondBoolean = /^\s+(brepiaNode\d+)Parts1 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
     );
     const positiveTranslation = /^if not (brepiaNode\d+)\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(250, 0, 0\)\)\):$/m.exec(
