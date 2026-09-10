@@ -48,6 +48,9 @@ function nodeDependencies(node: BrepNode): string[] {
       return [node.input];
     case 'subtract':
       return [node.base, ...node.tools];
+    case 'union':
+    case 'intersect':
+      return node.inputs;
   }
 }
 
