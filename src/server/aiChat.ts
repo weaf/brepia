@@ -90,6 +90,13 @@ import {
   buildAiContextDiagnostics,
   resolveAiModelBudgetMetadata,
 } from './aiContextDiagnostics';
+import {
+  AiContextBudgetError,
+  assertAiHardContextBudget,
+  deriveAiHardContextBudget,
+  estimateModelMessagesForHardBudget,
+  type AiHardContextBudget,
+} from './aiContextBudget';
 import { shouldStopAfterAcceptedBrepBuild } from './aiBrepStopCondition';
 import {
   classifyAiToolError,
@@ -875,7 +882,8 @@ export async function handleAiChatRequest(req: Request) {
               acceptedBrepBuildInput = input;
             },
             onBuildAttempt: ({ accepted, durationMs, error }) => {
-              const attempts = brepBuildAttemptsByStep.get(activeAiStepNumber) ?? [];
+              const attempts =
+                brepBuildAttemptsByStep.get(activeAiStepNumber) ?? [];
               attempts.push({
                 accepted,
                 durationMs,
@@ -1288,8 +1296,9 @@ export async function handleAiChatRequest(req: Request) {
     !streamingOpenCode &&
     !forceBuildToolChoice;
 
+  let contextDiagnostics: Awaited<ReturnType<typeof buildAiContextDiagnostics>>;
   try {
-    const contextDiagnostics = await buildAiContextDiagnostics({
+    contextDiagnostics = await buildAiContextDiagnostics({
       systemPrompt: resolvedSystemPrompt,
       systemPromptBeforeBrepContext,
       tools: tools as Record<string, unknown>,
@@ -1300,24 +1309,66 @@ export async function handleAiChatRequest(req: Request) {
       modelOutputLimit: modelBudgetMetadata.outputLimit,
       reservedOutputTokens: maxOutputTokens,
     });
-    console.info('ai context diagnostics', {
-      modelId: actualModelId,
-      transportKind: transport.kind,
-      modelBudgetSource: modelBudgetMetadata.source,
-      ...contextDiagnostics,
-    });
   } catch (error) {
     logError(error, {
       functionName: 'ai-chat',
-      statusCode: 200,
+      statusCode: 500,
       userId: user.id,
       conversationId: conversation.id,
       additionalContext: {
         ...baseLogContext,
-        operation: 'context_diagnostics',
+        operation: 'context_preflight',
       },
     });
+    await generationRun.failed('context_preflight_failed');
+    return jsonResponse(
+      { error: 'AI context could not be prepared safely' },
+      500,
+    );
   }
+
+  const requestHardBudget = deriveAiHardContextBudget({
+    estimatedInputTokens: contextDiagnostics.total.estimatedInputTokens,
+    contextWindowTokens: modelBudgetMetadata.contextLimit,
+    configuredMaxOutputTokens: maxOutputTokens,
+    modelOutputLimitTokens: modelBudgetMetadata.outputLimit,
+    safetyMarginTokens: contextDiagnostics.budget.safetyMarginTokens,
+  });
+  console.info('ai context diagnostics', {
+    modelId: actualModelId,
+    transportKind: transport.kind,
+    modelBudgetSource: modelBudgetMetadata.source,
+    ...contextDiagnostics,
+    hardBudget: requestHardBudget,
+  });
+
+  try {
+    assertAiHardContextBudget(requestHardBudget);
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-chat',
+      statusCode: 413,
+      userId: user.id,
+      conversationId: conversation.id,
+      additionalContext: {
+        ...baseLogContext,
+        operation: 'context_budget_preflight',
+        hardBudget: requestHardBudget,
+      },
+    });
+    await generationRun.failed('context_budget_exceeded');
+    return jsonResponse(
+      {
+        error:
+          'AI context is too large for the selected model. Shorten the conversation or choose a model with a larger context window.',
+      },
+      413,
+    );
+  }
+
+  const fixedContextEstimatedTokens =
+    contextDiagnostics.systemInstructions.estimatedTokens +
+    contextDiagnostics.providerToolSchemas.estimatedTokens;
 
   const activeGeneration = beginActiveGeneration(
     user.id,
@@ -1337,9 +1388,10 @@ export async function handleAiChatRequest(req: Request) {
   const generationStartedAt = Date.now();
   const stepStartedAt = new Map<number, number>();
   const stepContextByNumber = new Map<number, AiStepContextMeasurement>();
+  const stepBudgetByNumber = new Map<number, AiHardContextBudget>();
   const stepPolicyByNumber = new Map<
     number,
-    { activeTools: string[]; toolChoice: string }
+    { activeTools: string[]; toolChoice: string; maxOutputTokens: number }
   >();
 
   const result = streamText({
@@ -1348,8 +1400,20 @@ export async function handleAiChatRequest(req: Request) {
     system: resolvedSystemPrompt,
     messages: modelMessages,
     tools,
-    prepareStep: ({ stepNumber }) => {
+    prepareStep: ({ stepNumber, messages }) => {
       activeAiStepNumber = stepNumber;
+      const stepMessages = estimateModelMessagesForHardBudget(messages);
+      const stepBudget = deriveAiHardContextBudget({
+        estimatedInputTokens:
+          fixedContextEstimatedTokens + stepMessages.estimatedTokens,
+        contextWindowTokens: modelBudgetMetadata.contextLimit,
+        configuredMaxOutputTokens: maxOutputTokens,
+        modelOutputLimitTokens: modelBudgetMetadata.outputLimit,
+        safetyMarginTokens: contextDiagnostics.budget.safetyMarginTokens,
+      });
+      stepBudgetByNumber.set(stepNumber, stepBudget);
+      assertAiHardContextBudget(stepBudget);
+
       const forceInitialBuild =
         !streamingOpenCode &&
         conversation.type === 'parametric' &&
@@ -1361,17 +1425,22 @@ export async function handleAiChatRequest(req: Request) {
             toolChoice: forceBuildToolChoice
               ? `tool:${buildToolName}`
               : 'auto',
+            maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
           }
         : {
             activeTools: Object.keys(tools),
             toolChoice: 'auto',
+            maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
           };
       stepPolicyByNumber.set(stepNumber, stepPolicy);
 
-      if (streamingOpenCode) return {};
+      if (streamingOpenCode) {
+        return { maxOutputTokens: stepBudget.effectiveMaxOutputTokens };
+      }
       if (forceInitialBuild) {
         return {
           activeTools: [buildToolName as never],
+          maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
           ...(forceBuildToolChoice
             ? {
                 toolChoice: {
@@ -1382,7 +1451,7 @@ export async function handleAiChatRequest(req: Request) {
             : {}),
         };
       }
-      return {};
+      return { maxOutputTokens: stepBudget.effectiveMaxOutputTokens };
     },
     experimental_onStepStart: ({ stepNumber, messages }) => {
       activeAiStepNumber = stepNumber;
@@ -1399,6 +1468,9 @@ export async function handleAiChatRequest(req: Request) {
         totalElapsedMs: startedAt - generationStartedAt,
         activeTools: policy?.activeTools ?? Object.keys(tools),
         toolChoice: summarizeAiToolChoice(policy?.toolChoice ?? 'auto'),
+        maxOutputTokens:
+          policy?.maxOutputTokens ?? requestHardBudget.effectiveMaxOutputTokens,
+        hardBudget: stepBudgetByNumber.get(stepNumber) ?? requestHardBudget,
         context: {
           ...context,
           modelMessageGrowthBytes: previousContext
@@ -1429,6 +1501,9 @@ export async function handleAiChatRequest(req: Request) {
         finishReason,
         activeTools: policy?.activeTools ?? Object.keys(tools),
         toolChoice: summarizeAiToolChoice(policy?.toolChoice ?? 'auto'),
+        maxOutputTokens:
+          policy?.maxOutputTokens ?? requestHardBudget.effectiveMaxOutputTokens,
+        hardBudget: stepBudgetByNumber.get(stepNumber) ?? requestHardBudget,
         toolCalls: toolCalls.map((call) => call.toolName),
         buildBrepProject: {
           attemptCount: buildAttempts.length,
@@ -1461,13 +1536,28 @@ export async function handleAiChatRequest(req: Request) {
                 stepCountIs(maxSteps),
               ]
             : stepCountIs(maxSteps),
-    maxOutputTokens,
+    maxOutputTokens: requestHardBudget.effectiveMaxOutputTokens,
     abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
     onError: ({ error }) => {
       activeGeneration.finish();
       if (isRequestAbort(error, activeGeneration.signal)) {
         void generationRun.cancelled('Generation aborted.');
+        return;
+      }
+      if (error instanceof AiContextBudgetError) {
+        void generationRun.failed('context_budget_exceeded');
+        logError(error, {
+          functionName: 'ai-chat',
+          statusCode: 413,
+          userId: logContext.userId,
+          conversationId: logContext.conversationId,
+          additionalContext: {
+            ...logContext,
+            operation: 'step_context_budget',
+            hardBudget: error.budget,
+          },
+        });
         return;
       }
       void generationRun.failed('model_stream_failed');
@@ -1557,6 +1647,10 @@ export async function handleAiChatRequest(req: Request) {
       if (isRequestAbort(error, activeGeneration.signal)) {
         void generationRun.cancelled('Generation aborted.');
         return 'Generation stopped';
+      }
+      if (error instanceof AiContextBudgetError) {
+        void generationRun.failed('context_budget_exceeded');
+        return 'AI context became too large for the selected model before the next provider step.';
       }
       void generationRun.failed('ui_stream_failed');
 
