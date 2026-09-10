@@ -266,20 +266,31 @@ describe('Native BRep provider model-context projection', () => {
     expect(result.messages).toEqual(modelMessages);
   });
 
-  it('keeps the C3 pre-dispatch projection boundary before streamText', () => {
+  it('keeps C3 projection and C5 hard preflight before streamText', () => {
     const source = fs.readFileSync(
       new URL('../src/server/aiChat.ts', import.meta.url),
       'utf8',
     );
     const diagnosticsOffset = source.indexOf(
-      'const contextDiagnostics = await buildAiContextDiagnostics({',
+      'contextDiagnostics = await buildAiContextDiagnostics({',
+    );
+    const budgetOffset = source.indexOf(
+      'const requestHardBudget = deriveAiHardContextBudget({',
+    );
+    const assertOffset = source.indexOf(
+      'assertAiHardContextBudget(requestHardBudget);',
     );
     const dispatchOffset = source.indexOf('const result = streamText({');
 
     expect(diagnosticsOffset).toBeGreaterThanOrEqual(0);
-    expect(dispatchOffset).toBeGreaterThan(diagnosticsOffset);
-    expect(
-      source.slice(diagnosticsOffset, dispatchOffset),
-    ).toContain('modelMessages,');
+    expect(budgetOffset).toBeGreaterThan(diagnosticsOffset);
+    expect(assertOffset).toBeGreaterThan(budgetOffset);
+    expect(dispatchOffset).toBeGreaterThan(assertOffset);
+    expect(source.slice(diagnosticsOffset, budgetOffset)).toContain(
+      'modelMessages,',
+    );
+    expect(source.slice(assertOffset, dispatchOffset)).toContain(
+      'context_budget_preflight',
+    );
   });
 });
