@@ -1,6 +1,6 @@
 # BRep AI context budget and projection plan
 
-Status: **C1-C3 accepted; C4 deferred by evidence; C5 complete/runtime-accepted; C6 deterministic reasoning projection repository-complete / CI-accepted with runtime remeasurement next; M2 not started**
+Status: **C1-C3 accepted; C4 deferred by evidence; C5-C6 complete/runtime-accepted; no rolling summary justified; M2 not started**
 
 Date: 2026-09-10
 
@@ -21,7 +21,8 @@ Detailed evidence/status:
 - `docs/brep_c3_runtime_evidence_2026-09-10.md`;
 - `docs/brep_c5_hard_context_budget_status.md`;
 - `docs/brep_c5_runtime_evidence_2026-09-10.md`;
-- `docs/brep_c6_reasoning_projection_status.md`.
+- `docs/brep_c6_reasoning_projection_status.md`;
+- `docs/brep_c6_runtime_evidence_2026-09-10.md`.
 
 ## Trigger
 
@@ -165,7 +166,7 @@ Static/provider ratio:
 
 Status: **deferred by evidence, not cancelled**.
 
-The representative C3 and C5 follow-ups both had:
+The representative C3, C5 and C6 follow-ups all had:
 
 ```text
 images.count: 0
@@ -185,12 +186,13 @@ Until exact provider/tokenizer preflight is wired end-to-end:
 conservativeInput = ceil(staticEstimatedInput * 1.75)
 ```
 
-The factor is above all measured llama.cpp ratios so far:
+The factor remains above all measured llama.cpp ratios so far:
 
 ```text
-original C1 overflow:  1.5715
-C3 follow-up:          1.4022
-C5 acceptance follow-up: 1.3996
+original C1 overflow:      1.5715
+C3 follow-up:              1.4022
+C5 acceptance follow-up:   1.3996
+C6 acceptance follow-up:   1.5192
 ```
 
 For a known context window:
@@ -210,7 +212,7 @@ Quality Gate #833       PASS
 Grasshopper Build #405 PASS
 ```
 
-Real C5 acceptance follow-up:
+Real C5 acceptance follow-up before C6 projection:
 
 ```text
 hardBudget.enforced:         true
@@ -231,15 +233,9 @@ elapsed:                    177443 ms
 
 C3 remained effective in the same run, removing two historical build calls/results and three persisted BRep snapshots from provider working context.
 
-Detailed evidence:
+## C6 — deterministic superseded-build reasoning projection
 
-```text
-docs/brep_c5_runtime_evidence_2026-09-10.md
-```
-
-## C6 — bounded conversational working memory
-
-Status: **deterministic superseded-build reasoning projection repository-complete / CI-accepted; runtime remeasurement next**.
+Status: **complete, CI-accepted and runtime-accepted**.
 
 C5 runtime acceptance showed the next limiting category:
 
@@ -250,35 +246,18 @@ hardInputHeadroomTokens:             1123
 images.count:                           0
 ```
 
-From C3 to C5 one small follow-up changed:
-
-```text
-raw estimate:        59628 -> 60213  (+585)
-conservative input: 104349 -> 105373 (+1024)
-hard headroom:        2147 -> 1123   (-1024)
-```
-
 Inspection showed that historical assistant `reasoning` attached to accepted `build_brep_project` turns remained after the structured BRep payload itself had been projected away.
 
-C6 therefore begins with a narrower deterministic operation instead of an AI-generated rolling summary:
+C6 therefore implemented a narrow deterministic operation instead of an AI-generated rolling summary:
 
 - remove historical assistant `reasoning` only when attached to a superseded BRep build;
 - preserve every user-authored turn;
-- preserve unrelated assistant context;
+- preserve unrelated assistant context/reasoning;
 - preserve bounded accepted-revision summaries;
 - preserve exact current canonical BRep authority;
 - leave DB/UI history untouched.
 
-New diagnostics report:
-
-```text
-brepModelProjection.branch.removedBuildReasoningParts
-brepModelProjection.branch.removedBuildReasoningBytes
-brepModelProjection.provider.removedBuildReasoningParts
-brepModelProjection.provider.removedBuildReasoningBytes
-```
-
-Repository checkpoint:
+Repository implementation checkpoint:
 
 ```text
 d0130dd220d3cd10e3c6b7c05c3e4cb3c173653e
@@ -286,15 +265,81 @@ Quality Gate #838       PASS
 Grasshopper Build #410 PASS
 ```
 
-Detailed status:
+The documentation/reconciliation checkpoint before runtime measurement was:
 
 ```text
-docs/brep_c6_reasoning_projection_status.md
+d9e5dc337c65cd4578ff86a5040a1aa265dc5869
+Quality Gate #842       PASS
+Grasshopper Build #414 PASS
 ```
 
-The next active step is one real follow-up in the same persisted conversation to measure the removed reasoning bytes and restored C5 hard headroom.
+### Runtime acceptance
 
-Only if older **user-authored** natural-language history is still a material cost after this deterministic projection should a broader rolling summary/truncation mechanism be considered. The summary must never become geometry authority.
+A third small follow-up in the same persisted conversation with `local/qwen3.8-27b-mtp-128k` directly observed:
+
+```text
+branch removed build reasoning parts:     3
+branch removed build reasoning bytes:  83981
+provider removed build reasoning parts:   3
+provider removed build reasoning bytes:83981
+```
+
+Persisted ordinary conversation history remained intact and grew:
+
+```text
+81114 -> 84356 bytes
+```
+
+But the actual effective provider messages fell:
+
+```text
+83312 -> 1000 bytes
+```
+
+That is about a `98.8%` reduction in effective provider-message bytes.
+
+C5 headroom recovered materially:
+
+```text
+raw estimate:         60213 -> 39635
+conservative input:  105373 -> 69362
+hard headroom:         1123 -> 37134
+effective max output: 17507 -> 53518
+```
+
+Provider execution remained bounded and terminal on the first accepted canonical build:
+
+```text
+first-step historical BRep calls:   0
+first-step historical BRep results: 0
+current canonical BRep present:     true
+provider input:                     60212
+provider output:                     4210
+provider total:                     64422
+stepCount:                              1
+accepted build step:                    1
+elapsed:                           154741 ms
+```
+
+Provider/static ratio:
+
+```text
+60212 / 39635 = 1.5192
+```
+
+This remains below the conservative C5 multiplier `1.75`.
+
+Detailed evidence:
+
+```text
+docs/brep_c6_runtime_evidence_2026-09-10.md
+```
+
+### C6 decision
+
+The deterministic projection is sufficient for the measured bottleneck. **Do not add an AI-generated rolling summary** on this evidence.
+
+Only reconsider broader summary/truncation if future measurements show that older **user-authored** natural-language history itself becomes a material context cost. Any such summary must remain working memory only and must never become geometry authority.
 
 ## Current implementation order
 
@@ -304,10 +349,9 @@ Only if older **user-authored** natural-language history is still a material cos
 4. **C3** — complete and runtime-accepted;
 5. **C4** — deferred until image-bearing evidence justifies it;
 6. **C5** — complete and runtime-accepted;
-7. **C6 deterministic superseded-build reasoning projection** — repository complete / CI accepted;
-8. **representative real C6 follow-up remeasurement** — next active step;
-9. broader rolling summary only if that measurement proves it is still needed;
-10. **M2** — modeling capability expansion only after this runtime/context track is sufficiently stable.
+7. **C6 deterministic superseded-build reasoning projection** — complete and runtime-accepted;
+8. **AI-generated rolling summary** — not justified by current evidence; do not implement;
+9. **M2** — remains unstarted until the context/runtime track is explicitly transitioned to modeling capability expansion.
 
 ## Acceptance fixtures
 
@@ -350,7 +394,19 @@ stepCount:       1
 images:          0
 ```
 
-The C6 runtime fixture should materially reduce provider working-context bytes if superseded BRep reasoning is the dominant remaining history cost, while leaving current canonical state and user intent intact.
+C6 accepted follow-up:
+
+```text
+removed build reasoning bytes: 83981
+effective model message bytes:  1000
+static estimate:                39635
+conservative input:             69362
+provider input:                 60212
+provider output:                 4210
+hard headroom:                  37134
+stepCount:                          1
+images:                             0
+```
 
 ## Boundaries
 
@@ -370,10 +426,10 @@ This track must not:
 - regress OpenSCAD behavior;
 - claim installed-host parity without real Rhino 8 / Grasshopper evidence;
 - merge PR #36 across its stacked boundary;
-- start M2 `union` / `intersect` implementation during C2.5-C6.
+- start M2 `union` / `intersect` implementation until the context/runtime track is deliberately transitioned.
 
 ## Relationship to modeling roadmap
 
-The context/runtime track remains active before M2 because it directly determines whether Native BRep AI work executes reliably within bounded model resources.
+The context/runtime stabilization objective that blocked M2 has now been satisfied for the representative Native BRep path through C1-C3 and C5-C6; C4 remains evidence-deferred rather than an active blocker.
 
-M2 remains planned but unstarted. Phase 9 installed Rhino/Grasshopper host acceptance remains a separate evidence track and is not closed merely by context/runtime work.
+M2 is still unstarted in this checkpoint. Its start should be an explicit next-phase transition, preserving all context/runtime acceptance fixtures and boundaries above. Phase 9 installed Rhino/Grasshopper host acceptance remains a separate evidence track and is not closed merely by context/runtime work.
