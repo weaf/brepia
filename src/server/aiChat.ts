@@ -1501,7 +1501,7 @@ export async function handleAiChatRequest(req: Request) {
             0,
           )
         : null;
-      const acceptedBuildSteps = [...brepBuildAttemptsByStep.entries()]
+      const acceptedBrepBuildSteps = [...brepBuildAttemptsByStep.entries()]
         .filter(([, attempts]) => attempts.some((attempt) => attempt.accepted))
         .map(([stepNumber]) => stepNumber + 1)
         .sort((left, right) => left - right);
