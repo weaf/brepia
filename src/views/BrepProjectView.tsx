@@ -53,7 +53,7 @@ import type { Conversation, Message, Model } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Box } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageItem } from '../types/misc.ts';
 import { ConversationView } from './ConversationView';
 
@@ -197,6 +197,7 @@ function BrepProjectWorkspace() {
   const [generationAttempt, setGenerationAttempt] =
     useState<BrepGenerationAttempt | null>(null);
   const [mobilePreviewVersion, setMobilePreviewVersion] = useState(0);
+  const [viewedRevisionId, setViewedRevisionId] = useState<string | null>(null);
 
   const handleChatLoadingChange = useCallback((loading: boolean) => {
     setIsChatStreaming(loading);
@@ -278,6 +279,56 @@ function BrepProjectWorkspace() {
       ),
     [hiddenRevisionIdSet, revisionLabelMap, revisions],
   );
+
+  const displayedSource = useMemo(() => {
+    if (!viewedRevisionId || viewedRevisionId === activeSource?.messageId) {
+      return activeSource;
+    }
+    const revision = revisions.find((item) => item.id === viewedRevisionId);
+    return revision
+      ? {
+          kind: 'source' as const,
+          messageId: revision.id,
+          artifact: revision.artifact,
+          project: revision.artifact.source.source,
+        }
+      : activeSource;
+  }, [activeSource, revisions, viewedRevisionId]);
+  const viewingHistorical = Boolean(
+    activeSource &&
+      displayedSource &&
+      displayedSource.messageId !== activeSource.messageId,
+  );
+  const displayedRevisionLabel = useMemo(
+    () =>
+      editorRevisions.find(
+        (revision) => revision.id === displayedSource?.messageId,
+      )?.name ??
+      editorRevisions.find(
+        (revision) => revision.id === displayedSource?.messageId,
+      )?.label,
+    [displayedSource?.messageId, editorRevisions],
+  );
+
+  useEffect(() => {
+    setViewedRevisionId(null);
+  }, [activeSource?.messageId]);
+
+  const handleViewRevision = useCallback(
+    (messageId: string) => {
+      if (!revisions.some((revision) => revision.id === messageId)) return;
+      setViewedRevisionId(
+        messageId === activeSource?.messageId ? null : messageId,
+      );
+      setMobilePreviewVersion((current) => current + 1);
+    },
+    [activeSource?.messageId, revisions],
+  );
+
+  const returnToActiveRevision = useCallback(() => {
+    setViewedRevisionId(null);
+    setMobilePreviewVersion((current) => current + 1);
+  }, []);
 
   const refreshWorkspace = useCallback(async () => {
     await Promise.all([
@@ -497,6 +548,7 @@ function BrepProjectWorkspace() {
     (!generationAttempt && isChatStreaming);
   const isAiEditingRef = useRef(isAiEditing);
   isAiEditingRef.current = isAiEditing;
+  const projectEditingDisabled = isAiEditing || viewingHistorical;
 
   const durableCreationWithoutSource =
     !activeSource &&
@@ -523,7 +575,7 @@ function BrepProjectWorkspace() {
     );
   }
 
-  if (!activeSource) {
+  if (!activeSource || !displayedSource) {
     return (
       <main className="p-6 text-destructive">
         The active project branch has no valid BRep source snapshot.
@@ -533,15 +585,21 @@ function BrepProjectWorkspace() {
 
   return (
     <BrepProjectEditorProvider
-      project={activeSource.artifact.source.source}
-      conversationId={conversation.id}
-      packageTitle={activeSource.artifact.title}
+      key={`brep-source:${displayedSource.messageId}`}
+      project={displayedSource.artifact.source.source}
+      conversationId={viewingHistorical ? undefined : conversation.id}
+      packageTitle={displayedSource.artifact.title}
       activeRevisionId={activeSource.messageId}
       revisions={editorRevisions}
-      sourceEditingDisabled={isAiEditing}
+      sourceEditingDisabled={projectEditingDisabled}
       onParameterValuesCommit={async (
         parameterValues: BrepParameterValues,
       ) => {
+        if (viewingHistorical) {
+          throw new Error(
+            'Restore this historical BRep revision before editing its parameters.',
+          );
+        }
         if (isAiEditingRef.current) {
           throw new Error(
             'BRep parameter editing is disabled while AI is creating a new immutable revision.',
@@ -556,6 +614,11 @@ function BrepProjectWorkspace() {
         await refreshWorkspace();
       }}
       onProjectSourceCommit={async (project: BrepProject) => {
+        if (viewingHistorical) {
+          throw new Error(
+            'Restore this historical BRep revision before editing its features.',
+          );
+        }
         if (isAiEditingRef.current) {
           throw new Error(
             'BRep feature editing is disabled while AI is creating a new immutable revision.',
@@ -603,7 +666,7 @@ function BrepProjectWorkspace() {
       <BrepFeatureWorkspaceProvider>
         <ConversationView
           hasParameters
-          mobilePreviewKey={`brep:${activeSource.messageId}`}
+          mobilePreviewKey={`brep:${displayedSource.messageId}`}
           mobilePreviewVersion={mobilePreviewVersion}
           chatPanelSlot={
             <>
@@ -612,6 +675,19 @@ function BrepProjectWorkspace() {
                   <ChatTitle />
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {viewingHistorical ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      title="Return to the current authoritative BRep revision"
+                      onClick={returnToActiveRevision}
+                      className="hidden text-xs text-adam-neutral-300 sm:inline-flex"
+                    >
+                      {displayedRevisionLabel ?? 'Historical revision'} · read only
+                      <span className="ml-2 text-adam-blue">Back to active</span>
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     variant="ghost"
@@ -625,7 +701,11 @@ function BrepProjectWorkspace() {
                     Workspace
                   </Button>
                   <span className="hidden text-xs text-adam-text-tertiary sm:inline">
-                    {isAiEditing ? 'AI editing…' : 'Native BRep'}
+                    {isAiEditing
+                      ? 'AI editing…'
+                      : viewingHistorical
+                        ? 'Historical preview'
+                        : 'Native BRep'}
                   </span>
                 </div>
               </div>
@@ -644,19 +724,24 @@ function BrepProjectWorkspace() {
                 onSelectLeaf={handleSelectLeaf}
                 branchForLeaf={branchForLeaf}
                 onChangeRating={handleChangeRating}
+                onViewRevision={handleViewRevision}
+                displayedRevisionId={displayedSource.messageId}
+                activeRevisionId={activeSource.messageId}
                 onLoadingChange={handleChatLoadingChange}
               />
             </>
           }
-          previewSlot={<BrepProjectWorkspacePanel />}
+          previewSlot={<BrepProjectWorkspacePanel readOnly={viewingHistorical} />}
           parametersSlot={
-            <fieldset disabled={isAiEditing} className="contents">
+            <fieldset disabled={projectEditingDisabled} className="contents">
               <BrepProjectParametersPanel />
             </fieldset>
           }
-          mobilePreviewSlot={<BrepProjectWorkspacePanel isMobile />}
+          mobilePreviewSlot={
+            <BrepProjectWorkspacePanel isMobile readOnly={viewingHistorical} />
+          }
           mobileParametersSlot={
-            <fieldset disabled={isAiEditing} className="contents">
+            <fieldset disabled={projectEditingDisabled} className="contents">
               <BrepProjectParametersPanel />
             </fieldset>
           }
