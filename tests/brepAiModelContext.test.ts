@@ -7,7 +7,10 @@ import {
 } from '../shared/brepAiContext';
 import { createBrepProjectArtifact } from '../shared/brepProjectArtifact';
 import { phaseOneCabinetProject } from '../shared/brepSamples';
-import { projectBrepAiModelContext } from '../src/server/brepAiModelContext';
+import {
+  projectBrepAiModelContext,
+  projectBrepProviderModelMessages,
+} from '../src/server/brepAiModelContext';
 
 function userMessage(id: string, text: string): AppUIMessage {
   return {
@@ -175,5 +178,90 @@ describe('Native BRep provider model-context projection', () => {
       'u2',
     ]);
     expect(result.messages[1]).toBe(unrelatedAssistant);
+  });
+
+  it('removes the actual provider tool call/result payloads and replaces a successful result with its bounded revision summary', () => {
+    const branch = [
+      userMessage('u1', 'Create it.'),
+      acceptedRevisionMessage('a1', phaseOneCabinetProject, 'Changed width to 1500.'),
+      userMessage('u2', 'Now change the height.'),
+    ];
+    const modelMessages = [
+      { role: 'user', content: [{ type: 'text', text: 'Create it.' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'a1-build',
+            toolName: 'build_brep_project',
+            input: {
+              title: phaseOneCabinetProject.name,
+              project: phaseOneCabinetProject,
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'a1-build',
+            toolName: 'build_brep_project',
+            output: { status: 'success', message: 'Changed width to 1500.' },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Now change the height.' }],
+      },
+    ];
+
+    const result = projectBrepProviderModelMessages({
+      modelMessages,
+      branchMessages: branch,
+      enabled: true,
+    });
+
+    expect(result.branchDiagnostics).toMatchObject({
+      removedBuildToolParts: 1,
+      removedBrepSnapshotParts: 1,
+      summarizedAcceptedBuilds: 1,
+    });
+    expect(result.providerDiagnostics).toMatchObject({
+      applied: true,
+      removedToolCalls: 1,
+      removedToolResults: 1,
+      insertedRevisionSummaries: 1,
+    });
+    expect(result.providerDiagnostics.removedToolInputBytes).toBeGreaterThan(0);
+    expect(result.providerDiagnostics.removedToolOutputBytes).toBeGreaterThan(0);
+
+    const serialized = JSON.stringify(result.messages);
+    expect(serialized).not.toContain('tool-call');
+    expect(serialized).not.toContain('tool-result');
+    expect(serialized).not.toContain(phaseOneCabinetProject.id);
+    expect(serialized).toContain(
+      'Prior accepted Native BRep revision: Changed width to 1500.',
+    );
+    expect(result.messages.at(-1)).toEqual(modelMessages.at(-1));
+  });
+
+  it('leaves provider messages byte-for-byte equivalent when C3 is disabled', () => {
+    const branch = [userMessage('u1', 'Make a normal model.')];
+    const modelMessages = [
+      { role: 'user', content: [{ type: 'text', text: 'Make a normal model.' }] },
+    ];
+
+    const result = projectBrepProviderModelMessages({
+      modelMessages,
+      branchMessages: branch,
+      enabled: false,
+    });
+
+    expect(result.providerDiagnostics.applied).toBe(false);
+    expect(result.messages).toEqual(modelMessages);
   });
 });
