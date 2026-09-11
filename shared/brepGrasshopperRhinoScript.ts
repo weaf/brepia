@@ -566,6 +566,35 @@ function buildGraphSource(
         `        raise RuntimeError(${pythonString(`Rhino could not place an instance for Brepia linearPattern ${node.id}.`)})`,
       );
       lines.push(`    ${variable}.append(${itemVariable})`);
+    } else if (node.type === 'rectangularPattern') {
+      const input = emitNode(node.input);
+      const spacingA = scalarExpression(node.spacingA, variables);
+      const spacingB = scalarExpression(node.spacingB, variables);
+      const aVariable = `${variable}A`;
+      const bVariable = `${variable}B`;
+      const itemVariable = `${variable}Item`;
+      const distanceA = `${aVariable} * ${variable}SpacingA`;
+      const distanceB = `${bVariable} * ${variable}SpacingB`;
+      const vectorA = linearPatternVectorExpression(node.axisA, distanceA);
+      const vectorB = linearPatternVectorExpression(node.axisB, distanceB);
+      lines.push(`${variable}SpacingA = float(${spacingA})`);
+      lines.push(`${variable}SpacingB = float(${spacingB})`);
+      lines.push(`if ${variable}SpacingA == 0.0 or ${variable}SpacingB == 0.0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia rectangularPattern ${node.id} spacings must resolve non-zero.`)})`,
+      );
+      lines.push(`${variable} = []`);
+      lines.push(`for ${aVariable} in range(${node.countA}):`);
+      lines.push(`    for ${bVariable} in range(${node.countB}):`);
+      lines.push(`        ${itemVariable} = ${input}.DuplicateBrep()`);
+      lines.push(
+        `        ${variable}Translation = rg.Transform.Translation(${vectorA} + ${vectorB})`,
+      );
+      lines.push(`        if not ${itemVariable}.Transform(${variable}Translation):`);
+      lines.push(
+        `            raise RuntimeError(${pythonString(`Rhino could not place an instance for Brepia rectangularPattern ${node.id}.`)})`,
+      );
+      lines.push(`        ${variable}.append(${itemVariable})`);
     } else if (node.type === 'subtract') {
       const base = emitNode(node.base);
       lines.push(`${variable} = ${base}.DuplicateBrep()`);
@@ -580,7 +609,10 @@ function buildGraphSource(
         }
         const parts = `${variable}Parts${toolIndex}`;
         const disjoint = `${variable}Disjoint${toolIndex}`;
-        if (toolNode.type === 'linearPattern') {
+        if (
+          toolNode.type === 'linearPattern' ||
+          toolNode.type === 'rectangularPattern'
+        ) {
           const item = `${variable}Tool${toolIndex}`;
           lines.push(`for ${item} in ${tool}:`);
           lines.push(
@@ -765,7 +797,7 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
   const resultExpression =
-    resultNode.type === 'linearPattern'
+    resultNode.type === 'linearPattern' || resultNode.type === 'rectangularPattern'
       ? `[brepia_place_brep(brepiaResultItem, brepiaTransform) for brepiaResultItem in ${resultVariable}]`
       : `brepia_place_brep(${resultVariable}, brepiaTransform)`;
 
