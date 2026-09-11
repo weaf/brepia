@@ -57,7 +57,7 @@ function throughHoleFixture(): MutableFixture {
 }
 
 describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
-  it('emits the current box -> cylinder -> translate -> subtract host candidate with centered primitives', async () => {
+  it('emits the current box -> cylinder -> transform -> subtract host candidate with centered primitives', async () => {
     const candidate = throughHoleFixture();
     const script = await createBrepGrasshopperRhinoScriptPlan(candidate);
     const ghx = await compileBrepGrasshopperExecutableGhx(candidate);
@@ -76,7 +76,15 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     );
     assert.match(
       script.source,
-      /\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(200, 0, 0\)\)\)/,
+      /brepiaNode\d+Translation = rg\.Transform\.Translation\(rg\.Vector3d\(200, 0, 0\)\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode\d+Transform = brepiaNode\d+Translation \* brepiaNode\d+Rotation/,
+    );
+    assert.match(
+      script.source,
+      /if not brepiaNode\d+\.Transform\(brepiaNode\d+Transform\):/,
     );
     assert.match(
       script.source,
@@ -101,7 +109,7 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     );
   });
 
-  it('preserves canonical subtract tool order for multiple cutters', async () => {
+  it('preserves canonical subtract tool order for multiple transformed cutters', async () => {
     const candidate = cloneFixture();
     const body = candidate.source.nodes.find((node) => node.id === 'body');
     assert.ok(body);
@@ -141,10 +149,10 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     const secondBoolean = /^\s+(brepiaNode\d+)Parts1 = rg\.Brep\.CreateBooleanDifference\((brepiaNode\d+), (brepiaNode\d+), brepiaTolerance\)$/m.exec(
       script.source,
     );
-    const positiveTranslation = /^if not (brepiaNode\d+)\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(250, 0, 0\)\)\):$/m.exec(
+    const positiveTranslation = /^(brepiaNode\d+)Translation = rg\.Transform\.Translation\(rg\.Vector3d\(250, 0, 0\)\)$/m.exec(
       script.source,
     );
-    const negativeTranslation = /^if not (brepiaNode\d+)\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(-250, 0, 0\)\)\):$/m.exec(
+    const negativeTranslation = /^(brepiaNode\d+)Translation = rg\.Transform\.Translation\(rg\.Vector3d\(-250, 0, 0\)\)$/m.exec(
       script.source,
     );
 
@@ -159,6 +167,19 @@ describe('complex canonical BRep -> Rhino Python/GHX parity', () => {
     assert.equal(firstBoolean[3], positiveTranslation[1]);
     assert.equal(secondBoolean[3], negativeTranslation[1]);
     assert.notEqual(firstBoolean[3], secondBoolean[3]);
+
+    for (const transformed of [positiveTranslation[1], negativeTranslation[1]]) {
+      assert.match(
+        script.source,
+        new RegExp(
+          `${transformed}Transform = ${transformed}Translation \\* ${transformed}Rotation`,
+        ),
+      );
+      assert.match(
+        script.source,
+        new RegExp(`if not ${transformed}\\.Transform\\(${transformed}Transform\\):`),
+      );
+    }
 
     const positiveOffset = script.source.indexOf(positiveTranslation[0]);
     const firstBooleanOffset = script.source.indexOf(firstBoolean[0]);
