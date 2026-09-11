@@ -122,6 +122,14 @@ export type BrepTransformNode = {
   rotateDeg?: BrepVector3;
 };
 
+export type BrepMirrorNode = {
+  id: string;
+  type: 'mirror';
+  input: string;
+  normalAxis: BrepAxis;
+  offset: BrepScalar;
+};
+
 export type BrepSubtractNode = {
   id: string;
   type: 'subtract';
@@ -153,6 +161,7 @@ export type BrepNode =
   | BrepBoxNode
   | BrepCylinderNode
   | BrepTransformNode
+  | BrepMirrorNode
   | BrepSubtractNode
   | BrepUnionNode
   | BrepIntersectNode
@@ -788,6 +797,31 @@ function normalizeNode(
       };
     }
 
+    case 'mirror': {
+      if (
+        typeof value.normalAxis !== 'string' ||
+        !AXES.has(value.normalAxis as BrepAxis)
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep mirror ${id} normalAxis must be x, y, or z.`,
+        );
+      }
+      return {
+        id,
+        type: 'mirror',
+        input: normalizeNodeReference(value.input, `BRep mirror ${id} input`),
+        normalAxis: value.normalAxis as BrepAxis,
+        offset: normalizeScalar(
+          value.offset,
+          `BRep mirror ${id} offset`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
     case 'subtract': {
       if (
         !Array.isArray(value.tools) ||
@@ -853,6 +887,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'cylinder':
       return [];
     case 'transform':
+    case 'mirror':
     case 'fillet':
       return [node.input];
     case 'subtract':
