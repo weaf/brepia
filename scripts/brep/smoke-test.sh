@@ -91,6 +91,45 @@ JSON
   node -e "const r=require('$output_path/result.json'); const b=r.bodies?.[0]; if(r.status!=='success'||r.resultNodeId!=='cut'||r.resultKind!=='single'||r.bodies?.length!==1||b?.id!=='cut'||b?.instance!=null||!b?.viewerMesh?.indices?.length||r.exactExport?.available!==true) process.exit(1); console.log(JSON.stringify({patternTool:'cutters',count:4,result:r.resultNodeId,resultKind:r.resultKind,triangles:b.viewerMesh.indices.length/3,exactStep:r.exactExport.available}));"
 }
 
+run_extrude_rectangle() {
+  local axis="$1"
+  local expected_min_x="$2"
+  local expected_max_x="$3"
+  local expected_min_y="$4"
+  local expected_max_y="$5"
+  local expected_min_z="$6"
+  local expected_max_z="$7"
+  local request_path="$WORKSPACE/extrude-rectangle-${axis}.json"
+  local output_path="$WORKSPACE/extrude-rectangle-${axis}-output"
+  cat > "$request_path" <<JSON
+{"project":{"schemaVersion":1,"id":"extrude${axis}Smoke","name":"Extrude ${axis} smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[{"id":"profileWidth","label":"Profile width","type":"number","unit":"mm","default":40,"min":20,"max":80}],"nodes":[{"id":"extruded","type":"extrude","profile":{"type":"rectangle","width":{"parameter":"profileWidth"},"height":20},"axis":"${axis}","depth":30}],"resultNodeId":"extruded"},"parameterValues":{"profileWidth":60}}
+JSON
+  "$RUNNER" --input "$request_path" --output "$output_path"
+  grep -q 'ISO-10303-21' "$output_path/model.step"
+  grep -a -q '^3D Geometry File Format ' "$output_path/model.3dm"
+  node -e "const r=require('$output_path/result.json'); const b=r.bodies?.[0]; const near=(a,b)=>Math.abs(a-b)<1e-6; const e={min:[$expected_min_x,$expected_min_y,$expected_min_z],max:[$expected_max_x,$expected_max_y,$expected_max_z]}; if(r.status!=='success'||r.resultNodeId!=='extruded'||r.resultKind!=='single'||r.bodies?.length!==1||b?.id!=='extruded'||b?.instance!=null||!b?.viewerMesh?.indices?.length||!b.bounds.min.every((v,i)=>near(v,e.min[i]))||!b.bounds.max.every((v,i)=>near(v,e.max[i]))||r.exactExport?.available!==true) process.exit(1); console.log(JSON.stringify({extrude:'rectangle',axis:'$axis',profileWidth:60,bounds:b.bounds,triangles:b.viewerMesh.indices.length/3,exactStep:r.exactExport.available}));"
+}
+
+run_extrude_other_profiles() {
+  local circle_request="$WORKSPACE/extrude-circle.json"
+  local circle_output="$WORKSPACE/extrude-circle-output"
+  cat > "$circle_request" <<'JSON'
+{"project":{"schemaVersion":1,"id":"extrudeCircleSmoke","name":"Extrude circle smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[],"nodes":[{"id":"extruded","type":"extrude","profile":{"type":"circle","radius":12},"axis":"z","depth":10}],"resultNodeId":"extruded"},"parameterValues":{}}
+JSON
+  "$RUNNER" --input "$circle_request" --output "$circle_output"
+  grep -q 'ISO-10303-21' "$circle_output/model.step"
+  node -e "const r=require('$circle_output/result.json'); const b=r.bodies?.[0]; const near=(a,b)=>Math.abs(a-b)<1e-6; if(r.status!=='success'||r.resultKind!=='single'||!near(b.bounds.min[0],-12)||!near(b.bounds.max[0],12)||!near(b.bounds.min[1],-12)||!near(b.bounds.max[1],12)||!near(b.bounds.min[2],-5)||!near(b.bounds.max[2],5)) process.exit(1);"
+
+  local poly_request="$WORKSPACE/extrude-polyline.json"
+  local poly_output="$WORKSPACE/extrude-polyline-output"
+  cat > "$poly_request" <<'JSON'
+{"project":{"schemaVersion":1,"id":"extrudePolylineSmoke","name":"Extrude polyline smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[],"nodes":[{"id":"extruded","type":"extrude","profile":{"type":"closedPolyline","points":[{"u":-20,"v":-10},{"u":20,"v":-10},{"u":10,"v":15},{"u":-15,"v":20}]},"axis":"x","depth":16}],"resultNodeId":"extruded"},"parameterValues":{}}
+JSON
+  "$RUNNER" --input "$poly_request" --output "$poly_output"
+  grep -q 'ISO-10303-21' "$poly_output/model.step"
+  node -e "const r=require('$poly_output/result.json'); const b=r.bodies?.[0]; const near=(a,b)=>Math.abs(a-b)<1e-6; if(r.status!=='success'||r.resultKind!=='single'||!near(b.bounds.min[0],-8)||!near(b.bounds.max[0],8)||!near(b.bounds.min[1],-20)||!near(b.bounds.max[1],20)||!near(b.bounds.min[2],-10)||!near(b.bounds.max[2],20)) process.exit(1); console.log(JSON.stringify({extrudeProfiles:['circle','closedPolyline'],exactStep:true}));"
+}
+
 run_boolean_success union
 run_boolean_success intersect
 run_boolean_fail_closed union
@@ -100,3 +139,7 @@ run_mirror_success y 20 40 -25 -15 27 33
 run_mirror_success z 20 40 25 35 -23 -17
 run_linear_pattern_result
 run_linear_pattern_subtract_tool
+run_extrude_rectangle x -15 15 -30 30 -10 10
+run_extrude_rectangle y -10 10 -15 15 -30 30
+run_extrude_rectangle z -30 30 -10 10 -15 15
+run_extrude_other_profiles
