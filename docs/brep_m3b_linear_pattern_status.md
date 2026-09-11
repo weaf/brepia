@@ -1,6 +1,6 @@
 # M3B — bounded linear pattern status
 
-Status: **repository-complete, CI-accepted and native build123d / OCCT runtime accepted; installed Rhino 8 / Grasshopper runtime acceptance pending**
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
 
 Date: 2026-09-11
 
@@ -14,13 +14,11 @@ M3B adds one bounded multi-instance modeling operation:
 
 - `linearPattern`.
 
-It does not add rectangular patterns, nested instance sets, arbitrary collections, non-zero rotation, profile/extrusion, shell/thickness, broader finishing features or a general-purpose collection algebra.
+It does not add rectangular patterns, nested instance sets, arbitrary collection algebra, non-zero rotation, profile/extrusion, shell/thickness or broader finishing features.
 
 Canonical `schemaVersion: 1` remains unchanged.
 
 ## Canonical contract
-
-The additive node form is:
 
 ```ts
 {
@@ -33,28 +31,30 @@ The additive node form is:
 }
 ```
 
-The bounded semantics are:
+Bounded semantics:
 
-- `input` references exactly one existing single-shape node;
-- `count` is a literal integer from 2 through 32;
-- `spacing` is a millimetre-compatible canonical scalar and may use the existing bounded M1 expression AST;
-- resolved spacing must be non-zero both at canonical defaults and effective runtime parameter values;
+- `input` references one existing `single` node;
+- `count` is a literal integer 2–32;
+- `spacing` uses the existing M1 millimetre scalar/expression contract;
+- resolved spacing must be finite and non-zero for defaults and runtime overrides;
 - instance `0` is the unshifted source;
-- later instances are translated by `index * spacing` along the selected axis;
-- canonical instance order is stable and significant.
+- instance `i` is translated by `i * spacing` along the selected canonical axis;
+- instance order is stable and significant.
 
-M3B introduces an explicit value-kind distinction:
+M3B introduces the explicit value-kind distinction:
 
 ```text
-ordinary node      -> single
-linearPattern      -> instanceSet
+ordinary node  -> single
+linearPattern  -> instanceSet
 ```
 
-An instance set is not silently fused into one solid.
+An `instanceSet` is never silently fused merely to fit the old single-body model.
 
 ## Value-kind boundary
 
-Single-shape consumers remain single-shape:
+The first collection policy is deliberately narrow.
+
+Single-only consumers remain:
 
 - `transform.input`;
 - `mirror.input`;
@@ -65,21 +65,21 @@ Single-shape consumers remain single-shape:
 - `subtract.base`;
 - project-object geometry roles.
 
-`subtract.tools[]` is the intentionally supported exception. A linear-pattern tool expands into its individual instances in canonical index order and each instance is applied as a cutter.
+`subtract.tools[]` is the supported exception: a pattern tool expands to its member Breps/shapes in canonical index order.
 
-A `linearPattern` may itself be the canonical `resultNodeId`. In that case the result is an `instanceSet` and every instance remains a separate result body.
+A `linearPattern` may itself be `resultNodeId`; then the authoritative result is an ordered `instanceSet`.
 
-Nested patterns and arbitrary instance-set consumption remain fail-closed.
+Nested patterns and general collection algebra remain fail-closed.
 
 ## Evaluation/result contract
 
-The BRep evaluation success contract now supports:
+Evaluation now distinguishes:
 
 ```text
 resultKind = single | instanceSet
 ```
 
-For a final linear pattern, `bodies[]` contains one body per canonical instance with stable identity:
+A final pattern returns one body per canonical instance with stable IDs:
 
 ```text
 <patternNodeId>::0
@@ -93,68 +93,47 @@ Each body carries:
 - `instance.index`;
 - `instance.sourceNodeId`;
 - independent bounds;
-- independent bounded viewer mesh.
+- independent viewer mesh.
 
-Top-level result bounds are the aggregate bounds of all result bodies. The server validates body count, identity, instance ordering, source identity, mesh limits and aggregate bounds before accepting sandbox output.
+Top-level bounds are aggregate bounds over all result bodies. Server validation checks body count, identity/order, source identity, mesh limits and aggregate bounds.
 
 ## Native build123d / OCCT mapping
 
-`scripts/brep/brep_driver.py` evaluates a linear pattern as ordered moved copies of the single source shape.
+`scripts/brep/brep_driver.py` evaluates linear patterns as ordered moved copies of the single input shape.
 
-For a final pattern result:
+For final instance-set output:
 
-- the primary result remains multiple independent shapes;
-- viewer/result payload emits independent bodies;
-- exact STEP export uses a build123d `Compound` containing the result instances, preserving multi-solid output rather than performing a Boolean fuse;
-- 3DM interoperability writes every result instance separately with Brepia body/node/instance metadata and embeds the exact primary STEP artifact.
+- result bodies remain independent;
+- viewer payload keeps one body per instance;
+- exact STEP export uses a build123d `Compound` only as a multi-solid export container, never as canonical/result identity;
+- 3DM writes result instances separately with Brepia node/instance metadata and embeds the exact primary STEP artifact.
 
-For `subtract.tools[]`, each pattern instance is applied as an individual cutter in canonical order and the final subtract result remains subject to the existing single-shape result contract.
-
-`scripts/brep/smoke-test.sh` contains deterministic M3B runtime fixtures for:
-
-1. a three-instance X-axis pattern as the final `resultNodeId`;
-2. a four-instance pattern used as a subtract tool.
-
-Those fixtures have now been run successfully against the real local rootless build123d/OCCT runtime. Native runtime evidence is recorded in:
-
-```text
-docs/brep_m3b_native_runtime_evidence_2026-09-11.md
-```
-
-The accepted final-pattern runtime result was an ordered three-body `instanceSet` with stable identities `pattern::0` through `pattern::2`, exact 20 mm X spacing, aggregate bounds `[-5,-5,-5] -> [45,5,5]` and exact STEP export available.
-
-The accepted pattern-as-subtract-tool runtime result used four ordered cutter instances and returned exactly one `single` result body with a 2044-triangle viewer mesh and exact STEP export available.
+For `subtract.tools[]`, pattern members are expanded into ordinary ordered cutter operations and the final subtract result remains `single`.
 
 ## Viewer
 
-Both BRep preview surfaces are multi-body aware.
-
-Rendering aggregates only GPU buffer data from the complete `result.bodies[]` set. It does not merge canonical body identity or change the evaluation contract. If a required result body lacks viewer mesh data, the helper does not silently render a partial instance set.
-
-The canonical body identities and instance metadata remain authoritative outside the Three.js render aggregation.
+Both BRep preview surfaces render all `result.bodies[]` entries. GPU buffers may be aggregated for rendering, but semantic body identity is not merged. A partial instance set is not silently rendered when required body mesh data is missing.
 
 ## Rhino 8 / Grasshopper compiler
 
-The Rhino Python 3 compiler emits `linearPattern` as an ordered Python list of duplicated/transformed `Rhino.Geometry.Brep` objects.
+The Rhino Python 3 compiler emits `linearPattern` as an ordered Python list of duplicated/transformed `Rhino.Geometry.Brep` values.
 
-A final pattern therefore produces a Grasshopper `Result` list instead of a synthetic Boolean union.
+- final pattern -> Grasshopper `Result` list;
+- pattern used as subtract tool -> each Brep cutter is applied in canonical order;
+- no implicit Boolean union is inserted to disguise repeated independent bodies.
 
-When a pattern is used as a subtract tool, the generated Rhino code iterates each Brep cutter in canonical pattern order.
-
-The existing Rhino document tolerance, M1 scalar helpers, placement behavior, Boolean exact-one-Brep guards and non-zero-rotation fail-closed policy remain intact.
+Existing Rhino tolerance, M1 scalar helpers, placement semantics, exact-one-Brep Boolean guards and non-zero-rotation fail-closed policy remain intact.
 
 ## GHX output-access contract
 
-The portable Grasshopper contract derives the `Result` access from the canonical result kind:
+Portable GHX derives `Result` access from the canonical result kind:
 
 ```text
-single result       -> Item access
-instanceSet result  -> List access
+single       -> Item access
+instanceSet  -> List access
 ```
 
-The executable GHX persists this through the Rhino Python 3 Script parameter access field.
-
-McNeel Grasshopper API documentation was reconciled before implementation:
+The executable GHX persists this through Rhino Python 3 Script parameter access. McNeel's Grasshopper API values used by the implementation are:
 
 ```text
 GH_ParamAccess.item = 0
@@ -162,17 +141,13 @@ GH_ParamAccess.list = 1
 GH_ParamAccess.tree = 2
 ```
 
-M3B changes only the `Result` output persistence. Existing accepted persistence for `Connections`, `Mounting`, `Cable` and the other script outputs is deliberately left unchanged.
+M3B changes only `Result` persistence. Existing accepted persistence of other outputs is unchanged.
 
-The executable-GHX validator checks the expected `Result` access and fails closed with `script_output_access_changed` if a pattern Result is changed from List to Item or otherwise violates the canonical output contract.
+The validator fails closed with `script_output_access_changed` if a returned pattern GHX changes Result from List to Item or otherwise violates the canonical interface. Returned GHX remains parameter-only at the supported round-trip boundary.
 
-Returned GHX remains parameter-only at the supported round-trip boundary; M3B does not authorize graph/source mutation through GHX import.
+## AI/provider and structural authoring
 
-## AI/provider boundary
-
-Both the full canonical AI tool schema and the finite/reference-free provider schema expose the same bounded linear-pattern surface.
-
-Existing scalar limits remain unchanged:
+The canonical AI schema and the finite/reference-free provider schema expose the same bounded linear-pattern surface while preserving:
 
 ```text
 canonical expression depth: 12
@@ -180,99 +155,58 @@ canonical expression node limit: 64
 provider expression depth: 2
 ```
 
-The Native BRep instruction explicitly teaches:
+The Native BRep instruction teaches count 2–32, non-zero spacing, `index * spacing`, instance-set result semantics, pattern-as-subtract-tool behavior and the single-only consumer restrictions.
 
-- instance 0 / `index * spacing` semantics;
+The feature editor exposes Linear Pattern with:
+
+- single-shape input candidates only;
+- X/Y/Z axis;
 - count 2–32;
-- non-zero millimetre spacing;
-- final pattern as ordered multi-body output;
-- pattern as ordered subtract cutters;
-- all single-only consumer restrictions;
-- no Boolean union as a disguise for requested repeated independent bodies;
-- default-value spatial sanity for count and spacing.
+- M1-compatible spacing;
+- instance-set markings;
+- pattern entries allowed as subtract tools while remaining excluded from single-only selectors.
 
-No recursive/nested provider `$ref` baseline was introduced.
+## Repository acceptance
 
-## Structural authoring UI
-
-The feature editor exposes `Linear pattern` directly.
-
-The editor provides:
-
-- only single-shape candidates for the pattern input;
-- X/Y/Z axis selection;
-- literal integer count bounded 2–32;
-- M1-compatible spacing authoring through the existing scalar field;
-- explicit explanatory copy for index-ordered center-to-center spacing;
-- instance-set marking in the feature list;
-- instance-set marking for pattern entries offered as subtract tools.
-
-The same value-kind filtering prevents pattern outputs from being selected accidentally by transform, mirror, fillet, union/intersection or subtract-base authoring.
-
-## Repository acceptance checkpoint
-
-Repository implementation candidate:
+Primary repository candidate:
 
 ```text
 94e1b0fca3b1d01b016faeee52bb9cdeb564f4b4
-Extend native smoke coverage for M3B linear pattern
-```
-
-GitHub CI on that exact branch checkpoint:
-
-```text
 Quality Gate #937       PASS
-Grasshopper Build #509 PASS
+Grasshopper Build #509  PASS
 ```
 
-Quality Gate evidence on the exact candidate:
+Quality Gate #937 recorded 141 passing test files / 907 tests plus typecheck, lint, production build, `git diff --check` and dependency audit PASS.
 
-```text
-141 test files PASS
-907 tests PASS
-typecheck PASS
-lint PASS
-production build PASS
-git diff --check PASS
-npm audit: 0 vulnerabilities
-```
-
-Dedicated/related M3B coverage includes:
-
-- `tests/brepM3BLinearPatternContract.test.ts` — 17 tests PASS;
-- `tests/brepM3BRhinoPattern.test.ts` — 5 tests PASS;
-- `tests/brepProjectStructuralUi.test.ts` — 4 tests PASS;
-- `tests/brepViewerGeometry.test.ts` — 2 tests PASS;
-- M2 Boolean regression coverage remains PASS;
-- M3A mirror regression coverage remains PASS.
-
-Grasshopper Build #509 also passed the .NET build plus Ubuntu and Windows package builds.
-
-The later documentation/acceptance checkpoint before the real local native runtime run was:
+Later acceptance/docs checkpoint before native runtime:
 
 ```text
 a6f030f5752a3c1eb2fb53d9d188d132ec8ff302
 Quality Gate #939       PASS
-Grasshopper Build #511 PASS
+Grasshopper Build #511  PASS
 ```
+
+Dedicated M3B coverage includes:
+
+- `tests/brepM3BLinearPatternContract.test.ts`;
+- `tests/brepM3BRhinoPattern.test.ts`;
+- `tests/brepProjectStructuralUi.test.ts`;
+- `tests/brepViewerGeometry.test.ts`;
+- native smoke fixtures for final pattern and pattern-as-subtract-tool.
 
 ## Native runtime acceptance
 
-Native build123d / OCCT runtime acceptance is complete.
+Accepted in the real local rootless build123d / OCCT runtime on 2026-09-11.
 
-The real local rootless smoke run on 2026-09-11 verified:
+The final-pattern fixture produced:
 
-- existing primitive/transform/subtract/fillet regression behavior;
-- exact STEP and 3DM artifacts;
-- project-object roles and semantic point placement;
-- M2 union/intersection success and disjoint fail-closed behavior;
-- M3A mirror parity for X/Y/Z;
-- final M3B pattern as three separate ordered bodies with stable identity and aggregate bounds;
-- exact 20 mm parameter-driven spacing in the accepted fixture;
-- exact STEP availability for the multi-body final pattern;
-- four-instance pattern expansion as ordered subtract cutters;
-- final pattern-tool subtract result remaining exactly one `single` body;
-- exact STEP availability after pattern-driven subtraction.
+- `resultKind: instanceSet`;
+- three ordered bodies `pattern::0`, `pattern::1`, `pattern::2`;
+- exact 20 mm X spacing;
+- aggregate bounds `[-5,-5,-5] -> [45,5,5]`;
+- exact STEP available.
+
+The pattern-as-subtract-tool fixture expanded four cutters and produced exactly one `single` result body with exact STEP available.
 
 Evidence:
 
@@ -280,21 +214,39 @@ Evidence:
 docs/brep_m3b_native_runtime_evidence_2026-09-11.md
 ```
 
-## Remaining acceptance gate
+## Installed Rhino 8 / Grasshopper acceptance
 
-M3B is not installed-host complete yet.
+Accepted in installed Rhino 8 / Grasshopper on 2026-09-11 using two fresh current-branch GHX files:
 
-The only remaining M3B gate is fresh current-branch installed Rhino 8 / Grasshopper acceptance:
+1. final `linearPattern` instance-set Result;
+2. `linearPattern` used as a subtract tool.
 
-1. generate fresh current-branch GHX fixtures;
-2. open and solve them in installed Rhino 8 / Grasshopper;
-3. confirm that a final pattern exposes `Result` as a list of separate Breps;
-4. confirm parameter-driven spacing recomputes correctly;
-5. save/close/reopen and confirm the List output persists;
-6. confirm the pattern-as-subtract-tool host path produces the intended single Brep and responds to spacing changes;
-7. record installed-host evidence before declaring M3B complete.
+Both files opened and solved successfully. The host behavior matched the intended list-aware final-pattern path and single-result pattern-cutter path. Both definitions were then saved, closed and reopened successfully and continued to solve with their parameter wiring intact.
 
-M3B must remain open if installed-host behavior diverges from the repository/native contract.
+Evidence:
+
+```text
+docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md
+```
+
+## Closeout
+
+M3B is complete across:
+
+- canonical/shared semantics;
+- provider/AI authoring;
+- structural editor;
+- viewer;
+- native build123d/OCCT execution;
+- STEP/3DM output;
+- Rhino 8 compiler;
+- GHX Item/List persistence and validation;
+- repository CI;
+- native runtime;
+- installed Rhino 8 / Grasshopper runtime;
+- save/close/reopen persistence.
+
+Rectangular/grid pattern remains optional future work and was not pulled into M3B implicitly.
 
 ## Preserved boundaries
 
@@ -306,8 +258,8 @@ M3B does not change:
 - build123d/OCCT native geometry authority;
 - canonical `schemaVersion: 1`;
 - M0 parameter/graph integrity policy;
-- M1 canonical scalar depth 12 or expression-node limit 64;
-- provider expression depth 2 or finite/reference-free schema policy;
+- M1 scalar depth 12 / node limit 64;
+- provider expression depth 2 / finite reference-free schema policy;
 - M2 exact-one-body Boolean semantics;
 - Settings/discovery model authority;
 - GHX parameter-only return/import boundary;
