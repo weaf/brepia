@@ -47,6 +47,7 @@ const NODE_TYPES: BrepNode['type'][] = [
   'box',
   'cylinder',
   'transform',
+  'mirror',
   'subtract',
   'union',
   'intersect',
@@ -65,6 +66,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Cylinder';
     case 'transform':
       return 'Transform';
+    case 'mirror':
+      return 'Mirror';
     case 'subtract':
       return 'Subtract';
     case 'union':
@@ -108,6 +111,8 @@ function createNodeDraft(
       return { id, type, radius: 25, height: 100 };
     case 'transform':
       return { id, type, input, translate: [0, 0, 0] };
+    case 'mirror':
+      return { id, type, input, normalAxis: 'x', offset: 0 };
     case 'fillet':
       return {
         id,
@@ -554,6 +559,50 @@ function NodeEditorFields({
               onChange={(rotateDeg) => onChange({ ...node, rotateDeg })}
             />
           ) : null}
+        </div>
+      );
+
+    case 'mirror':
+      return (
+        <div className="grid gap-4">
+          <NodeReferenceField
+            label="Input node"
+            value={node.input}
+            project={project}
+            nodeId={node.id}
+            disabled={disabled}
+            onChange={(input) => onChange({ ...node, input })}
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Mirror plane normal axis</span>
+            <select
+              className={fieldClass}
+              value={node.normalAxis}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  normalAxis: event.target.value as 'x' | 'y' | 'z',
+                })
+              }
+            >
+              <option value="x">X · YZ plane</option>
+              <option value="y">Y · XZ plane</option>
+              <option value="z">Z · XY plane</option>
+            </select>
+          </label>
+          <ScalarField
+            label="Plane offset"
+            value={node.offset}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(offset) => onChange({ ...node, offset })}
+          />
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Mirror returns only the reflected input. It does not keep the original
+            or create a multi-instance result.
+          </p>
         </div>
       );
 
