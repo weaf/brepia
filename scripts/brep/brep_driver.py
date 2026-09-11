@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Box, Cylinder, Location, export_step
+from build123d import Box, Cylinder, Location, Plane, export_step
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -340,6 +340,14 @@ def evaluate(request):
             translation = vector(node.get("translate", [0, 0, 0]), parameters)
             rotation = vector(node.get("rotateDeg", [0, 0, 0]), parameters)
             shape = shape.moved(Location(translation, rotation))
+        elif kind == "mirror":
+            input_shape = evaluate_node(node["input"])
+            mirror_plane = {
+                "x": Plane.YZ,
+                "y": Plane.XZ,
+                "z": Plane.XY,
+            }[node["normalAxis"]].offset(scalar(node["offset"], parameters))
+            shape = input_shape.mirror(mirror_plane)
         elif kind == "subtract":
             shape = evaluate_node(node["base"])
             for tool in node["tools"]: shape = shape - evaluate_node(tool)
