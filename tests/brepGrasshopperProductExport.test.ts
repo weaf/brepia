@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { describe, it } from 'vitest';
 
 import { exportBrepGrasshopperGhx } from '../src/services/brepGrasshopperExport.ts';
-import { BrepGrasshopperRhinoScriptError } from '../shared/brepGrasshopperRhinoScript.ts';
+import { validateBrepGrasshopperExecutableGhx } from '../shared/brepGrasshopperExecutableGhxValidation.ts';
 import type { BrepProject } from '../shared/brepProject.ts';
 
 const fixture = JSON.parse(
@@ -49,21 +49,32 @@ describe('BRep Phase 8F product GHX export', () => {
     assert.doesNotMatch(result.ghx, /BREPIA_GRASSHOPPER_TOKEN|HttpClient/);
   });
 
-  it('fails closed instead of approximating canonical geometry outside the proven GHX subset', async () => {
-    const unsupported = cloneProject();
-    unsupported.nodes.push({
+  it('exports canonical M6 non-zero rotation through the supported executable GHX subset', async () => {
+    const rotated = cloneProject();
+    rotated.nodes.push({
       id: 'rotatedBody',
       type: 'transform',
-      input: unsupported.resultNodeId,
-      rotateDeg: [0, 0, 90],
+      input: rotated.resultNodeId,
+      translate: [7, 11, 13],
+      rotateDeg: [30, 20, 10],
     });
-    unsupported.resultNodeId = 'rotatedBody';
+    rotated.resultNodeId = 'rotatedBody';
 
-    await assert.rejects(
-      () => exportBrepGrasshopperGhx(unsupported, 'revision-unsupported'),
-      (error: unknown) =>
-        error instanceof BrepGrasshopperRhinoScriptError &&
-        error.code === 'unsupported_model',
+    const result = await exportBrepGrasshopperGhx(
+      rotated,
+      'revision-m6-rotation-export',
     );
+    const validation = await validateBrepGrasshopperExecutableGhx(
+      result.ghx,
+      result.contract,
+      'generated',
+    );
+
+    assert.equal(validation.accepted, true, JSON.stringify(validation.diagnostics));
+    assert.deepEqual(validation.diagnostics, []);
+    assert.equal(result.contract.interface.outputs[0]?.id, 'result');
+    assert.equal(result.contract.interface.outputs[0]?.access, 'item');
+    assert.equal(result.contract.source.resultNodeId, 'rotatedBody');
+    assert.match(result.ghx, /<item name="Name" type_name="gh_string" type_code="10">Python 3 Script<\/item>/);
   });
 });
