@@ -288,7 +288,8 @@ function validateOutput(
   ) {
     error(diagnostics, 'script_output_identity_changed', `Script output ${expected.outputId} name changed.`, path);
   }
-  const expectedParamAccess = expectedAccess === 'list' ? '1' : '0';
+  const expectedParamAccess =
+    expected.outputId === 'result' && expectedAccess === 'list' ? '1' : '0';
   if (ghxItemText(output, 'ScriptParamAccess') !== expectedParamAccess) {
     error(
       diagnostics,
