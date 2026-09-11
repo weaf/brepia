@@ -1,6 +1,6 @@
 # M4 profile + extrusion status
 
-Status: **repository/CI complete and native build123d/OCCT runtime accepted; installed Rhino 8 / Grasshopper acceptance pending**
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
 
 Date: 2026-09-11
 
@@ -99,7 +99,7 @@ M4 is integrated through the complete authoring/evaluation path:
 - native build123d / OCCT translation;
 - Rhino 8 Python 3 Script translation;
 - deterministic GHX Result Item persistence;
-- dedicated canonical, UI, native-source, Rhino-compiler and host-fixture tests.
+- dedicated canonical, UI, native-source, Rhino-compiler and installed-host fixture tests.
 
 Primary code-complete repository checkpoint:
 
@@ -110,13 +110,22 @@ Quality Gate #964       PASS
 Grasshopper Build #536 PASS
 ```
 
-The subsequent status checkpoint was also green:
+Repository status checkpoint:
 
 ```text
 344f35c5725932982c19dd343b648c8f0f135688
 Record M4 profile extrusion repository status
 Quality Gate #965       PASS
 Grasshopper Build #537 PASS
+```
+
+The bounded Rhino host-save normalization fix is accepted at:
+
+```text
+8f0b8798e6c1dbda8e4c3b933482fdb1509197dc
+Lock Rhino-saved GHX library normalization
+Quality Gate #972       PASS
+Grasshopper Build #544 PASS
 ```
 
 ## Native build123d / OCCT translation
@@ -162,8 +171,6 @@ Full evidence:
 docs/brep_m4_native_runtime_evidence_2026-09-11.md
 ```
 
-M4 native build123d / OCCT acceptance is therefore **closed**.
-
 ## Rhino 8 / Grasshopper translation
 
 `shared/brepGrasshopperRhinoScript.ts` maps M4 to the built-in Rhino 8 Python 3 Script carrier.
@@ -180,62 +187,94 @@ Profile mappings:
 
 Repository tests lock all three profile types, all three canonical frames, centered plane semantics, parameter wiring and ordinary Result **Item Access**. M4 does not introduce the M3B List Access path.
 
-The version boundary is documented in:
+The upstream API boundary is documented in:
 
 ```text
 docs/references/rhino8_mcneel_sources.md
 ```
 
-Installed-host evidence is still required before this translation is runtime-accepted.
+## Installed Rhino 8 / Grasshopper acceptance — complete
 
-## Reproducible installed-host fixtures
-
-`tests/brepM4RhinoAcceptanceFixtures.test.ts` now defines and strictly validates three deterministic current-compiler host fixtures:
+Fresh current-compiler GHX was generated for three complementary fixtures:
 
 ```text
-m4-rectangle-z.ghx   rectangle / Z / Item
-m4-circle-x.ghx      circle / X / Item
-m4-polyline-y.ghx    closedPolyline / Y / Item
+m4-rectangle-z.ghx   rectangle / Z / Result Item
+m4-circle-x.ghx      circle / X / Result Item
+m4-polyline-y.ghx    closedPolyline / Y / Result Item
 ```
 
-Together they cover all M4 profile kinds and all three canonical profile frames.
+Together they exercise all three M4 profile families and all three canonical profile frames.
 
-Materialize fresh host files with:
-
-```bash
-BREPIA_WRITE_M4_RHINO_FIXTURES=1 npx vitest run tests/brepM4RhinoAcceptanceFixtures.test.ts
-```
-
-Output is intentionally written under the ignored local acceptance directory:
+The installed-host parameter perturbations were:
 
 ```text
-test-results/m4-rhino-acceptance/
+rectangle/Z: profileWidth 60 -> 80, extrudeDepth 30 -> 40
+circle/X:    radius 12 -> 16
+polyline/Y:  reach 30 -> 40
 ```
 
-The same test can subsequently validate Rhino-saved files in strict `returned` mode. This checks that Rhino persistence changed only allowed published parameter values and did not mutate the Brepia-owned script, wiring, output access or graph shape.
-
-Detailed host procedure:
+The resulting Rhino/Grasshopper-saved definitions were preserved as local acceptance artifacts and then passed the strict returned-GHX validator. The successful acceptance run was:
 
 ```text
-docs/brep_m4_rhino8_acceptance_plan.md
+RUN  v4.1.11 /home/thn/ai/pCAD
+
+✓ tests/brepM4RhinoAcceptanceFixtures.test.ts (2 tests) 28ms
+  ✓ M4 installed Rhino 8 acceptance fixtures (2)
+    ✓ compiles and strictly validates fresh Item-access GHX fixtures 21ms
+    ✓ strictly validates Rhino-saved parameter-only acceptance files when requested 6ms
+
+Test Files  1 passed (1)
+Tests       2 passed (2)
 ```
 
-## Remaining acceptance boundary
+The returned validator recovered exactly:
 
-Only installed Rhino 8 / Grasshopper remains open for M4.
+```text
+rectangle: profileWidth=80, extrudeDepth=40
+circle:    radius=16
+polyline:  reach=40
+```
 
-Required host evidence:
+and retained the Brepia-owned script, wiring, graph-shape and Result-access boundary.
 
-1. fresh rectangle/Z GHX opens and solves;
-2. `Profile width 60 -> 80` and `Extrusion depth 30 -> 40` recompute the one-Brep result;
-3. centered Z bounds/orientation remain correct;
-4. fresh circle/X GHX opens, solves and recomputes `Radius 12 -> 16`;
-5. fresh asymmetric closedPolyline/Y GHX opens, solves and recomputes `Profile reach 30 -> 40`, extending in +X as required by U=Z/V=X;
-6. Result remains Item Access / one Brep for every fixture;
-7. all three survive save -> close -> reopen;
-8. the strict returned-GHX validator accepts all three Rhino-saved files and recovers exactly the intended parameter values.
+Full evidence:
 
-M4 is not fully complete until that installed-host sequence is accepted.
+```text
+docs/brep_m4_rhino8_runtime_evidence_2026-09-11.md
+```
+
+## Rhino host-save normalization boundary
+
+The first returned-file validation discovered a legitimate installed-host serialization difference: Rhino 8 may omit the generated Python 3 Script object's explicit `Lib` item and omit the RhinoCodePluginGH library entry from `GHALibraries` when it saves the definition.
+
+The acceptance boundary was narrowed rather than relaxed generally:
+
+- generated GHX still requires the explicit RhinoCodePluginGH library identity/declaration;
+- returned GHX may omit that metadata only for the exact supported built-in Python 3 component;
+- an explicitly present foreign `Lib` GUID remains rejected;
+- a structurally missing Grasshopper `GHALibraries` host envelope remains rejected;
+- script source, component/instance identity, parameter controls, input/output wiring, type hints, runtime settings, graph object count/order and Result Item/List access remain strict.
+
+The same real Rhino-saved artifacts that initially exposed the normalization passed after the bounded fix; no regenerated substitute files were used to manufacture acceptance.
+
+## Closeout
+
+M4 is complete across:
+
+- canonical/shared semantics;
+- bounded geometry validation;
+- M1 scalar and M0 reachability integration;
+- provider/AI authoring;
+- structural editor;
+- native build123d / OCCT execution;
+- exact STEP output;
+- Rhino 8 compiler;
+- GHX Item persistence and strict parameter-only return validation;
+- repository CI;
+- real local native runtime;
+- installed Rhino 8 / Grasshopper runtime and host persistence.
+
+The M4 external-runtime acceptance boundary is closed.
 
 ## Preserved boundaries
 
@@ -255,4 +294,4 @@ M4 does not alter:
 - C4 image projection deferral;
 - M3C grid-pattern deferral.
 
-PR #36 remains intentionally draft, stacked and unmerged.
+PR #36 remains intentionally draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
