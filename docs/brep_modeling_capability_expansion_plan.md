@@ -1,6 +1,6 @@
 # BRep modeling capability expansion plan
 
-Status: **M0, M1 and M2 complete; M3A mirror complete; M3B linear pattern is repository-complete and CI-accepted with native and installed Rhino 8 / Grasshopper runtime acceptance pending**. This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0, M1 and M2 complete; M3A mirror complete; M3B bounded linear pattern complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Post-M3 scope is decided in favor of M4 profile + extrusion; optional M3C rectangular/grid pattern is deferred.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
 
 Detailed current status:
 
@@ -10,7 +10,10 @@ Detailed current status:
 - `docs/brep_m3a_mirror_status.md`;
 - `docs/brep_m3a_native_runtime_evidence_2026-09-11.md`;
 - `docs/brep_m3a_rhino8_runtime_evidence_2026-09-11.md`;
-- `docs/brep_m3b_linear_pattern_status.md`.
+- `docs/brep_m3b_linear_pattern_status.md`;
+- `docs/brep_m3b_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md`;
+- `docs/brep_post_m3_scope_decision_2026-09-11.md`.
 
 ## Why this track exists
 
@@ -233,7 +236,7 @@ The installed-host run verified supported union/intersection solves, parameter-d
 
 ## M3 — repetition and symmetry
 
-Status: **active — M3A mirror complete; M3B bounded linear pattern repository-complete/CI-accepted with native and installed-host runtime acceptance pending**.
+Status: **M3A mirror and M3B bounded linear pattern complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Optional M3C rectangular/grid pattern is deferred in favor of M4.**
 
 M3A added bounded single-shape mirror semantics and is complete across canonical/provider/editor implementation, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Its closeout and runtime evidence are recorded in the dedicated M3A documents listed above.
 
@@ -273,17 +276,19 @@ Quality Gate #937       PASS
 Grasshopper Build #509 PASS
 ```
 
-Quality Gate #937 records 141 passing test files / 907 passing tests plus typecheck, lint, production build and `git diff --check` PASS. The current native smoke script contains a final three-body pattern fixture and a four-instance pattern-as-subtract-tool fixture, but those real local runtime cases remain pending at this checkpoint.
+Quality Gate #937 records 141 passing test files / 907 passing tests plus typecheck, lint, production build and `git diff --check` PASS. Subsequent real-runtime acceptance closed the remaining boundary: the rootless native smoke verified both the final three-body pattern and four-instance pattern-as-subtract-tool fixtures, and fresh current-branch GHX files were accepted in installed Rhino 8 / Grasshopper.
 
-Detailed M3B status:
+Detailed M3B status and runtime evidence:
 
 ```text
 docs/brep_m3b_linear_pattern_status.md
+docs/brep_m3b_native_runtime_evidence_2026-09-11.md
+docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md
 ```
 
-M3B must not be declared complete until the current native smoke runs successfully against the real rootless build123d/OCCT sandbox and fresh current-branch GHX is accepted in installed Rhino 8 / Grasshopper, including List Result persistence and pattern-as-subtract-tool behavior.
+Native runtime verified the final pattern as an ordered `instanceSet` with three separate bodies, exact 20 mm X-spacing, aggregate bounds `[-5,-5,-5] -> [45,5,5]`, exact multi-solid STEP, and four ordered pattern instances consumed as `subtract.tools[]` while the final subtract remained one `single` body. Installed Rhino 8 / Grasshopper accepted both a final list-result pattern and a pattern-as-subtract-cutters GHX, including save -> close -> reopen persistence.
 
-Rectangular pattern remains optional future M3 work and must not start before the 1D M3B runtime boundary is closed.
+The M3B runtime boundary is closed. Rectangular/grid pattern remains optional future M3C work, but `docs/brep_post_m3_scope_decision_2026-09-11.md` defers it in favor of M4 because profile/extrude fills the larger current representational gap.
 
 M3 continues to preserve the M0–M2 invariants, keep non-zero rotation fail-closed and remain additive to canonical schema version 1.
 
@@ -301,6 +306,8 @@ Candidate minimum surface:
 Do not start with arbitrary NURBS/sketch constraints. The first profile layer should remain deterministic and easily portable between build123d and RhinoCommon.
 
 This supports explicit plates and wall segments while keeping the canonical language kernel-neutral.
+
+The post-M3 decision and initial bounded M4 planning contract are recorded in `docs/brep_post_m3_scope_decision_2026-09-11.md`. The initial slice keeps profile data inside a solid-producing `extrude` node so the pipeline does not need a new non-solid result cardinality and the existing `single | instanceSet` contract remains intact.
 
 ## M5 — wall/shell/thickness semantics only after profile acceptance
 
@@ -340,8 +347,8 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 2. **M1 expression AST** — complete.
 3. **M2 union/intersection** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
 4. **M3A mirror** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
-5. **M3B linear pattern** — repository-complete/CI-accepted; native and installed-host runtime acceptance next.
-6. Consider rectangular pattern only after M3B closes; otherwise move to **M4 profile/extrude**.
+5. **M3B linear pattern** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
+6. **M4 profile/extrude** — selected as the next modeling capability; optional **M3C rectangular/grid pattern** is deferred per `docs/brep_post_m3_scope_decision_2026-09-11.md`.
 7. Re-evaluate need for dedicated wall/plate/shell semantics.
 8. **M6 rotation** and **M7 finishing** under their own Rhino/native parity acceptance.
 
