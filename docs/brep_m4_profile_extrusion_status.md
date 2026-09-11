@@ -1,6 +1,6 @@
 # M4 profile + extrusion status
 
-Status: **repository-complete / CI-accepted; native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance pending**
+Status: **repository/CI complete and native build123d/OCCT runtime accepted; installed Rhino 8 / Grasshopper acceptance pending**
 
 Date: 2026-09-11
 
@@ -10,13 +10,15 @@ Branch: `feature/brep-grasshopper-gh-packaging`
 
 ## Scope decision
 
-M4 profile + extrusion was selected as the next modeling-capability slice after M3B. Optional M3C rectangular/grid pattern remains deferred. The decision and bounded contract are recorded in:
+M4 profile + extrusion is the selected post-M3 modeling slice. Optional M3C rectangular/grid pattern remains deferred.
+
+Decision record:
 
 ```text
 docs/brep_post_m3_scope_decision_2026-09-11.md
 ```
 
-M4 deliberately keeps profile data inline in one solid-producing `extrude` node. It does not introduce a reusable non-solid profile node or broaden canonical result cardinality beyond the existing:
+M4 deliberately keeps profile data inline in one solid-producing `extrude` node. It does not add a reusable non-solid profile node and does not broaden result cardinality beyond:
 
 ```text
 single | instanceSet
@@ -26,9 +28,7 @@ single | instanceSet
 
 ## Canonical M4 surface
 
-Canonical schema version remains `1`.
-
-The new node is:
+Canonical `schemaVersion` remains `1`.
 
 ```ts
 type BrepProfile =
@@ -48,158 +48,198 @@ type BrepExtrudeNode = {
 };
 ```
 
-Profile coordinate frames are fixed and right-handed:
+Fixed right-handed profile frames:
 
 - X extrusion: U=Y, V=Z, normal +X;
 - Y extrusion: U=Z, V=X, normal +Y;
 - Z extrusion: U=X, V=Y, normal +Z.
 
-Extrusion is symmetric around the canonical profile plane from `-depth/2` to `+depth/2`.
+Extrusion is symmetric around the profile plane from `-depth/2` through `+depth/2`.
 
-Rectangle and circle profiles are centered on the local profile origin. `closedPolyline` coordinates are explicit ordered U/V values and close implicitly from the final point to the first.
+Rectangle and circle profiles are centered at the local profile origin. Closed-polyline points are ordered explicit U/V coordinates and closure is implicit.
 
-## Bounds and fail-closed validation
+## Bounded validation
 
-The initial M4 slice remains deliberately bounded:
+The first M4 surface remains deliberately narrow:
 
-- rectangle width and height must resolve positive;
+- rectangle width/height must resolve positive;
 - circle radius must resolve positive;
 - extrusion depth must resolve positive;
-- all profile dimensions/coordinates/depth use the existing millimetre-compatible bounded M1 scalar AST;
-- closed polylines contain 3 through 32 ordered vertices;
-- repeated terminal closure is unnecessary and a zero-length closing edge is rejected;
-- zero-length edges are rejected;
-- zero-area closed polylines are rejected;
-- self-intersecting closed polylines are rejected;
-- the same validity rules run again after effective runtime parameter overrides;
-- native and Rhino translations additionally fail closed unless exactly one usable solid/Brep is produced.
+- dimensions, point coordinates and depth use the existing millimetre-compatible M1 scalar AST;
+- closed polylines contain 3 through 32 vertices;
+- zero-length edges fail closed;
+- zero-area profiles fail closed;
+- self-intersecting profiles fail closed;
+- the same checks run again against effective runtime parameter overrides;
+- native and Rhino translations require exactly one usable solid/Brep.
 
-No arbitrary workplanes, arbitrary extrusion vectors, open profiles, holes/multiple profile loops, sketch constraints, NURBS/spline profile language, first-class profile nodes or topology references were introduced.
+The global M1 limits remain unchanged:
 
-## Canonical/provider/editor integration
+```text
+canonical scalar depth      12
+canonical scalar node limit 64
+provider expression depth    2
+```
 
-Repository implementation now includes:
+No arbitrary workplanes/vectors, open profiles, holes/multiple loops, sketch constraints, NURBS/splines, first-class profile nodes or persisted topology references were introduced.
 
-- canonical `BrepProfile` / `BrepExtrudeNode` normalization;
-- profile/depth scalar validation and parameter reference tracking;
-- M0 parameter-effectiveness integration;
-- evaluation-request validation at effective parameter overrides;
-- finite/reference-free provider authoring schema while retaining provider expression depth `2`;
-- Native BRep tool instructions for profile/extrusion semantics;
-- structural Add/Edit UI for rectangle, circle and closed-polyline profiles;
-- expression-preserving scalar controls for all M4 profile fields and depth;
-- bounded closed-polyline point add/remove controls;
-- explicit canonical X/Y/Z profile-frame descriptions in the editor.
+## Repository integration
 
-The global canonical M1 limits remain unchanged:
+M4 is integrated through the complete authoring/evaluation path:
 
-- scalar expression depth `12`;
-- scalar expression node count `64`.
+- canonical normalization and validation;
+- profile/depth scalar traversal;
+- M0 parameter-effectiveness analysis;
+- effective runtime override validation;
+- finite/reference-free provider schema;
+- Native BRep AI instruction;
+- structural Add/Edit UI;
+- expression-preserving scalar controls;
+- bounded closed-polyline point editing;
+- native build123d / OCCT translation;
+- Rhino 8 Python 3 Script translation;
+- deterministic GHX Result Item persistence;
+- dedicated canonical, UI, native-source, Rhino-compiler and host-fixture tests.
+
+Primary code-complete repository checkpoint:
+
+```text
+6847795d188054080c10f8563059d18addb68e3a
+Record Rhino 8 M4 extrusion API boundary
+Quality Gate #964       PASS
+Grasshopper Build #536 PASS
+```
+
+The subsequent status checkpoint was also green:
+
+```text
+344f35c5725932982c19dd343b648c8f0f135688
+Record M4 profile extrusion repository status
+Quality Gate #965       PASS
+Grasshopper Build #537 PASS
+```
 
 ## Native build123d / OCCT translation
 
-`scripts/brep/brep_driver.py` now maps:
+`scripts/brep/brep_driver.py` maps:
 
 - rectangle -> build123d `Rectangle`;
 - circle -> build123d `Circle`;
 - closed polyline -> build123d `Polygon`;
-- X/Y/Z canonical frames -> `Plane.YZ` / `Plane.ZX` / `Plane.XY`;
+- canonical X/Y/Z frames -> `Plane.YZ` / `Plane.ZX` / `Plane.XY`;
 - centered extrusion -> `extrude(..., amount=depth / 2, both=True)`.
 
-The result must resolve to exactly one solid.
+The resulting value must contain exactly one solid.
 
-`scripts/brep/smoke-test.sh` now contains deterministic M4 fixtures covering:
+## Native runtime acceptance — complete
 
-- parameter-backed rectangle extrusion on X, Y and Z;
-- exact centered bounds for all three canonical frames;
-- circle profile extrusion;
-- closed-polyline extrusion;
-- `resultKind = single`;
-- exact STEP availability.
+The full current smoke suite was executed successfully against the real local pinned rootless build123d / OCCT runtime on checkpoint:
 
-Repository tests additionally lock the native translation source and smoke fixtures. **This is not yet real native runtime evidence.** The current smoke suite still needs to be executed against the real local pinned rootless build123d/OCCT runtime before native M4 acceptance can be claimed.
+```text
+344f35c5725932982c19dd343b648c8f0f135688
+```
+
+M4 rectangle runtime results:
+
+```text
+axis X, profile width 60:
+[-15,-30,-10] -> [15,30,10]
+
+axis Y, profile width 60:
+[-10,-15,-30] -> [10,15,30]
+
+axis Z, profile width 60:
+[-30,-10,-15] -> [30,10,15]
+```
+
+All three emitted one body with exact STEP available. Circle and closedPolyline also executed successfully with exact STEP available.
+
+The same run kept all prior M0-M3 native regression fixtures green, including M2 Boolean behavior, M3A mirrors and M3B final/pattern-cutter collection semantics.
+
+Full evidence:
+
+```text
+docs/brep_m4_native_runtime_evidence_2026-09-11.md
+```
+
+M4 native build123d / OCCT acceptance is therefore **closed**.
 
 ## Rhino 8 / Grasshopper translation
 
-`shared/brepGrasshopperRhinoScript.ts` now compiles M4 profiles to the Rhino 8 Python 3 Script carrier using an explicit canonical `Rhino.Geometry.Plane` and `Rhino.Geometry.Extrusion.Create(curve, plane, height, cap)`.
+`shared/brepGrasshopperRhinoScript.ts` maps M4 to the built-in Rhino 8 Python 3 Script carrier.
 
-The Rhino plane starts at `-depth/2` along the selected normal and the positive full depth is extruded from that plane, preserving the native centered result.
+The compiler uses an explicit canonical `Rhino.Geometry.Plane` and Rhino 8's `Rhino.Geometry.Extrusion.Create(curve, plane, height, cap)` overload. The plane origin is shifted to `-depth/2` along the selected normal and the full positive depth is extruded from there, matching the centered native result.
 
-Profile mappings are:
+Profile mappings:
 
 - rectangle -> `Rectangle3d(...).ToNurbsCurve()`;
 - circle -> `Circle(...).ToNurbsCurve()`;
-- closed polyline -> ordered `Plane.PointAt(U,V)` values + explicit closure -> `PolylineCurve`;
-- extrusion -> `Extrusion.Create(..., depth, true)` -> `ToBrep()`;
-- the final result must be a solid Brep.
+- closed polyline -> ordered `Plane.PointAt(U,V)` values and `PolylineCurve`;
+- extrusion -> `Extrusion.Create(..., depth, true)` then `ToBrep()`;
+- final result must be one solid Brep.
 
-Repository tests lock all three profile kinds, all three axis frames, centered start-plane semantics, parameter wiring and ordinary Grasshopper Result **Item Access**. `linearPattern` remains the only path that changes the primary Result to List Access.
+Repository tests lock all three profile types, all three canonical frames, centered plane semantics, parameter wiring and ordinary Result **Item Access**. M4 does not introduce the M3B List Access path.
 
-McNeel's RhinoCommon 8.0 change surface explicitly includes the `Extrusion.Create(Curve, Plane, double, bool)` overload. The Rhino upstream evidence boundary is documented in:
+The version boundary is documented in:
 
 ```text
 docs/references/rhino8_mcneel_sources.md
 ```
 
-This remains **repository translation support only** until fresh generated M4 GHX is accepted in installed Rhino 8 / Grasshopper.
+Installed-host evidence is still required before this translation is runtime-accepted.
 
-## Repository acceptance checkpoint
+## Reproducible installed-host fixtures
 
-The complete repository implementation before this status document is:
-
-```text
-6847795d188054080c10f8563059d18addb68e3a
-Record Rhino 8 M4 extrusion API boundary
-```
-
-CI on that exact checkpoint:
+`tests/brepM4RhinoAcceptanceFixtures.test.ts` now defines and strictly validates three deterministic current-compiler host fixtures:
 
 ```text
-Quality Gate #964       PASS
-Grasshopper Build #536 PASS
+m4-rectangle-z.ghx   rectangle / Z / Item
+m4-circle-x.ghx      circle / X / Item
+m4-polyline-y.ghx    closedPolyline / Y / Item
 ```
 
-Quality Gate passed the complete test suite, TypeScript typecheck, lint, production build and diff check. Grasshopper Build passed on the same exact head.
+Together they cover all M4 profile kinds and all three canonical profile frames.
 
-An immediately preceding implementation checkpoint also passed both gates:
-
-```text
-742b6c98843be75bdfed8a35a882414ec9176d38
-Quality Gate #962       PASS
-Grasshopper Build #534 PASS
-```
-
-## Remaining acceptance sequence
-
-M4 is not complete until both external runtime boundaries are accepted.
-
-### 1. Native build123d / OCCT
-
-Run the current branch smoke suite against the real local rootless BRep runtime:
+Materialize fresh host files with:
 
 ```bash
-./scripts/brep/smoke-test.sh
+BREPIA_WRITE_M4_RHINO_FIXTURES=1 npx vitest run tests/brepM4RhinoAcceptanceFixtures.test.ts
 ```
 
-The M4-specific assertions must verify the three canonical axis bounds, rectangle parameter override, circle and closed-polyline execution, one `single` body and exact STEP availability while all prior M0-M3 smoke regressions remain green.
+Output is intentionally written under the ignored local acceptance directory:
 
-### 2. Installed Rhino 8 / Grasshopper
+```text
+test-results/m4-rhino-acceptance/
+```
 
-Use fresh GHX generated from the accepted current branch and verify at minimum:
+The same test can subsequently validate Rhino-saved files in strict `returned` mode. This checks that Rhino persistence changed only allowed published parameter values and did not mutate the Brepia-owned script, wiring, output access or graph shape.
 
-1. rectangle extrusion opens and solves with parameter-backed profile dimension;
-2. the relevant parameter changes the solved geometry;
-3. canonical centered axis/frame behavior matches the native fixture;
-4. circle and closed-polyline profile translations solve successfully;
-5. Result remains Item Access / one Brep;
-6. save -> close -> reopen preserves the definition and it solves again;
-7. no M3B List Access or collection semantics are introduced for extrusion.
+Detailed host procedure:
 
-Record native and installed-host evidence in separate dated evidence documents, following the M3B precedent.
+```text
+docs/brep_m4_rhino8_acceptance_plan.md
+```
+
+## Remaining acceptance boundary
+
+Only installed Rhino 8 / Grasshopper remains open for M4.
+
+Required host evidence:
+
+1. fresh rectangle/Z GHX opens and solves;
+2. `Profile width 60 -> 80` and `Extrusion depth 30 -> 40` recompute the one-Brep result;
+3. centered Z bounds/orientation remain correct;
+4. fresh circle/X GHX opens, solves and recomputes `Radius 12 -> 16`;
+5. fresh asymmetric closedPolyline/Y GHX opens, solves and recomputes `Profile reach 30 -> 40`, extending in +X as required by U=Z/V=X;
+6. Result remains Item Access / one Brep for every fixture;
+7. all three survive save -> close -> reopen;
+8. the strict returned-GHX validator accepts all three Rhino-saved files and recovers exactly the intended parameter values.
+
+M4 is not fully complete until that installed-host sequence is accepted.
 
 ## Preserved boundaries
 
-M4 does not broaden or alter:
+M4 does not alter:
 
 - `conversation.type = 'parametric'`;
 - `parametricSourceKind = 'brep'`;
@@ -207,12 +247,12 @@ M4 does not broaden or alter:
 - build123d/OCCT native geometry authority;
 - Rhino/GHX interoperability-only authority;
 - canonical `schemaVersion: 1`;
-- `single | instanceSet` result cardinality;
+- `single | instanceSet` cardinality;
 - M3B collection consumer rules;
 - GHX parameter-only return/import;
-- non-zero rotation fail-closed boundary until M6;
-- OpenSCAD behavior/regressions;
+- non-zero rotation fail-closed until M6;
+- OpenSCAD regressions;
 - C4 image projection deferral;
-- optional M3C grid-pattern deferral.
+- M3C grid-pattern deferral.
 
 PR #36 remains intentionally draft, stacked and unmerged.
