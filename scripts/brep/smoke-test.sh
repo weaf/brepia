@@ -49,19 +49,28 @@ JSON
 }
 
 run_mirror_success() {
-  local request_path="$WORKSPACE/mirror.json"
-  local output_path="$WORKSPACE/mirror-output"
-  cat > "$request_path" <<'JSON'
-{"project":{"schemaVersion":1,"id":"mirrorSmoke","name":"Mirror smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[{"id":"planeOffset","label":"Plane offset","type":"number","unit":"mm","default":0,"min":-20,"max":20}],"nodes":[{"id":"body","type":"box","width":20,"depth":10,"height":10},{"id":"moved","type":"transform","input":"body","translate":[30,0,0]},{"id":"mirrored","type":"mirror","input":"moved","normalAxis":"x","offset":{"parameter":"planeOffset"}}],"resultNodeId":"mirrored"},"parameterValues":{"planeOffset":5}}
+  local axis="$1"
+  local expected_min_x="$2"
+  local expected_max_x="$3"
+  local expected_min_y="$4"
+  local expected_max_y="$5"
+  local expected_min_z="$6"
+  local expected_max_z="$7"
+  local request_path="$WORKSPACE/mirror-${axis}.json"
+  local output_path="$WORKSPACE/mirror-${axis}-output"
+  cat > "$request_path" <<JSON
+{"project":{"schemaVersion":1,"id":"mirror${axis}Smoke","name":"Mirror ${axis} smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[{"id":"planeOffset","label":"Plane offset","type":"number","unit":"mm","default":0,"min":-20,"max":20}],"nodes":[{"id":"body","type":"box","width":20,"depth":10,"height":6},{"id":"moved","type":"transform","input":"body","translate":[30,30,30]},{"id":"mirrored","type":"mirror","input":"moved","normalAxis":"${axis}","offset":{"parameter":"planeOffset"}}],"resultNodeId":"mirrored"},"parameterValues":{"planeOffset":5}}
 JSON
   "$RUNNER" --input "$request_path" --output "$output_path"
   grep -q 'ISO-10303-21' "$output_path/model.step"
   grep -a -q '^3D Geometry File Format ' "$output_path/model.3dm"
-  node -e "const r=require('$output_path/result.json'); const b=r.bodies?.[0]; const near=(a,b)=>Math.abs(a-b)<1e-6; if(r.status!=='success'||r.resultNodeId!=='mirrored'||r.bodies?.length!==1||!b?.viewerMesh?.indices?.length||!near(b.bounds.min[0],-30)||!near(b.bounds.max[0],-10)||!near(b.bounds.min[1],-5)||!near(b.bounds.max[1],5)) process.exit(1); console.log(JSON.stringify({mirror:'x',offset:5,result:r.resultNodeId,bounds:b.bounds,triangles:b.viewerMesh.indices.length/3}));"
+  node -e "const r=require('$output_path/result.json'); const b=r.bodies?.[0]; const near=(a,b)=>Math.abs(a-b)<1e-6; const e={min:[$expected_min_x,$expected_min_y,$expected_min_z],max:[$expected_max_x,$expected_max_y,$expected_max_z]}; if(r.status!=='success'||r.resultNodeId!=='mirrored'||r.bodies?.length!==1||!b?.viewerMesh?.indices?.length||!b.bounds.min.every((v,i)=>near(v,e.min[i]))||!b.bounds.max.every((v,i)=>near(v,e.max[i]))) process.exit(1); console.log(JSON.stringify({mirror:'$axis',offset:5,result:r.resultNodeId,bounds:b.bounds,triangles:b.viewerMesh.indices.length/3}));"
 }
 
 run_boolean_success union
 run_boolean_success intersect
 run_boolean_fail_closed union
 run_boolean_fail_closed intersect
-run_mirror_success
+run_mirror_success x -30 -10 25 35 27 33
+run_mirror_success y 20 40 -25 -15 27 33
+run_mirror_success z 20 40 25 35 -23 -17
