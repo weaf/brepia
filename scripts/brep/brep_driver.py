@@ -344,7 +344,7 @@ def evaluate(request):
             input_shape = evaluate_node(node["input"])
             mirror_plane = {
                 "x": Plane.YZ,
-                "y": Plane.XZ,
+                "y": Plane.ZX,
                 "z": Plane.XY,
             }[node["normalAxis"]].offset(scalar(node["offset"], parameters))
             shape = input_shape.mirror(mirror_plane)
