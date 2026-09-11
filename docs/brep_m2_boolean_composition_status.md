@@ -1,8 +1,8 @@
 # M2 — additive Boolean composition status
 
-Status: **repository-complete, CI-accepted and native build123d / OCCT runtime-accepted; installed Rhino 8 / Grasshopper evidence pending**
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
 
-Date: 2026-09-10
+Date: 2026-09-11
 
 Repository: `weaf/brepia`
 
@@ -103,7 +103,7 @@ The compiler continues to use the document absolute tolerance and continues to f
 
 The mapping was reconciled against the repository's pinned Rhino 8 reference policy and the pinned McNeel `rhino-developer-samples` branch-8 reference.
 
-Repository compiler tests verify the emitted RhinoCommon Boolean calls and exact-one-Brep guards. This is compiler evidence only; installed-host acceptance remains pending.
+Repository compiler tests verify the emitted RhinoCommon Boolean calls and exact-one-Brep guards. Installed-host acceptance has now independently confirmed the same solve/fail-closed semantics in Rhino 8 / Grasshopper.
 
 ## AI/provider boundary
 
@@ -219,28 +219,41 @@ The two disjoint fixtures are intentionally silent on success. Because the smoke
 
 The native M2 result-cardinality contract is therefore runtime-accepted while the pre-M2 STEP/3DM and project-object smoke remains green.
 
-## Required installed-host acceptance next
+## Installed Rhino 8 / Grasshopper acceptance
 
-The only remaining M2 acceptance boundary is installed Rhino 8 / Grasshopper parity.
+Real installed-host acceptance is complete and recorded in:
 
-Use fresh GHX compiled from the current branch for deterministic representative union and intersection models.
+`docs/brep_m2_rhino8_runtime_evidence_2026-09-11.md`
 
-For each supported success case verify in installed Rhino 8 / Grasshopper:
+Fresh Brepia-generated GHX fixtures for both canonical M2 operations were opened in installed Rhino 8 / Grasshopper.
+
+Accepted host evidence includes:
+
+- overlapping `union` solved to visible combined geometry;
+- overlapping `intersect` solved to visible common-volume geometry;
+- published `OffsetX` drove recomputation through the generated Python component;
+- empty intersection failed closed with `produced no Brep`;
+- disjoint union failed closed with `did not produce exactly one Brep` rather than returning a multi-body result or arbitrary body;
+- the GHX files were saved, closed and reopened successfully while retaining parameter wiring and supported solve behavior.
+
+No M2 compiler/runtime correction was required after installed-host testing.
+
+## M2 closeout
+
+M2 is now complete across all required acceptance boundaries:
 
 ```text
-Brepia export
--> GHX open
--> solve without script/runtime error
--> exactly one Result Brep
--> change a published parameter when the fixture provides one
--> recompute correctly
--> save/reopen
--> still solves
+canonical/provider/editor implementation
+-> repository tests/typecheck/lint/build
+-> Grasshopper Build
+-> native build123d/OCCT runtime
+-> installed Rhino 8 / Grasshopper solve
+-> supported parameter recompute
+-> unsupported result-cardinality fail-closed
+-> GHX save/close/reopen persistence
 ```
 
-Also exercise at least one unsupported result-cardinality fixture and verify it fails closed rather than silently returning an arbitrary Brep or multi-body result.
-
-Installed-host evidence is required by the permanent Rhino 8 translation policy before claiming full M2 parity.
+M3 repetition and symmetry analysis is now unblocked. M3 implementation must preserve all M0–M2 invariants and must not accidentally unlock non-zero rotation or broaden the single-body Boolean contract.
 
 ## Preserved boundaries
 
@@ -258,5 +271,3 @@ M2 does not change:
 - non-zero rotation fail-closed behavior;
 - OpenSCAD behavior;
 - PR #36 draft/stacked/unmerged state.
-
-M3 must not begin until the installed Rhino 8 / Grasshopper evidence above has been reconciled and M2 is explicitly closed.
