@@ -1,6 +1,6 @@
 # M3 — repetition and symmetry plan
 
-Status: **analysis / contract definition active; no M3 modeling implementation has started**
+Status: **M3A mirror repository-complete and CI-accepted; native build123d/OCCT and installed Rhino 8 / Grasshopper runtime acceptance active; M3B blocked**
 
 Date: 2026-09-11
 
@@ -9,6 +9,10 @@ Repository: `weaf/brepia`
 Branch: `feature/brep-grasshopper-gh-packaging`
 
 M2 is fully closed before this plan begins. Its repository, native build123d/OCCT and installed Rhino 8 / Grasshopper evidence is recorded in the M2 status/evidence documents.
+
+Detailed current M3A status:
+
+- `docs/brep_m3a_mirror_status.md`.
 
 ## Goal
 
@@ -28,7 +32,7 @@ M3 must not silently weaken M2's exact-one-body Boolean semantics and must not u
 The current canonical DAG is shape-oriented:
 
 - primitives create one shape;
-- `transform` and `fillet` consume one input shape;
+- `transform`, `mirror` and `fillet` consume one input shape;
 - `subtract` consumes one base plus one or more tool-node references;
 - `union` / `intersect` consume ordered node references and require exactly one final Boolean body;
 - `resultNodeId` points to one canonical node;
@@ -43,9 +47,11 @@ Therefore a true repeated multi-instance result is not merely another single-val
 
 ## M3A — mirror first
 
+Status: **repository-complete and CI-accepted at `789188167bc48ad91a579b5aa4bb720ba8cfa8c0`; native and installed-host runtime acceptance pending**.
+
 Mirror is the bounded first step because it remains single-valued and does not require collection semantics.
 
-Proposed canonical node:
+Canonical node:
 
 ```ts
 type BrepMirrorNode = {
@@ -66,37 +72,63 @@ Semantics:
 - mirror returns only the mirrored input, not `original + mirrored`;
 - `offset` may use the existing bounded M1 scalar-expression contract;
 - input remains an ordinary single-shape node reference;
-- schema version remains `1` if the additive node extension reconciles cleanly.
+- schema version remains `1`.
 
 This axis+offset plane is intentionally narrower than an arbitrary plane/normal authoring surface. It is deterministic, easy to express in the structural editor and avoids introducing another free vector-frame contract during M3.
 
 ### Backend mapping
 
-Native build123d 0.11.1 exposes `Shape.mirror(mirror_plane)` and documents that it mirrors the shape without duplicating the original. That matches the proposed node semantics.
+Native build123d 0.11.1 exposes `Shape.mirror(mirror_plane)` and mirrors the shape without duplicating the original. That matches the canonical node semantics.
 
-RhinoCommon exposes `Rhino.Geometry.Transform.Mirror(Plane)` in the Rhino 8 API compatibility floor (available since Rhino 5). The GHX compiler can therefore:
+The native axis mapping is orientation-aware:
 
-1. duplicate the input Brep;
-2. construct the canonical axis-normal mirror plane at `offset`;
-3. apply `Transform.Mirror(...)`;
-4. fail closed if the transformation fails.
+```text
+x -> Plane.YZ
+ y -> Plane.ZX
+z -> Plane.XY
+```
 
-Before implementation, the Rhino mapping must still be reconciled under `docs/references/rhino8_mcneel_sources.md`; installed Rhino 8 evidence remains required before M3A closeout.
+`Plane.ZX` is deliberately used for the canonical Y-normal plane because build123d's `Plane.XZ` has a `-Y` normal. This keeps positive canonical offset mapped to `Y = +offset` and matches the Rhino compiler.
 
-### M3A acceptance
+RhinoCommon exposes `Rhino.Geometry.Transform.Mirror(Plane)` in the Rhino 8 API compatibility floor. The GHX compiler:
+
+1. duplicates the input Brep;
+2. constructs the canonical axis-normal mirror plane at `offset`;
+3. applies `Transform.Mirror(...)`;
+4. fails closed if plane construction or transformation fails.
+
+The Rhino mapping is reconciled under `docs/references/rhino8_mcneel_sources.md`; installed Rhino 8 evidence remains required before M3A closeout.
+
+### M3A repository acceptance
+
+Completed:
 
 - canonical normalization/reference/DAG coverage;
 - M0 reachability and M1 scalar-reference coverage;
 - finite/reference-free provider schema exposure;
 - structural feature-editor support;
-- native build123d mirror fixture;
+- native build123d mirror fixture with X/Y/Z oriented expected bounds;
 - Rhino Python source-generation fixture;
+- Native BRep agent instruction coverage;
 - repository tests/typecheck/lint/build/diff check green;
-- Grasshopper Build green;
-- real native runtime acceptance;
-- installed Rhino 8 / Grasshopper open/solve/parameter-change/save/reopen acceptance.
+- Grasshopper Build green.
+
+Exact repository checkpoint:
+
+```text
+789188167bc48ad91a579b5aa4bb720ba8cfa8c0
+Quality Gate #897       PASS
+Grasshopper Build #469 PASS
+```
+
+Still required before M3A closeout:
+
+- real native runtime acceptance via `./scripts/brep/smoke-test.sh`;
+- installed Rhino 8 / Grasshopper open/solve/parameter-change/save/reopen acceptance for a fresh mirror GHX.
 
 ## M3B — explicit instance-set foundation + linear pattern
+
+Status: **blocked until M3A runtime acceptance and explicit closeout**.
 
 Do not implement linear pattern as an implicit Boolean union or as an opaque single Brep/solid.
 
@@ -225,9 +257,9 @@ M3 must preserve:
 ## Execution order
 
 1. Close M2 — complete.
-2. M3A mirror canonical contract and repository implementation.
-3. M3A native + installed Rhino 8 acceptance and explicit closeout.
-4. M3B instance-set contract analysis before implementation.
+2. M3A mirror canonical contract and repository implementation — complete / CI accepted.
+3. M3A native + installed Rhino 8 acceptance and explicit closeout — active.
+4. M3B instance-set contract analysis before implementation — blocked.
 5. M3B linear pattern repository implementation.
 6. M3B native + installed Rhino 8 acceptance.
 7. Re-evaluate integer count and rectangular pattern as M3C rather than expanding scope implicitly.
