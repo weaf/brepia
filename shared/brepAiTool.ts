@@ -222,6 +222,20 @@ const brepLinearPatternNodeSchema = z
   })
   .strict();
 
+const brepRectangularPatternNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('rectangularPattern'),
+    input: brepIdSchema,
+    axisA: z.enum(['x', 'y', 'z']),
+    axisB: z.enum(['x', 'y', 'z']),
+    countA: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    countB: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    spacingA: brepScalarSchema,
+    spacingB: brepScalarSchema,
+  })
+  .strict();
+
 const brepSubtractNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -264,6 +278,7 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepTransformNodeSchema,
   brepMirrorNodeSchema,
   brepLinearPatternNodeSchema,
+  brepRectangularPatternNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
@@ -442,6 +457,19 @@ const brepProviderLinearPatternNodeSchema = z
     spacing: brepProviderScalarSchema,
   })
   .strict();
+const brepProviderRectangularPatternNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('rectangularPattern'),
+    input: brepIdSchema,
+    axisA: z.enum(['x', 'y', 'z']),
+    axisB: z.enum(['x', 'y', 'z']),
+    countA: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    countB: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    spacingA: brepProviderScalarSchema,
+    spacingB: brepProviderScalarSchema,
+  })
+  .strict();
 const brepProviderFilletNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -458,6 +486,7 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderTransformNodeSchema,
   brepProviderMirrorNodeSchema,
   brepProviderLinearPatternNodeSchema,
+  brepProviderRectangularPatternNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
