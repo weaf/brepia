@@ -151,6 +151,7 @@ type AcceptanceFixture = {
     max: [number, number, number];
   };
   acceptanceEdit: string;
+  expectedSavedParameters: Record<string, number>;
 };
 
 const fixtures: AcceptanceFixture[] = [
@@ -160,6 +161,7 @@ const fixtures: AcceptanceFixture[] = [
     expectedBounds: { min: [-30, -10, -15], max: [30, 10, 15] },
     acceptanceEdit:
       'Change Profile width 60 -> 80 and Extrusion depth 30 -> 40; geometry must recompute and remain one Brep.',
+    expectedSavedParameters: { profileWidth: 80, extrudeDepth: 40 },
   },
   {
     fileStem: 'm4-circle-x',
@@ -167,6 +169,7 @@ const fixtures: AcceptanceFixture[] = [
     expectedBounds: { min: [-12, -12, -12], max: [12, 12, 12] },
     acceptanceEdit:
       'Change Radius 12 -> 16; circular profile must recompute while extrusion remains centered on X.',
+    expectedSavedParameters: { radius: 16 },
   },
   {
     fileStem: 'm4-polyline-y',
@@ -174,8 +177,13 @@ const fixtures: AcceptanceFixture[] = [
     expectedBounds: { min: [-10, -15, -20], max: [30, 15, 20] },
     acceptanceEdit:
       'Change Profile reach 30 -> 40; the asymmetric profile must extend in +X while extrusion remains centered on Y.',
+    expectedSavedParameters: { reach: 40 },
   },
 ];
+
+function sourceRevisionId(fixture: AcceptanceFixture): string {
+  return `m4-host-acceptance-${fixture.fileStem}-2026-09-11`;
+}
 
 function resultOutputAccess(ghx: string): string | undefined {
   const match = ghx.match(
@@ -191,10 +199,10 @@ describe('M4 installed Rhino 8 acceptance fixtures', () => {
     const manifest: Array<Record<string, unknown>> = [];
 
     for (const fixture of fixtures) {
-      const sourceRevisionId = `m4-host-acceptance-${fixture.fileStem}-2026-09-11`;
+      const revisionId = sourceRevisionId(fixture);
       const contract = createBrepGrasshopperContract({
         project: fixture.project,
-        sourceRevisionId,
+        sourceRevisionId: revisionId,
       });
       const ghx = await compileBrepGrasshopperExecutableGhx(contract);
       const validation = await validateBrepGrasshopperExecutableGhx(
@@ -210,21 +218,19 @@ describe('M4 installed Rhino 8 acceptance fixtures', () => {
       assert.equal(resultOutputAccess(ghx), '0');
       assert.match(ghx, /719467e6-7cf5-4848-99b0-c5dd57e5442c/i);
 
+      const node = fixture.project.nodes[0];
+      assert.ok(node && node.type === 'extrude');
       manifest.push({
         file: `${fixture.fileStem}.ghx`,
+        savedFile: `${fixture.fileStem}-host-saved.ghx`,
         projectId: fixture.project.id,
-        sourceRevisionId,
-        profileType:
-          fixture.project.nodes[0]?.type === 'extrude'
-            ? fixture.project.nodes[0].profile.type
-            : null,
-        axis:
-          fixture.project.nodes[0]?.type === 'extrude'
-            ? fixture.project.nodes[0].axis
-            : null,
+        sourceRevisionId: revisionId,
+        profileType: node.profile.type,
+        axis: node.axis,
         resultAccess: 'item',
         expectedBoundsAtDefaults: fixture.expectedBounds,
         acceptanceEdit: fixture.acceptanceEdit,
+        expectedSavedParameters: fixture.expectedSavedParameters,
       });
 
       if (WRITE_FIXTURES) {
@@ -252,5 +258,37 @@ describe('M4 installed Rhino 8 acceptance fixtures', () => {
         ['closedPolyline', 'y', 'item'],
       ],
     );
+  });
+
+  it('strictly validates Rhino-saved parameter-only acceptance files when requested', async () => {
+    const savedDir = process.env.BREPIA_M4_RHINO_SAVED_DIR;
+    if (!savedDir) return;
+
+    for (const fixture of fixtures) {
+      const contract = createBrepGrasshopperContract({
+        project: fixture.project,
+        sourceRevisionId: sourceRevisionId(fixture),
+      });
+      const savedPath = path.resolve(
+        process.cwd(),
+        savedDir,
+        `${fixture.fileStem}-host-saved.ghx`,
+      );
+      const savedGhx = fs.readFileSync(savedPath, 'utf8');
+      const validation = await validateBrepGrasshopperExecutableGhx(
+        savedGhx,
+        contract,
+        'returned',
+      );
+
+      assert.equal(
+        validation.accepted,
+        true,
+        `${path.basename(savedPath)}: ${JSON.stringify(validation.diagnostics)}`,
+      );
+      assert.deepEqual(validation.diagnostics, []);
+      assert.deepEqual(validation.parameters, fixture.expectedSavedParameters);
+      assert.equal(resultOutputAccess(savedGhx), '0');
+    }
   });
 });
