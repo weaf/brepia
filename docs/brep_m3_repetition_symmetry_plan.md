@@ -1,6 +1,6 @@
 # M3 — repetition and symmetry plan
 
-Status: **M3A mirror repository-complete and CI-accepted; native build123d/OCCT and installed Rhino 8 / Grasshopper runtime acceptance active; M3B blocked**
+Status: **M3A mirror repository/CI and native build123d/OCCT runtime accepted; installed Rhino 8 / Grasshopper acceptance active; M3B blocked**
 
 Date: 2026-09-11
 
@@ -12,7 +12,8 @@ M2 is fully closed before this plan begins. Its repository, native build123d/OCC
 
 Detailed current M3A status:
 
-- `docs/brep_m3a_mirror_status.md`.
+- `docs/brep_m3a_mirror_status.md`;
+- `docs/brep_m3a_native_runtime_evidence_2026-09-11.md`.
 
 ## Goal
 
@@ -47,7 +48,7 @@ Therefore a true repeated multi-instance result is not merely another single-val
 
 ## M3A — mirror first
 
-Status: **repository-complete and CI-accepted at `789188167bc48ad91a579b5aa4bb720ba8cfa8c0`; native and installed-host runtime acceptance pending**.
+Status: **repository-complete, CI-accepted and native build123d/OCCT runtime-accepted; installed Rhino 8 / Grasshopper acceptance pending**.
 
 Mirror is the bounded first step because it remains single-valued and does not require collection semantics.
 
@@ -84,7 +85,7 @@ The native axis mapping is orientation-aware:
 
 ```text
 x -> Plane.YZ
- y -> Plane.ZX
+y -> Plane.ZX
 z -> Plane.XY
 ```
 
@@ -121,14 +122,27 @@ Quality Gate #897       PASS
 Grasshopper Build #469 PASS
 ```
 
+### M3A native runtime acceptance
+
+Completed via the real local constrained runtime:
+
+```bash
+./scripts/brep/smoke-test.sh
+```
+
+The X/Y/Z mirror fixtures reproduced their exact non-zero-offset expected bounds and retained one result body, exact STEP and 3DM output. Detailed evidence is recorded in:
+
+```text
+docs/brep_m3a_native_runtime_evidence_2026-09-11.md
+```
+
 Still required before M3A closeout:
 
-- real native runtime acceptance via `./scripts/brep/smoke-test.sh`;
-- installed Rhino 8 / Grasshopper open/solve/parameter-change/save/reopen acceptance for a fresh mirror GHX.
+- installed Rhino 8 / Grasshopper open/solve/parameter-change/save/reopen acceptance for a fresh current-branch mirror GHX.
 
 ## M3B — explicit instance-set foundation + linear pattern
 
-Status: **blocked until M3A runtime acceptance and explicit closeout**.
+Status: **blocked until M3A installed-host acceptance and explicit closeout**.
 
 Do not implement linear pattern as an implicit Boolean union or as an opaque single Brep/solid.
 
@@ -258,8 +272,9 @@ M3 must preserve:
 
 1. Close M2 — complete.
 2. M3A mirror canonical contract and repository implementation — complete / CI accepted.
-3. M3A native + installed Rhino 8 acceptance and explicit closeout — active.
-4. M3B instance-set contract analysis before implementation — blocked.
-5. M3B linear pattern repository implementation.
-6. M3B native + installed Rhino 8 acceptance.
-7. Re-evaluate integer count and rectangular pattern as M3C rather than expanding scope implicitly.
+3. M3A native runtime acceptance — complete.
+4. M3A installed Rhino 8 acceptance and explicit closeout — active.
+5. M3B instance-set contract analysis before implementation — blocked.
+6. M3B linear pattern repository implementation.
+7. M3B native + installed Rhino 8 acceptance.
+8. Re-evaluate integer count and rectangular pattern as M3C rather than expanding scope implicitly.
