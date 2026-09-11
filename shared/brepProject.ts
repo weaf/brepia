@@ -13,6 +13,7 @@ export const BREP_PROJECT_MAX_PARAMETERS = 128;
 export const BREP_PROJECT_MAX_NODES = 256;
 export const BREP_PROJECT_MAX_NODE_INPUTS = 32;
 export const BREP_PROJECT_MAX_PATTERN_COUNT = 32;
+export const BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES = 64;
 export const BREP_PROJECT_MAX_PROFILE_POINTS = 32;
 export const BREP_PROJECT_MAX_ID_CHARS = 64;
 export const BREP_PROJECT_MAX_NAME_CHARS = 120;
@@ -178,6 +179,18 @@ export type BrepLinearPatternNode = {
   spacing: BrepScalar;
 };
 
+export type BrepRectangularPatternNode = {
+  id: string;
+  type: 'rectangularPattern';
+  input: string;
+  axisA: BrepAxis;
+  axisB: BrepAxis;
+  countA: number;
+  countB: number;
+  spacingA: BrepScalar;
+  spacingB: BrepScalar;
+};
+
 export type BrepSubtractNode = {
   id: string;
   type: 'subtract';
@@ -212,6 +225,7 @@ export type BrepNode =
   | BrepTransformNode
   | BrepMirrorNode
   | BrepLinearPatternNode
+  | BrepRectangularPatternNode
   | BrepSubtractNode
   | BrepUnionNode
   | BrepIntersectNode
@@ -1019,6 +1033,77 @@ function normalizeNode(
       };
     }
 
+    case 'rectangularPattern': {
+      if (
+        typeof value.axisA !== 'string' ||
+        !AXES.has(value.axisA as BrepAxis) ||
+        typeof value.axisB !== 'string' ||
+        !AXES.has(value.axisB as BrepAxis)
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep rectangularPattern ${id} axisA and axisB must each be x, y, or z.`,
+        );
+      }
+      if (value.axisA === value.axisB) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep rectangularPattern ${id} axisA and axisB must be different axes.`,
+        );
+      }
+      const countFields = [
+        ['countA', value.countA],
+        ['countB', value.countB],
+      ] as const;
+      for (const [field, count] of countFields) {
+        if (
+          typeof count !== 'number' ||
+          !Number.isInteger(count) ||
+          count < 2 ||
+          count > BREP_PROJECT_MAX_PATTERN_COUNT
+        ) {
+          throw new BrepProjectError(
+            'invalid_node',
+            `BRep rectangularPattern ${id} ${field} must be a literal integer between 2 and ${BREP_PROJECT_MAX_PATTERN_COUNT}.`,
+          );
+        }
+      }
+      const countA = value.countA as number;
+      const countB = value.countB as number;
+      if (countA * countB > BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep rectangularPattern ${id} countA * countB must not exceed ${BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES}.`,
+        );
+      }
+      return {
+        id,
+        type: 'rectangularPattern',
+        input: normalizeNodeReference(
+          value.input,
+          `BRep rectangularPattern ${id} input`,
+        ),
+        axisA: value.axisA as BrepAxis,
+        axisB: value.axisB as BrepAxis,
+        countA,
+        countB,
+        spacingA: normalizeScalar(
+          value.spacingA,
+          `BRep rectangularPattern ${id} spacingA`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        spacingB: normalizeScalar(
+          value.spacingB,
+          `BRep rectangularPattern ${id} spacingB`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
     case 'subtract': {
       if (
         !Array.isArray(value.tools) ||
@@ -1079,7 +1164,9 @@ function normalizeNode(
 }
 
 export function brepNodeValueKind(node: BrepNode): BrepNodeValueKind {
-  return node.type === 'linearPattern' ? 'instanceSet' : 'single';
+  return node.type === 'linearPattern' || node.type === 'rectangularPattern'
+    ? 'instanceSet'
+    : 'single';
 }
 
 function nodeDependencies(node: BrepNode): string[] {
@@ -1091,6 +1178,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'transform':
     case 'mirror':
     case 'linearPattern':
+    case 'rectangularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -1159,6 +1247,7 @@ function validateNodeValueCompatibility(
       case 'mirror':
       case 'fillet':
       case 'linearPattern':
+      case 'rectangularPattern':
         requireSingle(node, node.input, 'input');
         break;
       case 'subtract':
@@ -1199,6 +1288,27 @@ export function validateBrepLinearPatternSpacingValues(
     if (spacing === 0) {
       throw new BrepScalarEvaluationError(
         `BRep linearPattern ${node.id} spacing must resolve to a non-zero millimetre value.`,
+      );
+    }
+  }
+}
+
+export function validateBrepRectangularPatternSpacingValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'rectangularPattern') continue;
+    const spacingA = resolveBrepScalar(node.spacingA, parameterValues);
+    const spacingB = resolveBrepScalar(node.spacingB, parameterValues);
+    if (spacingA === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep rectangularPattern ${node.id} spacingA must resolve to a non-zero millimetre value.`,
+      );
+    }
+    if (spacingB === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep rectangularPattern ${node.id} spacingB must resolve to a non-zero millimetre value.`,
       );
     }
   }
@@ -1358,6 +1468,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
       normalized.parameters.map((parameter) => [parameter.id, parameter.default]),
     );
     validateBrepLinearPatternSpacingValues(normalized, defaultParameterValues);
+    validateBrepRectangularPatternSpacingValues(normalized, defaultParameterValues);
     validateBrepExtrudeProfileValues(normalized, defaultParameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
