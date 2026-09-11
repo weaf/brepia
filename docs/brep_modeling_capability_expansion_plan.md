@@ -1,10 +1,12 @@
 # BRep modeling capability expansion plan
 
-Status: **M0 and M1 complete; M2 repository-complete / CI-accepted with native and installed Rhino 8 runtime evidence next; M3 not started**. This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0, M1 and M2 complete; M3 repetition and symmetry is the next active modeling phase**. This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
 
-Detailed current M2 status:
+Detailed M2 closeout status:
 
-- `docs/brep_m2_boolean_composition_status.md`.
+- `docs/brep_m2_boolean_composition_status.md`;
+- `docs/brep_m2_native_runtime_evidence_2026-09-10.md`;
+- `docs/brep_m2_rhino8_runtime_evidence_2026-09-11.md`.
 
 ## Why this track exists
 
@@ -190,9 +192,9 @@ This alone fixes much of the observed broken-parametric behavior without inventi
 
 ## M2 — additive Boolean composition
 
-Status: **repository-complete and CI-accepted; native runtime and installed Rhino 8 / Grasshopper evidence pending**.
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**.
 
-Canonical v1 now includes the two bounded kernel-neutral operations selected for M2:
+Canonical v1 includes the two bounded kernel-neutral operations selected for M2:
 
 - `union`;
 - `intersect`.
@@ -211,17 +213,23 @@ Quality Gate #856       PASS
 Grasshopper Build #428 PASS
 ```
 
-Detailed implementation and acceptance evidence:
+Native runtime acceptance is recorded in:
 
 ```text
-docs/brep_m2_boolean_composition_status.md
+docs/brep_m2_native_runtime_evidence_2026-09-10.md
 ```
 
-M2 is not yet runtime-accepted. The next active step is real build123d/OCCT smoke evidence followed by installed Rhino 8 / Grasshopper evidence for representative union/intersection success plus fail-closed unsupported cardinality. **M3 must not start until that evidence is reconciled and M2 is explicitly closed.**
+Installed Rhino 8 / Grasshopper acceptance is recorded in:
+
+```text
+docs/brep_m2_rhino8_runtime_evidence_2026-09-11.md
+```
+
+The installed-host run verified supported union/intersection solves, parameter-driven recomputation, fail-closed empty intersection and disjoint union, plus save/close/reopen persistence of the generated GHX files. M2 is explicitly closed and no longer blocks M3.
 
 ## M3 — repetition and symmetry
 
-Status: **not started; blocked on M2 runtime/host acceptance**.
+Status: **active — analysis and contract definition next**.
 
 Add modeling operations that eliminate repeated literal transforms:
 
@@ -232,6 +240,8 @@ Add modeling operations that eliminate repeated literal transforms:
 The canonical operation should reference one input node plus bounded count/spacing/axis semantics. Counts need a separate integer-safe parameter contract or a deliberately literal-only first version.
 
 This is the natural representation for four cabinets, repeated holes and mounting features.
+
+M3 must preserve the M0–M2 invariants, keep non-zero rotation fail-closed, remain additive to canonical schema version 1 if feasible, and obtain native plus installed Rhino 8 parity evidence before closeout.
 
 ## M4 — profile + extrusion foundation
 
@@ -284,8 +294,8 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 
 1. **M0 parameter effectiveness + orphan analysis** — complete.
 2. **M1 expression AST** — complete.
-3. **M2 union/intersection** — repository/CI complete; runtime/host acceptance active.
-4. **M3 pattern/mirror** — blocked until M2 closes.
+3. **M2 union/intersection** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
+4. **M3 pattern/mirror** — active; begin with bounded contract analysis before implementation.
 5. **M4 profile/extrude** — broadens geometry vocabulary significantly.
 6. Re-evaluate need for dedicated wall/plate/shell semantics.
 7. **M6 rotation** and **M7 finishing** under their own Rhino/native parity acceptance.
