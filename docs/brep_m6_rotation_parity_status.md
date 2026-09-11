@@ -1,6 +1,6 @@
 # M6 non-zero transform rotation parity status
 
-Status: **repository-complete / CI-accepted; real native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance pending**
+Status: **repository-complete / CI-accepted / native-runtime-accepted; installed Rhino 8 / Grasshopper acceptance pending**
 
 Date: 2026-09-11
 
@@ -140,19 +140,30 @@ Existing Grasshopper tests were reconciled so they continue to prove their origi
 
 The stale tests were not removed or weakened into generic smoke assertions. Cutter identity/order, generated-GHX validation, script transform composition and expression preservation remain explicit.
 
-## Native smoke candidate
+## Native runtime acceptance
 
-`scripts/brep/m6-rotation-smoke.sh` is part of the normal `scripts/brep/smoke-test.sh` suite.
-
-It contains an asymmetric centered source box:
+The full native smoke suite was executed locally on the exact branch checkpoint:
 
 ```text
-width  = 10
- depth  = 20
-height = 30
+ecfd9fea3209281e00ab9d31752087d3315bfea3
+Record M6 rotation parity repository status
 ```
 
-Single-axis expected bounds are:
+against the pinned runtime:
+
+```text
+localhost/brepia-brep:build123d-0.11.1
+```
+
+using:
+
+```bash
+./scripts/brep/smoke-test.sh
+```
+
+The complete suite was reported green.
+
+Accepted M6 runtime assertions include:
 
 ```text
 X 90:
@@ -165,25 +176,27 @@ Z 90:
 [-10,-5,-15] -> [10,5,15]
 ```
 
-The multi-axis fixture uses effective angles and translation:
+and the order-sensitive dynamic fixture:
 
 ```text
 rx = 30
 ry = ryBase + 5 = 20
 rz = 10
 T  = [7,11,13]
-```
 
-with expected parity bounds:
-
-```text
 min [-4.38914415,-5.87340299,-5.66971729]
 max [18.38914415,27.87340299,31.66971729]
 ```
 
-The fixture also requires one `single` result and exact STEP availability. 3DM output is checked where produced.
+The result remained one `single` body and exact STEP remained available. Because M6 runs inside the normal full smoke suite, the same accepted run also preserved the existing M0-M4 native regressions.
 
-These expected values are repository assertions only until the full smoke suite is executed against the real pinned local build123d/OCCT runtime.
+Detailed evidence:
+
+```text
+docs/brep_m6_native_runtime_evidence_2026-09-11.md
+```
+
+This closes the authoritative native side of M6. Installed Rhino 8 / Grasshopper parity remains a separate required acceptance boundary.
 
 ## Repository acceptance checkpoint
 
@@ -201,9 +214,21 @@ Quality Gate #990       PASS
 Grasshopper Build #562 PASS
 ```
 
-Quality Gate passed the full test suite, TypeScript typecheck, lint, production build and `git diff --check`. Grasshopper Build passed the plugin build plus Windows and Ubuntu package builds.
+The subsequent documentation checkpoint actually used for the accepted native smoke is:
 
-Scope diff from the M6-active baseline `7e1890765f1532ade047b9cb39bef98d84fab463` was 13 commits ahead / 0 behind and contained only:
+```text
+ecfd9fea3209281e00ab9d31752087d3315bfea3
+Record M6 rotation parity repository status
+```
+
+and it also passed:
+
+```text
+Quality Gate #991       PASS
+Grasshopper Build #563 PASS
+```
+
+Scope diff from the M6-active baseline `7e1890765f1532ade047b9cb39bef98d84fab463` was 13 commits ahead / 0 behind at the code-complete checkpoint and contained only:
 
 - M6 Rhino transform translation;
 - M6 AI instruction semantics;
@@ -215,30 +240,9 @@ No M5, M3C, canonical schema or collection-policy scope was introduced.
 
 ## Remaining acceptance sequence
 
-M6 is not complete until both real runtime boundaries are accepted.
+Only the installed Rhino 8 / Grasshopper boundary remains before M6 can be called complete.
 
-### 1. Native build123d / OCCT
-
-Run the full current native smoke suite against the real local pinned rootless runtime:
-
-```bash
-./scripts/brep/smoke-test.sh
-```
-
-Acceptance requires:
-
-- all existing M0-M4 smoke fixtures remain green;
-- X/Y/Z 90-degree M6 bounds match exactly within the test tolerance;
-- the asymmetric `[30,20,10]` + `[7,11,13]` fixture matches the expected bounds;
-- parameter/expression-backed degree values resolve correctly;
-- the result remains one `single` body;
-- exact STEP remains available.
-
-If the asymmetric bounds differ, do not change the canonical/Rhino convention merely to fit the result. Reconcile the observed build123d 0.11.1 / OCCT runtime behavior first.
-
-### 2. Installed Rhino 8 / Grasshopper
-
-Only after native acceptance, generate fresh current-branch GHX and verify at minimum:
+Generate fresh current-branch GHX and verify at minimum:
 
 1. X/Y/Z single-axis rotation coverage;
 2. the asymmetric multi-axis rotation with translation;
@@ -248,7 +252,7 @@ Only after native acceptance, generate fresh current-branch GHX and verify at mi
 6. save -> close -> reopen preserves the solved definition;
 7. the Rhino-saved file passes the strict parameter-only returned-GHX validator, including the already-accepted bounded Rhino Python-library metadata normalization.
 
-Record native and installed-host evidence separately, following the M3/M4 precedent.
+Record installed-host evidence separately, following the M3/M4 precedent.
 
 ## Preserved boundaries
 
