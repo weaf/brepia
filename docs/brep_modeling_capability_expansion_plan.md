@@ -1,6 +1,6 @@
 # BRep modeling capability expansion plan
 
-Status: **M0, M1, M2, M3A, M3B and M4 profile + extrusion are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. M6 non-zero transform rotation parity is selected as the next active modeling slice. M5 shell/thickness and optional M3C rectangular/grid pattern remain deferred.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0, M1, M2, M3A, M3B, M4 profile + extrusion and M6 non-zero rotation parity are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Bounded M3C rectangular pattern is selected as the next active modeling slice. M5 shell/thickness and M7 topology/finishing remain deferred.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
 
 Detailed current status:
 
@@ -17,7 +17,11 @@ Detailed current status:
 - `docs/brep_m4_profile_extrusion_status.md`;
 - `docs/brep_m4_native_runtime_evidence_2026-09-11.md`;
 - `docs/brep_m4_rhino8_runtime_evidence_2026-09-11.md`;
-- `docs/brep_post_m4_scope_decision_2026-09-11.md`.
+- `docs/brep_post_m4_scope_decision_2026-09-11.md`;
+- `docs/brep_m6_rotation_parity_status.md`;
+- `docs/brep_m6_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m6_rhino8_runtime_evidence_2026-09-11.md`;
+- `docs/brep_post_m6_scope_decision_2026-09-11.md`.
 
 ## Why this track exists
 
@@ -147,7 +151,7 @@ Runtime parity requirements:
 2. request normalization validates the full project expression set again against the effective runtime parameter values before native execution;
 3. the native build123d driver evaluates the same bounded operator set;
 4. the Rhino/GHX compiler emits only bounded helper calls for the same operator set;
-5. expression-backed `rotateDeg` does not unlock rotation before M6 parity acceptance.
+5. expression-backed `rotateDeg` follows the accepted M6 Intrinsic-XYZ transform semantics.
 
 AI contract:
 
@@ -195,7 +199,7 @@ Installed Rhino 8 acceptance remains a separate host-evidence boundary. Reposito
 
 and confirm that changing the published `Width`/`WallThickness` controls updates the solved Rhino geometry while the GHX round trip still changes only published parameter values.
 
-M1 must not start M2 Boolean expansion, new modeling-node families or non-zero rotation work.
+M1 must not start M2 Boolean expansion or new modeling-node families.
 
 ### Immediate product benefit
 
@@ -240,7 +244,7 @@ The installed-host run verified supported union/intersection solves, parameter-d
 
 ## M3 — repetition and symmetry
 
-Status: **M3A mirror and M3B bounded linear pattern complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Optional M3C rectangular/grid pattern is deferred.**
+Status: **M3A mirror and M3B bounded linear pattern are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. M3C bounded rectangular pattern is the next active slice after M6 closeout.**
 
 M3A added bounded single-shape mirror semantics and is complete across canonical/provider/editor implementation, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Its closeout and runtime evidence are recorded in the dedicated M3A documents listed above.
 
@@ -292,9 +296,25 @@ docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md
 
 Native runtime verified the final pattern as an ordered `instanceSet` with three separate bodies, exact 20 mm X-spacing, aggregate bounds `[-5,-5,-5] -> [45,5,5]`, exact multi-solid STEP, and four ordered pattern instances consumed as `subtract.tools[]` while the final subtract remained one `single` body. Installed Rhino 8 / Grasshopper accepted both a final list-result pattern and a pattern-as-subtract-cutters GHX, including save -> close -> reopen persistence.
 
-The M3B runtime boundary is closed. Rectangular/grid pattern remains optional future M3C work, but `docs/brep_post_m3_scope_decision_2026-09-11.md` deferred it in favor of the now-complete M4 profile/extrude slice because profile/extrude filled the larger representational gap.
+The M3B runtime boundary is closed. `docs/brep_post_m6_scope_decision_2026-09-11.md` now selects M3C because true two-dimensional parameterized repetition is not representable by M3B without either manual node expansion or the explicitly forbidden nested-instance-set model.
 
-M3 continues to preserve the M0–M2 invariants, keep non-zero rotation fail-closed and remain additive to canonical schema version 1.
+The bounded M3C planning contract is:
+
+```ts
+type BrepRectangularPatternNode = {
+  id: string;
+  type: 'rectangularPattern';
+  input: string;
+  axisA: 'x' | 'y' | 'z';
+  axisB: 'x' | 'y' | 'z';
+  countA: number;
+  countB: number;
+  spacingA: BrepScalar;
+  spacingB: BrepScalar;
+};
+```
+
+M3C remains within the existing `instanceSet` result kind. Axes must be distinct, each count is a literal integer 2–32, total instance count is bounded to at most 64, both spacings must resolve non-zero, and canonical ordering is row-major with `axisA` outer / `axisB` inner. Stable body IDs remain `<patternId>::<flatIndex>`. Only `subtract.tools[]` may consume the resulting set; nested patterns and general collection algebra remain fail-closed.
 
 ## M4 — profile + extrusion foundation
 
@@ -345,74 +365,106 @@ The M4 repository, native and installed-host boundaries are closed.
 
 ## M5 — wall/shell/thickness semantics
 
-Status: **deferred after post-M4 reconciliation**.
+Status: **deferred after post-M4 and post-M6 reconciliation**.
 
-M4 acceptance satisfied the prerequisite for evaluating this milestone, but the accepted M1–M4 language already represents the immediate wall/plate/hole use cases through expressions, explicit profiles/extrusions and Boolean composition. A dedicated shell/thickness operation would currently reduce graph verbosity rather than close a proven representational gap.
+The accepted M1–M4 + M6 language already represents the immediate wall/plate/hole use cases through expressions, explicit profiles/extrusions, Boolean composition and full bounded transforms. A dedicated shell/thickness operation would currently reduce graph verbosity rather than close a proven representational gap.
 
-Do not add a domain-specific `wall` node merely because earlier room examples were Boolean-heavy. Reconsider M5 only when a concrete target fixture demonstrates that the accepted M1–M4 surface is materially inadequate.
+Do not add a domain-specific `wall` node merely because earlier room examples were Boolean-heavy. Reconsider M5 only when a concrete target fixture demonstrates that the accepted surface is materially inadequate.
 
 If a dedicated thickness/shell operation is later justified, analyze topology stability separately. Shelling/offsetting can be kernel-sensitive and must not be added until native and Rhino behavior is bounded by deterministic fixtures. Any selected M5 contract must remain kernel-neutral and must not persist raw face/edge indices as topology authority.
 
-Decision record:
+Decision records:
 
 ```text
 docs/brep_post_m4_scope_decision_2026-09-11.md
+docs/brep_post_m6_scope_decision_2026-09-11.md
 ```
 
 ## M6 — rotation parity
 
-Status: **selected next — analysis active; implementation remains fail-closed until the rotation convention is locked**.
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**.
 
-Rotation already exists in canonical `transform.rotateDeg`, and the native evaluator already executes it. The active Rhino/GHX path intentionally rejects every non-zero rotation. M6 closes that existing cross-runtime mismatch rather than introducing a new canonical node.
+M6 closes the previous canonical/native versus Rhino/GHX mismatch for the already-existing `transform.rotateDeg` field without adding a new node or changing canonical `schemaVersion: 1`.
 
-Pinned build123d 0.11.1 constructs `Location(position, orientation)` with orientation interpreted as `Intrinsic.XYZ` by default. Its OCCT transform stores the rotation and then sets the translation part, corresponding to a local point mapping of:
-
-```text
-p' = R_intrinsicXYZ * p + T
-```
-
-That is rotation about the canonical origin followed by translation. Build123d's documented placement algebra also states that `Pos * Rot` is equivalent to `Location(position, rotation)`.
-
-For RhinoCommon, transform multiplication follows the rule that `A * B` applies `B` first and then `A`. Therefore the equivalent canonical transform must be composed as:
+The accepted convention is:
 
 ```text
-RhinoTransform = Translation * IntrinsicXYZRotation
+rotateDeg = [rx, ry, rz]
+Intrinsic XYZ
+R = Rx * Ry * Rz
+p' = R * p + T
 ```
 
-The Intrinsic-XYZ rotation itself must match OCCT's `gp_Intrinsic_XYZ` semantics exactly. Do not substitute an arbitrary Euler convention. The implementation plan should use three origin-centered right-hand axis rotations composed to the mathematically equivalent intrinsic XYZ matrix and prove the result against deterministic native fixtures before host acceptance.
-
-M6 analysis/implementation requirements:
-
-1. preserve canonical `[rx, ry, rz]` degree-vector shape and existing M1 degree scalars;
-2. preserve build123d 0.11.1 `Intrinsic.XYZ` semantics as the authoritative native behavior;
-3. map positive angles using the same right-hand rotation convention;
-4. apply rotation about origin before translation;
-5. cover single-axis X/Y/Z fixtures;
-6. cover an asymmetric multi-axis fixture that detects Euler-order mistakes;
-7. cover translation + rotation together to detect transform-order mistakes;
-8. cover direct parameter and bounded expression-backed degree values;
-9. retain the current non-zero Rhino fail-closed guard until repository parity tests are in place;
-10. obtain separate real local build123d/OCCT and installed Rhino 8 / Grasshopper acceptance before M6 closeout.
-
-Do not add arbitrary axis-angle, quaternion, matrix or free-form transform representations in M6.
-
-Decision record:
+Rotation occurs about the canonical local origin before translation. Positive angles use the right-hand convention. The Rhino compiler maps this through origin-centered `Rhino.Geometry.Transform.Rotation(...)` transforms and:
 
 ```text
-docs/brep_post_m4_scope_decision_2026-09-11.md
+Rotation  = RotationX * RotationY * RotationZ
+Transform = Translation * Rotation
 ```
+
+Repository tests cover X/Y/Z single-axis rotation, an asymmetric `[30,20,10]` fixture, translation `[7,11,13]`, direct degree parameters, bounded expression-backed degree values, zero rotation, generated executable GHX and Result Item Access.
+
+Primary code checkpoint:
+
+```text
+3fd9c38910baac956e1a67b710bcc41f31b3b0e0
+Quality Gate #990       PASS
+Grasshopper Build #562 PASS
+```
+
+The subsequent repository-status checkpoint used for the accepted native smoke also passed Quality Gate #991 and Grasshopper Build #563.
+
+Real local native smoke on the pinned build123d 0.11.1 / OCCT runtime accepted:
+
+```text
+X 90: [-5,-15,-10] -> [5,15,10]
+Y 90: [-15,-10,-5] -> [15,10,5]
+Z 90: [-10,-5,-15] -> [10,5,15]
+```
+
+and the order-sensitive dynamic fixture:
+
+```text
+rx = 30
+ry = ryBase + 5 = 20
+rz = 10
+T  = [7,11,13]
+
+min [-4.38914415,-5.87340299,-5.66971729]
+max [18.38914415,27.87340299,31.66971729]
+```
+
+The result remained `single` and exact STEP remained available while the full M0–M4 native smoke regressions stayed green.
+
+Fresh installed Rhino 8 / Grasshopper fixtures then covered +90 X/Y/Z and the asymmetric Intrinsic-XYZ + translation case. The asymmetric fixture changed published `Rotate X` from 30 to 60 while `Rotate Y base` remained 15, preserving the bounded derived Y angle `ryBase + 5`. The four Rhino-saved definitions passed the strict returned-GHX validator:
+
+```text
+✓ tests/brepM6RhinoAcceptanceFixtures.test.ts (2 tests)
+Test Files  1 passed (1)
+Tests       2 passed (2)
+```
+
+Detailed M6 status and evidence:
+
+```text
+docs/brep_m6_rotation_parity_status.md
+docs/brep_m6_native_runtime_evidence_2026-09-11.md
+docs/brep_m6_rhino8_runtime_evidence_2026-09-11.md
+```
+
+The M6 repository, native and installed-host boundaries are closed.
 
 ## M7 — finishing/topology operations
 
-Fillet has the first semantic selector (`parallelToAxis`). Broaden finishing only after the parameter/result integrity work above.
+Status: **deferred after post-M6 reconciliation**.
 
-Potential future work:
+Fillet has the first semantic selector (`parallelToAxis`). Potential future work includes:
 
 - stronger semantic edge selectors;
 - chamfer;
 - additional fillet selection forms.
 
-Each must avoid persisted raw topology indices and needs separate topology-stability analysis.
+Each must avoid persisted raw topology indices and needs separate topology-stability analysis. M7 remains deferred while the topology-neutral M3C rectangular-pattern gap is active.
 
 ## Suggested implementation order
 
@@ -422,9 +474,10 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 4. **M3A mirror** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
 5. **M3B linear pattern** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
 6. **M4 profile/extrude** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
-7. **M6 rotation parity** — active next slice; close the existing canonical/native versus Rhino/GHX mismatch under an explicit Intrinsic-XYZ transform-order contract.
-8. **M5 shell/thickness** — deferred until a target fixture proves a real gap; optional **M3C grid pattern** also remains deferred.
-9. **M7 finishing/topology** — only under separate native/Rhino topology-stability acceptance.
+7. **M6 rotation parity** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
+8. **M3C rectangular pattern** — active next slice; reuse `instanceSet`, enforce two distinct canonical axes, literal bounded counts, total instance cap 64 and deterministic row-major order.
+9. **M5 shell/thickness** — deferred until a target fixture proves a real gap.
+10. **M7 finishing/topology** — deferred until a topology-stability design justifies the next finishing capability.
 
 ## Regression fixtures to keep
 
@@ -435,6 +488,7 @@ Build a small canonical corpus that runs through both the native evaluator and G
 - union/intersection single-body fixtures plus unsupported-cardinality fail-closed cases;
 - four-hole patterned plate;
 - four-cabinet row using pattern rather than manually placed voids;
+- non-square rectangular grid with unequal axis spacings and deterministic instance order;
 - rectangular room with explicit wall/floor construction, doorway and parameter-driven offsets;
 - expression-heavy fixture where every published parameter is proven to reach authoritative output;
 - asymmetric rotated solid whose bounds and point probes expose Euler/order mismatches.
