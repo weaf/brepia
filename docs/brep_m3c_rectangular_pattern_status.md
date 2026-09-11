@@ -1,6 +1,6 @@
 # M3C — bounded rectangular pattern status
 
-Status: **repository-complete and native-runtime accepted; installed Rhino 8 / Grasshopper acceptance pending**
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
 
 Date: 2026-09-11
 
@@ -8,7 +8,7 @@ Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
 
-## Current accepted checkpoint
+## Accepted checkpoints and evidence
 
 The clean repository-integration checkpoint is:
 
@@ -24,23 +24,27 @@ Quality Gate #1027       PASS
 Grasshopper Build #599  PASS
 ```
 
-Quality Gate #1027 included 966/966 tests plus typecheck, lint, build and diff-check. Grasshopper Build #599 passed the plugin build and both Ubuntu and Windows packaging jobs.
+Quality Gate #1027 included 966/966 tests plus typecheck, lint, build, diff-check and dependency audit. Grasshopper Build #599 passed the plugin build and Ubuntu/Windows packaging jobs.
 
-Repository CI is not native or Rhino runtime evidence.
+The fresh installed-host fixtures were generated from:
 
-Native runtime evidence is recorded separately in:
+```text
+5c2d11c3b9bea97b2d6a6c50d296c9c371c25af0
+Keep M3C Rhino cutter grid inside host fixture
+```
+
+That exact tree separately passed:
+
+```text
+Quality Gate #1034       PASS
+Grasshopper Build #606  PASS
+```
+
+Repository CI is not native or Rhino runtime evidence. The two external acceptance layers are recorded independently in:
 
 ```text
 docs/brep_m3c_native_runtime_evidence_2026-09-11.md
-```
-
-and is accepted against:
-
-```text
-build123d=0.11.1
-cadquery-ocp-novtk=7.9.3.1.1
-OCP=7.9.3.1
-rhino3dm=8.32.1
+docs/brep_m3c_rhino8_runtime_evidence_2026-09-11.md
 ```
 
 ## Implemented canonical contract
@@ -61,7 +65,7 @@ type BrepRectangularPatternNode = {
 };
 ```
 
-The existing `schemaVersion: 1` remains unchanged.
+Canonical `schemaVersion: 1` remains unchanged.
 
 Accepted bounds and semantics:
 
@@ -69,77 +73,65 @@ Accepted bounds and semantics:
 - `axisA` and `axisB` must be different;
 - `countA` and `countB` are literal integers from 2 through 32;
 - `countA * countB <= 64`;
-- `spacingA` and `spacingB` use the existing M1 scalar/expression model;
-- both effective spacings must be finite and non-zero under defaults and runtime overrides;
+- `spacingA` and `spacingB` reuse the M1 scalar/expression model;
+- both effective spacings must be finite and non-zero for defaults and runtime overrides;
 - `(a=0,b=0)` keeps the source location;
 - instance `(a,b)` moves by `a * spacingA` on axis A plus `b * spacingB` on axis B;
-- order is row-major: A outer, B inner;
+- canonical order is row-major: A outer, B inner;
 - flat index is `a * countB + b`;
 - stable body identity is `<patternId>::<index>`;
 - result kind reuses M3B `instanceSet`;
 - only `subtract.tools[]` may consume an `instanceSet`;
-- no nested/general collection algebra or implicit union is introduced.
+- nested/general collection algebra and implicit union remain unsupported.
 
 ## Repository implementation
 
-The implemented repository surface now includes:
+The completed repository surface includes:
 
 - canonical normalization and bounded product validation;
 - axis-inequality enforcement;
 - single-only input/value-kind enforcement;
 - M0 effectiveness/integrity traversal;
 - M1 scalar traversal for both spacings;
-- default and runtime zero-spacing rejection;
+- default/runtime zero-spacing rejection;
 - finite/reference-free provider-facing schema with provider expression depth 2;
-- structural editor creation/editing controls for axis A/B, count A/B and spacing A/B;
-- single-only structural input selector;
-- native build123d / OCCT execution;
-- row-major ordered copies;
-- stable instance/body identity;
+- structural editor controls for axes, counts and spacings;
+- native build123d / OCCT execution with ordered copies and stable instance identity;
 - ordered `subtract.tools[]` expansion;
-- final rectangular pattern as `instanceSet`;
+- multi-body viewer/result handling and exact multi-solid STEP/3DM behavior;
 - Rhino 8 Python/GHX compilation;
 - rectangular final Result as List Access;
 - rectangular pattern used by subtract while the final subtract remains Item Access;
-- returned-GHX validation rejecting Result-access tampering.
+- strict returned-GHX validation rejecting Result-access, script, graph and wiring tampering.
 
-The provider schema remained inside the existing `<180000` byte regression budget without raising that limit. The provider remains finite and reference-free.
+The provider schema remains inside the existing `<180000` byte regression budget without raising that limit.
 
-## Deterministic repository coverage
-
-Current M3C-specific coverage includes:
+M3C-specific deterministic coverage includes:
 
 ```text
 tests/brepM3CRectangularPatternContract.test.ts
 tests/brepM3CNativePattern.test.ts
 tests/brepM3CRhinoPattern.test.ts
+tests/brepM3CRhinoAcceptanceTool.test.ts
 ```
 
-plus extensions to the shared provider-schema and structural-UI suites.
+plus the shared provider-schema and structural-UI suites and:
 
-The tests cover at minimum:
-
-- normalization and count bounds;
-- distinct axes;
-- total instance cap 64;
-- single-only input;
-- rejection of linear/rectangular `instanceSet` inputs;
-- M0 parameter effectiveness;
-- M1 scalar expressions;
-- default/runtime zero-spacing rejection;
-- row-major ordering;
-- stable body identity;
-- ordered subtract tools;
-- finite/reference-free provider schema;
-- Rhino/GHX Result List Access;
-- returned Result List -> Item tampering rejection.
+```text
+scripts/brep/m3c-rectangular-pattern-smoke.sh
+scripts/brep/m3c-rhino-acceptance.ts
+scripts/brep/m3c-rhino-acceptance.sh
+```
 
 ## Native runtime acceptance
 
-The real pinned local runtime completed:
+The real pinned runtime reported:
 
-```bash
-scripts/brep/m3c-rectangular-pattern-smoke.sh
+```text
+build123d=0.11.1
+cadquery-ocp-novtk=7.9.3.1.1
+OCP=7.9.3.1
+rhino3dm=8.32.1
 ```
 
 Accepted observed output:
@@ -149,57 +141,48 @@ Accepted observed output:
 {"result":"cut","resultKind":"single","orderedTools":["singleToolAt","cutters"],"exactStep":true}
 ```
 
-This proves in the real build123d / OCCT authority:
+This separately proves six ordered final bodies, stable flat identities, A-outer/B-inner placement, direct-parameter plus expression-backed spacing, exact STEP, ordered pattern-as-subtract consumption and an exact-one-body final subtract.
 
-- six ordered final bodies;
-- stable `pattern::0..5` identity;
-- A-outer/B-inner row-major placement;
-- direct parameter plus derived-expression spacing paths;
-- exact STEP availability;
-- rectangular instance-set consumption through ordered `subtract.tools[]`;
-- final subtract remaining exactly one `single` body.
+## Installed Rhino 8 / Grasshopper acceptance
 
-## Installed Rhino 8 / Grasshopper acceptance tooling
-
-The branch now contains a dedicated current-source fixture/validation utility:
-
-```text
-scripts/brep/m3c-rhino-acceptance.ts
-```
-
-It generates two fresh GHX definitions from the actual current compiler:
+Two fresh generated definitions were exercised in installed Rhino 8 / Grasshopper:
 
 ```text
 m3c-final-rectangular-pattern.ghx
 m3c-rectangular-pattern-cutters.ghx
 ```
 
-The first exposes the rectangular `instanceSet` through Result List Access. The second uses the rectangular pattern through `subtract.tools[]` and exposes the final Boolean result through Result Item Access.
+Accepted host behavior:
 
-Both use published parameters:
+- both definitions opened and solved successfully;
+- the final rectangular pattern produced six separate Breps through Result List Access, with no implicit union;
+- published spacing changes recomputed the repeated geometry;
+- save -> close -> reopen preserved the changed definition and values;
+- the pattern-as-cutters definition produced one final Brep with six cylindrical through-cuts through Result Item Access;
+- cutter spacing changes recomputed the six-hole arrangement;
+- both Rhino-saved returned GHX definitions passed the strict parameter-only returned validator.
 
-```text
-pitchA       default 20 mm
-pitchBaseB   default 25 mm
-spacingB     = pitchBaseB + 5 mm
-```
+A first validation run observed a persisted non-default `pitchA=36`; the failure at that point came only from an over-specific acceptance-wrapper expectation of `25`. The wrapper was corrected at `fd07d9ea885a6454c2bcef3f08e4bcd786febf47` to accept any bounded non-default perturbation. The strict structural validator was not weakened. Comparing `5c2d11c3...` to `fd07d9e...` shows changes only to the acceptance shell wrapper and its test, not the compiler, fixture generator or M3C semantics.
 
-The utility can also validate a Grasshopper-saved returned GHX against the original deterministic contract and report the returned published parameter values. Any script, graph, wiring, Result access or unsupported structural mutation remains rejected by the existing strict validator.
+## Closeout
 
-## Remaining acceptance boundary
+M3C now has all required acceptance layers:
 
-Only installed Rhino 8 / Grasshopper runtime acceptance remains before M3C closeout.
+- canonical/shared contract;
+- provider/AI authoring contract;
+- structural authoring UI;
+- multi-body viewer;
+- native build123d / OCCT execution;
+- exact STEP/3DM behavior;
+- Rhino 8 / Grasshopper compilation;
+- Result Item/List persistence rules;
+- repository CI;
+- real native runtime;
+- real installed Rhino 8 / Grasshopper runtime;
+- parameter perturbation and save/close/reopen persistence;
+- strict returned-GHX validation.
 
-The host run must prove:
-
-1. both freshly generated GHX files open and solve in installed Rhino 8 / Grasshopper;
-2. final rectangular pattern produces six separate Breps through Result List Access in row-major placement;
-3. changing `pitchA` and `pitchBaseB` recomputes geometry correctly;
-4. save -> close -> reopen preserves the generated definition and changed published values;
-5. the rectangular-pattern-cutters definition produces one final Brep through Result Item Access;
-6. both saved returned GHX files pass strict returned-GHX validation with only the published values changed.
-
-After that run, create/update the installed-host evidence document and mark M3C complete.
+There is no remaining M3C acceptance boundary.
 
 ## Preserved boundaries
 
@@ -219,7 +202,7 @@ M3C does not change:
 - M4 profile/extrusion semantics;
 - M6 Intrinsic XYZ `R = Rx * Ry * Rz`, `p' = R*p + T`;
 - GHX parameter-only return/import semantics;
-- Result Item/List access semantics;
+- Result Item/List semantics;
 - OpenSCAD regressions;
 - C4 image projection deferral;
 - M5 shell/thickness deferral;
