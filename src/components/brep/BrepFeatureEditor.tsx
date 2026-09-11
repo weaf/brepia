@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dialog';
 import {
   BREP_PROJECT_MAX_NODE_INPUTS,
+  BREP_PROJECT_MAX_PATTERN_COUNT,
+  brepNodeValueKind,
   type BrepNode,
   type BrepParameterUnit,
   type BrepProject,
@@ -48,6 +50,7 @@ const NODE_TYPES: BrepNode['type'][] = [
   'cylinder',
   'transform',
   'mirror',
+  'linearPattern',
   'subtract',
   'union',
   'intersect',
@@ -81,21 +84,51 @@ function nodeTypeLabel(type: BrepNode['type']): string {
   }
 }
 
+function isAllowedReferenceNode(
+  node: BrepNode,
+  nodeId: string | undefined,
+  valueKind: 'any' | 'single',
+): boolean {
+  return (
+    node.id !== nodeId &&
+    (valueKind === 'any' || brepNodeValueKind(node) === 'single')
+  );
+}
+
 function preferredInputNodeId(
   project: BrepProject,
   selectedNodeId: string | null,
+  valueKind: 'any' | 'single' = 'single',
 ): string {
   if (
     selectedNodeId &&
-    project.nodes.some((node) => node.id === selectedNodeId)
+    project.nodes.some(
+      (node) =>
+        node.id === selectedNodeId &&
+        isAllowedReferenceNode(node, undefined, valueKind),
+    )
   ) {
     return selectedNodeId;
   }
-  if (project.nodes.some((node) => node.id === project.resultNodeId)) {
+  if (
+    project.nodes.some(
+      (node) =>
+        node.id === project.resultNodeId &&
+        isAllowedReferenceNode(node, undefined, valueKind),
+    )
+  ) {
     return project.resultNodeId;
   }
-  const first = project.nodes[0]?.id;
-  if (!first) throw new Error('A BRep project must contain an existing feature.');
+  const first = project.nodes.find((node) =>
+    isAllowedReferenceNode(node, undefined, valueKind),
+  )?.id;
+  if (!first) {
+    throw new Error(
+      valueKind === 'single'
+        ? 'This BRep feature requires an existing single-shape input.'
+        : 'A BRep project must contain an existing feature.',
+    );
+  }
   return first;
 }
 
@@ -105,19 +138,25 @@ function createNodeDraft(
   id: string,
   selectedNodeId: string | null,
 ): BrepNode {
-  const input = preferredInputNodeId(project, selectedNodeId);
   switch (type) {
     case 'box':
       return { id, type, width: 100, depth: 100, height: 100 };
     case 'cylinder':
       return { id, type, radius: 25, height: 100 };
-    case 'transform':
+    case 'transform': {
+      const input = preferredInputNodeId(project, selectedNodeId);
       return { id, type, input, translate: [0, 0, 0] };
-    case 'mirror':
+    }
+    case 'mirror': {
+      const input = preferredInputNodeId(project, selectedNodeId);
       return { id, type, input, normalAxis: 'x', offset: 0 };
-    case 'linearPattern':
+    }
+    case 'linearPattern': {
+      const input = preferredInputNodeId(project, selectedNodeId);
       return { id, type, input, axis: 'x', count: 2, spacing: 20 };
-    case 'fillet':
+    }
+    case 'fillet': {
+      const input = preferredInputNodeId(project, selectedNodeId);
       return {
         id,
         type,
@@ -125,21 +164,26 @@ function createNodeDraft(
         radius: 5,
         selector: { kind: 'parallelToAxis', axis: 'z' },
       };
+    }
     case 'subtract': {
-      const tool = project.nodes.find((node) => node.id !== input)?.id;
+      const base = preferredInputNodeId(project, selectedNodeId);
+      const tool = project.nodes.find((node) => node.id !== base)?.id;
       if (!tool) {
         throw new Error(
           'Subtract creation requires at least two existing BRep features.',
         );
       }
-      return { id, type, base: input, tools: [tool] };
+      return { id, type, base, tools: [tool] };
     }
     case 'union':
     case 'intersect': {
-      const secondInput = project.nodes.find((node) => node.id !== input)?.id;
+      const input = preferredInputNodeId(project, selectedNodeId);
+      const secondInput = project.nodes.find(
+        (node) => node.id !== input && brepNodeValueKind(node) === 'single',
+      )?.id;
       if (!secondInput) {
         throw new Error(
-          `${nodeTypeLabel(type)} creation requires at least two existing BRep features.`,
+          `${nodeTypeLabel(type)} creation requires at least two existing single-shape BRep features.`,
         );
       }
       return { id, type, inputs: [input, secondInput] };
@@ -280,6 +324,7 @@ function NodeReferenceField({
   project,
   nodeId,
   disabled,
+  valueKind = 'any',
   onChange,
 }: {
   label: string;
@@ -287,8 +332,12 @@ function NodeReferenceField({
   project: BrepProject;
   nodeId: string;
   disabled: boolean;
+  valueKind?: 'any' | 'single';
   onChange: (value: string) => void;
 }) {
+  const availableNodes = project.nodes.filter((node) =>
+    isAllowedReferenceNode(node, nodeId, valueKind),
+  );
   return (
     <label className="grid gap-1.5 text-xs text-adam-neutral-300">
       <span>{label}</span>
@@ -298,13 +347,11 @@ function NodeReferenceField({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
-        {project.nodes
-          .filter((node) => node.id !== nodeId)
-          .map((node) => (
-            <option key={node.id} value={node.id}>
-              {node.id} · {node.type}
-            </option>
-          ))}
+        {availableNodes.map((node) => (
+          <option key={node.id} value={node.id}>
+            {node.id} · {node.type}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -325,7 +372,9 @@ function OrderedNodeReferencesField({
   disabled: boolean;
   onChange: (values: string[]) => void;
 }) {
-  const availableNodes = project.nodes.filter((node) => node.id !== nodeId);
+  const availableNodes = project.nodes.filter((node) =>
+    isAllowedReferenceNode(node, nodeId, 'single'),
+  );
   const addCandidate = availableNodes.find((node) => !values.includes(node.id));
   const canAdd =
     !disabled &&
@@ -418,7 +467,11 @@ function OrderedNodeReferencesField({
                 aria-label={`Remove Boolean input ${index + 1}`}
                 disabled={disabled || values.length <= 2}
                 className="h-9 px-2 text-[10px]"
-                onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}
+                onClick={() =>
+                  onChange(
+                    values.filter((_, itemIndex) => itemIndex !== index),
+                  )
+                }
               >
                 Remove
               </Button>
@@ -427,8 +480,8 @@ function OrderedNodeReferencesField({
         ))}
       </div>
       <p className="text-[10px] leading-4 text-adam-neutral-500">
-        Inputs are ordered and unique. Boolean evaluation must resolve to exactly
-        one solid body.
+        Inputs are ordered, unique and single-shape. Boolean evaluation must
+        resolve to exactly one solid body.
       </p>
     </div>
   );
@@ -507,6 +560,7 @@ function NodeEditorFields({
             project={project}
             nodeId={node.id}
             disabled={disabled}
+            valueKind="single"
             onChange={(input) => onChange({ ...node, input })}
           />
 
@@ -575,6 +629,7 @@ function NodeEditorFields({
             project={project}
             nodeId={node.id}
             disabled={disabled}
+            valueKind="single"
             onChange={(input) => onChange({ ...node, input })}
           />
           <label className="grid gap-1.5 text-xs text-adam-neutral-300">
@@ -610,6 +665,68 @@ function NodeEditorFields({
         </div>
       );
 
+    case 'linearPattern':
+      return (
+        <div className="grid gap-4">
+          <NodeReferenceField
+            label="Input node"
+            value={node.input}
+            project={project}
+            nodeId={node.id}
+            disabled={disabled}
+            valueKind="single"
+            onChange={(input) => onChange({ ...node, input })}
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Pattern axis</span>
+            <select
+              className={fieldClass}
+              value={node.axis}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  axis: event.target.value as 'x' | 'y' | 'z',
+                })
+              }
+            >
+              <option value="x">X axis</option>
+              <option value="y">Y axis</option>
+              <option value="z">Z axis</option>
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Instance count</span>
+            <input
+              className={fieldClass}
+              type="number"
+              min={2}
+              max={BREP_PROJECT_MAX_PATTERN_COUNT}
+              step={1}
+              value={node.count}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({ ...node, count: Number(event.target.value) })
+              }
+            />
+          </label>
+          <ScalarField
+            label="Center-to-center spacing"
+            value={node.spacing}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(spacing) => onChange({ ...node, spacing })}
+          />
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Instance 0 keeps the input location. Later instances move by index ×
+            spacing along the selected axis. Spacing must resolve to a non-zero
+            value. The pattern remains separate ordered bodies unless used as a
+            subtract tool.
+          </p>
+        </div>
+      );
+
     case 'subtract':
       return (
         <div className="grid gap-5">
@@ -619,6 +736,7 @@ function NodeEditorFields({
             project={project}
             nodeId={node.id}
             disabled={disabled}
+            valueKind="single"
             onChange={(base) => onChange({ ...node, base })}
           />
           <div className="grid gap-2">
@@ -647,11 +765,19 @@ function NodeEditorFields({
                       <span className="font-mono">{candidate.id}</span>
                       <span className="text-adam-neutral-500">
                         {candidate.type}
+                        {brepNodeValueKind(candidate) === 'instanceSet'
+                          ? ' · instance set'
+                          : ''}
                       </span>
                     </label>
                   );
                 })}
             </div>
+            <p className="text-[10px] leading-4 text-adam-neutral-500">
+              The base must be a single shape. Tool entries may be single shapes
+              or a linear-pattern instance set; pattern instances are applied in
+              canonical index order.
+            </p>
           </div>
         </div>
       );
@@ -678,6 +804,7 @@ function NodeEditorFields({
             project={project}
             nodeId={node.id}
             disabled={disabled}
+            valueKind="single"
             onChange={(input) => onChange({ ...node, input })}
           />
           <ScalarField
@@ -740,6 +867,9 @@ export function BrepFeatureEditor({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     project.resultNodeId || project.nodes[0]?.id || null,
   );
+  const singleNodeCount = project.nodes.filter(
+    (node) => brepNodeValueKind(node) === 'single',
+  ).length;
 
   useEffect(() => {
     if (
@@ -810,7 +940,9 @@ export function BrepFeatureEditor({
       setCreateDialogOpen(true);
     } catch (reason) {
       setStructuralError(
-        reason instanceof Error ? reason.message : 'Could not create a feature draft.',
+        reason instanceof Error
+          ? reason.message
+          : 'Could not create a feature draft.',
       );
     }
   };
@@ -824,7 +956,9 @@ export function BrepFeatureEditor({
       setCreateError(null);
     } catch (reason) {
       setCreateError(
-        reason instanceof Error ? reason.message : 'Could not change feature type.',
+        reason instanceof Error
+          ? reason.message
+          : 'Could not change feature type.',
       );
     }
   };
@@ -984,6 +1118,11 @@ export function BrepFeatureEditor({
                       <span className="shrink-0 rounded-full border border-adam-neutral-700 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-adam-neutral-400">
                         {node.type}
                       </span>
+                      {brepNodeValueKind(node) === 'instanceSet' ? (
+                        <span className="shrink-0 rounded-full border border-adam-neutral-700 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-adam-neutral-400">
+                          Instance set
+                        </span>
+                      ) : null}
                       {isResult ? (
                         <span className="shrink-0 rounded-full border border-adam-blue-dark/60 bg-adam-blue-dark/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-adam-blue-light">
                           Result
@@ -1072,9 +1211,10 @@ export function BrepFeatureEditor({
                           key={type}
                           value={type}
                           disabled={
+                            (type === 'linearPattern' && singleNodeCount < 1) ||
                             (type === 'subtract' && project.nodes.length < 2) ||
                             ((type === 'union' || type === 'intersect') &&
-                              project.nodes.length < 2)
+                              singleNodeCount < 2)
                           }
                         >
                           {nodeTypeLabel(type)}
@@ -1175,7 +1315,11 @@ export function BrepFeatureEditor({
                 >
                   Cancel
                 </Button>
-                <Button type="button" disabled={saving} onClick={() => void save()}>
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void save()}
+                >
                   {saving ? 'Saving feature revision…' : 'Save feature revision'}
                 </Button>
               </div>
