@@ -271,6 +271,28 @@ function filletAxisExpression(axis: 'x' | 'y' | 'z'): string {
   return 'rg.Vector3d(0, 0, 1)';
 }
 
+function mirrorPlaneExpressions(
+  axis: 'x' | 'y' | 'z',
+  offset: string,
+): { origin: string; normal: string } {
+  if (axis === 'x') {
+    return {
+      origin: `rg.Point3d(float(${offset}), 0, 0)`,
+      normal: 'rg.Vector3d(1, 0, 0)',
+    };
+  }
+  if (axis === 'y') {
+    return {
+      origin: `rg.Point3d(0, float(${offset}), 0)`,
+      normal: 'rg.Vector3d(0, 1, 0)',
+    };
+  }
+  return {
+    origin: `rg.Point3d(0, 0, float(${offset}))`,
+    normal: 'rg.Vector3d(0, 0, 1)',
+  };
+}
+
 function assertSupportedRhinoContract(contract: BrepGrasshopperContract): void {
   if (contract.source.nodes.length === 0) {
     throw new BrepGrasshopperRhinoScriptError(
@@ -390,6 +412,22 @@ function buildGraphSource(
       lines.push(`if not ${variable}.Transform(rg.Transform.Translation(${translate})):`);
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino could not translate Brepia node ${node.id}.`)})`,
+      );
+    } else if (node.type === 'mirror') {
+      const input = emitNode(node.input);
+      const offset = scalarExpression(node.offset, variables);
+      const plane = mirrorPlaneExpressions(node.normalAxis, offset);
+      lines.push(`${variable} = ${input}.DuplicateBrep()`);
+      lines.push(`${variable}MirrorPlane = rg.Plane(${plane.origin}, ${plane.normal})`);
+      lines.push(`if not ${variable}MirrorPlane.IsValid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct mirror plane for Brepia node ${node.id}.`)})`,
+      );
+      lines.push(
+        `if not ${variable}.Transform(rg.Transform.Mirror(${variable}MirrorPlane)):`
+      );
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not mirror Brepia node ${node.id}.`)})`,
       );
     } else if (node.type === 'subtract') {
       const base = emitNode(node.base);
