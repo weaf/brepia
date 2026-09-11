@@ -48,7 +48,20 @@ JSON
   grep -q 'unsupported_result_cardinality' "$error_path"
 }
 
+run_mirror_success() {
+  local request_path="$WORKSPACE/mirror.json"
+  local output_path="$WORKSPACE/mirror-output"
+  cat > "$request_path" <<'JSON'
+{"project":{"schemaVersion":1,"id":"mirrorSmoke","name":"Mirror smoke","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[{"id":"planeOffset","label":"Plane offset","type":"number","unit":"mm","default":0,"min":-20,"max":20}],"nodes":[{"id":"body","type":"box","width":20,"depth":10,"height":10},{"id":"moved","type":"transform","input":"body","translate":[30,0,0]},{"id":"mirrored","type":"mirror","input":"moved","normalAxis":"x","offset":{"parameter":"planeOffset"}}],"resultNodeId":"mirrored"},"parameterValues":{"planeOffset":5}}
+JSON
+  "$RUNNER" --input "$request_path" --output "$output_path"
+  grep -q 'ISO-10303-21' "$output_path/model.step"
+  grep -a -q '^3D Geometry File Format ' "$output_path/model.3dm"
+  node -e "const r=require('$output_path/result.json'); const b=r.bodies?.[0]; const near=(a,b)=>Math.abs(a-b)<1e-6; if(r.status!=='success'||r.resultNodeId!=='mirrored'||r.bodies?.length!==1||!b?.viewerMesh?.indices?.length||!near(b.bounds.min[0],-30)||!near(b.bounds.max[0],-10)||!near(b.bounds.min[1],-5)||!near(b.bounds.max[1],5)) process.exit(1); console.log(JSON.stringify({mirror:'x',offset:5,result:r.resultNodeId,bounds:b.bounds,triangles:b.viewerMesh.indices.length/3}));"
+}
+
 run_boolean_success union
 run_boolean_success intersect
 run_boolean_fail_closed union
 run_boolean_fail_closed intersect
+run_mirror_success
