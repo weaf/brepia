@@ -1,6 +1,6 @@
 # M3 — repetition and symmetry plan
 
-Status: **M3A mirror repository/CI and native build123d/OCCT runtime accepted; installed Rhino 8 / Grasshopper acceptance active; M3B blocked**
+Status: **complete — M3A mirror and M3B bounded linear pattern accepted across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime**
 
 Date: 2026-09-11
 
@@ -8,49 +8,27 @@ Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
 
-M2 is fully closed before this plan begins. Its repository, native build123d/OCCT and installed Rhino 8 / Grasshopper evidence is recorded in the M2 status/evidence documents.
+M2 was fully closed before M3 began. M3 is now also closed.
 
-Detailed current M3A status:
+Detailed accepted evidence:
 
 - `docs/brep_m3a_mirror_status.md`;
-- `docs/brep_m3a_native_runtime_evidence_2026-09-11.md`.
+- `docs/brep_m3a_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3a_rhino8_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3b_linear_pattern_status.md`;
+- `docs/brep_m3b_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md`.
 
-## Goal
+## Goal and result
 
-M3 should eliminate repeated literal transforms while preserving Brepia's bounded, kernel-neutral and fail-closed canonical model.
+M3 eliminated two major gaps in the bounded Native BRep vocabulary without weakening existing Boolean or collection semantics:
 
-Target use cases include:
+- symmetry through a single-body canonical mirror operation;
+- one-dimensional repetition through an explicit ordered instance-set model.
 
-- mirrored mechanical features;
-- repeated holes/cutters;
-- repeated independent objects such as a row of cabinets;
-- later rectangular repetition once the one-dimensional contract is proven.
+The implementation remains kernel-neutral and additive to canonical `schemaVersion: 1`.
 
-M3 must not silently weaken M2's exact-one-body Boolean semantics and must not unlock non-zero canonical rotation.
-
-## Reconciled current architecture
-
-The current canonical DAG is shape-oriented:
-
-- primitives create one shape;
-- `transform`, `mirror` and `fillet` consume one input shape;
-- `subtract` consumes one base plus one or more tool-node references;
-- `union` / `intersect` consume ordered node references and require exactly one final Boolean body;
-- `resultNodeId` points to one canonical node;
-- project-object geometry roles point to canonical nodes;
-- M0 reachability follows ordinary node dependencies.
-
-The native evaluator currently memoizes one build123d shape per node. The external evaluation contract already has a bounded `bodies` array, but current native evaluation emits one primary evaluated body for `resultNodeId` and current server validation requires `bodies[0].id === resultNodeId`.
-
-The active Rhino Python GHX compiler similarly treats each graph variable as one `Rhino.Geometry.Brep`; project placement currently duplicates and transforms one result Brep.
-
-Therefore a true repeated multi-instance result is not merely another single-valued node. Treating it as a Boolean union would be wrong for separated instances and would directly contradict M2's fail-closed result-cardinality policy.
-
-## M3A — mirror first
-
-Status: **repository-complete, CI-accepted and native build123d/OCCT runtime-accepted; installed Rhino 8 / Grasshopper acceptance pending**.
-
-Mirror is the bounded first step because it remains single-valued and does not require collection semantics.
+## M3A — mirror
 
 Canonical node:
 
@@ -64,24 +42,17 @@ type BrepMirrorNode = {
 };
 ```
 
-Semantics:
+Accepted semantics:
 
-- `normalAxis: 'x'` means a YZ mirror plane;
-- `normalAxis: 'y'` means an XZ mirror plane;
-- `normalAxis: 'z'` means an XY mirror plane;
-- `offset` is the mirror-plane position in millimetres along that normal axis;
-- mirror returns only the mirrored input, not `original + mirrored`;
-- `offset` may use the existing bounded M1 scalar-expression contract;
-- input remains an ordinary single-shape node reference;
-- schema version remains `1`.
+- `x` -> YZ mirror plane;
+- `y` -> XZ mirror plane;
+- `z` -> XY mirror plane;
+- `offset` is the plane position in mm along the selected normal;
+- output contains only the mirrored body, not original + mirrored;
+- input remains single-body;
+- M1 scalar expressions may drive offset.
 
-This axis+offset plane is intentionally narrower than an arbitrary plane/normal authoring surface. It is deterministic, easy to express in the structural editor and avoids introducing another free vector-frame contract during M3.
-
-### Backend mapping
-
-Native build123d 0.11.1 exposes `Shape.mirror(mirror_plane)` and mirrors the shape without duplicating the original. That matches the canonical node semantics.
-
-The native axis mapping is orientation-aware:
+Native build123d uses orientation-aware plane mapping:
 
 ```text
 x -> Plane.YZ
@@ -89,66 +60,15 @@ y -> Plane.ZX
 z -> Plane.XY
 ```
 
-`Plane.ZX` is deliberately used for the canonical Y-normal plane because build123d's `Plane.XZ` has a `-Y` normal. This keeps positive canonical offset mapped to `Y = +offset` and matches the Rhino compiler.
+`Plane.ZX` is intentional because build123d's `Plane.XZ` uses a `-Y` normal; this preserves canonical positive Y-offset parity with Rhino.
 
-RhinoCommon exposes `Rhino.Geometry.Transform.Mirror(Plane)` in the Rhino 8 API compatibility floor. The GHX compiler:
+Rhino 8 uses `Transform.Mirror(Plane)` on a duplicated Brep.
 
-1. duplicates the input Brep;
-2. constructs the canonical axis-normal mirror plane at `offset`;
-3. applies `Transform.Mirror(...)`;
-4. fails closed if plane construction or transformation fails.
+Accepted runtime evidence includes parameter-driven Y-axis mirror motion and save/close/reopen persistence in installed Grasshopper.
 
-The Rhino mapping is reconciled under `docs/references/rhino8_mcneel_sources.md`; installed Rhino 8 evidence remains required before M3A closeout.
+## M3B — explicit instance set + bounded linear pattern
 
-### M3A repository acceptance
-
-Completed:
-
-- canonical normalization/reference/DAG coverage;
-- M0 reachability and M1 scalar-reference coverage;
-- finite/reference-free provider schema exposure;
-- structural feature-editor support;
-- native build123d mirror fixture with X/Y/Z oriented expected bounds;
-- Rhino Python source-generation fixture;
-- Native BRep agent instruction coverage;
-- repository tests/typecheck/lint/build/diff check green;
-- Grasshopper Build green.
-
-Exact repository checkpoint:
-
-```text
-789188167bc48ad91a579b5aa4bb720ba8cfa8c0
-Quality Gate #897       PASS
-Grasshopper Build #469 PASS
-```
-
-### M3A native runtime acceptance
-
-Completed via the real local constrained runtime:
-
-```bash
-./scripts/brep/smoke-test.sh
-```
-
-The X/Y/Z mirror fixtures reproduced their exact non-zero-offset expected bounds and retained one result body, exact STEP and 3DM output. Detailed evidence is recorded in:
-
-```text
-docs/brep_m3a_native_runtime_evidence_2026-09-11.md
-```
-
-Still required before M3A closeout:
-
-- installed Rhino 8 / Grasshopper open/solve/parameter-change/save/reopen acceptance for a fresh current-branch mirror GHX.
-
-## M3B — explicit instance-set foundation + linear pattern
-
-Status: **blocked until M3A installed-host acceptance and explicit closeout**.
-
-Do not implement linear pattern as an implicit Boolean union or as an opaque single Brep/solid.
-
-A linear pattern of separated solids is semantically an ordered set of instances. M3B must introduce that distinction explicitly before exposing the node to AI or users.
-
-Proposed first canonical node shape:
+Canonical node:
 
 ```ts
 type BrepLinearPatternNode = {
@@ -161,120 +81,166 @@ type BrepLinearPatternNode = {
 };
 ```
 
-Initial bounds:
+Accepted bounds:
 
-- `count` is a literal integer only in the first version;
-- `2 <= count <= 32`;
-- `spacing` uses the existing `mm` scalar-expression contract;
-- spacing must resolve to a finite non-zero value;
-- instance 0 is the original location;
+- input must be an existing `single` node;
+- `count` is literal integer 2–32;
+- `spacing` uses the M1 millimetre scalar contract;
+- resolved spacing must be finite and non-zero at defaults and runtime overrides;
+- instance 0 is the unshifted source;
 - instance `i` is translated by `i * spacing` along the selected axis;
-- order is deterministic and canonical.
+- ordering is deterministic and canonical.
 
-A parameter-driven integer `count` is deliberately deferred until Brepia has an integer-safe published-parameter contract. Do not overload the current unconstrained numeric parameter type and round/truncate silently.
-
-## Required value-kind distinction for M3B
-
-Before linear pattern is accepted, shared validation/evaluation must distinguish at least:
+M3B introduced the explicit value-kind distinction:
 
 ```text
-single shape
-instance set
+single
+instanceSet
 ```
 
-Existing nodes remain single-shape unless explicitly expanded later.
+This distinction is part of the shared canonical/evaluation contract rather than a backend-specific Compound shortcut.
 
-First bounded consumer policy proposed for M3B:
+## Collection consumer policy
 
-- `linearPattern.input` must be single-shape;
-- `resultNodeId` may reference an instance set so independent repeated objects can be authoritative output;
-- `subtract.tools` may reference an instance set and deterministically expand its members as cutters;
-- `transform`, `fillet`, `mirror`, `subtract.base`, `union`, `intersect` and project-object geometry roles remain single-shape-only in the first collection version;
-- unsupported collection-to-single consumers fail canonical validation rather than relying on backend accidents.
+The first collection boundary remains intentionally narrow.
 
-This gives immediate support for repeated holes and repeated independent objects without silently broadening every operation to list semantics.
+Single-only consumers:
 
-Later M3 work may deliberately add collection-aware transforms or Boolean flattening after native/Rhino semantics are separately specified and tested.
+- `transform.input`;
+- `mirror.input`;
+- `fillet.input`;
+- `linearPattern.input`;
+- `union.inputs[]`;
+- `intersect.inputs[]`;
+- `subtract.base`;
+- project-object geometry roles.
 
-## Evaluated-body identity requirement
+Supported collection consumer:
 
-The current evaluation contract allows multiple bodies but documents body IDs as feature IDs and requires the first body ID to equal `resultNodeId`.
+- `subtract.tools[]` may consume an `instanceSet` and expands its members as ordered cutters.
 
-M3B must define stable evaluated instance identity rather than inventing ad-hoc IDs in the native driver.
+A `linearPattern` may itself be `resultNodeId`, producing an authoritative ordered multi-body result.
 
-The contract analysis must decide and test:
+Nested patterns and general collection algebra remain fail-closed.
 
-- how instance index is represented;
-- how `sourceNodeId` / pattern identity is retained;
-- how body IDs remain stable across parameter-only changes;
-- how the browser viewer keys/selects multiple result bodies;
-- how aggregate project bounds are computed;
-- how exact STEP and 3DM represent the repeated result;
-- how project-object role restrictions remain unambiguous.
+## Evaluation and export contract
 
-Do not implement a Compound-only shortcut that hides those semantics from the shared evaluation contract.
+Evaluation now exposes:
 
-## Native M3B direction
+```text
+resultKind = single | instanceSet
+```
 
-build123d can represent multiple shapes explicitly and can group assemblies in a `Compound`. It also supports relative copied placement through `moved(Location(...))`.
+Final pattern bodies use stable identities:
 
-The native evaluator should maintain explicit instance membership internally and only use a Compound where needed for aggregate tessellation/export. Repeated instances must remain distinguishable at the shared provider/result boundary.
+```text
+<patternNodeId>::0
+<patternNodeId>::1
+...
+```
 
-For patterned subtract tools, expand ordered instances into ordinary Boolean tool operations; do not fuse the cutters first merely to make them fit the old single-shape node assumption.
+Each result body retains pattern node ID, instance index, source node ID, independent bounds and viewer mesh. Top-level bounds are aggregate bounds over the set.
 
-## Rhino / Grasshopper M3B direction
+Native exact STEP may use a build123d `Compound` as an export container only; this does not collapse canonical instance identity or imply Boolean union.
 
-The current GHX result path assumes one Brep and `brepia_place_brep(...)` handles one Brep. M3B must add an explicit list-aware placement/output path for instance-set results.
+3DM retains separate result instances with Brepia node/instance metadata.
 
-Linear repetition itself can be compiled from already accepted Rhino translation semantics by duplicating the source Brep and applying deterministic translation transforms for each instance. The new risk is collection/result semantics, not the translation API.
+## Rhino / Grasshopper contract
 
-For patterned subtract tools, the compiler can iterate over each generated Brep tool in canonical order.
+The Rhino Python 3 compiler emits a final pattern as an ordered Python list of separate `Rhino.Geometry.Brep` values.
 
-Installed Rhino 8 / Grasshopper acceptance must verify that an instance-set result:
+Grasshopper output persistence is explicit:
 
-- appears as all expected repeated Breps;
-- responds to spacing changes;
-- survives save/close/reopen;
-- does not get collapsed into a Boolean union;
-- preserves deterministic ordering/identity where observable through the Brepia return boundary.
+```text
+single Result       -> Item Access
+instanceSet Result  -> List Access
+```
 
-## M3C candidates after M3B
+Only the `Result` port changes access based on result kind. Other historically accepted output persistence is unchanged.
 
-Only after the instance-set contract is accepted:
+Returned GHX remains parameter-only. The validator fails closed if the Result access contract is changed.
+
+Pattern-as-subtract-tool iterates individual Brep cutters in canonical order and returns the ordinary single Boolean result.
+
+Installed Rhino 8 / Grasshopper acceptance verified both a final list-result pattern and a pattern-driven subtract model, including save/close/reopen persistence.
+
+## Repository and runtime acceptance
+
+M3A repository checkpoint:
+
+```text
+789188167bc48ad91a579b5aa4bb720ba8cfa8c0
+Quality Gate #897       PASS
+Grasshopper Build #469  PASS
+```
+
+M3B primary repository checkpoint:
+
+```text
+94e1b0fca3b1d01b016faeee52bb9cdeb564f4b4
+Quality Gate #937       PASS
+Grasshopper Build #509  PASS
+```
+
+Later M3B docs/runtime-preparation checkpoint:
+
+```text
+a6f030f5752a3c1eb2fb53d9d188d132ec8ff302
+Quality Gate #939       PASS
+Grasshopper Build #511  PASS
+```
+
+Native runtime then passed the expanded smoke corpus, including:
+
+- M2 union/intersection regressions;
+- M3A mirror X/Y/Z parity;
+- three-body final linear pattern with stable identities and aggregate bounds;
+- exact multi-solid STEP;
+- four pattern instances used as ordered subtract cutters;
+- final subtract remaining exactly one `single` body.
+
+Installed Rhino 8 / Grasshopper subsequently accepted both fresh M3B GHX fixtures and save/close/reopen persistence.
+
+## M3C candidates — deferred, not implied next scope
+
+M3C is optional future work rather than an automatic continuation of M3B.
+
+Potential candidates:
 
 - integer-safe published `count` parameters;
-- rectangular/grid pattern built from the same explicit instance-set semantics;
-- collection-aware transform/mirror if product need justifies it;
-- deliberate collection flattening into union where exact-one-body Boolean semantics can still be proven.
+- rectangular/grid pattern built on the accepted `instanceSet` foundation;
+- collection-aware transform/mirror;
+- explicitly specified collection flattening where M2 exact-one-body semantics can still be proven.
 
-These are not part of M3A.
+None of these should be added merely because the instance-set substrate now exists.
+
+The next roadmap decision should compare product value of rectangular/grid pattern against M4 profile + extrusion. The preferred default is to move to M4 unless a concrete near-term model requires 2D repetition strongly enough to justify M3C first.
 
 ## Permanent boundaries
 
-M3 must preserve:
+M3 closeout preserves:
 
 - `conversation.type = 'parametric'`;
 - `parametricSourceKind = 'brep'`;
 - canonical `BrepProject` + immutable revision authority;
 - build123d/OCCT native geometry authority;
-- schemaVersion `1` unless an explicit migration becomes unavoidable;
-- canonical scalar depth `12` and expression-node limit `64`;
-- provider expression depth `2` and finite/reference-free provider schema;
+- canonical `schemaVersion: 1`;
+- canonical scalar depth 12 and expression-node limit 64;
+- provider expression depth 2 and finite/reference-free provider schema;
 - M0 parameter-effectiveness/orphan analysis;
 - M2 exact-one-body Boolean result policy;
 - Settings/discovery model authority;
 - GHX parameter-only return/import boundary;
 - non-zero rotation fail-closed behavior;
 - OpenSCAD regressions;
+- C4 deferred until image-bearing evidence exists;
 - PR #36 remaining draft, stacked and unmerged.
 
-## Execution order
+## Next entry point
 
-1. Close M2 — complete.
-2. M3A mirror canonical contract and repository implementation — complete / CI accepted.
-3. M3A native runtime acceptance — complete.
-4. M3A installed Rhino 8 acceptance and explicit closeout — active.
-5. M3B instance-set contract analysis before implementation — blocked.
-6. M3B linear pattern repository implementation.
-7. M3B native + installed Rhino 8 acceptance.
-8. Re-evaluate integer count and rectangular pattern as M3C rather than expanding scope implicitly.
+Start the next modeling chat with analysis/reconciliation only. Read this closeout plus the high-level modeling roadmap and decide explicitly between:
+
+1. optional M3C rectangular/grid pattern; or
+2. M4 bounded profile + extrusion foundation.
+
+Do not begin implementation until that scope decision has been reconciled against the actual current branch.
