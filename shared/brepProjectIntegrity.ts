@@ -47,6 +47,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'transform':
     case 'mirror':
     case 'linearPattern':
+    case 'rectangularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
