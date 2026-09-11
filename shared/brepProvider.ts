@@ -3,6 +3,7 @@ import {
   BrepProjectError,
   normalizeBrepProject,
   validateBrepLinearPatternSpacingValues,
+  type BrepNodeValueKind,
   type BrepProject,
   type BrepProjectMetadata,
   type BrepProjectObjectPointKind,
@@ -63,7 +64,7 @@ export type BrepBounds = {
 };
 
 export type BrepViewerMesh = {
-  /** Stable body/object identity, derived from Brepia feature IDs rather than OCCT indexes. */
+  /** Stable evaluated-body identity, never a transient kernel topology index. */
   bodyId: string;
   positions: number[];
   normals: number[];
@@ -72,8 +73,15 @@ export type BrepViewerMesh = {
 };
 
 export type BrepEvaluatedBody = {
-  /** Brepia feature ID that produced this body. */
+  /** Stable evaluated-body identity. Single bodies keep id === nodeId. */
   id: string;
+  /** Canonical node whose value owns this evaluated body. */
+  nodeId: string;
+  /** Present only for a deterministic member of an instance-set result. */
+  instance?: {
+    index: number;
+    sourceNodeId: string;
+  };
   bounds: BrepBounds;
   viewerMesh?: BrepViewerMesh;
 };
@@ -111,7 +119,9 @@ export type BrepEvaluationSuccess = {
   provider: BrepProviderMetadata;
   projectId: string;
   resultNodeId: string;
+  resultKind: BrepNodeValueKind;
   bodies: BrepEvaluatedBody[];
+  /** Aggregate bounds across every primary result body. */
   bounds: BrepBounds;
   projectObject: BrepEvaluatedProjectObject;
   warnings: string[];
