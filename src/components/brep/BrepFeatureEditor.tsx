@@ -23,6 +23,7 @@ import {
   BREP_PROJECT_MAX_NODE_INPUTS,
   BREP_PROJECT_MAX_PATTERN_COUNT,
   BREP_PROJECT_MAX_PROFILE_POINTS,
+  BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES,
   brepNodeValueKind,
   type BrepNode,
   type BrepParameterUnit,
@@ -54,6 +55,7 @@ const NODE_TYPES: BrepNode['type'][] = [
   'transform',
   'mirror',
   'linearPattern',
+  'rectangularPattern',
   'subtract',
   'union',
   'intersect',
@@ -78,6 +80,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Mirror';
     case 'linearPattern':
       return 'Linear pattern';
+    case 'rectangularPattern':
+      return 'Rectangular pattern';
     case 'subtract':
       return 'Subtract';
     case 'union':
@@ -186,6 +190,20 @@ function createNodeDraft(
     case 'linearPattern': {
       const input = preferredInputNodeId(project, selectedNodeId);
       return { id, type, input, axis: 'x', count: 2, spacing: 20 };
+    }
+    case 'rectangularPattern': {
+      const input = preferredInputNodeId(project, selectedNodeId);
+      return {
+        id,
+        type,
+        input,
+        axisA: 'x',
+        axisB: 'y',
+        countA: 2,
+        countB: 2,
+        spacingA: 20,
+        spacingB: 20,
+      };
     }
     case 'fillet': {
       const input = preferredInputNodeId(project, selectedNodeId);
@@ -965,6 +983,114 @@ function NodeEditorFields({
         </div>
       );
 
+    case 'rectangularPattern':
+      return (
+        <div className="grid gap-4">
+          <NodeReferenceField
+            label="Input node"
+            value={node.input}
+            project={project}
+            nodeId={node.id}
+            disabled={disabled}
+            valueKind="single"
+            onChange={(input) => onChange({ ...node, input })}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+              <span>Pattern axis A</span>
+              <select
+                className={fieldClass}
+                value={node.axisA}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...node,
+                    axisA: event.target.value as 'x' | 'y' | 'z',
+                  })
+                }
+              >
+                <option value="x">X axis</option>
+                <option value="y">Y axis</option>
+                <option value="z">Z axis</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+              <span>Pattern axis B</span>
+              <select
+                className={fieldClass}
+                value={node.axisB}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...node,
+                    axisB: event.target.value as 'x' | 'y' | 'z',
+                  })
+                }
+              >
+                <option value="x">X axis</option>
+                <option value="y">Y axis</option>
+                <option value="z">Z axis</option>
+              </select>
+            </label>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+              <span>Count A</span>
+              <input
+                className={fieldClass}
+                type="number"
+                min={2}
+                max={BREP_PROJECT_MAX_PATTERN_COUNT}
+                step={1}
+                value={node.countA}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({ ...node, countA: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+              <span>Count B</span>
+              <input
+                className={fieldClass}
+                type="number"
+                min={2}
+                max={BREP_PROJECT_MAX_PATTERN_COUNT}
+                step={1}
+                value={node.countB}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({ ...node, countB: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <ScalarField
+            label="Spacing A"
+            value={node.spacingA}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(spacingA) => onChange({ ...node, spacingA })}
+          />
+          <ScalarField
+            label="Spacing B"
+            value={node.spacingB}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(spacingB) => onChange({ ...node, spacingB })}
+          />
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Axes A and B must be different. Both counts are literal integers from
+            2 to {BREP_PROJECT_MAX_PATTERN_COUNT}, with at most{' '}
+            {BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES} total instances.
+            Both spacings must resolve to non-zero values. Instances are ordered
+            row-major with A outer, B inner and index = a × countB + b.
+          </p>
+        </div>
+      );
+
     case 'subtract':
       return (
         <div className="grid gap-5">
@@ -1013,8 +1139,8 @@ function NodeEditorFields({
             </div>
             <p className="text-[10px] leading-4 text-adam-neutral-500">
               The base must be a single shape. Tool entries may be single shapes
-              or a linear-pattern instance set; pattern instances are applied in
-              canonical index order.
+              or a pattern instance set; pattern instances are applied in canonical
+              index order.
             </p>
           </div>
         </div>
@@ -1449,7 +1575,9 @@ export function BrepFeatureEditor({
                           key={type}
                           value={type}
                           disabled={
-                            (type === 'linearPattern' && singleNodeCount < 1) ||
+                            ((type === 'linearPattern' ||
+                              type === 'rectangularPattern') &&
+                              singleNodeCount < 1) ||
                             (type === 'subtract' && project.nodes.length < 2) ||
                             ((type === 'union' || type === 'intersect') &&
                               singleNodeCount < 2)

@@ -351,21 +351,27 @@ function createBrepProviderScalarSchema(depth: number): z.ZodTypeAny {
   if (depth <= 0) return leafSchema;
 
   const childSchema = createBrepProviderScalarSchema(depth - 1);
+  const expressionSchema = z
+    .object({
+      op: z.enum(['add', 'sub', 'mul', 'div', 'neg']),
+      args: z.array(childSchema).min(1).max(2),
+    })
+    .strict()
+    .superRefine((expression, context) => {
+      const expectedArgs = expression.op === 'neg' ? 1 : 2;
+      if (expression.args.length !== expectedArgs) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['args'],
+          message: `${expression.op} requires exactly ${expectedArgs} scalar argument${expectedArgs === 1 ? '' : 's'}.`,
+        });
+      }
+    });
+
   return z.union([
     brepScalarNumberSchema,
     brepParameterReferenceSchema,
-    z
-      .object({
-        op: z.enum(['add', 'sub', 'mul', 'div']),
-        args: z.tuple([childSchema, childSchema]),
-      })
-      .strict(),
-    z
-      .object({
-        op: z.literal('neg'),
-        args: z.tuple([childSchema]),
-      })
-      .strict(),
+    expressionSchema,
   ]);
 }
 

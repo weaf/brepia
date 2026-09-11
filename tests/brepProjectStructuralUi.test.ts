@@ -53,6 +53,7 @@ describe('BRep structural DAG authoring UI boundary', () => {
       'transform',
       'mirror',
       'linearPattern',
+      'rectangularPattern',
       'subtract',
       'union',
       'intersect',
@@ -62,7 +63,7 @@ describe('BRep structural DAG authoring UI boundary', () => {
     }
     assert.match(
       featureEditorSource,
-      /type === 'linearPattern' && singleNodeCount < 1/,
+      /type === 'linearPattern' \|\|\s+type === 'rectangularPattern'/,
     );
     assert.match(
       featureEditorSource,
@@ -88,8 +89,22 @@ describe('BRep structural DAG authoring UI boundary', () => {
     assert.match(featureEditorSource, /Spacing must resolve to a non-zero/);
     assert.match(featureEditorSource, /valueKind="single"/);
     assert.match(featureEditorSource, /brepNodeValueKind\(candidate\) === 'instanceSet'/);
-    assert.match(featureEditorSource, /linear-pattern instance set/);
-    assert.match(featureEditorSource, /canonical index order/);
+    assert.match(featureEditorSource, /pattern instance set/);
+    assert.match(featureEditorSource, /canonical\s+index order/);
     assert.match(featureEditorSource, /Instance set/);
   });
+  it('exposes bounded M3C rectangular pattern authoring controls', () => {
+    assert.match(featureEditorSource, /case 'rectangularPattern'/);
+    assert.match(featureEditorSource, /Rectangular pattern/);
+    assert.match(featureEditorSource, /Pattern axis A/);
+    assert.match(featureEditorSource, /Pattern axis B/);
+    assert.match(featureEditorSource, /Count A/);
+    assert.match(featureEditorSource, /Count B/);
+    assert.match(featureEditorSource, /Spacing A/);
+    assert.match(featureEditorSource, /Spacing B/);
+    assert.match(featureEditorSource, /BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES/);
+    assert.match(featureEditorSource, /row-major with A outer, B inner/);
+    assert.match(featureEditorSource, /valueKind="single"/);
+  });
+
 });

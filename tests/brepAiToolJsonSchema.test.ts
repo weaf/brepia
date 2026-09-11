@@ -142,6 +142,23 @@ describe('BRep AI provider JSON Schema', () => {
     ).toBe(true);
   });
 
+  it('keeps bounded provider expression arity exact after compact schema projection', () => {
+    const base = ordinaryM1RelationshipInput();
+    const unaryBinary = structuredClone(base);
+    (unaryBinary.project.nodes[0] as { width: unknown }).width = {
+      op: 'add',
+      args: [1],
+    };
+    expect(brepAiProviderBuildInputZodSchema.safeParse(unaryBinary).success).toBe(false);
+
+    const binaryNegation = structuredClone(base);
+    (binaryNegation.project.nodes[0] as { width: unknown }).width = {
+      op: 'neg',
+      args: [1, 2],
+    };
+    expect(brepAiProviderBuildInputZodSchema.safeParse(binaryNegation).success).toBe(false);
+  });
+
   it('keeps the provider schema below the C1 size regression ceiling', async () => {
     const jsonSchema = await Promise.resolve(
       brepAiBuildProviderInputSchema.jsonSchema,

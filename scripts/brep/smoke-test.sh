@@ -143,4 +143,5 @@ run_extrude_rectangle x -15 15 -30 30 -10 10
 run_extrude_rectangle y -10 10 -15 15 -30 30
 run_extrude_rectangle z -30 30 -10 10 -15 15
 run_extrude_other_profiles
+"$SCRIPT_DIR/m3c-rectangular-pattern-smoke.sh"
 "$SCRIPT_DIR/m6-rotation-smoke.sh"
