@@ -280,6 +280,31 @@ function linearPatternVectorExpression(
   return `rg.Vector3d(0, 0, ${distance})`;
 }
 
+function extrudePlaneExpressions(
+  axis: 'x' | 'y' | 'z',
+  depthVariable: string,
+): { origin: string; xAxis: string; yAxis: string } {
+  if (axis === 'x') {
+    return {
+      origin: `rg.Point3d(-${depthVariable} / 2.0, 0, 0)`,
+      xAxis: 'rg.Vector3d(0, 1, 0)',
+      yAxis: 'rg.Vector3d(0, 0, 1)',
+    };
+  }
+  if (axis === 'y') {
+    return {
+      origin: `rg.Point3d(0, -${depthVariable} / 2.0, 0)`,
+      xAxis: 'rg.Vector3d(0, 0, 1)',
+      yAxis: 'rg.Vector3d(1, 0, 0)',
+    };
+  }
+  return {
+    origin: `rg.Point3d(0, 0, -${depthVariable} / 2.0)`,
+    xAxis: 'rg.Vector3d(1, 0, 0)',
+    yAxis: 'rg.Vector3d(0, 1, 0)',
+  };
+}
+
 function mirrorPlaneExpressions(
   axis: 'x' | 'y' | 'z',
   offset: string,
@@ -409,6 +434,81 @@ function buildGraphSource(
       );
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino could not center Brepia cylinder node ${node.id}.`)})`,
+      );
+    } else if (node.type === 'extrude') {
+      const depth = scalarExpression(node.depth, variables);
+      const depthVariable = `${variable}Depth`;
+      const plane = extrudePlaneExpressions(node.axis, depthVariable);
+      lines.push(`${depthVariable} = float(${depth})`);
+      lines.push(`if ${depthVariable} <= 0.0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia extrude node ${node.id} depth must be greater than zero.`)})`,
+      );
+      lines.push(
+        `${variable}Plane = rg.Plane(${plane.origin}, ${plane.xAxis}, ${plane.yAxis})`,
+      );
+      lines.push(`if not ${variable}Plane.IsValid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct profile plane for Brepia extrude node ${node.id}.`)})`,
+      );
+
+      if (node.profile.type === 'rectangle') {
+        const width = scalarExpression(node.profile.width, variables);
+        const height = scalarExpression(node.profile.height, variables);
+        lines.push(`${variable}ProfileWidth = float(${width})`);
+        lines.push(`${variable}ProfileHeight = float(${height})`);
+        lines.push(
+          `if ${variable}ProfileWidth <= 0.0 or ${variable}ProfileHeight <= 0.0:`,
+        );
+        lines.push(
+          `    raise ValueError(${pythonString(`Brepia extrude node ${node.id} rectangle profile dimensions must be greater than zero.`)})`,
+        );
+        lines.push(`${variable}Profile = rg.Rectangle3d(`);
+        lines.push(`    ${variable}Plane,`);
+        lines.push(
+          `    rg.Interval(-${variable}ProfileWidth / 2.0, ${variable}ProfileWidth / 2.0),`,
+        );
+        lines.push(
+          `    rg.Interval(-${variable}ProfileHeight / 2.0, ${variable}ProfileHeight / 2.0),`,
+        );
+        lines.push(').ToNurbsCurve()');
+      } else if (node.profile.type === 'circle') {
+        const radius = scalarExpression(node.profile.radius, variables);
+        lines.push(`${variable}ProfileRadius = float(${radius})`);
+        lines.push(`if ${variable}ProfileRadius <= 0.0:`);
+        lines.push(
+          `    raise ValueError(${pythonString(`Brepia extrude node ${node.id} circle profile radius must be greater than zero.`)})`,
+        );
+        lines.push(
+          `${variable}Profile = rg.Circle(${variable}Plane, ${variable}ProfileRadius).ToNurbsCurve()`,
+        );
+      } else {
+        const pointExpressions = node.profile.points.map(
+          (point) =>
+            `${variable}Plane.PointAt(float(${scalarExpression(point.u, variables)}), float(${scalarExpression(point.v, variables)}))`,
+        );
+        lines.push(`${variable}ProfilePoints = [${pointExpressions.join(', ')}]`);
+        lines.push(`${variable}ProfilePoints.append(${variable}ProfilePoints[0])`);
+        lines.push(`${variable}Profile = rg.PolylineCurve(${variable}ProfilePoints)`);
+      }
+
+      lines.push(
+        `if ${variable}Profile is None or not ${variable}Profile.IsValid or not ${variable}Profile.IsClosed:`,
+      );
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct a closed profile for Brepia extrude node ${node.id}.`)})`,
+      );
+      lines.push(
+        `${variable}Extrusion = rg.Extrusion.Create(${variable}Profile, ${variable}Plane, ${depthVariable}, True)`,
+      );
+      lines.push(`if ${variable}Extrusion is None:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not create extrusion for Brepia node ${node.id}.`)})`,
+      );
+      lines.push(`${variable} = ${variable}Extrusion.ToBrep()`);
+      lines.push(`if ${variable} is None or not ${variable}.IsSolid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino extrusion for Brepia node ${node.id} did not produce one closed solid Brep.`)})`,
       );
     } else if (node.type === 'transform') {
       const input = emitNode(node.input);
