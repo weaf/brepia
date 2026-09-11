@@ -330,6 +330,32 @@ function appendVectorScalars(
   vector.forEach((value, index) => scalars.push({ value, field: `${field}[${index}]` }));
 }
 
+function appendExtrudeProfileScalars(
+  scalars: Array<{ value: BrepScalar; field: string }>,
+  node: Extract<BrepNode, { type: 'extrude' }>,
+): void {
+  scalars.push({ value: node.depth, field: `${node.id}.depth` });
+  switch (node.profile.type) {
+    case 'rectangle':
+      scalars.push(
+        { value: node.profile.width, field: `${node.id}.profile.width` },
+        { value: node.profile.height, field: `${node.id}.profile.height` },
+      );
+      break;
+    case 'circle':
+      scalars.push({ value: node.profile.radius, field: `${node.id}.profile.radius` });
+      break;
+    case 'closedPolyline':
+      node.profile.points.forEach((point, index) => {
+        scalars.push(
+          { value: point.u, field: `${node.id}.profile.points[${index}].u` },
+          { value: point.v, field: `${node.id}.profile.points[${index}].v` },
+        );
+      });
+      break;
+  }
+}
+
 function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field: string }> {
   const scalars: Array<{ value: BrepScalar; field: string }> = [];
   appendVectorScalars(scalars, project.placement.origin, 'placement.origin');
@@ -353,6 +379,9 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
           { value: node.radius, field: `${node.id}.radius` },
           { value: node.height, field: `${node.id}.height` },
         );
+        break;
+      case 'extrude':
+        appendExtrudeProfileScalars(scalars, node);
         break;
       case 'transform':
         appendVectorScalars(scalars, node.translate, `${node.id}.translate`);
@@ -413,6 +442,24 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
     case 'cylinder':
       append(node.radius);
       append(node.height);
+      break;
+    case 'extrude':
+      append(node.depth);
+      switch (node.profile.type) {
+        case 'rectangle':
+          append(node.profile.width);
+          append(node.profile.height);
+          break;
+        case 'circle':
+          append(node.profile.radius);
+          break;
+        case 'closedPolyline':
+          node.profile.points.forEach((point) => {
+            append(point.u);
+            append(point.v);
+          });
+          break;
+      }
       break;
     case 'transform':
       appendVector(node.translate);
