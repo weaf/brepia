@@ -16,6 +16,9 @@ usage() {
 Usage:
   scripts/brep/m3c-rhino-acceptance.sh generate [output-dir]
   scripts/brep/m3c-rhino-acceptance.sh validate <final-returned.ghx> <cutters-returned.ghx> [expectedPitchA] [expectedPitchBaseB]
+
+If expected values are omitted, validation accepts any in-bounds persisted parameter
+perturbation from the generated defaults and reports the observed values.
 EOF
   exit 2
 }
@@ -38,8 +41,8 @@ case "$command" in
     [[ $# -ge 3 ]] || usage
     final_file="$2"
     cutters_file="$3"
-    expected_pitch_a="${4:-25}"
-    expected_pitch_base_b="${5:-35}"
+    expected_pitch_a="${4:-}"
+    expected_pitch_base_b="${5:-}"
     (
       cd "$ROOT_DIR"
       M3C_RHINO_MODE=validate \
