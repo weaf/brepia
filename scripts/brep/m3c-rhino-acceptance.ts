@@ -1,21 +1,27 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import process from 'node:process';
 
 import { createBrepGrasshopperContract } from '../../shared/brepGrasshopperContract.ts';
 import { compileBrepGrasshopperExecutableGhx } from '../../shared/brepGrasshopperExecutableGhx.ts';
 import { validateBrepGrasshopperExecutableGhx } from '../../shared/brepGrasshopperExecutableGhxValidation.ts';
 import type { BrepProject } from '../../shared/brepProject.ts';
 
-type FixtureKind = 'final' | 'cutters';
+export type M3cRhinoFixtureKind = 'final' | 'cutters';
 
-const PARAMETER_A = 'pitchA';
-const PARAMETER_BASE_B = 'pitchBaseB';
+export const M3C_RHINO_PARAMETER_A = 'pitchA';
+export const M3C_RHINO_PARAMETER_BASE_B = 'pitchBaseB';
+
+export type M3cRhinoFixtureResult = {
+  kind: M3cRhinoFixtureKind;
+  filename: string;
+  parameters: Record<string, number>;
+  expectedResultAccess: 'List' | 'Item';
+};
 
 function parameters(): BrepProject['parameters'] {
   return [
     {
-      id: PARAMETER_A,
+      id: M3C_RHINO_PARAMETER_A,
       label: 'Pitch A',
       type: 'number',
       unit: 'mm',
@@ -24,7 +30,7 @@ function parameters(): BrepProject['parameters'] {
       max: 80,
     },
     {
-      id: PARAMETER_BASE_B,
+      id: M3C_RHINO_PARAMETER_BASE_B,
       label: 'Pitch base B',
       type: 'number',
       unit: 'mm',
@@ -57,10 +63,10 @@ function finalPatternProject(): BrepProject {
         axisB: 'y',
         countA: 2,
         countB: 3,
-        spacingA: { parameter: PARAMETER_A },
+        spacingA: { parameter: M3C_RHINO_PARAMETER_A },
         spacingB: {
           op: 'add',
-          args: [{ parameter: PARAMETER_BASE_B }, 5],
+          args: [{ parameter: M3C_RHINO_PARAMETER_BASE_B }, 5],
         },
       },
     ],
@@ -91,10 +97,10 @@ function patternCuttersProject(): BrepProject {
         axisB: 'y',
         countA: 2,
         countB: 3,
-        spacingA: { parameter: PARAMETER_A },
+        spacingA: { parameter: M3C_RHINO_PARAMETER_A },
         spacingB: {
           op: 'add',
-          args: [{ parameter: PARAMETER_BASE_B }, 5],
+          args: [{ parameter: M3C_RHINO_PARAMETER_BASE_B }, 5],
         },
       },
       {
@@ -108,34 +114,37 @@ function patternCuttersProject(): BrepProject {
   };
 }
 
-function projectFor(kind: FixtureKind): BrepProject {
+function projectFor(kind: M3cRhinoFixtureKind): BrepProject {
   return kind === 'final' ? finalPatternProject() : patternCuttersProject();
 }
 
-function sourceRevisionId(kind: FixtureKind): string {
+function sourceRevisionId(kind: M3cRhinoFixtureKind): string {
   return kind === 'final'
     ? 'm3c-rhino-final-pattern-acceptance'
     : 'm3c-rhino-pattern-cutters-acceptance';
 }
 
-function fixtureFilename(kind: FixtureKind): string {
+export function m3cRhinoFixtureFilename(kind: M3cRhinoFixtureKind): string {
   return kind === 'final'
     ? 'm3c-final-rectangular-pattern.ghx'
     : 'm3c-rectangular-pattern-cutters.ghx';
 }
 
-async function contractFor(kind: FixtureKind) {
+function contractFor(kind: M3cRhinoFixtureKind) {
   return createBrepGrasshopperContract({
     project: projectFor(kind),
     sourceRevisionId: sourceRevisionId(kind),
   });
 }
 
-async function generate(outputDirectory: string): Promise<void> {
+export async function generateM3cRhinoAcceptanceFixtures(
+  outputDirectory: string,
+): Promise<M3cRhinoFixtureResult[]> {
   await fs.mkdir(outputDirectory, { recursive: true });
+  const results: M3cRhinoFixtureResult[] = [];
 
   for (const kind of ['final', 'cutters'] as const) {
-    const contract = await contractFor(kind);
+    const contract = contractFor(kind);
     const ghx = await compileBrepGrasshopperExecutableGhx(contract);
     const validation = await validateBrepGrasshopperExecutableGhx(
       ghx,
@@ -148,28 +157,27 @@ async function generate(outputDirectory: string): Promise<void> {
       );
     }
 
-    const filename = fixtureFilename(kind);
+    const filename = m3cRhinoFixtureFilename(kind);
     await fs.writeFile(path.join(outputDirectory, filename), ghx, 'utf8');
-    console.log(
-      JSON.stringify({
-        kind,
-        file: filename,
-        generatedValidation: 'accepted',
-        parameters: validation.parameters,
-        expectedResultAccess: kind === 'final' ? 'List' : 'Item',
-      }),
-    );
+    results.push({
+      kind,
+      filename,
+      parameters: validation.parameters,
+      expectedResultAccess: kind === 'final' ? 'List' : 'Item',
+    });
   }
+
+  return results;
 }
 
-async function validateReturned(
-  kind: FixtureKind,
+export async function validateM3cRhinoReturnedFixture(
+  kind: M3cRhinoFixtureKind,
   filename: string,
   expectedPitchA?: number,
   expectedPitchBaseB?: number,
-): Promise<void> {
+): Promise<M3cRhinoFixtureResult> {
   const ghx = await fs.readFile(filename, 'utf8');
-  const contract = await contractFor(kind);
+  const contract = contractFor(kind);
   const validation = await validateBrepGrasshopperExecutableGhx(
     ghx,
     contract,
@@ -177,79 +185,32 @@ async function validateReturned(
   );
 
   if (!validation.accepted) {
-    console.error(JSON.stringify(validation, null, 2));
-    process.exitCode = 1;
-    return;
+    throw new Error(
+      `${kind} returned GHX failed validation: ${JSON.stringify(validation.diagnostics)}`,
+    );
   }
 
   if (
     expectedPitchA != null &&
-    validation.parameters[PARAMETER_A] !== expectedPitchA
+    validation.parameters[M3C_RHINO_PARAMETER_A] !== expectedPitchA
   ) {
     throw new Error(
-      `Expected ${PARAMETER_A}=${expectedPitchA}, got ${validation.parameters[PARAMETER_A]}.`,
+      `Expected ${M3C_RHINO_PARAMETER_A}=${expectedPitchA}, got ${validation.parameters[M3C_RHINO_PARAMETER_A]}.`,
     );
   }
   if (
     expectedPitchBaseB != null &&
-    validation.parameters[PARAMETER_BASE_B] !== expectedPitchBaseB
+    validation.parameters[M3C_RHINO_PARAMETER_BASE_B] !== expectedPitchBaseB
   ) {
     throw new Error(
-      `Expected ${PARAMETER_BASE_B}=${expectedPitchBaseB}, got ${validation.parameters[PARAMETER_BASE_B]}.`,
+      `Expected ${M3C_RHINO_PARAMETER_BASE_B}=${expectedPitchBaseB}, got ${validation.parameters[M3C_RHINO_PARAMETER_BASE_B]}.`,
     );
   }
 
-  console.log(
-    JSON.stringify({
-      kind,
-      returnedValidation: 'accepted',
-      parameters: validation.parameters,
-      expectedResultAccess: kind === 'final' ? 'List' : 'Item',
-    }),
-  );
+  return {
+    kind,
+    filename: path.basename(filename),
+    parameters: validation.parameters,
+    expectedResultAccess: kind === 'final' ? 'List' : 'Item',
+  };
 }
-
-function parseKind(value: string | undefined): FixtureKind {
-  if (value === 'final' || value === 'cutters') return value;
-  throw new Error(`Expected fixture kind "final" or "cutters", got ${value ?? '<missing>'}.`);
-}
-
-function parseOptionalNumber(value: string | undefined): number | undefined {
-  if (value == null) return undefined;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Expected a finite number, got ${value}.`);
-  }
-  return parsed;
-}
-
-async function main(): Promise<void> {
-  const [command, ...args] = process.argv.slice(2);
-
-  if (command === 'generate') {
-    await generate(path.resolve(args[0] ?? 'tmp/m3c-rhino-acceptance'));
-    return;
-  }
-
-  if (command === 'validate') {
-    const kind = parseKind(args[0]);
-    const filename = args[1];
-    if (!filename) {
-      throw new Error('Returned GHX path is required.');
-    }
-    await validateReturned(
-      kind,
-      path.resolve(filename),
-      parseOptionalNumber(args[2]),
-      parseOptionalNumber(args[3]),
-    );
-    return;
-  }
-
-  throw new Error(
-    'Usage: node --experimental-strip-types scripts/brep/m3c-rhino-acceptance.ts generate [output-dir]\n' +
-      '   or: node --experimental-strip-types scripts/brep/m3c-rhino-acceptance.ts validate <final|cutters> <returned.ghx> [expectedPitchA] [expectedPitchBaseB]',
-  );
-}
-
-await main();
