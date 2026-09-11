@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Box, Compound, Cylinder, Location, Plane, export_step
+from build123d import Box, Circle, Compound, Cylinder, Location, Plane, Polygon, Rectangle, export_step, extrude
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -65,6 +65,13 @@ def scalar(value, parameters, depth=0):
             raise ValueError("invalid_parameter_value: scalar expression divides by zero")
         result = left / right
     return checked_scalar(result, f"scalar {op} result")
+
+
+def positive_scalar(value, parameters, label):
+    result = scalar(value, parameters)
+    if result <= 0.0:
+        raise ValueError(f"invalid_parameter_value: {label} must resolve to a positive millimetre value")
+    return result
 
 
 def vector(value, parameters):
@@ -152,6 +159,38 @@ def require_single_boolean_solid(value, kind, node_id):
             f"unsupported_result_cardinality: BRep {kind} {node_id} produced {len(solids)} solids; exactly one is required"
         )
     return solids[0]
+
+
+def extrude_profile_shape(node, parameters):
+    profile = node["profile"]
+    profile_kind = profile["type"]
+    node_id = node["id"]
+    if profile_kind == "rectangle":
+        sketch = Rectangle(
+            positive_scalar(profile["width"], parameters, f"BRep extrude {node_id} profile width"),
+            positive_scalar(profile["height"], parameters, f"BRep extrude {node_id} profile height"),
+        )
+    elif profile_kind == "circle":
+        sketch = Circle(
+            positive_scalar(profile["radius"], parameters, f"BRep extrude {node_id} profile radius")
+        )
+    elif profile_kind == "closedPolyline":
+        points = [
+            (scalar(point["u"], parameters), scalar(point["v"], parameters))
+            for point in profile["points"]
+        ]
+        sketch = Polygon(*points)
+    else:
+        raise ValueError(f"unsupported_operation: BRep extrude {node_id} profile {profile_kind}")
+
+    plane = {
+        "x": Plane.YZ,
+        "y": Plane.ZX,
+        "z": Plane.XY,
+    }[node["axis"]]
+    depth = positive_scalar(node["depth"], parameters, f"BRep extrude {node_id} depth")
+    part = extrude(plane * sketch, amount=depth / 2.0, both=True)
+    return require_single_boolean_solid(part, "extrude", node_id)
 
 
 def compact_json(value):
@@ -367,6 +406,7 @@ def evaluate(request):
             )
         if kind == "box": shape = Box(scalar(node["width"], parameters), scalar(node["depth"], parameters), scalar(node["height"], parameters))
         elif kind == "cylinder": shape = Cylinder(scalar(node["radius"], parameters), scalar(node["height"], parameters))
+        elif kind == "extrude": shape = extrude_profile_shape(node, parameters)
         elif kind == "transform":
             shape = evaluate_node(node["input"])
             translation = vector(node.get("translate", [0, 0, 0]), parameters)
