@@ -4,6 +4,7 @@ import {
   normalizeBrepProject,
   validateBrepExtrudeProfileValues,
   validateBrepLinearPatternSpacingValues,
+  validateBrepRectangularPatternSpacingValues,
   type BrepNodeValueKind,
   type BrepProject,
   type BrepProjectMetadata,
@@ -227,12 +228,6 @@ function cross(
   ];
 }
 
-/**
- * Resolve the kernel-neutral placement using the same published parameter
- * values as geometry evaluation and reject planes that Rhino/Grasshopper could
- * not represent reliably. Axis magnitudes are intentionally preserved; only
- * zero/near-zero and collinear/near-collinear axes are rejected.
- */
 export function resolveBrepProjectPlacement(
   placement: BrepProjectPlacement,
   parameterValues: Readonly<BrepParameterValues>,
@@ -268,7 +263,6 @@ export function resolveBrepProjectPlacement(
   return { origin, xAxis, yAxis, zAxis };
 }
 
-/** Resolve non-kernel project-object data under the exact evaluation values. */
 export function resolveBrepProjectObjectSemantics(
   project: BrepProject,
   parameterValues: Readonly<BrepParameterValues>,
@@ -358,6 +352,7 @@ export function normalizeBrepEvaluationRequest(
   try {
     validateBrepProjectScalarValues(project, parameterValues);
     validateBrepLinearPatternSpacingValues(project, parameterValues);
+    validateBrepRectangularPatternSpacingValues(project, parameterValues);
     validateBrepExtrudeProfileValues(project, parameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
