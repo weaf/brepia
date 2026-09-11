@@ -76,7 +76,11 @@ function outputParamXml(
   x: number,
   y: number,
 ): string {
-  const scriptParamAccess = access === 'list' ? 1 : 0;
+  // M3B changes only the primary Result persistence shape. Existing semantic
+  // point outputs keep the installed-host-accepted Item persistence even though
+  // their portable contract describes list semantics.
+  const scriptParamAccess =
+    output.outputId === 'result' && access === 'list' ? 1 : 0;
   return `<chunk name="OutputParam" index="${index}"><items count="12"><item name="AllowTreeAccess" type_name="gh_bool" type_code="1">false</item><item name="Description" type_name="gh_string" type_code="10">Brepia ${escapeXml(output.nickname)} output</item><item name="InstanceGuid" type_name="gh_guid" type_code="9">${output.instanceGuid}</item><item name="Name" type_name="gh_string" type_code="10">${output.variableName}</item><item name="NickName" type_name="gh_string" type_code="10">${escapeXml(output.nickname)}</item><item name="Optional" type_name="gh_bool" type_code="1">false</item><item name="ScriptParamAccess" type_name="gh_int32" type_code="3">${scriptParamAccess}</item><item name="ScriptParameterVersion" type_name="gh_int32" type_code="3">2</item><item name="ShowTypeHints" type_name="gh_bool" type_code="1">true</item><item name="SourceCount" type_name="gh_int32" type_code="3">0</item><item name="ToolTip" type_name="gh_string" type_code="10"></item><item name="TypeHintID" type_name="gh_guid" type_code="9">6a184b65-baa3-42d1-a548-3915b401de53</item></items><chunks count="2"><chunk name="Attributes"><items count="2"><item name="Bounds" type_name="gh_drawing_rectanglef" type_code="35"><X>${x}</X><Y>${y}</Y><W>92</W><H>24</H></item><item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>${x + 84}</X><Y>${y + 12}</Y></item></items></chunk><chunk name="ConverterData"><items count="2"><item name="AssemblyName" type_name="gh_string" type_code="10">System.Private.CoreLib</item><item name="TypeName" type_name="gh_string" type_code="10">System.Object</item></items></chunk></chunks></chunk>`;
 }
 
@@ -193,10 +197,9 @@ function upgradeHostEnvelope(ghx: string): string {
 }
 
 /**
- * Phase 8E executable GHX. The current proven code-generation subset is
- * intentionally limited to the canonical single-box BrepProject handled by
- * createBrepGrasshopperRhinoScriptPlan. Phase 9 host acceptance established
- * the Rhino 8 Python 3 Script persistence shape and the full document envelope.
+ * Phase 8E executable GHX. Phase 9 established the Rhino 8 Python 3 Script
+ * persistence shape and document envelope. Later modeling milestones extend
+ * only the canonical compiler subset while preserving that host envelope.
  */
 export async function compileBrepGrasshopperExecutableGhx(
   value: unknown,
