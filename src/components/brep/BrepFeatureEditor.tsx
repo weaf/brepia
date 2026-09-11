@@ -68,6 +68,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Transform';
     case 'mirror':
       return 'Mirror';
+    case 'linearPattern':
+      return 'Linear pattern';
     case 'subtract':
       return 'Subtract';
     case 'union':
@@ -113,6 +115,8 @@ function createNodeDraft(
       return { id, type, input, translate: [0, 0, 0] };
     case 'mirror':
       return { id, type, input, normalAxis: 'x', offset: 0 };
+    case 'linearPattern':
+      return { id, type, input, axis: 'x', count: 2, spacing: 20 };
     case 'fillet':
       return {
         id,
