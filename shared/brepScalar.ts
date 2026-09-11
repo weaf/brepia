@@ -361,6 +361,9 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
       case 'mirror':
         scalars.push({ value: node.offset, field: `${node.id}.offset` });
         break;
+      case 'linearPattern':
+        scalars.push({ value: node.spacing, field: `${node.id}.spacing` });
+        break;
       case 'fillet':
         scalars.push({ value: node.radius, field: `${node.id}.radius` });
         break;
@@ -417,6 +420,9 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
       break;
     case 'mirror':
       append(node.offset);
+      break;
+    case 'linearPattern':
+      append(node.spacing);
       break;
     case 'fillet':
       append(node.radius);
