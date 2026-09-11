@@ -255,8 +255,16 @@ function validPrimaryBodies(
     );
   }
 
-  if (resultNode.type !== 'linearPattern') return false;
-  if (result.bodies.length !== resultNode.count) return false;
+  if (
+    resultNode.type !== 'linearPattern' &&
+    resultNode.type !== 'rectangularPattern'
+  )
+    return false;
+  const expectedBodyCount =
+    resultNode.type === 'linearPattern'
+      ? resultNode.count
+      : resultNode.countA * resultNode.countB;
+  if (result.bodies.length !== expectedBodyCount) return false;
   return result.bodies.every(
     (body, index) =>
       body.id === `${resultNode.id}::${index}` &&
