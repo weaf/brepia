@@ -177,15 +177,19 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
       script.source,
       /\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(0, 0, -brepiaNode\d+Height \/ 2\.0\)\)\)/,
     );
+    const translation = /^(brepiaNode\d+)Translation = rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)$/m.exec(
+      script.source,
+    );
+    assert.ok(translation);
+    const transformed = translation[1];
     assert.match(
       script.source,
-      /brepiaNode2Translation = rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)/,
+      new RegExp(`${transformed}Transform = ${transformed}Translation \\* ${transformed}Rotation`),
     );
     assert.match(
       script.source,
-      /brepiaNode2Transform = brepiaNode2Translation \* brepiaNode2Rotation/,
+      new RegExp(`if not ${transformed}\\.Transform\\(${transformed}Transform\\):`),
     );
-    assert.match(script.source, /brepiaNode2\.Transform\(brepiaNode2Transform\)/);
     assert.match(
       script.source,
       /rg\.Brep\.CreateBooleanDifference\(brepiaNode\d+, brepiaNode\d+, brepiaTolerance\)/,
