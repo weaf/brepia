@@ -1,6 +1,6 @@
 # M3B — bounded linear pattern status
 
-Status: **repository-complete and CI-accepted; native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime acceptance pending**
+Status: **repository-complete, CI-accepted and native build123d / OCCT runtime accepted; installed Rhino 8 / Grasshopper runtime acceptance pending**
 
 Date: 2026-09-11
 
@@ -110,12 +110,20 @@ For a final pattern result:
 
 For `subtract.tools[]`, each pattern instance is applied as an individual cutter in canonical order and the final subtract result remains subject to the existing single-shape result contract.
 
-`scripts/brep/smoke-test.sh` now contains deterministic M3B runtime fixtures for:
+`scripts/brep/smoke-test.sh` contains deterministic M3B runtime fixtures for:
 
 1. a three-instance X-axis pattern as the final `resultNodeId`;
 2. a four-instance pattern used as a subtract tool.
 
-These fixtures are committed and CI-reviewed, but this document does **not** claim native runtime acceptance until they have been run against the real local rootless build123d/OCCT sandbox.
+Those fixtures have now been run successfully against the real local rootless build123d/OCCT runtime. Native runtime evidence is recorded in:
+
+```text
+docs/brep_m3b_native_runtime_evidence_2026-09-11.md
+```
+
+The accepted final-pattern runtime result was an ordered three-body `instanceSet` with stable identities `pattern::0` through `pattern::2`, exact 20 mm X spacing, aggregate bounds `[-5,-5,-5] -> [45,5,5]` and exact STEP export available.
+
+The accepted pattern-as-subtract-tool runtime result used four ordered cutter instances and returned exactly one `single` result body with a 2044-triangle viewer mesh and exact STEP export available.
 
 ## Viewer
 
@@ -172,7 +180,7 @@ canonical expression node limit: 64
 provider expression depth: 2
 ```
 
-The Native BRep instruction now explicitly teaches:
+The Native BRep instruction explicitly teaches:
 
 - instance 0 / `index * spacing` semantics;
 - count 2–32;
@@ -187,7 +195,7 @@ No recursive/nested provider `$ref` baseline was introduced.
 
 ## Structural authoring UI
 
-The feature editor now exposes `Linear pattern` directly.
+The feature editor exposes `Linear pattern` directly.
 
 The editor provides:
 
@@ -240,20 +248,53 @@ Dedicated/related M3B coverage includes:
 
 Grasshopper Build #509 also passed the .NET build plus Ubuntu and Windows package builds.
 
-## Remaining acceptance gates
+The later documentation/acceptance checkpoint before the real local native runtime run was:
 
-M3B is not runtime-complete yet.
+```text
+a6f030f5752a3c1eb2fb53d9d188d132ec8ff302
+Quality Gate #939       PASS
+Grasshopper Build #511 PASS
+```
 
-Required next gates are:
+## Native runtime acceptance
 
-1. run the current `./scripts/brep/smoke-test.sh` against the real local rootless build123d/OCCT sandbox and record the new pattern-result and pattern-as-subtract-tool evidence;
-2. generate fresh current-branch GHX fixtures;
-3. open and solve them in installed Rhino 8 / Grasshopper;
-4. confirm that a final pattern exposes `Result` as a list of separate Breps, parameter-driven spacing recomputes correctly and save/close/reopen preserves the List output;
-5. confirm the pattern-as-subtract-tool host path produces the intended single Brep and responds to spacing changes;
-6. record installed-host evidence before declaring M3B complete.
+Native build123d / OCCT runtime acceptance is complete.
 
-M3B must remain open if either native or installed-host behavior diverges from the repository contract.
+The real local rootless smoke run on 2026-09-11 verified:
+
+- existing primitive/transform/subtract/fillet regression behavior;
+- exact STEP and 3DM artifacts;
+- project-object roles and semantic point placement;
+- M2 union/intersection success and disjoint fail-closed behavior;
+- M3A mirror parity for X/Y/Z;
+- final M3B pattern as three separate ordered bodies with stable identity and aggregate bounds;
+- exact 20 mm parameter-driven spacing in the accepted fixture;
+- exact STEP availability for the multi-body final pattern;
+- four-instance pattern expansion as ordered subtract cutters;
+- final pattern-tool subtract result remaining exactly one `single` body;
+- exact STEP availability after pattern-driven subtraction.
+
+Evidence:
+
+```text
+docs/brep_m3b_native_runtime_evidence_2026-09-11.md
+```
+
+## Remaining acceptance gate
+
+M3B is not installed-host complete yet.
+
+The only remaining M3B gate is fresh current-branch installed Rhino 8 / Grasshopper acceptance:
+
+1. generate fresh current-branch GHX fixtures;
+2. open and solve them in installed Rhino 8 / Grasshopper;
+3. confirm that a final pattern exposes `Result` as a list of separate Breps;
+4. confirm parameter-driven spacing recomputes correctly;
+5. save/close/reopen and confirm the List output persists;
+6. confirm the pattern-as-subtract-tool host path produces the intended single Brep and responds to spacing changes;
+7. record installed-host evidence before declaring M3B complete.
+
+M3B must remain open if installed-host behavior diverges from the repository/native contract.
 
 ## Preserved boundaries
 
