@@ -25,6 +25,8 @@ import {
 
 const SYSTEM_CORELIB = 'System.Private.CoreLib';
 
+type BrepGrasshopperExecutableGhxValidationMode = 'generated' | 'returned';
+
 export type BrepGrasshopperExecutableGhxDiagnostic = {
   code: string;
   severity: 'error';
@@ -95,7 +97,7 @@ function validateNumericControl(
     string,
     Awaited<ReturnType<typeof createBrepGrasshopperPackagePlan>>['controls'][number]
   >,
-  mode: 'generated' | 'returned',
+  mode: BrepGrasshopperExecutableGhxValidationMode,
   seen: Set<string>,
   parameters: Record<string, number>,
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
@@ -105,7 +107,12 @@ function validateNumericControl(
   const container = objectContainer(object);
   const instanceGuid = container ? guidText(container, 'InstanceGuid') : undefined;
   if (!container || !instanceGuid) {
-    error(diagnostics, 'invalid_control', 'Numeric control is missing Container/InstanceGuid.', path);
+    error(
+      diagnostics,
+      'invalid_control',
+      'Numeric control is missing Container/InstanceGuid.',
+      path,
+    );
     return;
   }
   const expected = expectedByGuid.get(instanceGuid);
@@ -119,7 +126,12 @@ function validateNumericControl(
     return;
   }
   if (seen.has(instanceGuid)) {
-    error(diagnostics, 'duplicate_control', `Duplicate numeric control ${instanceGuid}.`, path);
+    error(
+      diagnostics,
+      'duplicate_control',
+      `Duplicate numeric control ${instanceGuid}.`,
+      path,
+    );
     return;
   }
   seen.add(instanceGuid);
@@ -221,26 +233,54 @@ function validateInput(
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = `script/input:${expected.inputId}`;
-  if (guidText(parameterData, 'InputId', String(index)) !== BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID) {
-    error(diagnostics, 'script_input_type_changed', `Script input ${expected.inputId} parameter type changed.`, path);
+  if (
+    guidText(parameterData, 'InputId', String(index)) !==
+    BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID
+  ) {
+    error(
+      diagnostics,
+      'script_input_type_changed',
+      `Script input ${expected.inputId} parameter type changed.`,
+      path,
+    );
   }
   const input = ghxChunk(parameterData, 'InputParam', String(index));
   if (!input) {
-    error(diagnostics, 'missing_script_input', `Script input ${expected.inputId} is missing.`, path);
+    error(
+      diagnostics,
+      'missing_script_input',
+      `Script input ${expected.inputId} is missing.`,
+      path,
+    );
     return;
   }
   if (guidText(input, 'InstanceGuid') !== expected.instanceGuid.toLowerCase()) {
-    error(diagnostics, 'script_input_identity_changed', `Script input ${expected.inputId} identity changed.`, path);
+    error(
+      diagnostics,
+      'script_input_identity_changed',
+      `Script input ${expected.inputId} identity changed.`,
+      path,
+    );
   }
   if (
     ghxItemText(input, 'Name') !== expected.variableName ||
     ghxItemText(input, 'NickName') !== expected.nickname
   ) {
-    error(diagnostics, 'script_input_identity_changed', `Script input ${expected.inputId} name changed.`, path);
+    error(
+      diagnostics,
+      'script_input_identity_changed',
+      `Script input ${expected.inputId} name changed.`,
+      path,
+    );
   }
   const expectedSourceCount = expected.sourceObjectGuid ? '1' : '0';
   if (ghxItemText(input, 'SourceCount') !== expectedSourceCount) {
-    error(diagnostics, 'script_rewired', `Script input ${expected.inputId} source count changed.`, path);
+    error(
+      diagnostics,
+      'script_rewired',
+      `Script input ${expected.inputId} source count changed.`,
+      path,
+    );
   }
   const source = guidText(input, 'Source', '0');
   if (
@@ -248,10 +288,20 @@ function validateInput(
       ? source !== expected.sourceObjectGuid.toLowerCase()
       : source != null
   ) {
-    error(diagnostics, 'script_rewired', `Script input ${expected.inputId} was rewired.`, path);
+    error(
+      diagnostics,
+      'script_rewired',
+      `Script input ${expected.inputId} was rewired.`,
+      path,
+    );
   }
   if (guidText(input, 'TypeHintID') !== expected.typeHintGuid.toLowerCase()) {
-    error(diagnostics, 'script_input_type_changed', `Script input ${expected.inputId} type hint changed.`, path);
+    error(
+      diagnostics,
+      'script_input_type_changed',
+      `Script input ${expected.inputId} type hint changed.`,
+      path,
+    );
   }
   const converter = ghxChunk(input, 'ConverterData');
   if (
@@ -259,7 +309,12 @@ function validateInput(
     ghxItemText(converter, 'AssemblyName') !== SYSTEM_CORELIB ||
     ghxItemText(converter, 'TypeName') !== expected.converterType
   ) {
-    error(diagnostics, 'script_input_type_changed', `Script input ${expected.inputId} converter changed.`, path);
+    error(
+      diagnostics,
+      'script_input_type_changed',
+      `Script input ${expected.inputId} converter changed.`,
+      path,
+    );
   }
 }
 
@@ -271,22 +326,45 @@ function validateOutput(
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = `script/output:${expected.outputId}`;
-  if (guidText(parameterData, 'OutputId', String(index)) !== BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID) {
-    error(diagnostics, 'script_output_type_changed', `Script output ${expected.outputId} parameter type changed.`, path);
+  if (
+    guidText(parameterData, 'OutputId', String(index)) !==
+    BREP_GRASSHOPPER_SCRIPT_PARAMETER_GUID
+  ) {
+    error(
+      diagnostics,
+      'script_output_type_changed',
+      `Script output ${expected.outputId} parameter type changed.`,
+      path,
+    );
   }
   const output = ghxChunk(parameterData, 'OutputParam', String(index));
   if (!output) {
-    error(diagnostics, 'missing_script_output', `Script output ${expected.outputId} is missing.`, path);
+    error(
+      diagnostics,
+      'missing_script_output',
+      `Script output ${expected.outputId} is missing.`,
+      path,
+    );
     return;
   }
   if (guidText(output, 'InstanceGuid') !== expected.instanceGuid.toLowerCase()) {
-    error(diagnostics, 'script_output_identity_changed', `Script output ${expected.outputId} identity changed.`, path);
+    error(
+      diagnostics,
+      'script_output_identity_changed',
+      `Script output ${expected.outputId} identity changed.`,
+      path,
+    );
   }
   if (
     ghxItemText(output, 'Name') !== expected.variableName ||
     ghxItemText(output, 'NickName') !== expected.nickname
   ) {
-    error(diagnostics, 'script_output_identity_changed', `Script output ${expected.outputId} name changed.`, path);
+    error(
+      diagnostics,
+      'script_output_identity_changed',
+      `Script output ${expected.outputId} name changed.`,
+      path,
+    );
   }
   const expectedParamAccess =
     expected.outputId === 'result' && expectedAccess === 'list' ? '1' : '0';
@@ -299,7 +377,12 @@ function validateOutput(
     );
   }
   if (ghxItemText(output, 'SourceCount') !== '0') {
-    error(diagnostics, 'script_output_rewired', `Script output ${expected.outputId} unexpectedly has a source.`, path);
+    error(
+      diagnostics,
+      'script_output_rewired',
+      `Script output ${expected.outputId} unexpectedly has a source.`,
+      path,
+    );
   }
   const converter = ghxChunk(output, 'ConverterData');
   if (
@@ -308,30 +391,63 @@ function validateOutput(
     ghxItemText(converter, 'AssemblyName') !== SYSTEM_CORELIB ||
     ghxItemText(converter, 'TypeName') !== 'System.Object'
   ) {
-    error(diagnostics, 'script_output_type_changed', `Script output ${expected.outputId} converter or type hint changed.`, path);
+    error(
+      diagnostics,
+      'script_output_type_changed',
+      `Script output ${expected.outputId} converter or type hint changed.`,
+      path,
+    );
   }
 }
 
 function validateHostEnvelope(
   root: BrepGrasshopperGhxArchiveNode,
   definition: BrepGrasshopperGhxArchiveNode,
+  mode: BrepGrasshopperExecutableGhxValidationMode,
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   if (!ghxChunk(root, 'Thumbnail')) {
-    error(diagnostics, 'missing_thumbnail', 'Executable GHX is missing the Grasshopper Thumbnail archive chunk.');
+    error(
+      diagnostics,
+      'missing_thumbnail',
+      'Executable GHX is missing the Grasshopper Thumbnail archive chunk.',
+    );
   }
+
   const libraries = ghxChunk(definition, 'GHALibraries');
-  const hasRhinoCode = libraries
-    ? ghxChunks(libraries, 'Library').some(
-        (library) => guidText(library, 'Id') === BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
-      )
-    : false;
-  if (!hasRhinoCode) {
+  if (!libraries) {
+    error(
+      diagnostics,
+      'missing_gha_libraries',
+      'Executable GHX is missing the Grasshopper GHALibraries archive chunk.',
+    );
+    return;
+  }
+
+  const libraryEntries = ghxChunks(libraries, 'Library');
+  const hasRhinoCode = libraryEntries.some(
+    (library) =>
+      guidText(library, 'Id') === BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
+  );
+  if (mode === 'generated' && !hasRhinoCode) {
     error(
       diagnostics,
       'missing_rhinocode_library',
       'Executable GHX does not declare the RhinoCodePluginGH library required by its Python 3 Script.',
     );
+  }
+
+  if (mode === 'returned') {
+    const claimsRhinoCodeByName = libraryEntries.some(
+      (library) => ghxItemText(library, 'Name') === 'RhinoCodePluginGH',
+    );
+    if (claimsRhinoCodeByName && !hasRhinoCode) {
+      error(
+        diagnostics,
+        'rhinocode_library_identity_changed',
+        'Returned GHX declares RhinoCodePluginGH with an unexpected library identity.',
+      );
+    }
   }
 }
 
@@ -339,22 +455,57 @@ function validateScript(
   object: BrepGrasshopperGhxArchiveNode,
   expected: BrepGrasshopperRhinoScriptPlan,
   outputAccess: ReadonlyMap<string, BrepGrasshopperAccess>,
+  mode: BrepGrasshopperExecutableGhxValidationMode,
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = 'DefinitionObjects/BrepiaScript';
-  if (guidText(object, 'GUID') !== BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID) {
-    error(diagnostics, 'script_type_changed', 'Brepia Python 3 Script component type changed.', path);
+  if (
+    guidText(object, 'GUID') !==
+    BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID
+  ) {
+    error(
+      diagnostics,
+      'script_type_changed',
+      'Brepia Python 3 Script component type changed.',
+      path,
+    );
   }
-  if (guidText(object, 'Lib') !== BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID) {
-    error(diagnostics, 'script_library_changed', 'Brepia Python 3 Script library identity changed.', path);
+
+  const scriptLibrary = guidText(object, 'Lib');
+  const invalidScriptLibrary =
+    mode === 'generated'
+      ? scriptLibrary !== BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID
+      : scriptLibrary != null &&
+        scriptLibrary !== BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID;
+  if (invalidScriptLibrary) {
+    error(
+      diagnostics,
+      'script_library_changed',
+      'Brepia Python 3 Script library identity changed.',
+      path,
+    );
   }
+
   const container = objectContainer(object);
   if (!container) {
-    error(diagnostics, 'missing_script_container', 'Brepia Python 3 Script Container is missing.', path);
+    error(
+      diagnostics,
+      'missing_script_container',
+      'Brepia Python 3 Script Container is missing.',
+      path,
+    );
     return;
   }
-  if (guidText(container, 'InstanceGuid') !== expected.componentInstanceGuid.toLowerCase()) {
-    error(diagnostics, 'script_identity_changed', 'Brepia Python 3 Script instance identity changed.', path);
+  if (
+    guidText(container, 'InstanceGuid') !==
+    expected.componentInstanceGuid.toLowerCase()
+  ) {
+    error(
+      diagnostics,
+      'script_identity_changed',
+      'Brepia Python 3 Script instance identity changed.',
+      path,
+    );
   }
   if (
     ghxItemText(container, 'Name') !== 'Python 3 Script' ||
@@ -376,25 +527,46 @@ function validateScript(
     );
   }
   if (ghxItemText(container, 'ScriptComponentVersion') !== '3') {
-    error(diagnostics, 'script_version_changed', 'Brepia Python 3 Script persistence version changed.', path);
+    error(
+      diagnostics,
+      'script_version_changed',
+      'Brepia Python 3 Script persistence version changed.',
+      path,
+    );
   }
 
   const parameterData = ghxChunk(container, 'ParameterData');
   if (!parameterData) {
-    error(diagnostics, 'missing_script_parameters', 'Brepia Python 3 Script ParameterData is missing.', path);
+    error(
+      diagnostics,
+      'missing_script_parameters',
+      'Brepia Python 3 Script ParameterData is missing.',
+      path,
+    );
     return;
   }
   if (
     ghxItemText(parameterData, 'InputCount') !== String(expected.inputs.length) ||
     ghxChunks(parameterData, 'InputParam').length !== expected.inputs.length
   ) {
-    error(diagnostics, 'script_input_count_changed', 'Brepia Python 3 Script input count changed.', path);
+    error(
+      diagnostics,
+      'script_input_count_changed',
+      'Brepia Python 3 Script input count changed.',
+      path,
+    );
   }
   if (
-    ghxItemText(parameterData, 'OutputCount') !== String(expected.outputs.length) ||
+    ghxItemText(parameterData, 'OutputCount') !==
+      String(expected.outputs.length) ||
     ghxChunks(parameterData, 'OutputParam').length !== expected.outputs.length
   ) {
-    error(diagnostics, 'script_output_count_changed', 'Brepia Python 3 Script output count changed.', path);
+    error(
+      diagnostics,
+      'script_output_count_changed',
+      'Brepia Python 3 Script output count changed.',
+      path,
+    );
   }
   expected.inputs.forEach((input, index) =>
     validateInput(parameterData, input, index, diagnostics),
@@ -411,7 +583,12 @@ function validateScript(
 
   const script = ghxChunk(container, 'Script');
   if (!script) {
-    error(diagnostics, 'missing_script_source', 'Brepia Python 3 Script source chunk is missing.', path);
+    error(
+      diagnostics,
+      'missing_script_source',
+      'Brepia Python 3 Script source chunk is missing.',
+      path,
+    );
     return;
   }
   if (
@@ -441,14 +618,19 @@ function validateScript(
     ghxItemText(language, 'Taxon') !== '*.*.python' ||
     ghxItemText(language, 'Version') !== '3.*'
   ) {
-    error(diagnostics, 'script_language_changed', 'Brepia script language/version changed.', path);
+    error(
+      diagnostics,
+      'script_language_changed',
+      'Brepia script language/version changed.',
+      path,
+    );
   }
 }
 
 export async function validateBrepGrasshopperExecutableGhx(
   input: string,
   expectedContract: unknown,
-  mode: 'generated' | 'returned' = 'generated',
+  mode: BrepGrasshopperExecutableGhxValidationMode = 'generated',
 ): Promise<BrepGrasshopperExecutableGhxValidationResult> {
   const diagnostics: BrepGrasshopperExecutableGhxDiagnostic[] = [];
   const parameters: Record<string, number> = {};
@@ -461,19 +643,35 @@ export async function validateBrepGrasshopperExecutableGhx(
     } else {
       error(diagnostics, 'malformed_xml', 'GHX could not be parsed safely.');
     }
-    return { accepted: false, compatibility: 'unsupported', diagnostics, parameters };
+    return {
+      accepted: false,
+      compatibility: 'unsupported',
+      diagnostics,
+      parameters,
+    };
   }
 
   if (root.name !== 'Archive' || root.attributes.name !== 'Root') {
     error(diagnostics, 'invalid_root', 'GHX root must be Archive name="Root".');
   }
   const definition = ghxChunk(root, 'Definition');
-  const definitionObjects = definition ? ghxChunk(definition, 'DefinitionObjects') : undefined;
+  const definitionObjects = definition
+    ? ghxChunk(definition, 'DefinitionObjects')
+    : undefined;
   if (!definition || !definitionObjects) {
-    error(diagnostics, 'missing_definition_objects', 'GHX DefinitionObjects chunk is missing.');
-    return { accepted: false, compatibility: 'unsupported', diagnostics, parameters };
+    error(
+      diagnostics,
+      'missing_definition_objects',
+      'GHX DefinitionObjects chunk is missing.',
+    );
+    return {
+      accepted: false,
+      compatibility: 'unsupported',
+      diagnostics,
+      parameters,
+    };
   }
-  validateHostEnvelope(root, definition, diagnostics);
+  validateHostEnvelope(root, definition, mode, diagnostics);
 
   let packagePlan;
   let scriptPlan;
@@ -490,16 +688,31 @@ export async function validateBrepGrasshopperExecutableGhx(
         caught instanceof Error ? caught.message : String(caught)
       }`,
     );
-    return { accepted: false, compatibility: 'unsupported', diagnostics, parameters };
+    return {
+      accepted: false,
+      compatibility: 'unsupported',
+      diagnostics,
+      parameters,
+    };
   }
 
   const outputAccess = new Map<string, BrepGrasshopperAccess>(
-    packagePlan.contract.interface.outputs.map((output) => [output.id, output.access]),
+    packagePlan.contract.interface.outputs.map((output) => [
+      output.id,
+      output.access,
+    ]),
   );
   const objects = ghxChunks(definitionObjects, 'Object');
-  const declared = Number.parseInt(ghxItemText(definitionObjects, 'ObjectCount') ?? '', 10);
+  const declared = Number.parseInt(
+    ghxItemText(definitionObjects, 'ObjectCount') ?? '',
+    10,
+  );
   if (!Number.isSafeInteger(declared) || declared !== objects.length) {
-    error(diagnostics, 'object_count_mismatch', 'GHX ObjectCount does not match serialized objects.');
+    error(
+      diagnostics,
+      'object_count_mismatch',
+      'GHX ObjectCount does not match serialized objects.',
+    );
   }
   if (objects.length !== packagePlan.controls.length + 1) {
     error(
@@ -510,7 +723,10 @@ export async function validateBrepGrasshopperExecutableGhx(
   }
 
   const expectedControls = new Map(
-    packagePlan.controls.map((control) => [control.instanceGuid.toLowerCase(), control]),
+    packagePlan.controls.map((control) => [
+      control.instanceGuid.toLowerCase(),
+      control,
+    ]),
   );
   const seenControls = new Set<string>();
   let scriptCount = 0;
@@ -543,9 +759,13 @@ export async function validateBrepGrasshopperExecutableGhx(
     if (guid === BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID) {
       scriptCount += 1;
       if (scriptCount > 1) {
-        error(diagnostics, 'duplicate_script', 'GHX contains more than one Brepia Python 3 Script.');
+        error(
+          diagnostics,
+          'duplicate_script',
+          'GHX contains more than one Brepia Python 3 Script.',
+        );
       } else {
-        validateScript(object, scriptPlan, outputAccess, diagnostics);
+        validateScript(object, scriptPlan, outputAccess, mode, diagnostics);
       }
       return;
     }
@@ -567,7 +787,11 @@ export async function validateBrepGrasshopperExecutableGhx(
     }
   }
   if (scriptCount !== 1) {
-    error(diagnostics, 'missing_script', 'Expected exactly one Brepia Python 3 Script component.');
+    error(
+      diagnostics,
+      'missing_script',
+      'Expected exactly one Brepia Python 3 Script component.',
+    );
   }
 
   const accepted = diagnostics.length === 0;
