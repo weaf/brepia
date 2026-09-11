@@ -160,6 +160,16 @@ const brepTransformNodeSchema = z
   })
   .strict();
 
+const brepMirrorNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('mirror'),
+    input: brepIdSchema,
+    normalAxis: z.enum(['x', 'y', 'z']),
+    offset: brepScalarSchema,
+  })
+  .strict();
+
 const brepSubtractNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -199,6 +209,7 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepBoxNodeSchema,
   brepCylinderNodeSchema,
   brepTransformNodeSchema,
+  brepMirrorNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
@@ -348,6 +359,15 @@ const brepProviderTransformNodeSchema = z
     rotateDeg: brepProviderVector3Schema.optional(),
   })
   .strict();
+const brepProviderMirrorNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('mirror'),
+    input: brepIdSchema,
+    normalAxis: z.enum(['x', 'y', 'z']),
+    offset: brepProviderScalarSchema,
+  })
+  .strict();
 const brepProviderFilletNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -361,6 +381,7 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderBoxNodeSchema,
   brepProviderCylinderNodeSchema,
   brepProviderTransformNodeSchema,
+  brepProviderMirrorNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
