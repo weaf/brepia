@@ -5,19 +5,17 @@ import { createBrepGrasshopperContract } from '../shared/brepGrasshopperContract
 import { compileBrepGrasshopperExecutableGhx } from '../shared/brepGrasshopperExecutableGhx.ts';
 import { validateBrepGrasshopperExecutableGhx } from '../shared/brepGrasshopperExecutableGhxValidation.ts';
 import { createBrepGrasshopperRhinoScriptPlan } from '../shared/brepGrasshopperRhinoScript.ts';
-import type { BrepProject } from '../shared/brepProject.ts';
+import type { BrepProject, BrepVector3 } from '../shared/brepProject.ts';
 
 const placement = {
-  origin: [0, 0, 0] as [number, number, number],
-  xAxis: [1, 0, 0] as [number, number, number],
-  yAxis: [0, 1, 0] as [number, number, number],
+  origin: [0, 0, 0] as BrepVector3,
+  xAxis: [1, 0, 0] as BrepVector3,
+  yAxis: [0, 1, 0] as BrepVector3,
 };
 
 function projectWithTransform(
-  rotateDeg: BrepProject['nodes'][number] extends infer _Node
-    ? [unknown, unknown, unknown]
-    : never,
-  translate: [number, number, number] = [0, 0, 0],
+  rotateDeg: BrepVector3,
+  translate: BrepVector3 = [0, 0, 0],
 ): BrepProject {
   return {
     schemaVersion: 1,
@@ -33,9 +31,7 @@ function projectWithTransform(
         type: 'transform',
         input: 'body',
         translate,
-        rotateDeg: rotateDeg as BrepProject['nodes'][number] extends { rotateDeg?: infer R }
-          ? R
-          : never,
+        rotateDeg,
       },
     ],
     resultNodeId: 'placed',
@@ -51,19 +47,19 @@ function contract(project: BrepProject) {
 
 describe('M6 non-zero rotation parity', () => {
   it('compiles X/Y/Z rotations with canonical Intrinsic XYZ matrix order', async () => {
-    const cases: Array<[[number, number, number], [number, number, number]]> = [
-      [[90, 0, 0], [90, 0, 0]],
-      [[0, 90, 0], [0, 90, 0]],
-      [[0, 0, 90], [0, 0, 90]],
+    const cases: BrepVector3[] = [
+      [90, 0, 0],
+      [0, 90, 0],
+      [0, 0, 90],
     ];
 
-    for (const [angles, expected] of cases) {
+    for (const angles of cases) {
       const script = await createBrepGrasshopperRhinoScriptPlan(
         contract(projectWithTransform(angles)),
       );
-      assert.match(script.source, new RegExp(`brepiaNode1RotationXDeg = float\\(${expected[0]}\\)`));
-      assert.match(script.source, new RegExp(`brepiaNode1RotationYDeg = float\\(${expected[1]}\\)`));
-      assert.match(script.source, new RegExp(`brepiaNode1RotationZDeg = float\\(${expected[2]}\\)`));
+      assert.match(script.source, new RegExp(`brepiaNode1RotationXDeg = float\\(${angles[0]}\\)`));
+      assert.match(script.source, new RegExp(`brepiaNode1RotationYDeg = float\\(${angles[1]}\\)`));
+      assert.match(script.source, new RegExp(`brepiaNode1RotationZDeg = float\\(${angles[2]}\\)`));
       assert.match(
         script.source,
         /brepiaNode1Rotation = brepiaNode1RotationX \* brepiaNode1RotationY \* brepiaNode1RotationZ/,
