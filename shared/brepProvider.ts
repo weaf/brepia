@@ -2,6 +2,7 @@ import {
   BREP_PROJECT_MAX_ABS_SCALAR,
   BrepProjectError,
   normalizeBrepProject,
+  validateBrepExtrudeProfileValues,
   validateBrepLinearPatternSpacingValues,
   type BrepNodeValueKind,
   type BrepProject,
@@ -357,6 +358,7 @@ export function normalizeBrepEvaluationRequest(
   try {
     validateBrepProjectScalarValues(project, parameterValues);
     validateBrepLinearPatternSpacingValues(project, parameterValues);
+    validateBrepExtrudeProfileValues(project, parameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
       throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
