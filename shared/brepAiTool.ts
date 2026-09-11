@@ -10,6 +10,7 @@ import {
   BREP_PROJECT_MAX_NODES,
   BREP_PROJECT_MAX_OBJECT_POINTS,
   BREP_PROJECT_MAX_PARAMETERS,
+  BREP_PROJECT_MAX_PATTERN_COUNT,
   BREP_PROJECT_SCHEMA_VERSION,
   type BrepProject,
 } from './brepProject.ts';
@@ -170,6 +171,17 @@ const brepMirrorNodeSchema = z
   })
   .strict();
 
+const brepLinearPatternNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('linearPattern'),
+    input: brepIdSchema,
+    axis: z.enum(['x', 'y', 'z']),
+    count: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    spacing: brepScalarSchema,
+  })
+  .strict();
+
 const brepSubtractNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -210,6 +222,7 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepCylinderNodeSchema,
   brepTransformNodeSchema,
   brepMirrorNodeSchema,
+  brepLinearPatternNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
@@ -368,6 +381,16 @@ const brepProviderMirrorNodeSchema = z
     offset: brepProviderScalarSchema,
   })
   .strict();
+const brepProviderLinearPatternNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('linearPattern'),
+    input: brepIdSchema,
+    axis: z.enum(['x', 'y', 'z']),
+    count: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    spacing: brepProviderScalarSchema,
+  })
+  .strict();
 const brepProviderFilletNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -382,6 +405,7 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderCylinderNodeSchema,
   brepProviderTransformNodeSchema,
   brepProviderMirrorNodeSchema,
+  brepProviderLinearPatternNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
