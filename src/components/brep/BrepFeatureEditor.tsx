@@ -22,9 +22,11 @@ import {
 import {
   BREP_PROJECT_MAX_NODE_INPUTS,
   BREP_PROJECT_MAX_PATTERN_COUNT,
+  BREP_PROJECT_MAX_PROFILE_POINTS,
   brepNodeValueKind,
   type BrepNode,
   type BrepParameterUnit,
+  type BrepProfile,
   type BrepProject,
   type BrepScalar,
   type BrepVector3,
@@ -48,6 +50,7 @@ const fieldClass =
 const NODE_TYPES: BrepNode['type'][] = [
   'box',
   'cylinder',
+  'extrude',
   'transform',
   'mirror',
   'linearPattern',
@@ -67,6 +70,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Box';
     case 'cylinder':
       return 'Cylinder';
+    case 'extrude':
+      return 'Extrude';
     case 'transform':
       return 'Transform';
     case 'mirror':
@@ -81,6 +86,25 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Intersect';
     case 'fillet':
       return 'Fillet';
+  }
+}
+
+function defaultExtrudeProfile(type: BrepProfile['type']): BrepProfile {
+  switch (type) {
+    case 'rectangle':
+      return { type, width: 100, height: 100 };
+    case 'circle':
+      return { type, radius: 50 };
+    case 'closedPolyline':
+      return {
+        type,
+        points: [
+          { u: -50, v: -50 },
+          { u: 50, v: -50 },
+          { u: 50, v: 50 },
+          { u: -50, v: 50 },
+        ],
+      };
   }
 }
 
@@ -143,6 +167,14 @@ function createNodeDraft(
       return { id, type, width: 100, depth: 100, height: 100 };
     case 'cylinder':
       return { id, type, radius: 25, height: 100 };
+    case 'extrude':
+      return {
+        id,
+        type,
+        profile: defaultExtrudeProfile('rectangle'),
+        axis: 'z',
+        depth: 50,
+      };
     case 'transform': {
       const input = preferredInputNodeId(project, selectedNodeId);
       return { id, type, input, translate: [0, 0, 0] };
@@ -487,6 +519,169 @@ function OrderedNodeReferencesField({
   );
 }
 
+function ExtrudeProfileFields({
+  profile,
+  project,
+  disabled,
+  onChange,
+}: {
+  profile: BrepProfile;
+  project: BrepProject;
+  disabled: boolean;
+  onChange: (profile: BrepProfile) => void;
+}) {
+  const profileType = profile.type;
+  return (
+    <div className="grid gap-4 rounded-lg border border-adam-neutral-800 bg-adam-neutral-950/30 p-3">
+      <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+        <span>Profile type</span>
+        <select
+          className={fieldClass}
+          value={profileType}
+          disabled={disabled}
+          onChange={(event) =>
+            onChange(
+              defaultExtrudeProfile(event.target.value as BrepProfile['type']),
+            )
+          }
+        >
+          <option value="rectangle">Rectangle</option>
+          <option value="circle">Circle</option>
+          <option value="closedPolyline">Closed polyline</option>
+        </select>
+      </label>
+
+      {profile.type === 'rectangle' ? (
+        <>
+          <ScalarField
+            label="Profile width"
+            value={profile.width}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(width) => onChange({ ...profile, width })}
+          />
+          <ScalarField
+            label="Profile height"
+            value={profile.height}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(height) => onChange({ ...profile, height })}
+          />
+        </>
+      ) : profile.type === 'circle' ? (
+        <ScalarField
+          label="Profile radius"
+          value={profile.radius}
+          unit="mm"
+          project={project}
+          disabled={disabled}
+          onChange={(radius) => onChange({ ...profile, radius })}
+        />
+      ) : (
+        <div className="grid gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-adam-neutral-300">
+              Closed polyline points · {profile.points.length}/
+              {BREP_PROJECT_MAX_PROFILE_POINTS}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={
+                disabled ||
+                profile.points.length >= BREP_PROJECT_MAX_PROFILE_POINTS
+              }
+              className="h-7 px-2 text-[10px]"
+              onClick={() => {
+                const last = profile.points.at(-1);
+                const offset = 25 * (profile.points.length + 1);
+                const nextPoint = {
+                  u: typeof last?.u === 'number' ? last.u + 25 : offset,
+                  v: typeof last?.v === 'number' ? last.v + 25 : offset,
+                };
+                onChange({
+                  ...profile,
+                  points: [...profile.points, nextPoint],
+                });
+              }}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Add point
+            </Button>
+          </div>
+          <div className="grid gap-3">
+            {profile.points.map((point, index) => (
+              <div
+                key={index}
+                className="grid gap-3 rounded-lg border border-adam-neutral-800 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-wide text-adam-neutral-500">
+                    Point {index + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled || profile.points.length <= 3}
+                    className="h-7 px-2 text-[10px]"
+                    onClick={() =>
+                      onChange({
+                        ...profile,
+                        points: profile.points.filter(
+                          (_, pointIndex) => pointIndex !== index,
+                        ),
+                      })
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ScalarField
+                    label="U"
+                    value={point.u}
+                    unit="mm"
+                    project={project}
+                    disabled={disabled}
+                    onChange={(u) => {
+                      const points = profile.points.map((candidate, pointIndex) =>
+                        pointIndex === index ? { ...candidate, u } : candidate,
+                      );
+                      onChange({ ...profile, points });
+                    }}
+                  />
+                  <ScalarField
+                    label="V"
+                    value={point.v}
+                    unit="mm"
+                    project={project}
+                    disabled={disabled}
+                    onChange={(v) => {
+                      const points = profile.points.map((candidate, pointIndex) =>
+                        pointIndex === index ? { ...candidate, v } : candidate,
+                      );
+                      onChange({ ...profile, points });
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Points are ordered in the canonical local U/V plane and close
+            implicitly from the final point to the first. Save rejects duplicate
+            edges, zero area and self-intersection.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NodeEditorFields({
   node,
   project,
@@ -548,6 +743,49 @@ function NodeEditorFields({
             disabled={disabled}
             onChange={(height) => onChange({ ...node, height })}
           />
+        </div>
+      );
+
+    case 'extrude':
+      return (
+        <div className="grid gap-4">
+          <ExtrudeProfileFields
+            profile={node.profile}
+            project={project}
+            disabled={disabled}
+            onChange={(profile) => onChange({ ...node, profile })}
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Extrusion axis</span>
+            <select
+              className={fieldClass}
+              value={node.axis}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  axis: event.target.value as 'x' | 'y' | 'z',
+                })
+              }
+            >
+              <option value="x">X axis · U=Y, V=Z</option>
+              <option value="y">Y axis · U=Z, V=X</option>
+              <option value="z">Z axis · U=X, V=Y</option>
+            </select>
+          </label>
+          <ScalarField
+            label="Extrusion depth"
+            value={node.depth}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(depth) => onChange({ ...node, depth })}
+          />
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            The profile is centered on the canonical local plane. Extrusion is
+            symmetric from -depth / 2 to +depth / 2 along the selected axis and
+            always produces one single-shape result.
+          </p>
         </div>
       );
 
@@ -1132,7 +1370,7 @@ export function BrepFeatureEditor({
                     <span className="mt-1 block truncate text-[10px] text-adam-neutral-500">
                       {dependencies.length > 0
                         ? `Depends on ${dependencies.join(', ')}`
-                        : `Primitive · node ${index + 1}`}
+                        : `${node.type === 'extrude' ? 'Profile extrusion' : 'Primitive'} · node ${index + 1}`}
                     </span>
                   </span>
                   <Pencil
