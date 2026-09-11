@@ -185,7 +185,7 @@ describe('M2 Boolean composition', () => {
     assert.match(driver, /exactly one is required/);
   });
 
-  it('exposes ordered Boolean inputs in the structural editor', () => {
+  it('exposes ordered single-shape Boolean inputs in the structural editor', () => {
     const source = fs.readFileSync(
       new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
       'utf8',
@@ -193,7 +193,8 @@ describe('M2 Boolean composition', () => {
     assert.match(source, /'union'/);
     assert.match(source, /'intersect'/);
     assert.match(source, /OrderedNodeReferencesField/);
-    assert.match(source, /Inputs are ordered and unique/);
+    assert.match(source, /Inputs are ordered, unique and single-shape/);
+    assert.match(source, /isAllowedReferenceNode\(node, nodeId, 'single'\)/);
     assert.match(source, /values\.length <= 2/);
   });
 });
