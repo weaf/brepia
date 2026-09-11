@@ -133,13 +133,14 @@ This runtime acceptance does not change:
 
 M3C native build123d / OCCT runtime acceptance is **complete**.
 
-The remaining external acceptance boundary is installed Rhino 8 / Grasshopper. It must separately prove:
+Installed Rhino 8 / Grasshopper acceptance was subsequently completed as a separate external evidence layer and is recorded in:
 
-1. rectangular pattern as final result through **Result List Access**;
-2. row-major repeated geometry in the installed host;
-3. parameter-driven spacing recomputation;
-4. save -> close -> reopen persistence;
-5. rectangular pattern as `subtract.tools[]` producing a single **Result Item Access** Brep;
-6. strict returned-GHX validation accepting only the changed published parameter values.
+```text
+docs/brep_m3c_rhino8_runtime_evidence_2026-09-11.md
+```
+
+That host run separately proved final rectangular pattern Result List behavior, parameter-driven spacing recomputation, save -> close -> reopen persistence, rectangular pattern as subtract cutters with final Result Item behavior, and strict parameter-only returned-GHX validation.
+
+The native and installed-host evidence remain deliberately separate from repository CI evidence.
 
 PR #36 remains open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
