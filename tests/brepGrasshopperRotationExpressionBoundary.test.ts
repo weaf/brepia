@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, it } from 'vitest';
 
-import {
-  BrepGrasshopperRhinoScriptError,
-  createBrepGrasshopperRhinoScriptPlan,
-} from '../shared/brepGrasshopperRhinoScript.ts';
+import { createBrepGrasshopperRhinoScriptPlan } from '../shared/brepGrasshopperRhinoScript.ts';
 
 const fixture = JSON.parse(
   fs.readFileSync(
@@ -28,23 +25,43 @@ function cloneFixture(): MutableFixture {
   return JSON.parse(JSON.stringify(fixture)) as MutableFixture;
 }
 
-describe('BRep M1 Rhino rotation boundary', () => {
-  it('rejects an expression-backed rotation even when the expression resolves to zero', async () => {
-    const unsupported = cloneFixture();
-    unsupported.source.nodes.push({
+describe('BRep M6 Rhino rotation expression parity', () => {
+  it('compiles bounded expression-backed degree rotations instead of rejecting them', async () => {
+    const candidate = cloneFixture();
+    candidate.source.nodes.push({
       id: 'expressionRotatedBody',
       type: 'transform',
       input: 'body',
-      rotateDeg: [{ op: 'sub', args: [0, 0] }, 0, 0],
+      translate: [7, 11, 13],
+      rotateDeg: [
+        { op: 'add', args: [10, 5] },
+        { op: 'sub', args: [20, 20] },
+        { op: 'neg', args: [-10] },
+      ],
     });
-    unsupported.source.resultNodeId = 'expressionRotatedBody';
+    candidate.source.resultNodeId = 'expressionRotatedBody';
 
-    await assert.rejects(
-      () => createBrepGrasshopperRhinoScriptPlan(unsupported),
-      (error: unknown) =>
-        error instanceof BrepGrasshopperRhinoScriptError &&
-        error.code === 'unsupported_model' &&
-        /rotation/.test(error.message),
+    const script = await createBrepGrasshopperRhinoScriptPlan(candidate);
+
+    assert.match(
+      script.source,
+      /RotationXDeg = float\(brepia_add\(10, 5\)\)/,
+    );
+    assert.match(
+      script.source,
+      /RotationYDeg = float\(brepia_sub\(20, 20\)\)/,
+    );
+    assert.match(
+      script.source,
+      /RotationZDeg = float\(brepia_neg\(-10\)\)/,
+    );
+    assert.match(
+      script.source,
+      /Rotation = brepiaNode\d+RotationX \* brepiaNode\d+RotationY \* brepiaNode\d+RotationZ/,
+    );
+    assert.match(
+      script.source,
+      /Transform = brepiaNode\d+Translation \* brepiaNode\d+Rotation/,
     );
   });
 });
