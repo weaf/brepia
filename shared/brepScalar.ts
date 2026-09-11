@@ -63,8 +63,6 @@ function scalarPossibleUnits(
   parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
 ): Set<BrepParameterUnit> {
   if (typeof value === 'number') {
-    // Numeric literals are contextually typed. This preserves v1 literals in
-    // every scalar field while allowing expressions such as width - 20.
     return new Set<BrepParameterUnit>(['mm', 'deg', 'none']);
   }
   if (isBrepParameterReference(value)) {
@@ -393,6 +391,12 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
       case 'linearPattern':
         scalars.push({ value: node.spacing, field: `${node.id}.spacing` });
         break;
+      case 'rectangularPattern':
+        scalars.push(
+          { value: node.spacingA, field: `${node.id}.spacingA` },
+          { value: node.spacingB, field: `${node.id}.spacingB` },
+        );
+        break;
       case 'fillet':
         scalars.push({ value: node.radius, field: `${node.id}.radius` });
         break;
@@ -470,6 +474,10 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
       break;
     case 'linearPattern':
       append(node.spacing);
+      break;
+    case 'rectangularPattern':
+      append(node.spacingA);
+      append(node.spacingB);
       break;
     case 'fillet':
       append(node.radius);
