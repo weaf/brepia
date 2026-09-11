@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { BufferAttribute, BufferGeometry } from 'three';
 import {
   Check,
   ChevronDown,
@@ -22,6 +21,7 @@ import {
 } from 'lucide-react';
 import { BrepFeatureEditor } from '@/components/brep/BrepFeatureEditor';
 import { BrepProjectDefinitionEditor } from '@/components/brep/BrepProjectDefinitionEditor';
+import { brepViewerGeometryFromResult } from '@/components/brep/brepViewerGeometry';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import {
@@ -149,22 +149,6 @@ function parameterValuesEqual(
     leftKeys.length === rightKeys.length &&
     leftKeys.every((key) => left[key] === right[key])
   );
-}
-
-function geometryFromResult(
-  result: BrepEvaluationSuccess,
-): BufferGeometry | null {
-  const mesh = result.bodies[0]?.viewerMesh;
-  if (!mesh) return null;
-  const geometry = new BufferGeometry();
-  geometry.setAttribute(
-    'position',
-    new BufferAttribute(new Float32Array(mesh.positions), 3),
-  );
-  geometry.setIndex(mesh.indices);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
 }
 
 export function BrepProjectEditorProvider({
@@ -642,7 +626,7 @@ export function BrepProjectViewerPanel({
 }) {
   const { result, loading, error } = useBrepProjectEditor();
   const geometry = useMemo(
-    () => (result ? geometryFromResult(result) : null),
+    () => (result ? brepViewerGeometryFromResult(result) : null),
     [result],
   );
 
