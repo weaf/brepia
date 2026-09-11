@@ -44,6 +44,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'cylinder':
       return [];
     case 'transform':
+    case 'mirror':
     case 'fillet':
       return [node.input];
     case 'subtract':
