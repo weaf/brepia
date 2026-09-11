@@ -1,6 +1,6 @@
 # M3A — mirror status
 
-Status: **repository-complete and CI-accepted; native build123d / OCCT runtime and installed Rhino 8 / Grasshopper acceptance pending**
+Status: **repository-complete, CI-accepted and native build123d / OCCT runtime-accepted; installed Rhino 8 / Grasshopper acceptance pending**
 
 Date: 2026-09-11
 
@@ -65,9 +65,9 @@ The constrained native evaluator maps mirror to build123d `Shape.mirror(Plane)`.
 Canonical axis mapping is orientation-aware so a positive canonical offset means a positive global coordinate along the named normal axis:
 
 ```text
-x -> Plane.YZ  -> +X normal
- y -> Plane.ZX -> +Y normal
-z -> Plane.XY  -> +Z normal
+x -> Plane.YZ -> +X normal
+y -> Plane.ZX -> +Y normal
+z -> Plane.XY -> +Z normal
 ```
 
 The use of `Plane.ZX` rather than `Plane.XZ` for the Y-normal backend mapping is deliberate. build123d defines `Plane.XZ` with a `-Y` normal, so applying `offset(+d)` there would place the mirror plane at `Y = -d` and violate the canonical `Y = +offset` contract. This orientation issue was found during pre-runtime reconciliation and corrected before M3A repository acceptance.
@@ -76,11 +76,15 @@ The native smoke fixture covers all three axes with asymmetric translated geomet
 
 ```text
 x mirror -> X = -30 .. -10
- y mirror -> Y = -25 .. -15
+y mirror -> Y = -25 .. -15
 z mirror -> Z = -23 .. -17
 ```
 
-It also checks exact STEP signature and 3DM header for each mirror case while preserving the existing pre-M3 smoke coverage.
+Real native runtime acceptance has now reproduced all three expected bounds exactly while retaining one result body and successful exact STEP / 3DM artifact checks. Evidence is recorded in:
+
+```text
+docs/brep_m3a_native_runtime_evidence_2026-09-11.md
+```
 
 ## Rhino 8 / Grasshopper mapping
 
@@ -149,19 +153,31 @@ Quality Gate #896       PASS
 Grasshopper Build #468 PASS
 ```
 
-## Remaining runtime acceptance
+## Native runtime acceptance
 
-M3A is not yet runtime-accepted.
+Native build123d / OCCT runtime acceptance is complete.
 
-Native acceptance next:
+The real local smoke run preserved the complete pre-M3 regression set and produced:
 
-```bash
-./scripts/brep/smoke-test.sh
+```text
+{"mirror":"x","offset":5,"result":"mirrored","bounds":{"min":[-30,25,27],"max":[-10,35,33]},"triangles":12}
+{"mirror":"y","offset":5,"result":"mirrored","bounds":{"min":[20,-25,27],"max":[40,-15,33]},"triangles":12}
+{"mirror":"z","offset":5,"result":"mirrored","bounds":{"min":[20,25,-23],"max":[40,35,-17]},"triangles":12}
 ```
 
-The expected additional successful mirror lines should report X/Y/Z mirrors with the numeric bounds above.
+These bounds match the canonical expected mirror positions exactly, including the orientation-sensitive Y offset.
 
-Installed Rhino 8 / Grasshopper acceptance then requires a fresh current-branch GHX containing a parameter-backed mirror node and should verify:
+Detailed evidence:
+
+```text
+docs/brep_m3a_native_runtime_evidence_2026-09-11.md
+```
+
+## Remaining installed-host acceptance
+
+M3A is not yet fully closed. Only installed Rhino 8 / Grasshopper acceptance remains.
+
+A fresh current-branch GHX containing a parameter-backed mirror node must verify:
 
 ```text
 Brepia export
@@ -178,7 +194,7 @@ Brepia export
 
 At least two axis/offset states should be visually or numerically distinguishable so a zero-plane-only success cannot hide an offset-sign mismatch.
 
-M3B instance-set / linear-pattern work must not begin until M3A native and installed-host evidence is reconciled and M3A is explicitly closed.
+M3B instance-set / linear-pattern work must not begin until installed-host evidence is reconciled and M3A is explicitly closed.
 
 ## Preserved boundaries
 
