@@ -400,7 +400,7 @@ def evaluate(request):
             return shapes[node_id]
         node = nodes[node_id]
         kind = node["type"]
-        if kind == "linearPattern":
+        if kind in {"linearPattern", "rectangularPattern"}:
             raise ValueError(
                 f"unsupported_result_cardinality: BRep node {node_id} is an instance set where a single shape is required"
             )
@@ -440,27 +440,52 @@ def evaluate(request):
 
     def evaluate_node_instances(node_id):
         node = nodes[node_id]
-        if node["type"] != "linearPattern":
+        kind = node["type"]
+        if kind not in {"linearPattern", "rectangularPattern"}:
             return [evaluate_node(node_id)]
         if node_id in instance_sets:
             return instance_sets[node_id]
+
         input_shape = evaluate_node(node["input"])
-        spacing = scalar(node["spacing"], parameters)
-        if spacing == 0.0:
-            raise ValueError(
-                f"invalid_parameter_value: BRep linearPattern {node_id} spacing must resolve to a non-zero millimetre value"
-            )
-        axis = node["axis"]
-        direction = {
+        directions = {
             "x": (1.0, 0.0, 0.0),
             "y": (0.0, 1.0, 0.0),
             "z": (0.0, 0.0, 1.0),
-        }[axis]
+        }
         instances = []
-        for index in range(node["count"]):
-            distance = index * spacing
-            translation = tuple(component * distance for component in direction)
-            instances.append(input_shape.moved(Location(translation)))
+
+        if kind == "linearPattern":
+            spacing = scalar(node["spacing"], parameters)
+            if spacing == 0.0:
+                raise ValueError(
+                    f"invalid_parameter_value: BRep linearPattern {node_id} spacing must resolve to a non-zero millimetre value"
+                )
+            direction = directions[node["axis"]]
+            for index in range(node["count"]):
+                distance = index * spacing
+                translation = tuple(component * distance for component in direction)
+                instances.append(input_shape.moved(Location(translation)))
+        else:
+            spacing_a = scalar(node["spacingA"], parameters)
+            spacing_b = scalar(node["spacingB"], parameters)
+            if spacing_a == 0.0:
+                raise ValueError(
+                    f"invalid_parameter_value: BRep rectangularPattern {node_id} spacingA must resolve to a non-zero millimetre value"
+                )
+            if spacing_b == 0.0:
+                raise ValueError(
+                    f"invalid_parameter_value: BRep rectangularPattern {node_id} spacingB must resolve to a non-zero millimetre value"
+                )
+            direction_a = directions[node["axisA"]]
+            direction_b = directions[node["axisB"]]
+            for a in range(node["countA"]):
+                for b in range(node["countB"]):
+                    translation = tuple(
+                        direction_a[axis] * a * spacing_a + direction_b[axis] * b * spacing_b
+                        for axis in range(3)
+                    )
+                    instances.append(input_shape.moved(Location(translation)))
+
         instance_sets[node_id] = instances
         return instances
 
@@ -493,7 +518,7 @@ def evaluate(request):
 
     result_id = project["resultNodeId"]
     result_node = nodes[result_id]
-    if result_node["type"] == "linearPattern":
+    if result_node["type"] in {"linearPattern", "rectangularPattern"}:
         result_instances = evaluate_node_instances(result_id)
         primary_bodies = evaluated_instance_bodies(result_id)
         result_shape = Compound(children=result_instances)
