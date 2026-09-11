@@ -3,6 +3,7 @@ import {
   BrepScalarEvaluationError,
   BrepScalarValidationError,
   normalizeBrepScalarValue,
+  resolveBrepScalar,
   validateBrepProjectScalarDefaults,
 } from './brepScalar.ts';
 
@@ -10,6 +11,7 @@ export const BREP_PROJECT_SCHEMA_VERSION = 1 as const;
 export const BREP_PROJECT_MAX_PARAMETERS = 128;
 export const BREP_PROJECT_MAX_NODES = 256;
 export const BREP_PROJECT_MAX_NODE_INPUTS = 32;
+export const BREP_PROJECT_MAX_PATTERN_COUNT = 32;
 export const BREP_PROJECT_MAX_ID_CHARS = 64;
 export const BREP_PROJECT_MAX_NAME_CHARS = 120;
 export const BREP_PROJECT_MAX_DESCRIPTION_CHARS = 500;
@@ -20,6 +22,7 @@ export const BREP_PROJECT_MAX_OBJECT_POINTS = 128;
 export type BrepProjectUnitSystem = 'mm';
 export type BrepParameterUnit = 'mm' | 'deg' | 'none';
 export type BrepAxis = 'x' | 'y' | 'z';
+export type BrepNodeValueKind = 'single' | 'instanceSet';
 
 export type BrepParameterReference = {
   parameter: string;
@@ -130,6 +133,15 @@ export type BrepMirrorNode = {
   offset: BrepScalar;
 };
 
+export type BrepLinearPatternNode = {
+  id: string;
+  type: 'linearPattern';
+  input: string;
+  axis: BrepAxis;
+  count: number;
+  spacing: BrepScalar;
+};
+
 export type BrepSubtractNode = {
   id: string;
   type: 'subtract';
@@ -162,6 +174,7 @@ export type BrepNode =
   | BrepCylinderNode
   | BrepTransformNode
   | BrepMirrorNode
+  | BrepLinearPatternNode
   | BrepSubtractNode
   | BrepUnionNode
   | BrepIntersectNode
@@ -822,6 +835,43 @@ function normalizeNode(
       };
     }
 
+    case 'linearPattern': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep linearPattern ${id} axis must be x, y, or z.`,
+        );
+      }
+      if (
+        typeof value.count !== 'number' ||
+        !Number.isInteger(value.count) ||
+        value.count < 2 ||
+        value.count > BREP_PROJECT_MAX_PATTERN_COUNT
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep linearPattern ${id} count must be a literal integer between 2 and ${BREP_PROJECT_MAX_PATTERN_COUNT}.`,
+        );
+      }
+      return {
+        id,
+        type: 'linearPattern',
+        input: normalizeNodeReference(
+          value.input,
+          `BRep linearPattern ${id} input`,
+        ),
+        axis: value.axis as BrepAxis,
+        count: value.count,
+        spacing: normalizeScalar(
+          value.spacing,
+          `BRep linearPattern ${id} spacing`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
     case 'subtract': {
       if (
         !Array.isArray(value.tools) ||
@@ -881,6 +931,10 @@ function normalizeNode(
   }
 }
 
+export function brepNodeValueKind(node: BrepNode): BrepNodeValueKind {
+  return node.type === 'linearPattern' ? 'instanceSet' : 'single';
+}
+
 function nodeDependencies(node: BrepNode): string[] {
   switch (node.type) {
     case 'box':
@@ -888,6 +942,7 @@ function nodeDependencies(node: BrepNode): string[] {
       return [];
     case 'transform':
     case 'mirror':
+    case 'linearPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -929,6 +984,75 @@ function validateNodeReferencesAndCycles(nodes: BrepNode[]): void {
   };
 
   for (const node of nodes) visit(node.id);
+}
+
+function validateNodeValueCompatibility(
+  nodes: BrepNode[],
+  projectObject: BrepProjectObjectDefinition | undefined,
+): void {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const requireSingle = (owner: BrepNode, dependencyId: string, field: string) => {
+    const dependency = byId.get(dependencyId)!;
+    if (brepNodeValueKind(dependency) !== 'single') {
+      throw new BrepProjectError(
+        'invalid_node',
+        `BRep ${owner.type} ${owner.id} ${field} requires a single-shape node; ${dependencyId} is an instance set.`,
+      );
+    }
+  };
+
+  for (const node of nodes) {
+    switch (node.type) {
+      case 'box':
+      case 'cylinder':
+        break;
+      case 'transform':
+      case 'mirror':
+      case 'fillet':
+      case 'linearPattern':
+        requireSingle(node, node.input, 'input');
+        break;
+      case 'subtract':
+        requireSingle(node, node.base, 'base');
+        break;
+      case 'union':
+      case 'intersect':
+        node.inputs.forEach((input, index) =>
+          requireSingle(node, input, `inputs[${index}]`),
+        );
+        break;
+    }
+  }
+
+  const rolePairs = [
+    ['footprintNodeId', projectObject?.footprintNodeId],
+    ['clearanceEnvelopeNodeId', projectObject?.clearanceEnvelopeNodeId],
+    ['maintenanceEnvelopeNodeId', projectObject?.maintenanceEnvelopeNodeId],
+  ] as const;
+  for (const [field, nodeId] of rolePairs) {
+    if (!nodeId) continue;
+    if (brepNodeValueKind(byId.get(nodeId)!) !== 'single') {
+      throw new BrepProjectError(
+        'invalid_project_object',
+        `BRep project-object ${field} must reference a single-shape node; ${nodeId} is an instance set.`,
+      );
+    }
+  }
+}
+
+export function validateBrepLinearPatternSpacingValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'linearPattern') continue;
+    const spacing = resolveBrepScalar(node.spacing, parameterValues);
+    if (spacing === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep linearPattern ${node.id} spacing must resolve to a non-zero millimetre value.`,
+      );
+    }
+  }
 }
 
 export function normalizeBrepProject(project: unknown): BrepProject {
@@ -1011,6 +1135,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     parameterUnits,
     nodeIds,
   );
+  validateNodeValueCompatibility(nodes, projectObject);
 
   parameters.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
   nodes.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
@@ -1030,6 +1155,12 @@ export function normalizeBrepProject(project: unknown): BrepProject {
 
   try {
     validateBrepProjectScalarDefaults(normalized);
+    validateBrepLinearPatternSpacingValues(
+      normalized,
+      Object.fromEntries(
+        normalized.parameters.map((parameter) => [parameter.id, parameter.default]),
+      ),
+    );
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
       throw new BrepProjectError('invalid_parameter', error.message);
