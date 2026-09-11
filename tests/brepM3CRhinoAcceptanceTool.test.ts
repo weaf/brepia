@@ -15,6 +15,22 @@ import {
 
 const mode = process.env.M3C_RHINO_MODE ?? 'selftest';
 
+function optionalExpectedParameter(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  assert.ok(Number.isFinite(value), `${name} must be a finite number.`);
+  return value;
+}
+
+function assertPerturbed(parameters: Record<string, number>, fixture: string): void {
+  assert.ok(
+    parameters[M3C_RHINO_PARAMETER_A] !== 20 ||
+      parameters[M3C_RHINO_PARAMETER_BASE_B] !== 25,
+    `${fixture} must persist at least one parameter change from the generated defaults.`,
+  );
+}
+
 describe('M3C Rhino acceptance tooling', () => {
   if (mode === 'selftest' || mode === 'generate') {
     it('generates validated current-compiler GHX fixtures', async () => {
@@ -87,12 +103,12 @@ describe('M3C Rhino acceptance tooling', () => {
       assert.ok(finalFile, 'M3C_RHINO_RETURNED_FINAL is required.');
       assert.ok(cuttersFile, 'M3C_RHINO_RETURNED_CUTTERS is required.');
 
-      const expectedPitchA = Number(process.env.M3C_RHINO_EXPECTED_PITCH_A);
-      const expectedPitchBaseB = Number(
-        process.env.M3C_RHINO_EXPECTED_PITCH_BASE_B,
+      const expectedPitchA = optionalExpectedParameter(
+        'M3C_RHINO_EXPECTED_PITCH_A',
       );
-      assert.ok(Number.isFinite(expectedPitchA));
-      assert.ok(Number.isFinite(expectedPitchBaseB));
+      const expectedPitchBaseB = optionalExpectedParameter(
+        'M3C_RHINO_EXPECTED_PITCH_BASE_B',
+      );
 
       const finalResult = await validateM3cRhinoReturnedFixture(
         'final',
@@ -107,6 +123,8 @@ describe('M3C Rhino acceptance tooling', () => {
         expectedPitchBaseB,
       );
 
+      assertPerturbed(finalResult.parameters, 'Final pattern returned GHX');
+      assertPerturbed(cuttersResult.parameters, 'Pattern cutters returned GHX');
       assert.equal(finalResult.expectedResultAccess, 'List');
       assert.equal(cuttersResult.expectedResultAccess, 'Item');
       assert.equal(finalResult.filename, path.basename(finalFile));
