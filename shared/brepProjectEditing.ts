@@ -22,6 +22,7 @@ export function brepNodeDependencies(node: BrepNode): string[] {
     case 'transform':
     case 'mirror':
     case 'linearPattern':
+    case 'rectangularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -213,6 +214,12 @@ export function brepProjectParameterUsages(
       case 'linearPattern':
         if (brepScalarReferencesParameter(node.spacing, parameterId))
           usages.push(`${node.id}.spacing`);
+        break;
+      case 'rectangularPattern':
+        if (brepScalarReferencesParameter(node.spacingA, parameterId))
+          usages.push(`${node.id}.spacingA`);
+        if (brepScalarReferencesParameter(node.spacingB, parameterId))
+          usages.push(`${node.id}.spacingB`);
         break;
       case 'fillet':
         if (brepScalarReferencesParameter(node.radius, parameterId))
