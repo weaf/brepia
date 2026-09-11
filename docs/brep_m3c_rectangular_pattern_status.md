@@ -1,6 +1,6 @@
 # M3C — bounded rectangular pattern status
 
-Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted; post-closeout server result-boundary reconciliation also repository-accepted**
 
 Date: 2026-09-11
 
@@ -10,7 +10,7 @@ Branch: `feature/brep-grasshopper-gh-packaging`
 
 ## Accepted checkpoints and evidence
 
-The clean repository-integration checkpoint is:
+The original repository-integration checkpoint is:
 
 ```text
 c46a12c2d488a083e17c43ca97608b37a717767f
@@ -46,6 +46,44 @@ Repository CI is not native or Rhino runtime evidence. The two external acceptan
 docs/brep_m3c_native_runtime_evidence_2026-09-11.md
 docs/brep_m3c_rhino8_runtime_evidence_2026-09-11.md
 ```
+
+### Post-closeout server result-boundary reconciliation
+
+The later post-M3C product-gap reconciliation found one repository integration defect that the original driver-focused M3C tests did not exercise.
+
+The canonical graph and native/Rhino implementations already agreed that both:
+
+```text
+linearPattern
+rectangularPattern
+```
+
+produce an `instanceSet` when used as the final result. The native driver correctly emitted a rectangular final result as `countA * countB` ordered bodies and the GHX compiler correctly emitted Result List Access. However, `src/server/brepEvaluation.ts` still accepted only `linearPattern` inside its final `instanceSet` result-body validator. A valid rectangular result could therefore be produced by the native sandbox and rejected at the server boundary as `output_invalid`.
+
+The bounded repair changed only that result-contract validation:
+
+```text
+linearPattern      -> expected body count = count
+rectangularPattern -> expected body count = countA * countB
+```
+
+Stable `<patternId>::<index>` body identity, instance index ordering and `sourceNodeId` validation remain unchanged. A dedicated regression test now exercises a 2 x 3 final rectangular result through `evaluateBrepProject()`:
+
+```text
+tests/brepM3CServerBoundary.test.ts
+```
+
+The repaired code plus the post-M3C scope decision is accepted at:
+
+```text
+e4489eaea226751d0d4274db937381e0f5582c6a
+Select bounded circular pattern after M3C reconciliation
+
+Quality Gate #1044       PASS
+Grasshopper Build #616  PASS
+```
+
+This was a repository/server-boundary repair only. It did not change canonical M3C semantics, `scripts/brep/brep_driver.py`, the Rhino/GHX compiler or the previously accepted external-runtime fixtures. The earlier native and installed-Rhino evidence therefore remains separate and applicable; repository CI is not being substituted for either external runtime.
 
 ## Implemented canonical contract
 
@@ -99,6 +137,7 @@ The completed repository surface includes:
 - native build123d / OCCT execution with ordered copies and stable instance identity;
 - ordered `subtract.tools[]` expansion;
 - multi-body viewer/result handling and exact multi-solid STEP/3DM behavior;
+- server-boundary validation for final rectangular `instanceSet` results;
 - Rhino 8 Python/GHX compilation;
 - rectangular final Result as List Access;
 - rectangular pattern used by subtract while the final subtract remains Item Access;
@@ -113,6 +152,7 @@ tests/brepM3CRectangularPatternContract.test.ts
 tests/brepM3CNativePattern.test.ts
 tests/brepM3CRhinoPattern.test.ts
 tests/brepM3CRhinoAcceptanceTool.test.ts
+tests/brepM3CServerBoundary.test.ts
 ```
 
 plus the shared provider-schema and structural-UI suites and:
@@ -166,12 +206,13 @@ A first validation run observed a persisted non-default `pitchA=36`; the failure
 
 ## Closeout
 
-M3C now has all required acceptance layers:
+M3C now has all required acceptance layers, including the post-closeout repository boundary repair:
 
 - canonical/shared contract;
 - provider/AI authoring contract;
 - structural authoring UI;
 - multi-body viewer;
+- server result-contract validation;
 - native build123d / OCCT execution;
 - exact STEP/3DM behavior;
 - Rhino 8 / Grasshopper compilation;
@@ -182,7 +223,7 @@ M3C now has all required acceptance layers:
 - parameter perturbation and save/close/reopen persistence;
 - strict returned-GHX validation.
 
-There is no remaining M3C acceptance boundary.
+There is no remaining known M3C acceptance boundary after the `e4489ea...` reconciliation checkpoint.
 
 ## Preserved boundaries
 
