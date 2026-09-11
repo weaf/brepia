@@ -1,6 +1,6 @@
 # M6 non-zero transform rotation parity status
 
-Status: **repository-complete / CI-accepted / native-runtime-accepted; installed Rhino 8 / Grasshopper acceptance pending**
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
 
 Date: 2026-09-11
 
@@ -8,19 +8,9 @@ Repository: `weaf/brepia`
 
 Branch: `feature/brep-grasshopper-gh-packaging`
 
-## Scope decision
+## Scope
 
-M6 was selected as the next modeling slice after M4 closeout because non-zero rotation is an existing cross-runtime parity gap rather than a new modeling abstraction.
-
-Decision record:
-
-```text
-docs/brep_post_m4_scope_decision_2026-09-11.md
-```
-
-M5 shell/thickness and optional M3C rectangular/grid pattern remain deferred.
-
-M6 does not add a new canonical node or change `schemaVersion: 1`. It completes Rhino/GHX support for the already-existing canonical transform field:
+M6 closes the existing cross-runtime mismatch for the already-present canonical transform field:
 
 ```ts
 type BrepTransformNode = {
@@ -32,70 +22,52 @@ type BrepTransformNode = {
 };
 ```
 
+No new node family or schema version was introduced. M5 shell/thickness and optional M3C rectangular/grid pattern remain deferred pending a new post-M6 scope decision.
+
 ## Canonical rotation convention
 
-`rotateDeg = [rx, ry, rz]` retains the existing bounded M1 degree-scalar vector. Each component may be:
+`rotateDeg = [rx, ry, rz]` uses the existing bounded M1 degree-scalar contract. Components may be literals, published degree-parameter references or bounded degree-compatible M1 expressions.
 
-- a finite degree literal;
-- a direct published degree-parameter reference;
-- a bounded M1 scalar expression with degree-compatible unit algebra.
-
-The rotation convention is pinned to the native build123d 0.11.1 / OCCT behavior already used by `scripts/brep/brep_driver.py`:
+The canonical/native convention is pinned to build123d 0.11.1 / OCCT `Location(translation, rotation)` behavior:
 
 ```text
-Location(translation, rotation)
-```
-
-The orientation tuple is interpreted as **Intrinsic XYZ**. In matrix form for local column-vector geometry:
-
-```text
+Intrinsic XYZ
 R = Rx * Ry * Rz
 p' = R * p + T
 ```
 
-The geometry is therefore rotated around the canonical local origin first and translated afterward.
+Geometry rotates around the canonical local origin first and is translated afterward. Positive X/Y/Z angles follow the right-hand convention.
 
-Positive X/Y/Z angles use the normal right-hand axis-rotation convention. M6 does not introduce axis-angle, quaternion, free-form matrix or arbitrary transform representations.
+## RhinoCommon parity
 
-## RhinoCommon parity mapping
-
-The active Rhino 8 Python 3 compiler now emits three origin-centered axis rotations:
+The Rhino 8 Python 3 compiler emits origin-centered axis rotations and composes:
 
 ```text
-RotationX = Transform.Rotation(rx, XAxis, Origin)
-RotationY = Transform.Rotation(ry, YAxis, Origin)
-RotationZ = Transform.Rotation(rz, ZAxis, Origin)
+Rotation  = RotationX * RotationY * RotationZ
+Transform = Translation * Rotation
 ```
 
-and composes them as:
+RhinoCommon transform multiplication applies the right-hand operand first, preserving the native `p' = R*p + T` semantics.
 
-```text
-Rotation   = RotationX * RotationY * RotationZ
-Translation = Transform.Translation(...)
-Transform  = Translation * Rotation
-```
+Zero rotation uses the same composed path; translation-only nodes are no longer a separate compiler special case.
 
-RhinoCommon transform multiplication applies the right-hand operand first, so `Translation * Rotation` preserves the native `p' = R*p + T` behavior.
+## Cardinality and authority preserved
 
-The same path is used for zero rotation. Translation-only transform nodes therefore no longer use a separate special-case translation implementation in the Rhino compiler.
-
-## Existing canonical boundaries preserved
-
-M6 does not broaden transform result cardinality:
+M6 does not broaden collection semantics:
 
 - transform input remains single-shape only;
 - transform output remains `single`;
 - `instanceSet` input remains unsupported;
-- M3B Result List Access behavior is unchanged;
+- M3B final pattern List Access remains unchanged;
 - M6 Result remains ordinary Grasshopper Item Access.
 
-Project placement still runs as the already-accepted outer project placement transform after canonical graph evaluation. M6 concerns the local canonical transform-node semantics only.
+Canonical BRep + immutable revisions remain authoritative. build123d/OCCT remains the native geometry authority. Rhino/GHX remains an interoperability compiler and the returned GHX boundary remains parameter-only.
 
 ## AI/provider/editor behavior
 
-No provider schema or editor node family was added because `rotateDeg` already existed throughout the canonical authoring surface.
+No provider schema or editor node family was added because `rotateDeg` already existed in the canonical authoring surface.
 
-The Native BRep agent instruction was updated to stop treating non-zero rotation as forbidden and instead teach the exact M6 contract:
+The Native BRep instruction now teaches the exact M6 contract:
 
 ```text
 Intrinsic XYZ
@@ -105,51 +77,74 @@ then translate
 p' = R_intrinsicXYZ * p + T
 ```
 
-It also explicitly prohibits inventing extrinsic/yaw-pitch-roll strings, axis-angle, quaternion or matrix representations.
+Axis-angle, quaternion, free-form matrix and alternate yaw/pitch/roll representations remain outside the canonical contract.
 
-Existing UI scalar fields continue to preserve literal, parameter-backed and expression-backed degree values.
+## Repository / CI acceptance
 
-## Repository tests
-
-Dedicated M6 repository coverage includes:
+Dedicated repository coverage includes:
 
 ```text
 tests/brepM6RotationParity.test.ts
 tests/brepM6NativeRotation.test.ts
+tests/brepM6RhinoAcceptanceFixtures.test.ts
 ```
 
-The Rhino parity test covers:
+Coverage includes:
 
-- 90-degree X rotation;
-- 90-degree Y rotation;
-- 90-degree Z rotation;
-- asymmetric multi-axis `[30,20,10]` rotation;
-- translation `[7,11,13]` combined with that rotation;
+- +90 degree X/Y/Z rotations;
+- asymmetric `[30,20,10]` Intrinsic XYZ rotation;
+- translation `[7,11,13]` composed after rotation;
 - direct degree parameters;
-- bounded M1 expression-backed degree values;
-- zero rotation through the same composed path;
-- generated executable GHX validation;
-- ordinary Result Item Access.
+- bounded expression-backed degree values;
+- zero rotation through the same transform path;
+- executable GHX validation;
+- Result Item Access;
+- strict returned-GHX validation for Rhino-saved fixtures.
 
-Existing Grasshopper tests were reconciled so they continue to prove their original invariants under the unified transform path:
+The first complete M6 code candidate was:
 
-- complex graph / subtract cutter ordering;
-- product GHX export;
-- Rhino Python source shape;
-- rotation-expression boundary behavior, now positive M6 parity rather than legacy rejection.
+```text
+3fd9c38910baac956e1a67b710bcc41f31b3b0e0
+Lock native M6 rotation smoke contract
+```
 
-The stale tests were not removed or weakened into generic smoke assertions. Cutter identity/order, generated-GHX validation, script transform composition and expression preservation remain explicit.
+with:
 
-## Native runtime acceptance
+```text
+Quality Gate #990       PASS
+Grasshopper Build #562 PASS
+```
 
-The full native smoke suite was executed locally on the exact branch checkpoint:
+The subsequent repository-status checkpoint used for native runtime acceptance was:
 
 ```text
 ecfd9fea3209281e00ab9d31752087d3315bfea3
 Record M6 rotation parity repository status
 ```
 
-against the pinned runtime:
+with:
+
+```text
+Quality Gate #991       PASS
+Grasshopper Build #563 PASS
+```
+
+The M6 Rhino acceptance fixture checkpoint:
+
+```text
+b69e2723308055a736442494d9b2b823c711bf20
+```
+
+passed:
+
+```text
+Quality Gate #994       PASS
+Grasshopper Build #566 PASS
+```
+
+## Native runtime acceptance
+
+The full native smoke suite was executed against the real pinned local runtime:
 
 ```text
 localhost/brepia-brep:build123d-0.11.1
@@ -163,20 +158,15 @@ using:
 
 The complete suite was reported green.
 
-Accepted M6 runtime assertions include:
+Accepted single-axis bounds:
 
 ```text
-X 90:
-[-5,-15,-10] -> [5,15,10]
-
-Y 90:
-[-15,-10,-5] -> [15,10,5]
-
-Z 90:
-[-10,-5,-15] -> [10,5,15]
+X 90: [-5,-15,-10] -> [5,15,10]
+Y 90: [-15,-10,-5] -> [15,10,5]
+Z 90: [-10,-5,-15] -> [10,5,15]
 ```
 
-and the order-sensitive dynamic fixture:
+Accepted order-sensitive dynamic fixture:
 
 ```text
 rx = 30
@@ -188,71 +178,94 @@ min [-4.38914415,-5.87340299,-5.66971729]
 max [18.38914415,27.87340299,31.66971729]
 ```
 
-The result remained one `single` body and exact STEP remained available. Because M6 runs inside the normal full smoke suite, the same accepted run also preserved the existing M0-M4 native regressions.
+The result remained one `single` body and exact STEP remained available. Because M6 runs inside the normal full smoke suite, the same run preserved existing M0-M4 native regressions.
 
-Detailed evidence:
+Detailed native evidence:
 
 ```text
 docs/brep_m6_native_runtime_evidence_2026-09-11.md
 ```
 
-This closes the authoritative native side of M6. Installed Rhino 8 / Grasshopper parity remains a separate required acceptance boundary.
+## Installed Rhino 8 / Grasshopper acceptance
 
-## Repository acceptance checkpoint
-
-The first complete M6 repository candidate with the Rhino compiler, AI semantics, stale-regression reconciliation, native smoke and native source lock is:
+Fresh current-compiler GHX fixtures covered:
 
 ```text
-3fd9c38910baac956e1a67b710bcc41f31b3b0e0
-Lock native M6 rotation smoke contract
+m6-rotate-x90.ghx
+m6-rotate-y90.ghx
+m6-rotate-z90.ghx
+m6-intrinsic-xyz.ghx
 ```
 
-CI on that exact checkpoint:
+The first three cover positive 90-degree rotation around each canonical axis using an asymmetric 10 x 20 x 30 source box.
+
+The asymmetric multi-axis fixture uses:
 
 ```text
-Quality Gate #990       PASS
-Grasshopper Build #562 PASS
+rx = 30
+ry = ryBase + 5 = 20
+rz = 10
+T  = [7,11,13]
 ```
 
-The subsequent documentation checkpoint actually used for the accepted native smoke is:
+and the host acceptance edit changes only:
 
 ```text
-ecfd9fea3209281e00ab9d31752087d3315bfea3
-Record M6 rotation parity repository status
+Rotate X: 30 -> 60
 ```
 
-and it also passed:
+while `Rotate Y base` remains 15, proving the Y angle continues to be driven by the bounded expression `ryBase + 5`.
+
+The four Rhino-saved files were then checked through the strict returned-GHX validator:
+
+```bash
+BREPIA_M6_RHINO_SAVED_DIR=test-results/m6-rhino-acceptance \
+  npx vitest run tests/brepM6RhinoAcceptanceFixtures.test.ts
+```
+
+Observed result:
 
 ```text
-Quality Gate #991       PASS
-Grasshopper Build #563 PASS
+✓ tests/brepM6RhinoAcceptanceFixtures.test.ts (2 tests) 30ms
+  ✓ compiles and strictly validates fresh Item-access GHX fixtures 24ms
+  ✓ strictly validates Rhino-saved parameter-only acceptance files when requested 6ms
+
+Test Files  1 passed (1)
+Tests       2 passed (2)
 ```
 
-Scope diff from the M6-active baseline `7e1890765f1532ade047b9cb39bef98d84fab463` was 13 commits ahead / 0 behind at the code-complete checkpoint and contained only:
+Returned-mode recovery is constrained to:
 
-- M6 Rhino transform translation;
-- M6 AI instruction semantics;
-- M6 native smoke;
-- M6 dedicated tests;
-- reconciliation of tests whose expectations encoded the old translation-only / non-zero-rotation-rejected behavior.
+```text
+m6-rotate-x90:    {}
+m6-rotate-y90:    {}
+m6-rotate-z90:    {}
+m6-intrinsic-xyz: { rx: 60, ryBase: 15 }
+```
 
-No M5, M3C, canonical schema or collection-policy scope was introduced.
+while preserving the built-in Rhino Python 3 identity, Python source, component/port identities, type hints, graph/wiring, Result Item Access and the previously bounded Rhino host-save library-metadata normalization.
 
-## Remaining acceptance sequence
+Detailed installed-host evidence:
 
-Only the installed Rhino 8 / Grasshopper boundary remains before M6 can be called complete.
+```text
+docs/brep_m6_rhino8_runtime_evidence_2026-09-11.md
+```
 
-Generate fresh current-branch GHX and verify at minimum:
+## Closeout
 
-1. X/Y/Z single-axis rotation coverage;
-2. the asymmetric multi-axis rotation with translation;
-3. a published degree parameter changes solved geometry;
-4. a bounded expression-backed angle remains correctly driven by its published inputs;
-5. Result remains one Brep / Item Access;
-6. save -> close -> reopen preserves the solved definition;
-7. the Rhino-saved file passes the strict parameter-only returned-GHX validator, including the already-accepted bounded Rhino Python-library metadata normalization.
+M6 is complete across all required boundaries:
 
-Record installed-host evidence separately, following the M3/M4 precedent.
+- canonical/runtime semantics locked;
+- repository regression coverage green;
+- full Quality Gate green;
+- Grasshopper build/package gate green;
+- real build123d/OCCT native runtime accepted;
+- installed Rhino 8 / Grasshopper runtime accepted;
+- parameter and bounded-expression behavior exercised;
+- save/close/reopen + strict returned-GHX path accepted;
+- Result remains `single` / Item Access.
+
+No M5, M3C or broader collection/topology scope was introduced by M6.
 
 ## Preserved boundaries
 
@@ -268,12 +281,10 @@ M6 does not change:
 - M1 scalar depth 12 / node limit 64;
 - provider expression depth 2 / finite reference-free schema;
 - M2 exact-one-body Boolean semantics;
-- M3B `single | instanceSet` cardinality or collection consumers;
+- M3B `single | instanceSet` cardinality and collection consumers;
 - M4 profile/extrusion semantics;
 - GHX parameter-only return/import boundary;
 - OpenSCAD behavior;
-- C4 image projection deferral;
-- M5 shell/thickness deferral;
-- M3C rectangular/grid-pattern deferral.
+- C4 image projection deferral.
 
 PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
