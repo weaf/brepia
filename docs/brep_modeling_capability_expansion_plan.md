@@ -1,6 +1,6 @@
 # BRep modeling capability expansion plan
 
-Status: **M0, M1 and M2 complete; M3A mirror complete; M3B bounded linear pattern complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Post-M3 scope is decided in favor of M4 profile + extrusion; optional M3C rectangular/grid pattern is deferred.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0, M1, M2, M3A, M3B and M4 profile + extrusion are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Optional M3C rectangular/grid pattern remains deferred. The next step is a bounded post-M4 decision on whether M5 wall/shell/thickness semantics are justified before M6 rotation parity.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
 
 Detailed current status:
 
@@ -13,7 +13,10 @@ Detailed current status:
 - `docs/brep_m3b_linear_pattern_status.md`;
 - `docs/brep_m3b_native_runtime_evidence_2026-09-11.md`;
 - `docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md`;
-- `docs/brep_post_m3_scope_decision_2026-09-11.md`.
+- `docs/brep_post_m3_scope_decision_2026-09-11.md`;
+- `docs/brep_m4_profile_extrusion_status.md`;
+- `docs/brep_m4_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m4_rhino8_runtime_evidence_2026-09-11.md`.
 
 ## Why this track exists
 
@@ -236,7 +239,7 @@ The installed-host run verified supported union/intersection solves, parameter-d
 
 ## M3 — repetition and symmetry
 
-Status: **M3A mirror and M3B bounded linear pattern complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Optional M3C rectangular/grid pattern is deferred in favor of M4.**
+Status: **M3A mirror and M3B bounded linear pattern complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Optional M3C rectangular/grid pattern is deferred.**
 
 M3A added bounded single-shape mirror semantics and is complete across canonical/provider/editor implementation, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Its closeout and runtime evidence are recorded in the dedicated M3A documents listed above.
 
@@ -288,32 +291,64 @@ docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md
 
 Native runtime verified the final pattern as an ordered `instanceSet` with three separate bodies, exact 20 mm X-spacing, aggregate bounds `[-5,-5,-5] -> [45,5,5]`, exact multi-solid STEP, and four ordered pattern instances consumed as `subtract.tools[]` while the final subtract remained one `single` body. Installed Rhino 8 / Grasshopper accepted both a final list-result pattern and a pattern-as-subtract-cutters GHX, including save -> close -> reopen persistence.
 
-The M3B runtime boundary is closed. Rectangular/grid pattern remains optional future M3C work, but `docs/brep_post_m3_scope_decision_2026-09-11.md` defers it in favor of M4 because profile/extrude fills the larger current representational gap.
+The M3B runtime boundary is closed. Rectangular/grid pattern remains optional future M3C work, but `docs/brep_post_m3_scope_decision_2026-09-11.md` deferred it in favor of the now-complete M4 profile/extrude slice because profile/extrude filled the larger representational gap.
 
 M3 continues to preserve the M0–M2 invariants, keep non-zero rotation fail-closed and remain additive to canonical schema version 1.
 
 ## M4 — profile + extrusion foundation
 
-Introduce a bounded 2D profile abstraction and extrusion so ordinary plates, walls and outlines do not need to be reverse-engineered from subtractive 3D boxes.
+Status: **complete — repository/CI, native build123d / OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**.
 
-Candidate minimum surface:
+M4 adds a bounded inline 2D profile plus solid extrusion surface without introducing a reusable non-solid sketch authority:
 
-- rectangle profile;
-- closed polyline profile with expression-backed 2D points;
-- circle profile;
-- extrude along a canonical axis/direction.
+```ts
+type BrepProfile =
+  | { type: 'rectangle'; width: BrepScalar; height: BrepScalar }
+  | { type: 'circle'; radius: BrepScalar }
+  | { type: 'closedPolyline'; points: Array<{ u: BrepScalar; v: BrepScalar }> };
 
-Do not start with arbitrary NURBS/sketch constraints. The first profile layer should remain deterministic and easily portable between build123d and RhinoCommon.
+type BrepExtrudeNode = {
+  id: string;
+  type: 'extrude';
+  profile: BrepProfile;
+  axis: 'x' | 'y' | 'z';
+  depth: BrepScalar;
+};
+```
 
-This supports explicit plates and wall segments while keeping the canonical language kernel-neutral.
+The canonical frames are fixed and right-handed:
 
-The post-M3 decision and initial bounded M4 planning contract are recorded in `docs/brep_post_m3_scope_decision_2026-09-11.md`. The initial slice keeps profile data inside a solid-producing `extrude` node so the pipeline does not need a new non-solid result cardinality and the existing `single | instanceSet` contract remains intact.
+- X: U=Y, V=Z, normal +X;
+- Y: U=Z, V=X, normal +Y;
+- Z: U=X, V=Y, normal +Z.
+
+Extrusion is centered from `-depth/2` to `+depth/2`. Rectangle/circle profiles are centered; closedPolyline uses 3–32 ordered expression-capable U/V points and rejects zero-length edges, zero area and self-intersection. Width, height, radius and depth must resolve positive. The same validity rules run against effective runtime overrides.
+
+M4 remains additive to canonical `schemaVersion: 1`, produces exactly one `single`, and does not broaden the M3B collection policy. Arbitrary workplanes/vectors, open profiles, holes/multiple loops, sketch constraints, NURBS/splines, reusable profile nodes and topology references remain outside the slice.
+
+Native build123d / OCCT maps rectangle/circle/polyline to `Rectangle` / `Circle` / `Polygon`, canonical frames to `Plane.YZ` / `Plane.ZX` / `Plane.XY`, and centered extrusion to `extrude(..., amount=depth/2, both=True)`. Real native smoke accepted X/Y/Z rectangle bounds, circle, closedPolyline, parameter overrides and exact STEP while keeping prior M0–M3 regressions green.
+
+Rhino 8 / Grasshopper compiles the same surface through the built-in Python 3 Script carrier using explicit `Rhino.Geometry.Plane`, profile curves and `Extrusion.Create(...).ToBrep()`. Three fresh installed-host fixtures covered rectangle/Z, circle/X and closedPolyline/Y, parameter perturbations and ordinary Result Item Access. Their Rhino-saved definitions subsequently passed the strict returned-GHX gate with exactly the expected parameter values.
+
+The installed-host run also exposed a bounded Rhino save normalization: Rhino may omit explicit RhinoCodePluginGH `Lib`/library metadata when persisting the built-in Python 3 component. Generated mode continues to require the explicit library identity; returned mode accepts only the observed omission while preserving strict component GUID, script source, instance identity, wiring, type hints, graph shape and Item/List access. Foreign explicit library identities remain rejected.
+
+Detailed M4 status and evidence:
+
+```text
+docs/brep_m4_profile_extrusion_status.md
+docs/brep_m4_native_runtime_evidence_2026-09-11.md
+docs/brep_m4_rhino8_runtime_evidence_2026-09-11.md
+```
+
+The M4 repository, native and installed-host boundaries are closed.
 
 ## M5 — wall/shell/thickness semantics only after profile acceptance
 
-Do not immediately add a domain-specific `wall` node merely because the current room example is Boolean-heavy. First determine whether profile + extrusion + expressions + pattern already represents rooms cleanly.
+M4 acceptance now satisfies the prerequisite for evaluating this milestone, but does not by itself prove that a dedicated wall/shell/thickness operation is needed.
 
-If a dedicated thickness/shell operation is still needed, analyze topology stability separately. Shelling/offsetting can be kernel-sensitive and must not be added until native and Rhino behavior is bounded by deterministic fixtures.
+Do not add a domain-specific `wall` node merely because earlier room examples were Boolean-heavy. First test whether the accepted combination of M1 expressions + M2 Boolean composition + M3 repetition/symmetry + M4 profile/extrusion already represents the target room/plate cases cleanly.
+
+If a dedicated thickness/shell operation is still needed, analyze topology stability separately. Shelling/offsetting can be kernel-sensitive and must not be added until native and Rhino behavior is bounded by deterministic fixtures. Any selected M5 contract must remain kernel-neutral and must not persist raw face/edge indices as topology authority.
 
 ## M6 — rotation parity
 
@@ -348,9 +383,10 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 3. **M2 union/intersection** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
 4. **M3A mirror** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
 5. **M3B linear pattern** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
-6. **M4 profile/extrude** — selected as the next modeling capability; optional **M3C rectangular/grid pattern** is deferred per `docs/brep_post_m3_scope_decision_2026-09-11.md`.
-7. Re-evaluate need for dedicated wall/plate/shell semantics.
-8. **M6 rotation** and **M7 finishing** under their own Rhino/native parity acceptance.
+6. **M4 profile/extrude** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
+7. **Post-M4 decision** — evaluate target cases using M1–M4 before deciding whether M5 shell/thickness is justified; optional M3C grid pattern remains deferred.
+8. **M6 rotation** — if M5 is not justified as the immediate gap, close the existing non-zero-rotation parity boundary next.
+9. **M7 finishing/topology** — only under separate native/Rhino topology-stability acceptance.
 
 ## Regression fixtures to keep
 
