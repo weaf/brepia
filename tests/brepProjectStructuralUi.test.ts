@@ -46,17 +46,50 @@ describe('BRep structural DAG authoring UI boundary', () => {
     assert.match(projectEditorSource, /Another BRep project update is already in progress/);
   });
 
-  it('keeps all current node types available while subtract requires enough existing inputs', () => {
-    for (const type of ['box', 'cylinder', 'transform', 'subtract', 'fillet']) {
+  it('keeps all current node types available while bounded composition types enforce authoring prerequisites', () => {
+    for (const type of [
+      'box',
+      'cylinder',
+      'transform',
+      'mirror',
+      'linearPattern',
+      'subtract',
+      'union',
+      'intersect',
+      'fillet',
+    ]) {
       assert.match(featureEditorSource, new RegExp(`'${type}'`));
     }
+    assert.match(
+      featureEditorSource,
+      /type === 'linearPattern' && singleNodeCount < 1/,
+    );
     assert.match(
       featureEditorSource,
       /type === 'subtract' && project\.nodes\.length < 2/,
     );
     assert.match(
       featureEditorSource,
+      /type === 'union' \|\| type === 'intersect'/,
+    );
+    assert.match(
+      featureEditorSource,
       /Subtract creation requires at least two existing BRep features/,
     );
+  });
+
+  it('exposes the M3B linear pattern controls without weakening value-kind boundaries', () => {
+    assert.match(featureEditorSource, /case 'linearPattern'/);
+    assert.match(featureEditorSource, /Pattern axis/);
+    assert.match(featureEditorSource, /Instance count/);
+    assert.match(featureEditorSource, /min=\{2\}/);
+    assert.match(featureEditorSource, /max=\{BREP_PROJECT_MAX_PATTERN_COUNT\}/);
+    assert.match(featureEditorSource, /Center-to-center spacing/);
+    assert.match(featureEditorSource, /Spacing must resolve to a non-zero/);
+    assert.match(featureEditorSource, /valueKind="single"/);
+    assert.match(featureEditorSource, /brepNodeValueKind\(candidate\) === 'instanceSet'/);
+    assert.match(featureEditorSource, /linear-pattern instance set/);
+    assert.match(featureEditorSource, /canonical index order/);
+    assert.match(featureEditorSource, /Instance set/);
   });
 });
