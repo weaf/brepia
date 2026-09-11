@@ -1,6 +1,6 @@
 # M3A Rhino 8 / Grasshopper runtime evidence — 2026-09-11
 
-Status: **partial installed-host acceptance — open/solve and parameter-driven Y-normal mirror movement accepted; save/close/reopen pending**
+Status: **accepted — installed Rhino 8 / Grasshopper runtime**
 
 Repository: `weaf/brepia`
 
@@ -10,11 +10,7 @@ Branch: `feature/brep-grasshopper-gh-packaging`
 
 A fresh current-branch GHX containing a parameter-backed canonical `mirror` node was opened in the installed Rhino 8 / Grasshopper host.
 
-The tested graph uses a published `MirrorOffset` input driving a Y-normal mirror plane. Grasshopper opened the definition, solved it without a script/runtime error, and produced the reflected box as the Result Brep.
-
-The user exercised clearly different slider states, including the visible range endpoints `-20` and `20`. The resulting box visibly moved along the Rhino Y direction as `MirrorOffset` changed.
-
-This is the orientation-sensitive host case selected specifically to verify parity with the native mapping:
+The tested graph used a published `MirrorOffset` input driving a Y-normal mirror plane:
 
 ```text
 canonical normalAxis: y
@@ -23,22 +19,39 @@ native backend: Plane.ZX.offset(MirrorOffset)
 Rhino backend: explicit plane with +Y normal at Y = MirrorOffset
 ```
 
-The observed parameter-driven movement confirms that the installed Rhino compiler is not stuck on a zero plane and that the mirror offset is wired through the Grasshopper input.
+Grasshopper opened the definition, solved it without a script/runtime error, and produced the reflected box as the Result Brep.
+
+The user exercised clearly different slider states, including `-20` and `20`. The resulting box visibly moved along the Rhino Y direction as `MirrorOffset` changed. This is the orientation-sensitive case selected specifically to verify parity with the native build123d mapping and confirms that the installed Rhino compiler is not accidentally pinned to a zero plane or using the wrong offset sign.
+
+## Persistence acceptance
+
+The same generated GHX was then saved, closed and reopened in the installed Grasshopper host.
+
+After reopening:
+
+- the definition still solved successfully;
+- `MirrorOffset` remained connected to the generated Brepia Python component;
+- the Result Brep remained valid;
+- changing `MirrorOffset` continued to move the reflected box in Y.
+
+This completes the required installed-host sequence:
+
+```text
+Brepia export
+-> GHX open/solve
+-> parameter-driven mirror movement
+-> save
+-> close
+-> reopen
+-> still solves with the same parameter wiring
+```
 
 ## Evidence supplied
 
-Two installed-host screenshots show the same generated Grasshopper definition with `MirrorOffset` connected to the Brepia Python component and the reflected box at distinguishable Y positions for different slider values.
+Two installed-host screenshots showed the same generated Grasshopper definition with `MirrorOffset` connected to the Brepia Python component and the reflected box at distinguishable Y positions for different slider values. The user then explicitly confirmed successful save/close/reopen persistence and continued parameter control.
 
-## Remaining persistence check
+## Conclusion
 
-M3A is not yet fully closed. The same GHX still needs one persistence check:
+M3A installed Rhino 8 / Grasshopper runtime parity is accepted.
 
-```text
-save
--> close
--> reopen
--> definition still solves
--> MirrorOffset remains connected and continues to move the reflected Result Brep
-```
-
-Once that is confirmed, the installed-host acceptance gate is complete and M3A can be explicitly closed before M3B begins.
+Together with the repository/CI acceptance and the real build123d/OCCT native smoke evidence, this satisfies the full M3A mirror acceptance contract. M3A can be explicitly closed and M3B instance-set / linear-pattern contract analysis may begin.
