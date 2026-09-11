@@ -358,10 +358,15 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
         appendVectorScalars(scalars, node.translate, `${node.id}.translate`);
         appendVectorScalars(scalars, node.rotateDeg, `${node.id}.rotateDeg`);
         break;
+      case 'mirror':
+        scalars.push({ value: node.offset, field: `${node.id}.offset` });
+        break;
       case 'fillet':
         scalars.push({ value: node.radius, field: `${node.id}.radius` });
         break;
       case 'subtract':
+      case 'union':
+      case 'intersect':
         break;
     }
   }
@@ -410,10 +415,15 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
       appendVector(node.translate);
       appendVector(node.rotateDeg);
       break;
+    case 'mirror':
+      append(node.offset);
+      break;
     case 'fillet':
       append(node.radius);
       break;
     case 'subtract':
+    case 'union':
+    case 'intersect':
       break;
   }
   return [...references].sort((left, right) => left.localeCompare(right, 'en-US'));
