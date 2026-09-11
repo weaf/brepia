@@ -5,7 +5,6 @@ import { describe, it } from 'vitest';
 import {
   BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID,
   BREP_GRASSHOPPER_RHINOCODE_LIBRARY_GUID,
-  BrepGrasshopperRhinoScriptError,
   createBrepGrasshopperRhinoScriptPlan,
 } from '../shared/brepGrasshopperRhinoScript.ts';
 import { createBrepGrasshopperPackagePlan } from '../shared/brepGrasshopperPackagePlan.ts';
@@ -146,7 +145,7 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     assert.match(revised.source, /sourceRevisionId: revision-43/);
   });
 
-  it('emits the first canonical through-hole graph as centered box, centered cylinder, translate and subtract', async () => {
+  it('emits the first canonical through-hole graph as centered box, centered cylinder, transform and subtract', async () => {
     const withHole = cloneFixture();
     const body = withHole.source.nodes[0];
     assert.ok(body);
@@ -180,8 +179,13 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     );
     assert.match(
       script.source,
-      /\.Transform\(rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)\)/,
+      /brepiaNode2Translation = rg\.Transform\.Translation\(rg\.Vector3d\(600, 250, -10\)\)/,
     );
+    assert.match(
+      script.source,
+      /brepiaNode2Transform = brepiaNode2Translation \* brepiaNode2Rotation/,
+    );
+    assert.match(script.source, /brepiaNode2\.Transform\(brepiaNode2Transform\)/);
     assert.match(
       script.source,
       /rg\.Brep\.CreateBooleanDifference\(brepiaNode\d+, brepiaNode\d+, brepiaTolerance\)/,
@@ -214,23 +218,47 @@ describe('BRep Phase 8E-B Rhino Python 3 script plan', () => {
     );
   });
 
-  it('fails closed for transform rotations that have not yet been host-parity accepted', async () => {
-    const unsupported = cloneFixture();
-    unsupported.source.nodes.push({
+  it('emits M6 intrinsic XYZ rotation before translation for canonical transform nodes', async () => {
+    const rotated = cloneFixture();
+    rotated.source.nodes.push({
       id: 'rotatedBody',
       type: 'transform',
       input: 'body',
-      rotateDeg: [0, 0, 90],
+      translate: [7, 11, 13],
+      rotateDeg: [30, 20, 10],
     });
-    unsupported.source.resultNodeId = 'rotatedBody';
+    rotated.source.resultNodeId = 'rotatedBody';
 
-    await assert.rejects(
-      () => createBrepGrasshopperRhinoScriptPlan(unsupported),
-      (error: unknown) =>
-        error instanceof BrepGrasshopperRhinoScriptError &&
-        error.code === 'unsupported_model' &&
-        /rotation/.test(error.message),
+    const script = await createBrepGrasshopperRhinoScriptPlan(rotated);
+
+    assert.match(script.source, /brepiaNode1RotationXDeg = float\(30\)/);
+    assert.match(script.source, /brepiaNode1RotationYDeg = float\(20\)/);
+    assert.match(script.source, /brepiaNode1RotationZDeg = float\(10\)/);
+    assert.match(
+      script.source,
+      /brepiaNode1RotationX = rg\.Transform\.Rotation\(math\.radians\(brepiaNode1RotationXDeg\), rg\.Vector3d\(1, 0, 0\), rg\.Point3d\(0, 0, 0\)\)/,
     );
+    assert.match(
+      script.source,
+      /brepiaNode1RotationY = rg\.Transform\.Rotation\(math\.radians\(brepiaNode1RotationYDeg\), rg\.Vector3d\(0, 1, 0\), rg\.Point3d\(0, 0, 0\)\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode1RotationZ = rg\.Transform\.Rotation\(math\.radians\(brepiaNode1RotationZDeg\), rg\.Vector3d\(0, 0, 1\), rg\.Point3d\(0, 0, 0\)\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode1Rotation = brepiaNode1RotationX \* brepiaNode1RotationY \* brepiaNode1RotationZ/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode1Translation = rg\.Transform\.Translation\(rg\.Vector3d\(7, 11, 13\)\)/,
+    );
+    assert.match(
+      script.source,
+      /brepiaNode1Transform = brepiaNode1Translation \* brepiaNode1Rotation/,
+    );
+    assert.match(script.source, /brepiaNode1\.Transform\(brepiaNode1Transform\)/);
   });
 
   it('emits canonical parallel-axis fillets using normalized edge-midpoint tangents', async () => {
