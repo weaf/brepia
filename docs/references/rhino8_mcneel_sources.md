@@ -54,6 +54,8 @@ For the current first multi-node host candidate (`box -> cylinder -> translate -
 
 For canonical fillets, no direct branch-8 developer-sample implementing `Brep.CreateFilletEdges(...)` was found in the reviewed sample set. The version-specific official RhinoCommon 8 API is therefore the direct SDK authority for that call: `https://developer.rhino3d.com/api/rhinocommon/rhino.geometry.brep/createfilletedges?version=8.x`. Its seven-argument overload accepts edge indices, start/end radius collections, `BlendType`, `RailType` and tolerance and is available since Rhino 6, so it is within the Rhino 8 compatibility floor. Brepia uses `BlendType.Fillet`, `RailType.RollingBall` and the active document absolute tolerance.
 
+For M3A mirror, the version-specific RhinoCommon 8 API for `Rhino.Geometry.Transform.Mirror(...)` is the direct SDK authority. The `Mirror(Plane mirrorPlane)` overload is available since Rhino 5 and is therefore within the Rhino 8 compatibility floor. Brepia deliberately maps its narrower canonical axis+offset contract to an explicit local mirror plane, duplicates the input Brep, applies `Transform.Mirror(Plane)`, and fails closed if the plane or transform cannot be applied. Canonical `normalAxis: x/y/z` maps to YZ/XZ/XY respectively. This remains repository translation support until the same generated GHX is accepted in the installed Rhino 8 / Grasshopper host.
+
 ## Grasshopper GH/GHX persistence rules
 
 Official references:
@@ -84,6 +86,8 @@ Before adding or changing a canonical BRep DAG node translation to RhinoCommon:
 For boolean operations, follow RhinoCommon's tolerance-aware pattern. The McNeel Rhino 8 Python boolean-difference sample uses the active document's `ModelAbsoluteTolerance` with `Brep.CreateBooleanDifference(...)`.
 
 For translation, the reviewed Rhino 8 `transform-breps.py` sample uses `Rhino.Geometry.Transform.Translation(...)`. Brepia applies that transformation to duplicated local Breps so the canonical source DAG remains immutable while derived nodes receive their canonical translation.
+
+For mirror, canonical M3A remains single-shape. The Rhino translation constructs a plane from the canonical normal axis and millimetre offset in local project coordinates, duplicates the source Brep, then applies `Rhino.Geometry.Transform.Mirror(Plane)`. It returns only the reflected Brep; retaining the original or creating a repeated instance set is not part of `mirror` semantics. Installed-host evidence is required before M3A runtime parity is considered accepted.
 
 For fillets, Brepia preserves the currently accepted canonical selector boundary instead of exposing raw Rhino edge numbers as canonical state. Canonical v1 normalization admits `parallelToAxis` with axis `x`, `y` or `z`; it does not currently admit the wider `all` selector even though lower-level types/native code have a branch for it. The Rhino translation evaluates each Brep edge tangent at the normalized midpoint (`Domain.ParameterAt(0.5)` then `TangentAt(...)`), unitizes it and applies the native selector threshold `abs(abs(dot(axis)) - 1.0) <= 1e-3`. The selected topology indices and one constant radius per edge are passed as explicit .NET arrays to `Brep.CreateFilletEdges(...)`. Empty selection, non-positive radius or a result other than exactly one Brep fails closed. The GHX exporter must not broaden the canonical selector surface independently. This is repository translation support only until the exact fillet graph is accepted in the installed Rhino 8 host.
 
