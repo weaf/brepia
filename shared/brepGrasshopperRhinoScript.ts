@@ -261,10 +261,6 @@ function pointsForKind(
     .join(', ')}]`;
 }
 
-function isLiteralZero(value: BrepScalar): boolean {
-  return typeof value === 'number' && value === 0;
-}
-
 function filletAxisExpression(axis: 'x' | 'y' | 'z'): string {
   if (axis === 'x') return 'rg.Vector3d(1, 0, 0)';
   if (axis === 'y') return 'rg.Vector3d(0, 1, 0)';
@@ -333,19 +329,6 @@ function assertSupportedRhinoContract(contract: BrepGrasshopperContract): void {
       'unsupported_model',
       'Rhino script generation requires at least one canonical BRep node.',
     );
-  }
-
-  for (const node of contract.source.nodes) {
-    if (
-      node.type === 'transform' &&
-      node.rotateDeg != null &&
-      node.rotateDeg.some((entry) => !isLiteralZero(entry))
-    ) {
-      throw new BrepGrasshopperRhinoScriptError(
-        'unsupported_model',
-        `Rhino GHX host generation does not yet support non-zero transform rotation on node ${node.id}.`,
-      );
-    }
   }
 }
 
@@ -517,10 +500,33 @@ function buildGraphSource(
         variables,
         'vector',
       );
-      lines.push(`${variable} = ${input}.DuplicateBrep()`);
-      lines.push(`if not ${variable}.Transform(rg.Transform.Translation(${translate})):`);
+      const rotate = node.rotateDeg ?? [0, 0, 0];
+      const rotateX = scalarExpression(rotate[0], variables);
+      const rotateY = scalarExpression(rotate[1], variables);
+      const rotateZ = scalarExpression(rotate[2], variables);
+      lines.push(`${variable}RotationXDeg = float(${rotateX})`);
+      lines.push(`${variable}RotationYDeg = float(${rotateY})`);
+      lines.push(`${variable}RotationZDeg = float(${rotateZ})`);
       lines.push(
-        `    raise RuntimeError(${pythonString(`Rhino could not translate Brepia node ${node.id}.`)})`,
+        `${variable}RotationX = rg.Transform.Rotation(math.radians(${variable}RotationXDeg), rg.Vector3d(1, 0, 0), rg.Point3d(0, 0, 0))`,
+      );
+      lines.push(
+        `${variable}RotationY = rg.Transform.Rotation(math.radians(${variable}RotationYDeg), rg.Vector3d(0, 1, 0), rg.Point3d(0, 0, 0))`,
+      );
+      lines.push(
+        `${variable}RotationZ = rg.Transform.Rotation(math.radians(${variable}RotationZDeg), rg.Vector3d(0, 0, 1), rg.Point3d(0, 0, 0))`,
+      );
+      lines.push(
+        `${variable}Rotation = ${variable}RotationX * ${variable}RotationY * ${variable}RotationZ`,
+      );
+      lines.push(`${variable}Translation = rg.Transform.Translation(${translate})`);
+      lines.push(
+        `${variable}Transform = ${variable}Translation * ${variable}Rotation`,
+      );
+      lines.push(`${variable} = ${input}.DuplicateBrep()`);
+      lines.push(`if not ${variable}.Transform(${variable}Transform):`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not transform Brepia node ${node.id}.`)})`,
       );
     } else if (node.type === 'mirror') {
       const input = emitNode(node.input);
