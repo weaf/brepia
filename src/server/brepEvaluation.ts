@@ -98,10 +98,11 @@ function finiteVector(value: unknown): value is [number, number, number] {
 }
 
 function validBounds(value: unknown): value is BrepBounds {
-  if (!isRecord(value) || !finiteVector(value.min) || !finiteVector(value.max)) {
-    return false;
-  }
-  return value.min.every((component, index) => component <= value.max[index]!);
+  if (!isRecord(value)) return false;
+  const min = value.min;
+  const max = value.max;
+  if (!finiteVector(min) || !finiteVector(max)) return false;
+  return min.every((component, index) => component <= max[index]!);
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {
