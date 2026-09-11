@@ -1,6 +1,6 @@
 # M2 Rhino 8 / Grasshopper runtime evidence — 2026-09-11
 
-Status: **Boolean solve and fail-closed host parity accepted; save/close/reopen persistence check still to confirm before full M2 closeout**
+Status: **installed Rhino 8 / Grasshopper runtime accepted, including save/close/reopen persistence**
 
 Repository: `weaf/brepia`
 
@@ -60,6 +60,21 @@ The Grasshopper component entered an error state rather than returning a disjoin
 
 This confirms the intended exact-one-Brep union contract in the real Rhino 8 host.
 
+## Save / close / reopen evidence
+
+The generated GHX documents were also exercised across a persistence cycle in the installed host:
+
+```text
+working solved GHX
+-> save
+-> close
+-> reopen in Grasshopper
+-> published parameter wiring still present
+-> supported state still solves
+```
+
+The user explicitly confirmed that the save/close/reopen sequence worked. No host-side source, port or parameter-wiring loss was observed after reopening.
+
 ## Accepted findings
 
 The real installed-host evidence therefore proves:
@@ -70,26 +85,16 @@ The real installed-host evidence therefore proves:
 4. supported overlapping `union` solves to visible result geometry;
 5. empty intersection fails closed with an explicit runtime error;
 6. disjoint/multi-Brep union fails closed with an explicit exact-one-Brep runtime error;
-7. the host behavior matches the native single-body/result-cardinality policy rather than degrading to compound or arbitrary-body semantics.
+7. the host behavior matches the native single-body/result-cardinality policy rather than degrading to compound or arbitrary-body semantics;
+8. saved GHX documents can be closed and reopened while retaining the published parameter wiring and supported solve behavior.
 
 No M2 compiler correction is indicated by this evidence.
 
-## Remaining closeout check
+## Acceptance conclusion
 
-Before M2 is declared fully installed-host accepted, confirm the persistence leg for the generated GHX documents:
+The installed Rhino 8 / Grasshopper acceptance boundary for M2 is complete.
 
-```text
-working solved GHX
--> save
--> close
--> reopen in Grasshopper
--> same published parameter wiring present
--> supported state still solves
-```
-
-If that save/close/reopen step was already performed during this run, it only needs explicit confirmation; no additional geometry fixture is required.
-
-Until that confirmation is recorded, M3 remains blocked.
+Together with the repository CI and real native build123d / OCCT smoke evidence, M2 now has the required parity evidence to close formally and unblock M3 analysis.
 
 ## Preserved boundaries
 
