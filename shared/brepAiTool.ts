@@ -11,6 +11,7 @@ import {
   BREP_PROJECT_MAX_OBJECT_POINTS,
   BREP_PROJECT_MAX_PARAMETERS,
   BREP_PROJECT_MAX_PATTERN_COUNT,
+  BREP_PROJECT_MAX_PROFILE_POINTS,
   BREP_PROJECT_SCHEMA_VERSION,
   type BrepProject,
 } from './brepProject.ts';
@@ -151,6 +152,45 @@ const brepCylinderNodeSchema = z
   })
   .strict();
 
+function createBrepProfileSchema(scalarSchema: z.ZodTypeAny) {
+  const pointSchema = z
+    .object({ u: scalarSchema, v: scalarSchema })
+    .strict();
+  return z.discriminatedUnion('type', [
+    z
+      .object({
+        type: z.literal('rectangle'),
+        width: scalarSchema,
+        height: scalarSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('circle'),
+        radius: scalarSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('closedPolyline'),
+        points: z.array(pointSchema).min(3).max(BREP_PROJECT_MAX_PROFILE_POINTS),
+      })
+      .strict(),
+  ]);
+}
+
+const brepProfileSchema = createBrepProfileSchema(brepScalarSchema);
+
+const brepExtrudeNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('extrude'),
+    profile: brepProfileSchema,
+    axis: z.enum(['x', 'y', 'z']),
+    depth: brepScalarSchema,
+  })
+  .strict();
+
 const brepTransformNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -220,6 +260,7 @@ const brepFilletNodeSchema = z
 const brepNodeSchema = z.discriminatedUnion('type', [
   brepBoxNodeSchema,
   brepCylinderNodeSchema,
+  brepExtrudeNodeSchema,
   brepTransformNodeSchema,
   brepMirrorNodeSchema,
   brepLinearPatternNodeSchema,
@@ -363,6 +404,16 @@ const brepProviderCylinderNodeSchema = z
     height: brepProviderScalarSchema,
   })
   .strict();
+const brepProviderProfileSchema = createBrepProfileSchema(brepProviderScalarSchema);
+const brepProviderExtrudeNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('extrude'),
+    profile: brepProviderProfileSchema,
+    axis: z.enum(['x', 'y', 'z']),
+    depth: brepProviderScalarSchema,
+  })
+  .strict();
 const brepProviderTransformNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -403,6 +454,7 @@ const brepProviderFilletNodeSchema = z
 const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderBoxNodeSchema,
   brepProviderCylinderNodeSchema,
+  brepProviderExtrudeNodeSchema,
   brepProviderTransformNodeSchema,
   brepProviderMirrorNodeSchema,
   brepProviderLinearPatternNodeSchema,
