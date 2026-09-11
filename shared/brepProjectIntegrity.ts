@@ -42,6 +42,7 @@ function nodeDependencies(node: BrepNode): string[] {
   switch (node.type) {
     case 'box':
     case 'cylinder':
+    case 'extrude':
       return [];
     case 'transform':
     case 'mirror':
