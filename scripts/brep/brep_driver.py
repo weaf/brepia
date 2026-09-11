@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Box, Cylinder, Location, Plane, export_step
+from build123d import Box, Compound, Cylinder, Location, Plane, export_step
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -102,6 +102,13 @@ def resolved_point(point, parameters):
 def bounds(shape):
     box = shape.bounding_box()
     return {"min": [box.min.X, box.min.Y, box.min.Z], "max": [box.max.X, box.max.Y, box.max.Z]}
+
+
+def aggregate_bounds(bodies):
+    return {
+        "min": [min(body["bounds"]["min"][axis] for body in bodies) for axis in range(3)],
+        "max": [max(body["bounds"]["max"][axis] for body in bodies) for axis in range(3)],
+    }
 
 
 def mesh(shape, body_id):
@@ -203,6 +210,25 @@ def validate_exact_step_file(path, role):
             raise ValueError(f"3dm_export_failed: invalid exact STEP for {role}")
 
 
+def add_3dm_body(model, project, body, roles):
+    attributes = rhino3dm.ObjectAttributes()
+    attributes.Name = body["id"]
+    instance = body.get("instance")
+    set_user_strings(
+        attributes,
+        {
+            "brepia.projectId": project["id"],
+            "brepia.bodyId": body["id"],
+            "brepia.nodeId": body["nodeId"],
+            "brepia.instanceIndex": instance.get("index") if instance else None,
+            "brepia.sourceNodeId": instance.get("sourceNodeId") if instance else None,
+            "brepia.roles": roles,
+            "brepia.representation": "tessellated-mesh",
+        },
+    )
+    model.Objects.AddMesh(rhino_mesh(body["viewerMesh"]), attributes)
+
+
 def write_3dm(project, result, exact_step_paths, three_dm_path):
     model = rhino3dm.File3dm()
     model.Settings.ModelUnitSystem = rhino3dm.UnitSystem.Millimeters
@@ -222,6 +248,7 @@ def write_3dm(project, result, exact_step_paths, three_dm_path):
         "brepia.schemaVersion": str(project["schemaVersion"]),
         "brepia.projectId": project["id"],
         "brepia.resultNodeId": project["resultNodeId"],
+        "brepia.resultKind": result["resultKind"],
         "brepia.provider": compact_json(PROVIDER),
         "brepia.units": project["units"],
         "brepia.geometryRepresentation": "tessellated-mesh",
@@ -236,28 +263,26 @@ def write_3dm(project, result, exact_step_paths, three_dm_path):
     for key, value in document_strings.items():
         model.Strings[key] = value
 
-    bodies = {body["id"]: body for body in result["bodies"]}
-    for body in result["projectObject"]["geometry"].values():
-        bodies[body["id"]] = body
+    auxiliary_by_node = {}
+    for role, node_id in optional_role_node_ids.items():
+        body = result["projectObject"]["geometry"].get(role)
+        if body:
+            entry = auxiliary_by_node.setdefault(node_id, {"body": body, "roles": []})
+            entry["roles"].append(role)
 
-    roles_by_node = {}
-    for role, node_id in role_node_ids.items():
-        roles_by_node.setdefault(node_id, []).append(role)
+    if result["resultKind"] == "single":
+        primary = result["bodies"][0]
+        combined_roles = ["result"]
+        auxiliary = auxiliary_by_node.pop(primary["nodeId"], None)
+        if auxiliary:
+            combined_roles.extend(auxiliary["roles"])
+        add_3dm_body(model, project, primary, combined_roles)
+    else:
+        for body in result["bodies"]:
+            add_3dm_body(model, project, body, ["result"])
 
-    for node_id, roles in roles_by_node.items():
-        body = bodies[node_id]
-        attributes = rhino3dm.ObjectAttributes()
-        attributes.Name = node_id
-        set_user_strings(
-            attributes,
-            {
-                "brepia.projectId": project["id"],
-                "brepia.nodeId": node_id,
-                "brepia.roles": roles,
-                "brepia.representation": "tessellated-mesh",
-            },
-        )
-        model.Objects.AddMesh(rhino_mesh(body["viewerMesh"]), attributes)
+    for auxiliary in auxiliary_by_node.values():
+        add_3dm_body(model, project, auxiliary["body"], auxiliary["roles"])
 
     for point in result["projectObject"]["points"]:
         attributes = rhino3dm.ObjectAttributes()
@@ -297,6 +322,8 @@ def write_3dm(project, result, exact_step_paths, three_dm_path):
         raise ValueError("3dm_export_failed: model units are not millimetres")
     if check.Strings["brepia.projectId"] != project["id"]:
         raise ValueError("3dm_export_failed: project identity did not round trip")
+    if check.Strings["brepia.resultKind"] != result["resultKind"]:
+        raise ValueError("3dm_export_failed: result kind did not round trip")
     if check.Strings["brepia.placement"] != compact_json(placement):
         raise ValueError("3dm_export_failed: placement did not round trip")
     if check.Strings["brepia.exactBrepArtifacts"] != compact_json(exact_artifacts):
@@ -325,6 +352,7 @@ def evaluate(request):
     project = request["project"]
     parameters = request["parameterValues"]
     shapes = {}
+    instance_sets = {}
     body_payloads = {}
     nodes = {node["id"]: node for node in project["nodes"]}
 
@@ -333,6 +361,10 @@ def evaluate(request):
             return shapes[node_id]
         node = nodes[node_id]
         kind = node["type"]
+        if kind == "linearPattern":
+            raise ValueError(
+                f"unsupported_result_cardinality: BRep node {node_id} is an instance set where a single shape is required"
+            )
         if kind == "box": shape = Box(scalar(node["width"], parameters), scalar(node["depth"], parameters), scalar(node["height"], parameters))
         elif kind == "cylinder": shape = Cylinder(scalar(node["radius"], parameters), scalar(node["height"], parameters))
         elif kind == "transform":
@@ -350,7 +382,9 @@ def evaluate(request):
             shape = input_shape.mirror(mirror_plane)
         elif kind == "subtract":
             shape = evaluate_node(node["base"])
-            for tool in node["tools"]: shape = shape - evaluate_node(tool)
+            for tool_id in node["tools"]:
+                for tool_shape in evaluate_node_instances(tool_id):
+                    shape = shape - tool_shape
         elif kind == "union":
             inputs = [evaluate_node(input_id) for input_id in node["inputs"]]
             shape = require_single_boolean_solid(inputs[0].fuse(*inputs[1:]), kind, node_id)
@@ -364,18 +398,72 @@ def evaluate(request):
         shapes[node_id] = shape
         return shape
 
+    def evaluate_node_instances(node_id):
+        node = nodes[node_id]
+        if node["type"] != "linearPattern":
+            return [evaluate_node(node_id)]
+        if node_id in instance_sets:
+            return instance_sets[node_id]
+        input_shape = evaluate_node(node["input"])
+        spacing = scalar(node["spacing"], parameters)
+        if spacing == 0.0:
+            raise ValueError(
+                f"invalid_parameter_value: BRep linearPattern {node_id} spacing must resolve to a non-zero millimetre value"
+            )
+        axis = node["axis"]
+        direction = {
+            "x": (1.0, 0.0, 0.0),
+            "y": (0.0, 1.0, 0.0),
+            "z": (0.0, 0.0, 1.0),
+        }[axis]
+        instances = []
+        for index in range(node["count"]):
+            distance = index * spacing
+            translation = tuple(component * distance for component in direction)
+            instances.append(input_shape.moved(Location(translation)))
+        instance_sets[node_id] = instances
+        return instances
+
     def evaluated_body(node_id):
         if node_id in body_payloads:
             return body_payloads[node_id]
         shape = evaluate_node(node_id)
-        payload = {"id": node_id, "bounds": bounds(shape), "viewerMesh": mesh(shape, node_id)}
+        payload = {
+            "id": node_id,
+            "nodeId": node_id,
+            "bounds": bounds(shape),
+            "viewerMesh": mesh(shape, node_id),
+        }
         body_payloads[node_id] = payload
         return payload
 
+    def evaluated_instance_bodies(node_id):
+        node = nodes[node_id]
+        instances = evaluate_node_instances(node_id)
+        return [
+            {
+                "id": f"{node_id}::{index}",
+                "nodeId": node_id,
+                "instance": {"index": index, "sourceNodeId": node["input"]},
+                "bounds": bounds(shape),
+                "viewerMesh": mesh(shape, f"{node_id}::{index}"),
+            }
+            for index, shape in enumerate(instances)
+        ]
+
     result_id = project["resultNodeId"]
-    result = evaluate_node(result_id)
-    primary_body = evaluated_body(result_id)
-    role_shapes = {"result": result}
+    result_node = nodes[result_id]
+    if result_node["type"] == "linearPattern":
+        result_instances = evaluate_node_instances(result_id)
+        primary_bodies = evaluated_instance_bodies(result_id)
+        result_shape = Compound(children=result_instances)
+        result_kind = "instanceSet"
+    else:
+        result_shape = evaluate_node(result_id)
+        primary_bodies = [evaluated_body(result_id)]
+        result_kind = "single"
+
+    role_shapes = {"result": result_shape}
 
     definition = project.get("projectObject") or {}
     geometry = {}
@@ -393,13 +481,14 @@ def evaluate(request):
     if "metadata" in project:
         project_object["metadata"] = project["metadata"]
 
-    return result, {
+    return result_shape, {
         "status": "success",
         "provider": PROVIDER,
         "projectId": project["id"],
         "resultNodeId": result_id,
-        "bodies": [primary_body],
-        "bounds": primary_body["bounds"],
+        "resultKind": result_kind,
+        "bodies": primary_bodies,
+        "bounds": aggregate_bounds(primary_bodies),
         "projectObject": project_object,
         "warnings": [],
         "exactExport": {"format": "step", "available": True},
