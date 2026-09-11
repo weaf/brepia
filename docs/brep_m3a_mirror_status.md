@@ -1,6 +1,6 @@
 # M3A — mirror status
 
-Status: **repository-complete, CI-accepted, native build123d / OCCT runtime-accepted, and installed Rhino 8 / Grasshopper open/solve + parameter-motion accepted; save/close/reopen pending**
+Status: **complete — repository/CI, native build123d / OCCT runtime, and installed Rhino 8 / Grasshopper runtime accepted**
 
 Date: 2026-09-11
 
@@ -10,7 +10,7 @@ Branch: `feature/brep-grasshopper-gh-packaging`
 
 ## Scope
 
-M3A adds only bounded single-shape mirror symmetry. It does not start linear pattern, instance-set semantics, rectangular pattern, non-zero rotation, profile/extrusion or broader finishing work.
+M3A adds only bounded single-shape mirror symmetry. It does not include linear pattern, instance-set semantics, rectangular pattern, non-zero rotation, profile/extrusion or broader finishing work.
 
 Canonical `schemaVersion: 1` remains unchanged.
 
@@ -40,11 +40,9 @@ Ordinary canonical reference and DAG-cycle validation apply to `input`.
 
 ## M0 / M1 integration
 
-M0 reachability follows `mirror.input`, so a mirror node participates in authoritative graph analysis exactly like the other single-input feature nodes.
+M0 reachability follows `mirror.input`. M1 scalar traversal includes `mirror.offset`, so an authoritative mirror-offset parameter is classified as effective and uses the same bounded runtime scalar validation as other millimetre geometry fields.
 
-M1 scalar traversal includes `mirror.offset`. A parameter used by an authoritative mirror offset is therefore classified as effective, and runtime override validation uses the same bounded scalar evaluator as other millimetre geometry fields.
-
-The permanent scalar limits remain unchanged:
+Permanent scalar limits remain unchanged:
 
 ```text
 canonical expression depth: 12
@@ -56,13 +54,13 @@ provider expression depth: 2
 
 Both the full canonical Zod schema and the finite/reference-free provider authoring schema expose the same mirror node. Provider-facing `offset` uses the existing depth-2 scalar surface while canonical persistence retains the full M1 bounds.
 
-The Native BRep tool instruction explicitly states that mirror returns only the reflected shape. Requests for `original + mirrored` must use explicit branches and only a supported composition whose semantics are correct; mirror itself is not a pattern or collection primitive.
+The Native BRep tool instruction states explicitly that mirror returns only the reflected shape. Requests for `original + mirrored` must use explicit supported composition rather than overloading mirror with collection semantics.
 
 ## Native build123d / OCCT mapping
 
 The constrained native evaluator maps mirror to build123d `Shape.mirror(Plane)`.
 
-Canonical axis mapping is orientation-aware so a positive canonical offset means a positive global coordinate along the named normal axis:
+Canonical axis mapping is orientation-aware:
 
 ```text
 x -> Plane.YZ -> +X normal
@@ -70,9 +68,11 @@ y -> Plane.ZX -> +Y normal
 z -> Plane.XY -> +Z normal
 ```
 
-The use of `Plane.ZX` rather than `Plane.XZ` for the Y-normal backend mapping is deliberate. build123d defines `Plane.XZ` with a `-Y` normal, so applying `offset(+d)` there would place the mirror plane at `Y = -d` and violate the canonical `Y = +offset` contract.
+`Plane.ZX` is deliberately used for canonical Y-normal because build123d's `Plane.XZ` has a `-Y` normal. This preserves the contract that positive canonical offset means positive global coordinate along the named normal axis.
 
-Real native runtime acceptance reproduced all three expected bounds exactly while retaining one result body and successful exact STEP / 3DM artifact checks. Evidence is recorded in:
+Real native runtime acceptance reproduced the expected non-zero-offset bounds exactly for X/Y/Z while preserving one result body, exact STEP and 3DM artifacts.
+
+Evidence:
 
 ```text
 docs/brep_m3a_native_runtime_evidence_2026-09-11.md
@@ -82,25 +82,24 @@ docs/brep_m3a_native_runtime_evidence_2026-09-11.md
 
 The active Rhino Python 3 compiler duplicates the input Brep, constructs an explicit canonical mirror plane, applies `Rhino.Geometry.Transform.Mirror(Plane)`, and fails closed if the transform cannot be applied.
 
-Installed-host testing has now accepted the orientation-sensitive Y-normal case:
+Installed-host acceptance verified the orientation-sensitive Y-normal case with a fresh current-branch GHX:
 
-- a fresh generated GHX opened in installed Rhino 8 / Grasshopper;
-- the definition solved without script/runtime error;
-- `MirrorOffset` remained connected to the generated Brepia component;
-- moving the slider across clearly distinct values, including `-20` and `20`, visibly moved the reflected Result Brep along Y;
-- the observed direction/change confirms non-zero mirror-offset wiring in the real host.
+- GHX opened and solved without script/runtime error;
+- one reflected Result Brep was produced;
+- `MirrorOffset` remained connected to the generated component;
+- changing the slider across clearly different values moved the result in Y;
+- save -> close -> reopen succeeded;
+- after reopening the definition still solved and `MirrorOffset` continued controlling the reflected result.
 
-Partial installed-host evidence is recorded in:
+Evidence:
 
 ```text
 docs/brep_m3a_rhino8_runtime_evidence_2026-09-11.md
 ```
 
-Only save/close/reopen persistence remains before full M3A closeout.
-
 ## Structural editor
 
-The BRep feature editor exposes `Mirror` with input node, normal axis, scalar plane offset and an explicit note that mirror returns only the reflected input.
+The BRep feature editor exposes `Mirror` with input node, mirror-plane normal axis, scalar plane offset and an explicit note that mirror returns only the reflected input.
 
 ## Repository acceptance
 
@@ -111,30 +110,31 @@ Repository candidate:
 Smoke-test all M3A mirror axis offsets
 ```
 
-GitHub CI on that exact checkpoint:
+CI on that exact checkpoint:
 
 ```text
 Quality Gate #897       PASS
 Grasshopper Build #469 PASS
 ```
 
-## Native runtime acceptance
+Quality Gate includes tests, typecheck, lint, production build and `git diff --check`.
 
-Native build123d / OCCT runtime acceptance is complete. The real local smoke run preserved the complete pre-M3 regression set and produced exact X/Y/Z reflected bounds at non-zero offset.
+## Closeout conclusion
 
-## Remaining installed-host persistence check
-
-The same accepted GHX must now verify:
+M3A is fully accepted across:
 
 ```text
-save
--> close
--> reopen
--> still solves
--> MirrorOffset remains wired and continues to move the reflected Result Brep
+canonical/project validation
+-> provider schema / AI authoring
+-> structural editor
+-> native build123d / OCCT
+-> exact STEP / 3DM regression
+-> Rhino 8 / Grasshopper open/solve
+-> parameter recompute
+-> GHX save/close/reopen
 ```
 
-M3B instance-set / linear-pattern work must not begin until that persistence check is reconciled and M3A is explicitly closed.
+M3B instance-set / linear-pattern contract analysis is now authorized. M3A itself requires no further implementation work unless a regression is discovered.
 
 ## Preserved boundaries
 
