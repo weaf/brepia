@@ -19,6 +19,7 @@ export function brepNodeDependencies(node: BrepNode): string[] {
     case 'cylinder':
       return [];
     case 'transform':
+    case 'mirror':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -178,6 +179,10 @@ export function brepProjectParameterUsages(
           parameterId,
           `${node.id}.rotateDeg`,
         );
+        break;
+      case 'mirror':
+        if (brepScalarReferencesParameter(node.offset, parameterId))
+          usages.push(`${node.id}.offset`);
         break;
       case 'fillet':
         if (brepScalarReferencesParameter(node.radius, parameterId))
