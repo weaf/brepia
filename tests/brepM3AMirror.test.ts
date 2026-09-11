@@ -210,13 +210,13 @@ describe('M3A mirror', () => {
     assert.doesNotMatch(script.source, /boolean union for Brepia node mirroredBody/);
   });
 
-  it('maps canonical axes and offset to build123d Plane mirror operations', () => {
+  it('maps canonical axes and positive offsets to oriented build123d mirror planes', () => {
     const driver = fs.readFileSync(
       new URL('../scripts/brep/brep_driver.py', import.meta.url),
       'utf8',
     );
     assert.match(driver, /"x": Plane\.YZ/);
-    assert.match(driver, /"y": Plane\.XZ/);
+    assert.match(driver, /"y": Plane\.ZX/);
     assert.match(driver, /"z": Plane\.XY/);
     assert.match(driver, /\.offset\(scalar\(node\["offset"\], parameters\)\)/);
     assert.match(driver, /input_shape\.mirror\(mirror_plane\)/);
