@@ -1,12 +1,16 @@
 # BRep modeling capability expansion plan
 
-Status: **M0, M1 and M2 complete; M3 repetition and symmetry is the next active modeling phase**. This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0, M1 and M2 complete; M3A mirror complete; M3B linear pattern is repository-complete and CI-accepted with native and installed Rhino 8 / Grasshopper runtime acceptance pending**. This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
 
-Detailed M2 closeout status:
+Detailed current status:
 
 - `docs/brep_m2_boolean_composition_status.md`;
 - `docs/brep_m2_native_runtime_evidence_2026-09-10.md`;
-- `docs/brep_m2_rhino8_runtime_evidence_2026-09-11.md`.
+- `docs/brep_m2_rhino8_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3a_mirror_status.md`;
+- `docs/brep_m3a_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3a_rhino8_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3b_linear_pattern_status.md`.
 
 ## Why this track exists
 
@@ -151,11 +155,11 @@ Example:
   "width": {
     "op": "sub",
     "args": [
-      { "parameter": "overall_width" },
+      { "parameter": "overallWidth" },
       {
         "op": "mul",
         "args": [
-          { "parameter": "wall_thickness" },
+          { "parameter": "wallThickness" },
           2
         ]
       }
@@ -164,7 +168,7 @@ Example:
 }
 ```
 
-This represents `inner_width = overall_width - 2 * wall_thickness` without publishing a synthetic `inner_width` slider.
+This represents `innerWidth = overallWidth - 2 * wallThickness` without publishing a synthetic `innerWidth` slider.
 
 ### M1 acceptance sequence
 
@@ -229,19 +233,59 @@ The installed-host run verified supported union/intersection solves, parameter-d
 
 ## M3 — repetition and symmetry
 
-Status: **active — analysis and contract definition next**.
+Status: **active — M3A mirror complete; M3B bounded linear pattern repository-complete/CI-accepted with native and installed-host runtime acceptance pending**.
 
-Add modeling operations that eliminate repeated literal transforms:
+M3A added bounded single-shape mirror semantics and is complete across canonical/provider/editor implementation, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Its closeout and runtime evidence are recorded in the dedicated M3A documents listed above.
 
-- linear pattern / array;
-- mirror;
-- optionally rectangular pattern after the 1D form is stable.
+M3B adds the first bounded multi-instance result form:
 
-The canonical operation should reference one input node plus bounded count/spacing/axis semantics. Counts need a separate integer-safe parameter contract or a deliberately literal-only first version.
+```ts
+{
+  id: string;
+  type: 'linearPattern';
+  input: string;
+  axis: 'x' | 'y' | 'z';
+  count: number;
+  spacing: BrepScalar;
+}
+```
 
-This is the natural representation for four cabinets, repeated holes and mounting features.
+The M3B contract is intentionally narrow:
 
-M3 must preserve the M0–M2 invariants, keep non-zero rotation fail-closed, remain additive to canonical schema version 1 if feasible, and obtain native plus installed Rhino 8 parity evidence before closeout.
+- pattern input must be an existing single-shape node;
+- `count` is literal integer 2–32;
+- `spacing` uses the existing M1 millimetre scalar/expression contract and must resolve non-zero;
+- instance 0 is the unshifted source; later instances are `index * spacing` along the selected axis;
+- a final pattern is an ordered `instanceSet`, not a fused Boolean body;
+- `subtract.tools[]` may consume an instance set and applies its instances as ordered cutters;
+- transform, mirror, fillet, another pattern, union/intersection, subtract base and project-object geometry roles remain single-only;
+- nested/general collection algebra is not introduced.
+
+The evaluation contract therefore distinguishes `single` from `instanceSet`. A final pattern emits stable bodies named `<patternId>::<index>` with explicit instance index/source identity, per-body bounds/mesh and aggregate result bounds.
+
+Viewer rendering consumes all result bodies while preserving their semantic identity. Native exact STEP uses a multi-solid build123d Compound rather than a fuse. 3DM retains separate instance objects and identity metadata. Rhino/GHX emits a Python list of separate Breps; the Grasshopper `Result` port persists as List Access only for instance-set results. Single results retain Item Access and the existing non-Result output persistence is unchanged.
+
+Repository acceptance checkpoint:
+
+```text
+94e1b0fca3b1d01b016faeee52bb9cdeb564f4b4
+Quality Gate #937       PASS
+Grasshopper Build #509 PASS
+```
+
+Quality Gate #937 records 141 passing test files / 907 passing tests plus typecheck, lint, production build and `git diff --check` PASS. The current native smoke script contains a final three-body pattern fixture and a four-instance pattern-as-subtract-tool fixture, but those real local runtime cases remain pending at this checkpoint.
+
+Detailed M3B status:
+
+```text
+docs/brep_m3b_linear_pattern_status.md
+```
+
+M3B must not be declared complete until the current native smoke runs successfully against the real rootless build123d/OCCT sandbox and fresh current-branch GHX is accepted in installed Rhino 8 / Grasshopper, including List Result persistence and pattern-as-subtract-tool behavior.
+
+Rectangular pattern remains optional future M3 work and must not start before the 1D M3B runtime boundary is closed.
+
+M3 continues to preserve the M0–M2 invariants, keep non-zero rotation fail-closed and remain additive to canonical schema version 1.
 
 ## M4 — profile + extrusion foundation
 
@@ -295,10 +339,11 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 1. **M0 parameter effectiveness + orphan analysis** — complete.
 2. **M1 expression AST** — complete.
 3. **M2 union/intersection** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
-4. **M3 pattern/mirror** — active; begin with bounded contract analysis before implementation.
-5. **M4 profile/extrude** — broadens geometry vocabulary significantly.
-6. Re-evaluate need for dedicated wall/plate/shell semantics.
-7. **M6 rotation** and **M7 finishing** under their own Rhino/native parity acceptance.
+4. **M3A mirror** — complete across repository, native runtime and installed Rhino 8 / Grasshopper acceptance.
+5. **M3B linear pattern** — repository-complete/CI-accepted; native and installed-host runtime acceptance next.
+6. Consider rectangular pattern only after M3B closes; otherwise move to **M4 profile/extrude**.
+7. Re-evaluate need for dedicated wall/plate/shell semantics.
+8. **M6 rotation** and **M7 finishing** under their own Rhino/native parity acceptance.
 
 ## Regression fixtures to keep
 
