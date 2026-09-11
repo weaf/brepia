@@ -10,6 +10,7 @@ import {
   BREP_GRASSHOPPER_GHX_NUMBER_PARAMETER_GUID,
   BREP_GRASSHOPPER_GHX_NUMBER_SLIDER_GUID,
 } from './brepGrasshopperGhx.ts';
+import type { BrepGrasshopperAccess } from './brepGrasshopperContract.ts';
 import { createBrepGrasshopperPackagePlan } from './brepGrasshopperPackagePlan.ts';
 import {
   BREP_GRASSHOPPER_RHINO_PYTHON3_COMPONENT_GUID,
@@ -265,6 +266,7 @@ function validateInput(
 function validateOutput(
   parameterData: BrepGrasshopperGhxArchiveNode,
   expected: BrepGrasshopperRhinoScriptOutput,
+  expectedAccess: BrepGrasshopperAccess,
   index: number,
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
@@ -285,6 +287,15 @@ function validateOutput(
     ghxItemText(output, 'NickName') !== expected.nickname
   ) {
     error(diagnostics, 'script_output_identity_changed', `Script output ${expected.outputId} name changed.`, path);
+  }
+  const expectedParamAccess = expectedAccess === 'list' ? '1' : '0';
+  if (ghxItemText(output, 'ScriptParamAccess') !== expectedParamAccess) {
+    error(
+      diagnostics,
+      'script_output_access_changed',
+      `Script output ${expected.outputId} parameter access changed.`,
+      path,
+    );
   }
   if (ghxItemText(output, 'SourceCount') !== '0') {
     error(diagnostics, 'script_output_rewired', `Script output ${expected.outputId} unexpectedly has a source.`, path);
@@ -326,6 +337,7 @@ function validateHostEnvelope(
 function validateScript(
   object: BrepGrasshopperGhxArchiveNode,
   expected: BrepGrasshopperRhinoScriptPlan,
+  outputAccess: ReadonlyMap<string, BrepGrasshopperAccess>,
   diagnostics: BrepGrasshopperExecutableGhxDiagnostic[],
 ): void {
   const path = 'DefinitionObjects/BrepiaScript';
@@ -387,7 +399,13 @@ function validateScript(
     validateInput(parameterData, input, index, diagnostics),
   );
   expected.outputs.forEach((output, index) =>
-    validateOutput(parameterData, output, index, diagnostics),
+    validateOutput(
+      parameterData,
+      output,
+      outputAccess.get(output.outputId) ?? 'item',
+      index,
+      diagnostics,
+    ),
   );
 
   const script = ghxChunk(container, 'Script');
@@ -474,6 +492,9 @@ export async function validateBrepGrasshopperExecutableGhx(
     return { accepted: false, compatibility: 'unsupported', diagnostics, parameters };
   }
 
+  const outputAccess = new Map<string, BrepGrasshopperAccess>(
+    packagePlan.contract.interface.outputs.map((output) => [output.id, output.access]),
+  );
   const objects = ghxChunks(definitionObjects, 'Object');
   const declared = Number.parseInt(ghxItemText(definitionObjects, 'ObjectCount') ?? '', 10);
   if (!Number.isSafeInteger(declared) || declared !== objects.length) {
@@ -523,7 +544,7 @@ export async function validateBrepGrasshopperExecutableGhx(
       if (scriptCount > 1) {
         error(diagnostics, 'duplicate_script', 'GHX contains more than one Brepia Python 3 Script.');
       } else {
-        validateScript(object, scriptPlan, diagnostics);
+        validateScript(object, scriptPlan, outputAccess, diagnostics);
       }
       return;
     }
