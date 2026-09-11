@@ -87,7 +87,7 @@ function patternCuttersProject(): BrepProject {
     },
     parameters: parameters(),
     nodes: [
-      { id: 'base', type: 'box', width: 120, depth: 120, height: 20 },
+      { id: 'base', type: 'box', width: 240, depth: 240, height: 20 },
       { id: 'cutter', type: 'cylinder', radius: 4, height: 40 },
       {
         id: 'cutters',
