@@ -1,6 +1,6 @@
 # BRep modeling capability expansion plan
 
-Status: **M0, M1, M2, M3A, M3B, M4 profile + extrusion and M6 non-zero rotation parity are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Bounded M3C rectangular pattern is selected as the next active modeling slice. M5 shell/thickness and M7 topology/finishing remain deferred.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
+Status: **M0, M1, M2, M3A, M3B, M3C, M4 profile + extrusion and M6 non-zero rotation parity are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. No further modeling slice is automatically active; M5 shell/thickness, M7 topology/finishing and C4 image projection remain deferred pending a concrete product-driven gap.** This track remains intentionally separate from Phase 9 GHX installed-host acceptance.
 
 Detailed current status:
 
@@ -13,6 +13,9 @@ Detailed current status:
 - `docs/brep_m3b_linear_pattern_status.md`;
 - `docs/brep_m3b_native_runtime_evidence_2026-09-11.md`;
 - `docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3c_rectangular_pattern_status.md`;
+- `docs/brep_m3c_native_runtime_evidence_2026-09-11.md`;
+- `docs/brep_m3c_rhino8_runtime_evidence_2026-09-11.md`;
 - `docs/brep_post_m3_scope_decision_2026-09-11.md`;
 - `docs/brep_m4_profile_extrusion_status.md`;
 - `docs/brep_m4_native_runtime_evidence_2026-09-11.md`;
@@ -21,7 +24,8 @@ Detailed current status:
 - `docs/brep_m6_rotation_parity_status.md`;
 - `docs/brep_m6_native_runtime_evidence_2026-09-11.md`;
 - `docs/brep_m6_rhino8_runtime_evidence_2026-09-11.md`;
-- `docs/brep_post_m6_scope_decision_2026-09-11.md`.
+- `docs/brep_post_m6_scope_decision_2026-09-11.md`;
+- `docs/brep_post_m3c_scope_decision_2026-09-11.md`.
 
 ## Why this track exists
 
@@ -244,7 +248,7 @@ The installed-host run verified supported union/intersection solves, parameter-d
 
 ## M3 — repetition and symmetry
 
-Status: **M3A mirror and M3B bounded linear pattern are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. M3C bounded rectangular pattern is the next active slice after M6 closeout.**
+Status: **M3A mirror, M3B bounded linear pattern and M3C bounded rectangular pattern are complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime.**
 
 M3A added bounded single-shape mirror semantics and is complete across canonical/provider/editor implementation, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime. Its closeout and runtime evidence are recorded in the dedicated M3A documents listed above.
 
@@ -296,9 +300,9 @@ docs/brep_m3b_rhino8_runtime_evidence_2026-09-11.md
 
 Native runtime verified the final pattern as an ordered `instanceSet` with three separate bodies, exact 20 mm X-spacing, aggregate bounds `[-5,-5,-5] -> [45,5,5]`, exact multi-solid STEP, and four ordered pattern instances consumed as `subtract.tools[]` while the final subtract remained one `single` body. Installed Rhino 8 / Grasshopper accepted both a final list-result pattern and a pattern-as-subtract-cutters GHX, including save -> close -> reopen persistence.
 
-The M3B runtime boundary is closed. `docs/brep_post_m6_scope_decision_2026-09-11.md` now selects M3C because true two-dimensional parameterized repetition is not representable by M3B without either manual node expansion or the explicitly forbidden nested-instance-set model.
+M3C was selected because true two-dimensional parameterized repetition was not representable by M3B without either manual node expansion or the explicitly forbidden nested-instance-set model.
 
-The bounded M3C planning contract is:
+The accepted M3C contract is:
 
 ```ts
 type BrepRectangularPatternNode = {
@@ -315,6 +319,16 @@ type BrepRectangularPatternNode = {
 ```
 
 M3C remains within the existing `instanceSet` result kind. Axes must be distinct, each count is a literal integer 2–32, total instance count is bounded to at most 64, both spacings must resolve non-zero, and canonical ordering is row-major with `axisA` outer / `axisB` inner. Stable body IDs remain `<patternId>::<flatIndex>`. Only `subtract.tools[]` may consume the resulting set; nested patterns and general collection algebra remain fail-closed.
+
+M3C is now complete. The repository implementation passed its deterministic CI gates; the real pinned native runtime accepted six ordered bodies, expression-backed spacing and exact STEP; and installed Rhino 8 / Grasshopper accepted both the final List-result pattern and pattern-as-subtract-cutters Item-result definition with parameter perturbation, save -> close -> reopen persistence and strict returned-GHX validation.
+
+Detailed M3C status and evidence:
+
+```text
+docs/brep_m3c_rectangular_pattern_status.md
+docs/brep_m3c_native_runtime_evidence_2026-09-11.md
+docs/brep_m3c_rhino8_runtime_evidence_2026-09-11.md
+```
 
 ## M4 — profile + extrusion foundation
 
@@ -365,9 +379,9 @@ The M4 repository, native and installed-host boundaries are closed.
 
 ## M5 — wall/shell/thickness semantics
 
-Status: **deferred after post-M4 and post-M6 reconciliation**.
+Status: **deferred after post-M4, post-M6 and post-M3C reconciliation**.
 
-The accepted M1–M4 + M6 language already represents the immediate wall/plate/hole use cases through expressions, explicit profiles/extrusions, Boolean composition and full bounded transforms. A dedicated shell/thickness operation would currently reduce graph verbosity rather than close a proven representational gap.
+The accepted M1–M4 + M6 + M3C language already represents the immediate wall/plate/hole and repeated-layout use cases through expressions, explicit profiles/extrusions, Boolean composition, bounded repetition and full bounded transforms. A dedicated shell/thickness operation would currently reduce graph verbosity rather than close a proven representational gap.
 
 Do not add a domain-specific `wall` node merely because earlier room examples were Boolean-heavy. Reconsider M5 only when a concrete target fixture demonstrates that the accepted surface is materially inadequate.
 
@@ -378,6 +392,7 @@ Decision records:
 ```text
 docs/brep_post_m4_scope_decision_2026-09-11.md
 docs/brep_post_m6_scope_decision_2026-09-11.md
+docs/brep_post_m3c_scope_decision_2026-09-11.md
 ```
 
 ## M6 — rotation parity
@@ -456,7 +471,7 @@ The M6 repository, native and installed-host boundaries are closed.
 
 ## M7 — finishing/topology operations
 
-Status: **deferred after post-M6 reconciliation**.
+Status: **deferred after post-M3C reconciliation**.
 
 Fillet has the first semantic selector (`parallelToAxis`). Potential future work includes:
 
@@ -464,7 +479,7 @@ Fillet has the first semantic selector (`parallelToAxis`). Potential future work
 - chamfer;
 - additional fillet selection forms.
 
-Each must avoid persisted raw topology indices and needs separate topology-stability analysis. M7 remains deferred while the topology-neutral M3C rectangular-pattern gap is active.
+Each must avoid persisted raw topology indices and needs separate topology-stability analysis. M7 remains deferred until a concrete product target justifies a topology-sensitive expansion and a kernel-neutral semantic selector design exists.
 
 ## Suggested implementation order
 
@@ -475,9 +490,11 @@ Each must avoid persisted raw topology indices and needs separate topology-stabi
 5. **M3B linear pattern** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
 6. **M4 profile/extrude** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
 7. **M6 rotation parity** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
-8. **M3C rectangular pattern** — active next slice; reuse `instanceSet`, enforce two distinct canonical axes, literal bounded counts, total instance cap 64 and deterministic row-major order.
+8. **M3C rectangular pattern** — complete across repository/CI, native build123d/OCCT runtime and installed Rhino 8 / Grasshopper acceptance.
 9. **M5 shell/thickness** — deferred until a target fixture proves a real gap.
 10. **M7 finishing/topology** — deferred until a topology-stability design justifies the next finishing capability.
+
+No additional modeling slice is selected automatically after item 8. Use `docs/brep_post_m3c_scope_decision_2026-09-11.md` before broadening the language further.
 
 ## Regression fixtures to keep
 
