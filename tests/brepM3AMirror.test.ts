@@ -223,10 +223,19 @@ describe('M3A mirror', () => {
   });
 
   it('exposes mirror input, normal axis, and scalar offset in the structural editor', () => {
-    const source = fs.readFileSync(
-      new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
-      'utf8',
-    );
+    const source = [
+      fs.readFileSync(
+        new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
+        'utf8',
+      ),
+      fs.readFileSync(
+        new URL(
+          '../src/components/brep/BrepFeatureEditorLegacy.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ].join('\n');
     assert.match(source, /'mirror'/);
     assert.match(source, /Mirror plane normal axis/);
     assert.match(source, /Plane offset/);
