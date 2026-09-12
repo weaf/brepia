@@ -11,7 +11,9 @@ import {
   BREP_PROJECT_MAX_OBJECT_POINTS,
   BREP_PROJECT_MAX_PARAMETERS,
   BREP_PROJECT_MAX_PATTERN_COUNT,
+  BREP_PROJECT_MAX_PROFILE_HOLES,
   BREP_PROJECT_MAX_PROFILE_POINTS,
+  BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS,
   BREP_PROJECT_SCHEMA_VERSION,
   type BrepProject,
 } from './brepProject.ts';
@@ -152,7 +154,7 @@ const brepCylinderNodeSchema = z
   })
   .strict();
 
-function createBrepProfileSchema(scalarSchema: z.ZodTypeAny) {
+function createBrepProfileLoopSchema(scalarSchema: z.ZodTypeAny) {
   const pointSchema = z.object({ u: scalarSchema, v: scalarSchema }).strict();
   return z.discriminatedUnion('type', [
     z
@@ -177,13 +179,70 @@ function createBrepProfileSchema(scalarSchema: z.ZodTypeAny) {
   ]);
 }
 
-const brepProfileSchema = createBrepProfileSchema(brepScalarSchema);
+function createBrepExtrudeProfileSchema(scalarSchema: z.ZodTypeAny) {
+  const pointSchema = z.object({ u: scalarSchema, v: scalarSchema }).strict();
+  const loopSchema = createBrepProfileLoopSchema(scalarSchema);
+  const holeSchema = z
+    .object({
+      loop: loopSchema,
+      offsetU: scalarSchema,
+      offsetV: scalarSchema,
+    })
+    .strict();
+  const holesSchema = z.array(holeSchema).max(BREP_PROJECT_MAX_PROFILE_HOLES).optional();
+
+  return z
+    .discriminatedUnion('type', [
+      z
+        .object({
+          type: z.literal('rectangle'),
+          width: scalarSchema,
+          height: scalarSchema,
+          holes: holesSchema,
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal('circle'),
+          radius: scalarSchema,
+          holes: holesSchema,
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal('closedPolyline'),
+          points: z.array(pointSchema).min(3).max(BREP_PROJECT_MAX_PROFILE_POINTS),
+          holes: holesSchema,
+        })
+        .strict(),
+    ])
+    .superRefine((profile, context) => {
+      const outerPoints =
+        profile.type === 'closedPolyline' ? profile.points.length : 0;
+      const holePoints = (profile.holes ?? []).reduce(
+        (sum, hole) =>
+          sum +
+          (hole.loop.type === 'closedPolyline' ? hole.loop.points.length : 0),
+        0,
+      );
+      if (outerPoints + holePoints > BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['holes'],
+          message: `BRep extrusion profile may contain at most ${BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS} explicit closedPolyline points across outer and holes.`,
+        });
+      }
+    });
+}
+
+const brepExtrudeProfileSchema = createBrepExtrudeProfileSchema(brepScalarSchema);
+const brepRevolveProfileSchema = createBrepProfileLoopSchema(brepScalarSchema);
 
 const brepExtrudeNodeSchema = z
   .object({
     id: brepIdSchema,
     type: z.literal('extrude'),
-    profile: brepProfileSchema,
+    profile: brepExtrudeProfileSchema,
     axis: z.enum(['x', 'y', 'z']),
     depth: brepScalarSchema,
   })
@@ -193,7 +252,7 @@ const brepRevolveNodeSchema = z
   .object({
     id: brepIdSchema,
     type: z.literal('revolve'),
-    profile: brepProfileSchema,
+    profile: brepRevolveProfileSchema,
     axis: z.enum(['x', 'y', 'z']),
   })
   .strict();
@@ -433,12 +492,17 @@ const brepProviderCylinderNodeSchema = z
     height: brepProviderScalarSchema,
   })
   .strict();
-const brepProviderProfileSchema = createBrepProfileSchema(brepProviderScalarSchema);
+const brepProviderExtrudeProfileSchema = createBrepExtrudeProfileSchema(
+  brepProviderScalarSchema,
+);
+const brepProviderRevolveProfileSchema = createBrepProfileLoopSchema(
+  brepProviderScalarSchema,
+);
 const brepProviderExtrudeNodeSchema = z
   .object({
     id: brepIdSchema,
     type: z.literal('extrude'),
-    profile: brepProviderProfileSchema,
+    profile: brepProviderExtrudeProfileSchema,
     axis: z.enum(['x', 'y', 'z']),
     depth: brepProviderScalarSchema,
   })
@@ -447,7 +511,7 @@ const brepProviderRevolveNodeSchema = z
   .object({
     id: brepIdSchema,
     type: z.literal('revolve'),
-    profile: brepProviderProfileSchema,
+    profile: brepProviderRevolveProfileSchema,
     axis: z.enum(['x', 'y', 'z']),
   })
   .strict();

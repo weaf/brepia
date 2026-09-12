@@ -3,6 +3,7 @@ import {
   type BrepNode,
   type BrepParameterUnit,
   type BrepProfile,
+  type BrepProfileLoop,
   type BrepProject,
   type BrepProjectMetadata,
   type BrepProjectObjectDefinition,
@@ -109,32 +110,59 @@ function appendVectorParameterUsages(
   });
 }
 
+function appendProfileLoopParameterUsages(
+  usages: string[],
+  loop: BrepProfileLoop,
+  parameterId: string,
+  label: string,
+): void {
+  switch (loop.type) {
+    case 'rectangle':
+      if (brepScalarReferencesParameter(loop.width, parameterId))
+        usages.push(`${label}.width`);
+      if (brepScalarReferencesParameter(loop.height, parameterId))
+        usages.push(`${label}.height`);
+      break;
+    case 'circle':
+      if (brepScalarReferencesParameter(loop.radius, parameterId))
+        usages.push(`${label}.radius`);
+      break;
+    case 'closedPolyline':
+      loop.points.forEach((point, index) => {
+        if (brepScalarReferencesParameter(point.u, parameterId))
+          usages.push(`${label}.points[${index}].u`);
+        if (brepScalarReferencesParameter(point.v, parameterId))
+          usages.push(`${label}.points[${index}].v`);
+      });
+      break;
+  }
+}
+
 function appendProfileParameterUsages(
   usages: string[],
   profile: BrepProfile,
   parameterId: string,
   nodeId: string,
 ): void {
-  switch (profile.type) {
-    case 'rectangle':
-      if (brepScalarReferencesParameter(profile.width, parameterId))
-        usages.push(`${nodeId}.profile.width`);
-      if (brepScalarReferencesParameter(profile.height, parameterId))
-        usages.push(`${nodeId}.profile.height`);
-      break;
-    case 'circle':
-      if (brepScalarReferencesParameter(profile.radius, parameterId))
-        usages.push(`${nodeId}.profile.radius`);
-      break;
-    case 'closedPolyline':
-      profile.points.forEach((point, index) => {
-        if (brepScalarReferencesParameter(point.u, parameterId))
-          usages.push(`${nodeId}.profile.points[${index}].u`);
-        if (brepScalarReferencesParameter(point.v, parameterId))
-          usages.push(`${nodeId}.profile.points[${index}].v`);
-      });
-      break;
-  }
+  appendProfileLoopParameterUsages(
+    usages,
+    profile,
+    parameterId,
+    `${nodeId}.profile`,
+  );
+  profile.holes?.forEach((hole, index) => {
+    const label = `${nodeId}.profile.holes[${index}]`;
+    if (brepScalarReferencesParameter(hole.offsetU, parameterId))
+      usages.push(`${label}.offsetU`);
+    if (brepScalarReferencesParameter(hole.offsetV, parameterId))
+      usages.push(`${label}.offsetV`);
+    appendProfileLoopParameterUsages(
+      usages,
+      hole.loop,
+      parameterId,
+      `${label}.loop`,
+    );
+  });
 }
 
 export function brepProjectParameterUsages(
