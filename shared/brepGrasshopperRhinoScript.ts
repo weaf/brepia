@@ -595,6 +595,34 @@ function buildGraphSource(
         `            raise RuntimeError(${pythonString(`Rhino could not place an instance for Brepia rectangularPattern ${node.id}.`)})`,
       );
       lines.push(`        ${variable}.append(${itemVariable})`);
+    } else if (node.type === 'circularPattern') {
+      const input = emitNode(node.input);
+      const angleStepDeg = scalarExpression(node.angleStepDeg, variables);
+      const center = vectorExpression(node.center, variables, 'point');
+      const indexVariable = `${variable}Index`;
+      const itemVariable = `${variable}Item`;
+      lines.push(`${variable}AngleStepDeg = float(${angleStepDeg})`);
+      lines.push(`if ${variable}AngleStepDeg == 0.0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia circularPattern ${node.id} angleStepDeg must resolve non-zero.`)})`,
+      );
+      lines.push(`if abs(${variable}AngleStepDeg) * ${node.count} > 360.0:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia circularPattern ${node.id} abs(angleStepDeg) * count must not exceed 360 degrees.`)})`,
+      );
+      lines.push(`${variable}Center = ${center}`);
+      lines.push(`${variable}Axis = ${filletAxisExpression(node.axis)}`);
+      lines.push(`${variable} = []`);
+      lines.push(`for ${indexVariable} in range(${node.count}):`);
+      lines.push(`    ${itemVariable} = ${input}.DuplicateBrep()`);
+      lines.push(
+        `    ${variable}Rotation = rg.Transform.Rotation(math.radians(${indexVariable} * ${variable}AngleStepDeg), ${variable}Axis, ${variable}Center)`,
+      );
+      lines.push(`    if not ${itemVariable}.Transform(${variable}Rotation):`);
+      lines.push(
+        `        raise RuntimeError(${pythonString(`Rhino could not place an instance for Brepia circularPattern ${node.id}.`)})`,
+      );
+      lines.push(`    ${variable}.append(${itemVariable})`);
     } else if (node.type === 'subtract') {
       const base = emitNode(node.base);
       lines.push(`${variable} = ${base}.DuplicateBrep()`);
@@ -611,7 +639,8 @@ function buildGraphSource(
         const disjoint = `${variable}Disjoint${toolIndex}`;
         if (
           toolNode.type === 'linearPattern' ||
-          toolNode.type === 'rectangularPattern'
+          toolNode.type === 'rectangularPattern' ||
+          toolNode.type === 'circularPattern'
         ) {
           const item = `${variable}Tool${toolIndex}`;
           lines.push(`for ${item} in ${tool}:`);
@@ -797,7 +826,9 @@ function buildSource(
     metadata: contract.source.metadata ?? null,
   });
   const resultExpression =
-    resultNode.type === 'linearPattern' || resultNode.type === 'rectangularPattern'
+    resultNode.type === 'linearPattern' ||
+    resultNode.type === 'rectangularPattern' ||
+    resultNode.type === 'circularPattern'
       ? `[brepia_place_brep(brepiaResultItem, brepiaTransform) for brepiaResultItem in ${resultVariable}]`
       : `brepia_place_brep(${resultVariable}, brepiaTransform)`;
 
