@@ -189,6 +189,15 @@ const brepExtrudeNodeSchema = z
   })
   .strict();
 
+const brepRevolveNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('revolve'),
+    profile: brepProfileSchema,
+    axis: z.enum(['x', 'y', 'z']),
+  })
+  .strict();
+
 const brepTransformNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -285,6 +294,7 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepBoxNodeSchema,
   brepCylinderNodeSchema,
   brepExtrudeNodeSchema,
+  brepRevolveNodeSchema,
   brepTransformNodeSchema,
   brepMirrorNodeSchema,
   brepLinearPatternNodeSchema,
@@ -433,6 +443,14 @@ const brepProviderExtrudeNodeSchema = z
     depth: brepProviderScalarSchema,
   })
   .strict();
+const brepProviderRevolveNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('revolve'),
+    profile: brepProviderProfileSchema,
+    axis: z.enum(['x', 'y', 'z']),
+  })
+  .strict();
 const brepProviderTransformNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -498,6 +516,7 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderBoxNodeSchema,
   brepProviderCylinderNodeSchema,
   brepProviderExtrudeNodeSchema,
+  brepProviderRevolveNodeSchema,
   brepProviderTransformNodeSchema,
   brepProviderMirrorNodeSchema,
   brepProviderLinearPatternNodeSchema,

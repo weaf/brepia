@@ -52,6 +52,7 @@ const NODE_TYPES: BrepNode['type'][] = [
   'box',
   'cylinder',
   'extrude',
+  'revolve',
   'transform',
   'mirror',
   'linearPattern',
@@ -75,6 +76,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Cylinder';
     case 'extrude':
       return 'Extrude';
+    case 'revolve':
+      return 'Revolve';
     case 'transform':
       return 'Transform';
     case 'mirror':
@@ -113,6 +116,22 @@ function defaultExtrudeProfile(type: BrepProfile['type']): BrepProfile {
         ],
       };
   }
+}
+
+function defaultRevolveProfile(): BrepProfile {
+  return {
+    type: 'closedPolyline',
+    points: [
+      { u: -30, v: 8 },
+      { u: -30, v: 16 },
+      { u: -18, v: 16 },
+      { u: -18, v: 13 },
+      { u: 18, v: 13 },
+      { u: 18, v: 16 },
+      { u: 30, v: 16 },
+      { u: 30, v: 8 },
+    ],
+  };
 }
 
 function isAllowedReferenceNode(
@@ -181,6 +200,13 @@ function createNodeDraft(
         profile: defaultExtrudeProfile('rectangle'),
         axis: 'z',
         depth: 50,
+      };
+    case 'revolve':
+      return {
+        id,
+        type,
+        profile: defaultRevolveProfile(),
+        axis: 'z',
       };
     case 'transform': {
       const input = preferredInputNodeId(project, selectedNodeId);
@@ -818,6 +844,44 @@ function NodeEditorFields({
             The profile is centered on the canonical local plane. Extrusion is
             symmetric from -depth / 2 to +depth / 2 along the selected axis and
             always produces one single-shape result.
+          </p>
+        </div>
+      );
+
+    case 'revolve':
+      return (
+        <div className="grid gap-4">
+          <ExtrudeProfileFields
+            profile={node.profile}
+            project={project}
+            disabled={disabled}
+            onChange={(profile) => onChange({ ...node, profile })}
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Revolve axis</span>
+            <select
+              className={fieldClass}
+              value={node.axis}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  axis: event.target.value as 'x' | 'y' | 'z',
+                })
+              }
+            >
+              <option value="x">X axis · U=X axial, V=Y radial</option>
+              <option value="y">Y axis · U=Y axial, V=Z radial</option>
+              <option value="z">Z axis · U=Z axial, V=X radial</option>
+            </select>
+          </label>
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Revolve is a full 360° single-solid operation around the selected
+            canonical axis through the local origin. For the bounded first slice,
+            use a closed polyline: U is axial and V is non-negative radial
+            distance. Profiles may touch V=0 only along a real boundary segment;
+            centered rectangle/circle profiles cross the axis and are rejected by
+            canonical validation.
           </p>
         </div>
       );
@@ -1582,7 +1646,7 @@ export function BrepFeatureEditor({
                     <span className="mt-1 block truncate text-[10px] text-adam-neutral-500">
                       {dependencies.length > 0
                         ? `Depends on ${dependencies.join(', ')}`
-                        : `${node.type === 'extrude' ? 'Profile extrusion' : 'Primitive'} · node ${index + 1}`}
+                        : `${node.type === 'extrude' ? 'Profile extrusion' : node.type === 'revolve' ? 'Full profile revolve' : 'Primitive'} · node ${index + 1}`}
                     </span>
                   </span>
                   <Pencil
