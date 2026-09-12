@@ -23,6 +23,7 @@ export function brepNodeDependencies(node: BrepNode): string[] {
     case 'mirror':
     case 'linearPattern':
     case 'rectangularPattern':
+    case 'circularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -106,13 +107,6 @@ function appendVectorParameterUsages(
   });
 }
 
-/**
- * Return human-readable canonical fields that currently reference a published
- * parameter, including references nested in M1 scalar expressions. Project
- * definition and later project-object authoring use this to make destructive
- * changes explicit rather than relying on missing-reference validation after
- * the fact.
- */
 export function brepProjectParameterUsages(
   project: BrepProject,
   parameterId: string,
@@ -221,6 +215,16 @@ export function brepProjectParameterUsages(
         if (brepScalarReferencesParameter(node.spacingB, parameterId))
           usages.push(`${node.id}.spacingB`);
         break;
+      case 'circularPattern':
+        appendVectorParameterUsages(
+          usages,
+          node.center,
+          parameterId,
+          `${node.id}.center`,
+        );
+        if (brepScalarReferencesParameter(node.angleStepDeg, parameterId))
+          usages.push(`${node.id}.angleStepDeg`);
+        break;
       case 'fillet':
         if (brepScalarReferencesParameter(node.radius, parameterId))
           usages.push(`${node.id}.radius`);
@@ -242,12 +246,6 @@ export type BrepProjectDefinition = {
   parameters: BrepPublishedNumberParameter[];
 };
 
-/**
- * Replace only the editable project-definition fields while preserving project
- * identity, feature DAG and result authority. Canonical normalization remains
- * authoritative for parameter/reference/schema validation, and the default
- * parameter set must also resolve to a usable placement plane before save.
- */
 export function replaceBrepProjectDefinition(
   project: BrepProject,
   definition: BrepProjectDefinition,
@@ -266,12 +264,6 @@ export function replaceBrepProjectDefinition(
   return nextProject;
 }
 
-/**
- * Replace only semantic project-object outputs while preserving project
- * identity, feature DAG, result authority, placement, metadata and published
- * parameter definitions. The canonical normalizer validates every role and
- * scalar reference and removes an empty projectObject block.
- */
 export function replaceBrepProjectObjectDefinition(
   project: BrepProject,
   projectObject?: BrepProjectObjectDefinition,
@@ -296,12 +288,6 @@ export function brepParametersByUnit(
   return parameters.filter((parameter) => parameter.unit === unit);
 }
 
-/**
- * Phase 4A edits the fields of an existing semantic feature while keeping its
- * stable identity and node type. The complete project is normalized again so
- * reference, parameter-unit and DAG validation stays centralized in the
- * canonical BrepProject contract.
- */
 export function replaceExistingBrepProjectNode(
   project: BrepProject,
   nodeId: string,
@@ -326,7 +312,6 @@ export function replaceExistingBrepProjectNode(
   });
 }
 
-/** Add one new semantic node while preserving every existing stable node ID. */
 export function addBrepProjectNode(
   project: BrepProject,
   node: BrepNode,
@@ -340,7 +325,6 @@ export function addBrepProjectNode(
   });
 }
 
-/** Select an existing semantic node as the canonical project result. */
 export function setBrepProjectResultNode(
   project: BrepProject,
   nodeId: string,
@@ -352,11 +336,6 @@ export function setBrepProjectResultNode(
   return normalizeBrepProject({ ...project, resultNodeId: nodeId });
 }
 
-/**
- * Delete exactly one unreferenced, non-result node. Structural authoring never
- * performs implicit cascading rewrites; consumers, project-object roles and
- * result authority must be changed explicitly before deletion is permitted.
- */
 export function deleteBrepProjectNode(
   project: BrepProject,
   nodeId: string,
