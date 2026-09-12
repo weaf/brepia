@@ -138,6 +138,7 @@ describe('bounded multi-loop Rhino extrusion compiler', () => {
     assert.equal(validation.compatibility, 'supported');
     assert.deepEqual(validation.diagnostics, []);
     assert.deepEqual(validation.parameters, { width: 100, margin: 30 });
-    assert.match(ghx, /CreatePlanarBreps/);
+    assert.match(ghx, /719467e6-7cf5-4848-99b0-c5dd57e5442c/i);
+    assert.doesNotMatch(ghx, /CreatePlanarBreps/);
   });
 });
