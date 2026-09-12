@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNNER="${PCAD_BREP_RUNNER:-$SCRIPT_DIR/pcad-brep-sandbox}"
+PODMAN_BIN="${PCAD_PODMAN_BIN:-podman}"
+IMAGE="${PCAD_BREP_IMAGE:-localhost/brepia-brep:build123d-0.11.1}"
 WORKSPACE="$(mktemp -d "${TMPDIR:-/tmp}/brepia-m3d-circular.XXXXXX")"
 trap 'rm -rf "$WORKSPACE"' EXIT
 
@@ -31,17 +33,36 @@ JSON
 grep -q 'ISO-10303-21' "$WORKSPACE/subtract-output/model.step"
 grep -a -q '^3D Geometry File Format ' "$WORKSPACE/subtract-output/model.3dm"
 node -e "const r=require('$WORKSPACE/subtract-output/result.json'); const b=r.bodies?.[0]; if(r.status!=='success'||r.resultNodeId!=='cut'||r.resultKind!=='single'||r.bodies?.length!==1||b?.id!=='cut'||b?.instance!=null||!b?.viewerMesh?.indices?.length||r.exactExport?.available!==true) process.exit(1); console.log(JSON.stringify({patternTool:'cutters',count:6,result:r.resultNodeId,resultKind:r.resultKind,triangles:b.viewerMesh.indices.length/3,exactStep:r.exactExport.available}));"
-python3 - "$WORKSPACE/subtract-output/model.step" <<'PY'
+
+cat > "$WORKSPACE/verify-step.py" <<'PY'
 import sys
+from importlib.metadata import version
 from build123d import GeomType, import_step
 
+build123d_version = version("build123d")
+ocp_version = version("cadquery-ocp-novtk")
+if build123d_version != "0.11.1" or ocp_version != "7.9.3.1.1":
+    raise SystemExit(
+        f"unexpected pinned CAD runtime build123d={build123d_version} cadquery-ocp-novtk={ocp_version}"
+    )
 shape = import_step(sys.argv[1])
 solids = list(shape.solids())
 cylinders = [face for face in shape.faces() if face.geom_type == GeomType.CYLINDER]
 if len(solids) != 1 or len(cylinders) != 6:
     raise SystemExit(f"expected one solid with six cylindrical hole faces, got solids={len(solids)} cylinders={len(cylinders)}")
-print({"exactStepSolids": len(solids), "cylindricalHoleFaces": len(cylinders)})
+print({"build123d": build123d_version, "cadqueryOcpNovtk": ocp_version, "exactStepSolids": len(solids), "cylindricalHoleFaces": len(cylinders)})
 PY
+
+command -v "$PODMAN_BIN" >/dev/null 2>&1 || { echo "BREP_SANDBOX_UNAVAILABLE: Podman executable not found" >&2; exit 69; }
+"$PODMAN_BIN" image exists "$IMAGE" >/dev/null 2>&1 || { echo "BREP_SANDBOX_UNAVAILABLE: sandbox image is not built" >&2; exit 69; }
+"$PODMAN_BIN" run --rm --pull=never \
+  --network=none --read-only --security-opt=no-new-privileges --cap-drop=all \
+  --pids-limit=64 --memory=512m --cpus=1 --userns=keep-id --user "$(id -u):$(id -g)" \
+  --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777" \
+  --volume "$WORKSPACE/subtract-output/model.step:/input/model.step:ro" \
+  --volume "$WORKSPACE/verify-step.py:/verify-step.py:ro" \
+  --env HOME=/tmp --entrypoint=/opt/brepia-brep-venv/bin/python \
+  "$IMAGE" /verify-step.py /input/model.step
 
 cat > "$WORKSPACE/invalid.json" <<'JSON'
 {"project":{"schemaVersion":1,"id":"m3dCircularInvalid","name":"M3D circular invalid","units":"mm","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0]},"parameters":[{"id":"angleStep","label":"Angle step","type":"number","unit":"deg","default":60}],"nodes":[{"id":"seed","type":"box","width":10,"depth":6,"height":4},{"id":"pattern","type":"circularPattern","input":"seed","axis":"z","center":[0,0,0],"count":6,"angleStepDeg":{"parameter":"angleStep"}}],"resultNodeId":"pattern"},"parameterValues":{"angleStep":0}}
