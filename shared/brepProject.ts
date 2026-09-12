@@ -191,6 +191,16 @@ export type BrepRectangularPatternNode = {
   spacingB: BrepScalar;
 };
 
+export type BrepCircularPatternNode = {
+  id: string;
+  type: 'circularPattern';
+  input: string;
+  axis: BrepAxis;
+  center: BrepVector3;
+  count: number;
+  angleStepDeg: BrepScalar;
+};
+
 export type BrepSubtractNode = {
   id: string;
   type: 'subtract';
@@ -226,6 +236,7 @@ export type BrepNode =
   | BrepMirrorNode
   | BrepLinearPatternNode
   | BrepRectangularPatternNode
+  | BrepCircularPatternNode
   | BrepSubtractNode
   | BrepUnionNode
   | BrepIntersectNode
@@ -1104,6 +1115,50 @@ function normalizeNode(
       };
     }
 
+    case 'circularPattern': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep circularPattern ${id} axis must be x, y, or z.`,
+        );
+      }
+      if (
+        typeof value.count !== 'number' ||
+        !Number.isInteger(value.count) ||
+        value.count < 2 ||
+        value.count > BREP_PROJECT_MAX_PATTERN_COUNT
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep circularPattern ${id} count must be a literal integer between 2 and ${BREP_PROJECT_MAX_PATTERN_COUNT}.`,
+        );
+      }
+      return {
+        id,
+        type: 'circularPattern',
+        input: normalizeNodeReference(
+          value.input,
+          `BRep circularPattern ${id} input`,
+        ),
+        axis: value.axis as BrepAxis,
+        center: normalizeVector3(
+          value.center,
+          `BRep circularPattern ${id} center`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        count: value.count,
+        angleStepDeg: normalizeScalar(
+          value.angleStepDeg,
+          `BRep circularPattern ${id} angleStepDeg`,
+          parameterIds,
+          parameterUnits,
+          ['deg'],
+        ),
+      };
+    }
+
     case 'subtract': {
       if (
         !Array.isArray(value.tools) ||
@@ -1164,7 +1219,9 @@ function normalizeNode(
 }
 
 export function brepNodeValueKind(node: BrepNode): BrepNodeValueKind {
-  return node.type === 'linearPattern' || node.type === 'rectangularPattern'
+  return node.type === 'linearPattern' ||
+    node.type === 'rectangularPattern' ||
+    node.type === 'circularPattern'
     ? 'instanceSet'
     : 'single';
 }
@@ -1179,6 +1236,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'mirror':
     case 'linearPattern':
     case 'rectangularPattern':
+    case 'circularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -1248,6 +1306,7 @@ function validateNodeValueCompatibility(
       case 'fillet':
       case 'linearPattern':
       case 'rectangularPattern':
+      case 'circularPattern':
         requireSingle(node, node.input, 'input');
         break;
       case 'subtract':
@@ -1309,6 +1368,26 @@ export function validateBrepRectangularPatternSpacingValues(
     if (spacingB === 0) {
       throw new BrepScalarEvaluationError(
         `BRep rectangularPattern ${node.id} spacingB must resolve to a non-zero millimetre value.`,
+      );
+    }
+  }
+}
+
+export function validateBrepCircularPatternAngleValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'circularPattern') continue;
+    const angleStepDeg = resolveBrepScalar(node.angleStepDeg, parameterValues);
+    if (angleStepDeg === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep circularPattern ${node.id} angleStepDeg must resolve to a non-zero degree value.`,
+      );
+    }
+    if (Math.abs(angleStepDeg) * node.count > 360) {
+      throw new BrepScalarEvaluationError(
+        `BRep circularPattern ${node.id} abs(angleStepDeg) * count must not exceed 360 degrees.`,
       );
     }
   }
@@ -1469,6 +1548,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     );
     validateBrepLinearPatternSpacingValues(normalized, defaultParameterValues);
     validateBrepRectangularPatternSpacingValues(normalized, defaultParameterValues);
+    validateBrepCircularPatternAngleValues(normalized, defaultParameterValues);
     validateBrepExtrudeProfileValues(normalized, defaultParameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
