@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Box, Circle, Compound, Cylinder, Location, Plane, Polygon, Rectangle, export_step, extrude
+from build123d import Axis, Box, Circle, Compound, Cylinder, Location, Plane, Polygon, Rectangle, export_step, extrude
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -400,7 +400,7 @@ def evaluate(request):
             return shapes[node_id]
         node = nodes[node_id]
         kind = node["type"]
-        if kind in {"linearPattern", "rectangularPattern"}:
+        if kind in {"linearPattern", "rectangularPattern", "circularPattern"}:
             raise ValueError(
                 f"unsupported_result_cardinality: BRep node {node_id} is an instance set where a single shape is required"
             )
@@ -441,7 +441,7 @@ def evaluate(request):
     def evaluate_node_instances(node_id):
         node = nodes[node_id]
         kind = node["type"]
-        if kind not in {"linearPattern", "rectangularPattern"}:
+        if kind not in {"linearPattern", "rectangularPattern", "circularPattern"}:
             return [evaluate_node(node_id)]
         if node_id in instance_sets:
             return instance_sets[node_id]
@@ -465,7 +465,7 @@ def evaluate(request):
                 distance = index * spacing
                 translation = tuple(component * distance for component in direction)
                 instances.append(input_shape.moved(Location(translation)))
-        else:
+        elif kind == "rectangularPattern":
             spacing_a = scalar(node["spacingA"], parameters)
             spacing_b = scalar(node["spacingB"], parameters)
             if spacing_a == 0.0:
@@ -485,6 +485,20 @@ def evaluate(request):
                         for axis in range(3)
                     )
                     instances.append(input_shape.moved(Location(translation)))
+        else:
+            angle_step_deg = scalar(node["angleStepDeg"], parameters)
+            if angle_step_deg == 0.0:
+                raise ValueError(
+                    f"invalid_parameter_value: BRep circularPattern {node_id} angleStepDeg must resolve to a non-zero degree value"
+                )
+            if abs(angle_step_deg) * node["count"] > 360.0:
+                raise ValueError(
+                    f"invalid_parameter_value: BRep circularPattern {node_id} abs(angleStepDeg) * count must not exceed 360 degrees"
+                )
+            center = vector(node["center"], parameters)
+            rotation_axis = Axis(center, directions[node["axis"]])
+            for index in range(node["count"]):
+                instances.append(input_shape.rotate(rotation_axis, index * angle_step_deg))
 
         instance_sets[node_id] = instances
         return instances
@@ -518,7 +532,7 @@ def evaluate(request):
 
     result_id = project["resultNodeId"]
     result_node = nodes[result_id]
-    if result_node["type"] in {"linearPattern", "rectangularPattern"}:
+    if result_node["type"] in {"linearPattern", "rectangularPattern", "circularPattern"}:
         result_instances = evaluate_node_instances(result_id)
         primary_bodies = evaluated_instance_bodies(result_id)
         result_shape = Compound(children=result_instances)
