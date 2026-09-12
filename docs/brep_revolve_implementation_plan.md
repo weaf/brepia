@@ -1,6 +1,6 @@
 # Bounded full revolve implementation plan
 
-Status: **planned — implementation not started**
+Status: **repository implementation complete and CI-accepted; pinned native runtime and installed Rhino 8 / Grasshopper acceptance remain pending**
 
 Date: 2026-09-12
 
@@ -20,6 +20,18 @@ M3D bounded circular/polar pattern is complete across all three deliberately sep
 
 The post-M3D scope decision selected **bounded full revolve** as the next modeling slice. Multi-loop profiles remain the runner-up. M5 shell/thickness and M7 topology-sensitive finishing remain deferred.
 
+The revolve boundary is locked in:
+
+```text
+docs/brep_revolve_implementation_boundary_2026-09-12.md
+```
+
+Current implementation status is recorded in:
+
+```text
+docs/brep_revolve_status.md
+```
+
 Relevant prior records:
 
 ```text
@@ -35,13 +47,11 @@ docs/brep_m6_rotation_parity_status.md
 
 Add a bounded, deterministic, kernel-neutral full-revolve operation for ordinary axisymmetric solids such as stepped bushings, collars, pulleys, knobs and rotational housings.
 
-The first slice must stay narrower than a general CAD revolve feature and must preserve the existing Brepia authority model.
+The first slice stays narrower than a general CAD revolve feature and preserves the existing Brepia authority model.
 
-## Phase 1 — implementation-boundary reconciliation
+## Phase 1 — implementation-boundary reconciliation — complete
 
-Do not write revolve implementation code before this phase is complete.
-
-Create a dedicated implementation-boundary record that locks:
+The dedicated boundary record locks:
 
 - the canonical `revolve` node shape;
 - exact profile-frame semantics;
@@ -56,17 +66,23 @@ Create a dedicated implementation-boundary record that locks:
 - server result-boundary expectations;
 - returned-GHX invariants.
 
-### Critical frame question
+### Locked frame contract
 
-Do **not** reuse the M4 extrusion frame naively.
+M4 extrusion planes are **not** reused naively.
 
-A useful revolve profile must lie in a plane that contains the rotation axis, whereas the existing M4 extrusion profile plane is normal to its extrusion axis. The implementation-boundary document must define a deterministic right-handed mapping from the inline profile's `(u, v)` coordinates to a plane containing the selected canonical X/Y/Z rotation axis.
+For revolve:
 
-The mapping must be identical in canonical validation, native execution and Rhino compilation.
+- profile `u` is axial;
+- profile `v` is radial;
+- X: U=+X, V=+Y, `(u,v) -> (u,v,0)`;
+- Y: U=+Y, V=+Z, `(u,v) -> (0,u,v)`;
+- Z: U=+Z, V=+X, `(u,v) -> (v,0,u)`.
 
-## Proposed first-slice canonical shape
+Every frame is right-handed and the selected canonical axis passes through the local origin.
 
-Subject to the implementation-boundary review:
+Resolved radial `v` must remain non-negative. Axis contact is accepted only through a non-zero-length profile boundary segment on `v=0`; isolated point contact and negative-radial axis crossing fail closed.
+
+## Locked first-slice canonical shape
 
 ```ts
 type BrepRevolveNode = {
@@ -77,11 +93,11 @@ type BrepRevolveNode = {
 };
 ```
 
-The first slice should reuse the existing M4 inline `BrepProfile` families rather than introducing reusable sketch/profile graph nodes.
+The first slice reuses the existing M4 inline `BrepProfile` grammar rather than introducing reusable sketch/profile graph nodes.
 
-## First-slice bounds
+Centered M4 rectangle/circle profiles are unchanged for extrusion but are rejected for the bounded first revolve slice because they cross `v=0`. `closedPolyline` is therefore the intended turned-part profile family until a separate future profile-placement/sketch decision is made.
 
-Lock these unless the implementation-boundary review finds a concrete incompatibility:
+## First-slice bounds — locked
 
 - full 360 degree revolve only;
 - no partial angle;
@@ -92,18 +108,16 @@ Lock these unless the implementation-boundary review finds a concrete incompatib
 - no new trigonometric or arbitrary functions in M1;
 - canonical `schemaVersion: 1` remains additive;
 - result kind remains `single`;
-- exactly one resulting solid/Brep is required;
+- exactly one positive-volume solid/Brep is required;
 - zero-volume, self-intersecting, multi-solid or otherwise ambiguous output fails closed;
-- profile/axis arrangements that create unsupported axis crossing fail closed;
+- unsupported profile/axis crossing fails closed;
 - GHX return remains parameter-only;
 - build123d/OCCT remains geometry authority;
 - Rhino/GHX remains interoperability-only authority.
 
-## Phase 2 — lock target fixtures before implementation
+## Phase 2 — target fixtures — complete for repository design
 
-Use product-like fixtures rather than a cylinder-equivalent smoke only.
-
-At minimum lock:
+The repository fixtures are locked before external-runtime acceptance:
 
 1. **Stepped bushing / turned part**
    - asymmetric axial profile;
@@ -111,15 +125,17 @@ At minimum lock:
    - cannot collapse to one cylinder primitive.
 
 2. **Parameterized turned part**
-   - at least one published radial dimension;
-   - at least one published axial dimension;
-   - both must affect the authoritative result through M0/M1 semantics.
+   - published radial `outerRadius`;
+   - published axial `length`;
+   - existing M1 arithmetic derives `-length/2` and `+length/2`;
+   - both must affect authoritative geometry.
 
 3. **Axis-adjacent valid profile**
-   - exercises the boundary close to the rotation axis without producing an invalid solid.
+   - exercises a real boundary segment on the rotation axis.
 
 4. **Explicit invalid profile/axis arrangement**
-   - must fail closed deterministically in canonical/default and runtime/native/Rhino paths.
+   - simple closed profile crossing into negative radial `v`;
+   - fails closed independently of generic closed-polyline validity.
 
 5. **External-runtime acceptance fixture**
    - exact native STEP;
@@ -128,89 +144,111 @@ At minimum lock:
    - save -> close -> reopen;
    - strict returned-GHX validation.
 
-## Phase 3 — repository implementation
+The dedicated native smoke harness is prepared at:
 
-After the boundary and fixtures are locked, implement the complete repository surface:
+```text
+scripts/brep/revolve-smoke.sh
+```
+
+Preparing that harness is repository work only and is not native runtime evidence until it is actually executed against the pinned environment.
+
+## Phase 3 — repository implementation — complete
+
+The repository surface is implemented across:
 
 - `shared/brepProject.ts`
   - node type;
   - normalization;
-  - validation;
-  - dependency/value-kind semantics.
+  - default validation;
+  - dependency/value-kind semantics;
+  - bounded radial admissibility.
 
 - M0/M1 integration
   - parameter reachability/effectiveness;
-  - scalar traversal;
-  - runtime-override validation.
+  - profile scalar traversal;
+  - runtime-override validation;
+  - no M1 grammar expansion.
 
 - provider/AI
-  - canonical authoring schema;
-  - finite/reference-free provider schema;
-  - bounded AI instructions;
-  - preserve provider expression depth 2.
+  - canonical and finite/reference-free authoring schemas;
+  - bounded Native BRep instructions;
+  - provider expression depth remains 2.
 
 - structural editor
   - create/edit revolve;
   - expression-preserving profile fields;
+  - explicit X/Y/Z axial/radial frame labels;
   - no free-form code/expression authoring.
 
 - server result boundary
-  - exactly one final body for revolve;
+  - existing `single` exact-one-body contract is preserved;
   - no new collection semantics.
 
 - native build123d/OCCT driver
-  - exact full revolve;
-  - identical profile-frame mapping;
-  - fail closed on unsupported cardinality/geometry.
+  - explicit full revolve;
+  - identical locked profile-frame mapping;
+  - exact-one-positive-volume solid guard;
+  - exact STEP path preserved.
 
 - Rhino/GHX compiler
-  - equivalent full revolve semantics;
+  - equivalent full-revolve semantics;
+  - explicit locked profile frame;
   - Result Item Access;
-  - no compiler-specific geometry authority.
+  - generated source remains Brepia-owned interoperability state.
 
 - returned-GHX validator
-  - parameter-only mutation boundary preserved;
-  - script/graph/wiring/result-access tampering remains rejected.
+  - parameter-only mutation boundary remains unchanged;
+  - generated script/graph/wiring/result-access semantics remain strict.
 
 - regression coverage
-  - preserve M0-M6 and M3D behavior;
-  - preserve OpenSCAD regressions;
+  - M0-M6 and M3A-M3D semantics retained;
+  - M4 centered rectangle/circle extrusion retained;
+  - OpenSCAD regressions retained through the ordinary Quality Gate;
   - no broadening of `single | instanceSet` collection algebra.
 
-## Phase 4 — repository acceptance
+## Phase 4 — repository acceptance — complete before runtime-harness checkpoint
 
-Require one exact repository checkpoint with:
+Repository implementation checkpoint:
 
-- focused revolve tests PASS;
-- complete existing test suite PASS;
-- typecheck PASS;
-- lint PASS;
-- production build PASS;
-- diff check PASS;
-- dependency audit PASS;
-- Grasshopper Build PASS including plugin and Ubuntu/Windows packaging.
+```text
+ed4e0312254ef42e051fb8ce850c92c9f091d919
+Add bounded revolve native translation and parity tests
+Quality Gate #1077       PASS
+Grasshopper Build #649   PASS
+```
 
-Repository CI is repository evidence only and must not be described as native or Rhino runtime evidence.
+Earlier accepted authoring checkpoint:
 
-## Phase 5 — real pinned native runtime acceptance
+```text
+b59510fa0f874ede5e3bf724367761cc4eb21475
+Add bounded revolve authoring surfaces
+Quality Gate #1075       PASS
+Grasshopper Build #647   PASS
+```
+
+The repository acceptance covers focused revolve tests plus the complete existing quality/build gates. It is repository evidence only and is not described as native or Rhino runtime evidence.
+
+A later runtime-harness/status checkpoint may supersede the repository checkpoint once its own CI is green; that still remains repository evidence only.
+
+## Phase 5 — real pinned native runtime acceptance — next active gate
 
 Only after repository completion:
 
-- run a dedicated rootless/pinned build123d/OCCT revolve smoke;
+- run the dedicated rootless/pinned build123d/OCCT revolve smoke;
 - verify actual geometry/bounds/cardinality from the runtime;
 - perturb radial and axial parameters;
 - verify fail-closed invalid profile/axis cases;
 - export exact STEP;
 - independently import STEP in the pinned CAD runtime;
-- verify expected solid/cardinality/topology characteristics where deterministic.
+- verify exactly one positive-volume solid and expected deterministic bounds.
 
-Record this in a separate native-runtime evidence document.
+Record this in a separate native-runtime evidence document. Repository tests or CI must not be substituted for this gate.
 
-## Phase 6 — installed Rhino 8 / Grasshopper acceptance
+## Phase 6 — installed Rhino 8 / Grasshopper acceptance — pending after native gate
 
 Only after native acceptance:
 
-- generate fresh GHX from the current compiler;
+- generate fresh GHX from the accepted compiler;
 - open and solve in installed Rhino 8 / Grasshopper;
 - visually verify the intended turned geometry;
 - perturb the same bounded radial/axial parameters;
@@ -238,6 +276,7 @@ Throughout revolve work preserve:
 - M3 `single | instanceSet` discipline;
 - only `subtract.tools[]` may consume an `instanceSet`;
 - no nested/general pattern collection algebra;
+- M3A-M3D semantics;
 - M4 profile/extrusion semantics;
 - M6 Intrinsic XYZ `R = Rx * Ry * Rz`, `p' = R*p + T`;
 - GHX parameter-only return/import semantics;
@@ -260,8 +299,8 @@ Stop and reconcile before broadening scope if the first slice would require any 
 - general collection algebra;
 - new M1 functions.
 
-Those are separate product decisions, not incidental revolve implementation details.
+Those remain separate product decisions, not incidental revolve implementation details.
 
 ## Immediate next action
 
-Start the next work session by reconciling the current branch implementation against this plan and `docs/brep_post_m3d_scope_decision_2026-09-12.md`, then produce the dedicated bounded-revolve implementation-boundary document before modifying code.
+Complete CI for the prepared runtime-harness/status checkpoint, then execute `scripts/brep/revolve-smoke.sh` against the real pinned rootless build123d/OCCT environment. If and only if that succeeds, create the separate native-runtime evidence document and proceed to installed Rhino 8 / Grasshopper acceptance.
