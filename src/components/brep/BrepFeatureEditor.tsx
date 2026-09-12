@@ -56,6 +56,7 @@ const NODE_TYPES: BrepNode['type'][] = [
   'mirror',
   'linearPattern',
   'rectangularPattern',
+  'circularPattern',
   'subtract',
   'union',
   'intersect',
@@ -82,6 +83,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Linear pattern';
     case 'rectangularPattern':
       return 'Rectangular pattern';
+    case 'circularPattern':
+      return 'Circular pattern';
     case 'subtract':
       return 'Subtract';
     case 'union':
@@ -203,6 +206,18 @@ function createNodeDraft(
         countB: 2,
         spacingA: 20,
         spacingB: 20,
+      };
+    }
+    case 'circularPattern': {
+      const input = preferredInputNodeId(project, selectedNodeId);
+      return {
+        id,
+        type,
+        input,
+        axis: 'z',
+        center: [0, 0, 0],
+        count: 6,
+        angleStepDeg: 60,
       };
     }
     case 'fillet': {
@@ -1091,6 +1106,77 @@ function NodeEditorFields({
         </div>
       );
 
+    case 'circularPattern':
+      return (
+        <div className="grid gap-4">
+          <NodeReferenceField
+            label="Input node"
+            value={node.input}
+            project={project}
+            nodeId={node.id}
+            disabled={disabled}
+            valueKind="single"
+            onChange={(input) => onChange({ ...node, input })}
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Pattern axis</span>
+            <select
+              className={fieldClass}
+              value={node.axis}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  axis: event.target.value as 'x' | 'y' | 'z',
+                })
+              }
+            >
+              <option value="x">X axis</option>
+              <option value="y">Y axis</option>
+              <option value="z">Z axis</option>
+            </select>
+          </label>
+          <VectorField
+            label="Pattern center"
+            value={node.center}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(center) => onChange({ ...node, center })}
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Instance count</span>
+            <input
+              className={fieldClass}
+              type="number"
+              min={2}
+              max={BREP_PROJECT_MAX_PATTERN_COUNT}
+              step={1}
+              value={node.count}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({ ...node, count: Number(event.target.value) })
+              }
+            />
+          </label>
+          <ScalarField
+            label="Angle step"
+            value={node.angleStepDeg}
+            unit="deg"
+            project={project}
+            disabled={disabled}
+            onChange={(angleStepDeg) => onChange({ ...node, angleStepDeg })}
+          />
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Instance 0 is the unchanged input. Later instances apply one rigid
+            right-hand rotation by index × angle step around the selected canonical
+            axis through the pattern center. Angle step must resolve non-zero and
+            absolute angle step × count must not exceed 360°. Instances remain
+            separate ordered bodies unless consumed as subtract tools.
+          </p>
+        </div>
+      );
+
     case 'subtract':
       return (
         <div className="grid gap-5">
@@ -1576,7 +1662,8 @@ export function BrepFeatureEditor({
                           value={type}
                           disabled={
                             ((type === 'linearPattern' ||
-                              type === 'rectangularPattern') &&
+                              type === 'rectangularPattern' ||
+                              type === 'circularPattern') &&
                               singleNodeCount < 1) ||
                             (type === 'subtract' && project.nodes.length < 2) ||
                             ((type === 'union' || type === 'intersect') &&
