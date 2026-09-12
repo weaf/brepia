@@ -257,13 +257,14 @@ function validPrimaryBodies(
 
   if (
     resultNode.type !== 'linearPattern' &&
-    resultNode.type !== 'rectangularPattern'
+    resultNode.type !== 'rectangularPattern' &&
+    resultNode.type !== 'circularPattern'
   )
     return false;
   const expectedBodyCount =
-    resultNode.type === 'linearPattern'
-      ? resultNode.count
-      : resultNode.countA * resultNode.countB;
+    resultNode.type === 'rectangularPattern'
+      ? resultNode.countA * resultNode.countB
+      : resultNode.count;
   if (result.bodies.length !== expectedBodyCount) return false;
   return result.bodies.every(
     (body, index) =>
