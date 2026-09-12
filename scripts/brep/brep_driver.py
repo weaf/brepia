@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Axis, Box, Circle, Compound, Cylinder, Location, Plane, Polygon, Rectangle, export_step, extrude, revolve
+from build123d import Axis, Box, Circle, Compound, Cylinder, Face, Location, Plane, Polygon, Rectangle, export_step, extrude, revolve
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -176,27 +176,51 @@ def require_single_positive_volume_solid(value, kind, node_id):
     return solid
 
 
-def extrude_profile_shape(node, parameters):
-    profile = node["profile"]
+def profile_sketch(profile, parameters, label):
     profile_kind = profile["type"]
-    node_id = node["id"]
     if profile_kind == "rectangle":
-        sketch = Rectangle(
-            positive_scalar(profile["width"], parameters, f"BRep extrude {node_id} profile width"),
-            positive_scalar(profile["height"], parameters, f"BRep extrude {node_id} profile height"),
+        return Rectangle(
+            positive_scalar(profile["width"], parameters, f"{label} width"),
+            positive_scalar(profile["height"], parameters, f"{label} height"),
         )
-    elif profile_kind == "circle":
-        sketch = Circle(
-            positive_scalar(profile["radius"], parameters, f"BRep extrude {node_id} profile radius")
+    if profile_kind == "circle":
+        return Circle(
+            positive_scalar(profile["radius"], parameters, f"{label} radius")
         )
-    elif profile_kind == "closedPolyline":
+    if profile_kind == "closedPolyline":
         points = [
             (scalar(point["u"], parameters), scalar(point["v"], parameters))
             for point in profile["points"]
         ]
-        sketch = Polygon(*points)
+        return Polygon(*points)
+    raise ValueError(f"unsupported_operation: {label} profile {profile_kind}")
+
+
+def extrude_profile_shape(node, parameters):
+    profile = node["profile"]
+    node_id = node["id"]
+    outer_sketch = profile_sketch(profile, parameters, f"BRep extrude {node_id} profile")
+    holes = profile.get("holes") or []
+
+    if holes:
+        outer_wire = outer_sketch.wire()
+        hole_wires = []
+        for index, hole in enumerate(holes):
+            offset_u = scalar(hole["offsetU"], parameters)
+            offset_v = scalar(hole["offsetV"], parameters)
+            hole_wire = profile_sketch(
+                hole["loop"],
+                parameters,
+                f"BRep extrude {node_id} hole {index} profile",
+            ).wire()
+            hole_wires.append(
+                hole_wire.moved(Location((offset_u, offset_v, 0.0)))
+            )
+        region = Face(outer_wire, hole_wires)
     else:
-        raise ValueError(f"unsupported_operation: BRep extrude {node_id} profile {profile_kind}")
+        # Preserve the established M4 single-loop path byte-for-byte in geometry
+        # semantics; only multi-loop profiles require an explicit planar Face.
+        region = outer_sketch
 
     plane = {
         "x": Plane.YZ,
@@ -204,13 +228,19 @@ def extrude_profile_shape(node, parameters):
         "z": Plane.XY,
     }[node["axis"]]
     depth = positive_scalar(node["depth"], parameters, f"BRep extrude {node_id} depth")
-    part = extrude(plane * sketch, amount=depth / 2.0, both=True)
+    part = extrude(plane * region, amount=depth / 2.0, both=True)
+    if holes:
+        return require_single_positive_volume_solid(part, "extrude", node_id)
     return require_single_boolean_solid(part, "extrude", node_id)
 
 
 def revolve_profile_shape(node, parameters):
     profile = node["profile"]
     node_id = node["id"]
+    if profile.get("holes"):
+        raise ValueError(
+            f"unsupported_operation: BRep revolve {node_id} does not support profile holes"
+        )
     if profile["type"] != "closedPolyline":
         raise ValueError(
             f"unsupported_operation: BRep revolve {node_id} currently requires a closedPolyline profile"
