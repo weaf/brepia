@@ -1,6 +1,6 @@
 # Bounded multi-loop profile extrusion status
 
-Status: **Gate A complete — repository/CI accepted; Gate B native runtime and Gate C installed Rhino 8 runtime prepared but not yet accepted**
+Status: **Gate A repository/CI and Gate B native runtime accepted; Gate C installed Rhino 8 runtime prepared but not yet accepted**
 
 Date: 2026-09-12
 
@@ -153,19 +153,51 @@ The harness locks:
 - `cadquery-ocp-novtk 7.9.3.1.1`;
 - rootless/offline/read-only/capability-dropped verification constraints.
 
-### Gate B status
+### Gate B — pinned native runtime complete
 
-**Pending actual pinned runtime execution.**
+The real local pinned build123d / OCCT runtime executed the Gate-B harness successfully.
 
-The repository test proves the acceptance harness itself is present and bounded. It is not runtime evidence.
+Default fixture:
 
-Run from the real repository host with the existing pinned BRep image:
-
-```bash
-bash scripts/brep/multiloop-extrude-smoke.sh
+```text
+{"fixture":"multi-loop-default","bounds":{"min":[-50,-35,-4],"max":[50,35,4]},"resultKind":"single","exactStep":true}
 ```
 
-Invalid-loop behavior is already repository-accepted at the canonical/server boundary, including runtime overrides that make a hole touch the outer boundary before native execution. Gate B closeout must still record the actual local pinned-runtime run separately.
+Parameterized override:
+
+```text
+{"fixture":"multi-loop-override","override":{"width":120,"margin":40,"holeRadius":9},"bounds":{"min":[-60,-35,-4],"max":[60,35,4]}}
+```
+
+Independent exact STEP re-import in the pinned CAD image:
+
+```text
+{'build123d': '0.11.1', 'cadqueryOcpNovtk': '7.9.3.1.1', 'exactStepSolids': 1, 'volume': 64524.24796047347, 'bounds': (-60.0, -35.0, -4.0, 60.0, 35.0, 4.0)}
+```
+
+The imported STEP therefore preserves:
+
+- exactly one solid;
+- exact perturbed outer bounds;
+- positive volume;
+- the analytical volume of the outer plate minus both inner holes.
+
+The accepted volume is:
+
+```text
+120*70*8 - pi*9^2*8 - 10*8*8
+= 64524.24796047347 mm^3
+```
+
+That volume check proves the hole geometry survived exact STEP export/re-import rather than merely preserving the same outer envelope.
+
+Full native evidence:
+
+```text
+docs/brep_multiloop_native_runtime_evidence_2026-09-12.md
+```
+
+Canonical invalid-loop behavior remains separately repository/server accepted before native execution, including runtime overrides that make a hole touch the outer boundary.
 
 ## Rhino 8 / Grasshopper translation
 
@@ -300,14 +332,14 @@ This slice does not change:
 
 ## Current closeout state
 
-Repository implementation and Gate A are complete.
+Repository implementation and native runtime acceptance are complete.
 
-External closeout remains intentionally split:
+Only the installed-host gate remains:
 
 ```text
 Gate A repository / CI                  COMPLETE
-Gate B pinned native build123d / OCCT   PENDING RUNTIME
+Gate B pinned native build123d / OCCT   COMPLETE
 Gate C installed Rhino 8 / Grasshopper  PENDING RUNTIME
 ```
 
-Do not mark bounded multi-loop profile extrusion fully complete until Gate B and Gate C have separate recorded runtime evidence.
+Do not mark bounded multi-loop profile extrusion fully complete until Gate C has separate recorded installed-host runtime evidence.
