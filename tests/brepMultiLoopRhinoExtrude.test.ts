@@ -130,14 +130,14 @@ describe('bounded multi-loop Rhino extrusion compiler', () => {
     const sourceContract = contract(multiLoopProject());
     const ghx = await compileBrepGrasshopperExecutableGhx(sourceContract);
     const validation = await validateBrepGrasshopperExecutableGhx(
-      ghx.ghx,
+      ghx,
       sourceContract,
     );
 
-    assert.equal(validation.accepted, true);
+    assert.equal(validation.accepted, true, JSON.stringify(validation.diagnostics));
     assert.equal(validation.compatibility, 'supported');
     assert.deepEqual(validation.diagnostics, []);
     assert.deepEqual(validation.parameters, { width: 100, margin: 30 });
-    assert.match(ghx.ghx, /CreatePlanarBreps/);
+    assert.match(ghx, /CreatePlanarBreps/);
   });
 });
