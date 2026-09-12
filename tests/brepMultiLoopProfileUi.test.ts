@@ -29,7 +29,7 @@ describe('bounded multi-loop structural profile UI', () => {
     assert.doesNotMatch(source, /node\.type === 'revolve'/);
   });
 
-  it('edits all bounded loop families and local U\/V offsets without materializing expressions', () => {
+  it('edits all bounded loop families and local U/V offsets without materializing expressions', () => {
     assert.match(source, /Hole profile type/);
     assert.match(source, /Rectangle/);
     assert.match(source, /Circle/);
