@@ -153,9 +153,7 @@ const brepCylinderNodeSchema = z
   .strict();
 
 function createBrepProfileSchema(scalarSchema: z.ZodTypeAny) {
-  const pointSchema = z
-    .object({ u: scalarSchema, v: scalarSchema })
-    .strict();
+  const pointSchema = z.object({ u: scalarSchema, v: scalarSchema }).strict();
   return z.discriminatedUnion('type', [
     z
       .object({
@@ -236,6 +234,18 @@ const brepRectangularPatternNodeSchema = z
   })
   .strict();
 
+const brepCircularPatternNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('circularPattern'),
+    input: brepIdSchema,
+    axis: z.enum(['x', 'y', 'z']),
+    center: brepVector3Schema,
+    count: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    angleStepDeg: brepScalarSchema,
+  })
+  .strict();
+
 const brepSubtractNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -279,17 +289,13 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepMirrorNodeSchema,
   brepLinearPatternNodeSchema,
   brepRectangularPatternNodeSchema,
+  brepCircularPatternNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
   brepFilletNodeSchema,
 ]);
 
-/**
- * Provider-visible JSON shape for a complete canonical BRep project. Scalar
- * expressions are recursive but remain bounded by the canonical normalizer;
- * this Zod surface describes only the allowed operation vocabulary and arity.
- */
 export const brepAiProjectSchema = z
   .object({
     schemaVersion: z.literal(BREP_PROJECT_SCHEMA_VERSION),
@@ -333,14 +339,6 @@ export type BrepAiBuildInput = Omit<
   'project'
 > & { project: BrepProject };
 
-/**
- * Keep the model-facing schema reference-free for OpenAI-compatible/local
- * providers whose JSON-schema-to-grammar paths do not reliably support nested
- * `$ref`. Two expression levels cover the ordinary derived relationships M1
- * is intended to author (`width - 2 * wallThickness`, half offsets, scaled
- * spacing, etc.). The canonical validator below remains authoritative and
- * still accepts the full M1 depth/node limits for persisted/imported projects.
- */
 export const BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH = 2;
 
 function createBrepProviderScalarSchema(depth: number): z.ZodTypeAny {
@@ -476,6 +474,17 @@ const brepProviderRectangularPatternNodeSchema = z
     spacingB: brepProviderScalarSchema,
   })
   .strict();
+const brepProviderCircularPatternNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('circularPattern'),
+    input: brepIdSchema,
+    axis: z.enum(['x', 'y', 'z']),
+    center: brepProviderVector3Schema,
+    count: z.number().int().min(2).max(BREP_PROJECT_MAX_PATTERN_COUNT),
+    angleStepDeg: brepProviderScalarSchema,
+  })
+  .strict();
 const brepProviderFilletNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -493,6 +502,7 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderMirrorNodeSchema,
   brepProviderLinearPatternNodeSchema,
   brepProviderRectangularPatternNodeSchema,
+  brepProviderCircularPatternNodeSchema,
   brepSubtractNodeSchema,
   brepUnionNodeSchema,
   brepIntersectNodeSchema,
@@ -521,14 +531,8 @@ export const brepAiProviderBuildInputZodSchema = z
     project: brepAiProviderProjectSchema,
   })
   .strict();
-const brepAiProviderJsonSchema = zodSchema(
-  brepAiProviderBuildInputZodSchema,
-);
+const brepAiProviderJsonSchema = zodSchema(brepAiProviderBuildInputZodSchema);
 
-/**
- * The provider sees the bounded, reference-free schema above, while every tool
- * call is validated against the full recursive/canonical schema before use.
- */
 export const brepAiBuildProviderInputSchema = jsonSchema<BrepAiBuildInput>(
   () => brepAiProviderJsonSchema.jsonSchema,
   {
