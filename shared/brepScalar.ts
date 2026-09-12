@@ -86,11 +86,8 @@ function scalarPossibleUnits(
         else if (right === 'none') result.add(left);
         continue;
       }
-      if (right === 'none') {
-        result.add(left);
-      } else if (left === right) {
-        result.add('none');
-      }
+      if (right === 'none') result.add(left);
+      else if (left === right) result.add('none');
     }
   }
   return result;
@@ -148,18 +145,13 @@ function normalizedExpression(
   const args = value.args.map((argument, index) =>
     normalizeScalarTree(
       argument,
-      {
-        ...options,
-        field: `${options.field}.${String(op)}.args[${index}]`,
-      },
+      { ...options, field: `${options.field}.${String(op)}.args[${index}]` },
       depth + 1,
       state,
     ),
   );
 
-  if (op === 'neg') {
-    return { op: 'neg', args: [args[0]!] };
-  }
+  if (op === 'neg') return { op: 'neg', args: [args[0]!] };
   return {
     op: op as 'add' | 'sub' | 'mul' | 'div',
     args: [args[0]!, args[1]!],
@@ -284,9 +276,8 @@ export function resolveBrepScalar(
 
     const left = visit(scalar.args[0], depth + 1);
     let result: number;
-    if (scalar.op === 'neg') {
-      result = -left;
-    } else {
+    if (scalar.op === 'neg') result = -left;
+    else {
       const right = visit(scalar.args[1], depth + 1);
       switch (scalar.op) {
         case 'add':
@@ -299,9 +290,7 @@ export function resolveBrepScalar(
           result = left * right;
           break;
         case 'div':
-          if (right === 0) {
-            throw new BrepScalarEvaluationError('Scalar expression divides by zero.');
-          }
+          if (right === 0) throw new BrepScalarEvaluationError('Scalar expression divides by zero.');
           result = left / right;
           break;
       }
@@ -397,6 +386,10 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
           { value: node.spacingB, field: `${node.id}.spacingB` },
         );
         break;
+      case 'circularPattern':
+        appendVectorScalars(scalars, node.center, `${node.id}.center`);
+        scalars.push({ value: node.angleStepDeg, field: `${node.id}.angleStepDeg` });
+        break;
       case 'fillet':
         scalars.push({ value: node.radius, field: `${node.id}.radius` });
         break;
@@ -478,6 +471,10 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
     case 'rectangularPattern':
       append(node.spacingA);
       append(node.spacingB);
+      break;
+    case 'circularPattern':
+      appendVector(node.center);
+      append(node.angleStepDeg);
       break;
     case 'fillet':
       append(node.radius);
