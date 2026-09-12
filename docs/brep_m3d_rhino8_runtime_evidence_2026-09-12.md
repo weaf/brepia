@@ -1,6 +1,6 @@
 # M3D — installed Rhino 8 / Grasshopper runtime evidence
 
-Status: **partial — strict returned-GHX validation accepted; explicit host solve / visual / save-close-reopen observations still to be recorded**
+Status: **accepted**
 
 Date: 2026-09-12
 
@@ -10,7 +10,7 @@ Branch: `feature/brep-grasshopper-gh-packaging`
 
 ## Scope
 
-This document records the installed-host evidence received so far for M3D bounded circular/polar pattern.
+This document closes the installed-host acceptance boundary for M3D bounded circular/polar pattern.
 
 The M3D implementation/runtime checkpoint before this host run was:
 
@@ -34,7 +34,7 @@ docs/brep_m3d_native_runtime_evidence_2026-09-12.md
 
 ## Fresh installed-host fixtures
 
-The repository acceptance utility generates two current-compiler fixtures:
+The repository acceptance utility generated two current-compiler fixtures:
 
 ```text
 m3d-final-circular-pattern.ghx
@@ -64,12 +64,43 @@ radius     default 30 mm, bounded 10..80 mm
 angleStep  default 60 deg, bounded 15..60 deg
 ```
 
-The requested installed-host perturbation was:
+The installed-host perturbation was:
 
 ```text
 radius     40 mm
 angleStep  45 deg
 ```
+
+## Final circular-pattern acceptance
+
+The final-pattern definition was accepted in installed Rhino 8 / Grasshopper with the following explicitly confirmed behavior:
+
+- the GHX file opened successfully;
+- the definition solved successfully;
+- the result contained six separate asymmetric bodies;
+- the circular placement/orientation changed correctly when `radius` changed from `30 -> 40` and `angleStep` changed from `60 -> 45`;
+- the final pattern remained a Grasshopper Result **List**, not an implicit Boolean union;
+- the modified definition was saved, closed and reopened successfully;
+- after reopen, `radius = 40` and `angleStep = 45` remained persisted;
+- the reopened definition solved successfully again.
+
+The non-origin pattern center and asymmetric source make the host fixture sensitive to both circular position and rigid orientation, rather than merely proving coincident radial points.
+
+## Circular pattern as subtract cutters
+
+The second definition was accepted in installed Rhino 8 / Grasshopper with the following explicitly confirmed behavior:
+
+- the GHX file opened successfully;
+- the definition solved successfully;
+- the circular `instanceSet` was consumed through `subtract.tools[]`;
+- the final result was one body through Grasshopper Result **Item** access;
+- the plate contained six circular holes from the six cutter instances;
+- the cutter placement recomputed correctly for `radius = 40` and `angleStep = 45`;
+- the modified definition was saved, closed and reopened successfully;
+- after reopen, the same `40 / 45` values remained persisted;
+- the reopened definition solved successfully again.
+
+This preserves the existing collection boundary: a circular pattern may be a final `instanceSet` or an ordered subtract-tool source, but it is not silently fused and does not become a general collection operand.
 
 ## Strict returned-GHX validation — accepted
 
@@ -94,7 +125,7 @@ Test Files  1 passed (1)
 Tests       1 passed (1)
 ```
 
-This proves for the returned host-saved definitions:
+This independently proves for the returned host-saved definitions:
 
 - both returned GHX files satisfy the strict parameter-only returned-document validator;
 - the final circular-pattern definition persists `radius = 40` and `angleStep = 45`;
@@ -104,17 +135,6 @@ This proves for the returned host-saved definitions:
 - both files contain a real bounded non-default parameter perturbation rather than only generated defaults.
 
 The validator continues to reject unsupported script/component/graph/wiring/output-access or out-of-bounds parameter mutations. This acceptance therefore does not weaken the GHX parameter-only return boundary.
-
-## Evidence not inferred from the validator
-
-The returned-GHX validator does not itself observe Rhino's viewport, Grasshopper solve state or user interaction history. Therefore this document does **not** yet claim, solely from the validator output, that:
-
-- the final fixture visibly solved as six distinct asymmetric bodies in installed Rhino 8 / Grasshopper;
-- right-hand circular ordering and source orientation were visually inspected in the host;
-- the cutter fixture visibly solved as one plate with six circular through-cuts;
-- either returned document was explicitly closed and reopened after save and then observed to solve again.
-
-Those host observations must be recorded explicitly before this document changes from partial to accepted.
 
 ## Native parity already accepted separately
 
@@ -133,7 +153,7 @@ Native evidence remains separate from installed Rhino host evidence.
 
 ## Preserved architecture
 
-This host validation does not change:
+This host acceptance does not change:
 
 - `conversation.type = 'parametric'`;
 - `parametricSourceKind = 'brep'`;
@@ -157,16 +177,14 @@ This host validation does not change:
 - M5 shell/thickness deferral;
 - M7 topology/finishing deferral.
 
-## Remaining host-closeout statement
+## Conclusion
 
-To mark M3D installed Rhino 8 / Grasshopper acceptance complete, record the actual installed-host observations for both fresh fixtures:
+M3D installed Rhino 8 / Grasshopper acceptance is **complete**.
 
-1. final fixture opened/solved with six separate asymmetric bodies and Result List semantics;
-2. `40 / 45` changed the circular placement/orientation as expected;
-3. final fixture was saved, closed, reopened and solved again with `40 / 45` persisted;
-4. cutter fixture opened/solved as one plate with six circular holes and Result Item semantics;
-5. cutter fixture was saved, closed, reopened and solved again with `40 / 45` persisted.
+Together with repository/CI coverage and the separately recorded real build123d / OCCT runtime evidence, all required M3D circular-pattern acceptance layers are now closed:
 
-Once those observations are explicitly supplied, this document can be promoted to **accepted**, and the M3D status/roadmap closeout can be recorded without conflating host evidence with repository CI or native runtime evidence.
+1. repository/CI implementation evidence;
+2. pinned native build123d / OCCT runtime evidence;
+3. installed Rhino 8 / Grasshopper runtime evidence.
 
 PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
