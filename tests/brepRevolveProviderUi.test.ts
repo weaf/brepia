@@ -8,10 +8,16 @@ import {
   brepAiProviderBuildInputZodSchema,
 } from '../shared/brepAiTool.ts';
 
-const featureEditorSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
-  'utf8',
-);
+const featureEditorSource = [
+  fs.readFileSync(
+    new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
+    'utf8',
+  ),
+  fs.readFileSync(
+    new URL('../src/components/brep/BrepFeatureEditorLegacy.tsx', import.meta.url),
+    'utf8',
+  ),
+].join('\n');
 const buildInstruction = fs.readFileSync(
   new URL('../config/ai/instructions/tool-build-brep-project.md', import.meta.url),
   'utf8',

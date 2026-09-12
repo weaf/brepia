@@ -2,10 +2,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, it } from 'vitest';
 
-const featureEditorSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
-  'utf8',
-);
+const featureEditorSource = [
+  fs.readFileSync(
+    new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
+    'utf8',
+  ),
+  fs.readFileSync(
+    new URL('../src/components/brep/BrepFeatureEditorLegacy.tsx', import.meta.url),
+    'utf8',
+  ),
+].join('\n');
 
 describe('M4 profile extrusion structural authoring UI', () => {
   it('exposes extrusion as a first-class bounded feature type', () => {
