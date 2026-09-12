@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Axis, Box, Circle, Compound, Cylinder, Location, Plane, Polygon, Rectangle, export_step, extrude
+from build123d import Axis, Box, Circle, Compound, Cylinder, Location, Plane, Polygon, Rectangle, export_step, extrude, revolve
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -161,6 +161,21 @@ def require_single_boolean_solid(value, kind, node_id):
     return solids[0]
 
 
+def require_single_positive_volume_solid(value, kind, node_id):
+    solids = result_solids(value)
+    if len(solids) != 1:
+        raise ValueError(
+            f"unsupported_result_cardinality: BRep {kind} {node_id} produced {len(solids)} solids; exactly one is required"
+        )
+    solid = solids[0]
+    volume = float(solid.volume)
+    if not math.isfinite(volume) or volume <= 0.0:
+        raise ValueError(
+            f"invalid_geometry: BRep {kind} {node_id} must produce one positive-volume solid"
+        )
+    return solid
+
+
 def extrude_profile_shape(node, parameters):
     profile = node["profile"]
     profile_kind = profile["type"]
@@ -191,6 +206,56 @@ def extrude_profile_shape(node, parameters):
     depth = positive_scalar(node["depth"], parameters, f"BRep extrude {node_id} depth")
     part = extrude(plane * sketch, amount=depth / 2.0, both=True)
     return require_single_boolean_solid(part, "extrude", node_id)
+
+
+def revolve_profile_shape(node, parameters):
+    profile = node["profile"]
+    node_id = node["id"]
+    if profile["type"] != "closedPolyline":
+        raise ValueError(
+            f"unsupported_operation: BRep revolve {node_id} currently requires a closedPolyline profile"
+        )
+
+    points = [
+        (scalar(point["u"], parameters), scalar(point["v"], parameters))
+        for point in profile["points"]
+    ]
+    if any(v < 0.0 for _, v in points):
+        raise ValueError(
+            f"invalid_parameter_value: BRep revolve {node_id} profile must keep radial v >= 0 and must not cross the rotation axis"
+        )
+    if any(v == 0.0 for _, v in points):
+        has_axis_segment = any(
+            points[index][1] == 0.0 and points[(index + 1) % len(points)][1] == 0.0
+            for index in range(len(points))
+        )
+        if not has_axis_segment:
+            raise ValueError(
+                f"invalid_parameter_value: BRep revolve {node_id} profile may touch the rotation axis only through a non-zero-length boundary segment on v = 0"
+            )
+
+    sketch = Polygon(*points)
+    frames = {
+        # Plane(o, x_dir=U, z_dir=N) derives y_dir=V, preserving the locked
+        # right-handed canonical profile frame U axial / V radial.
+        "x": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
+        "y": ((0.0, 1.0, 0.0), (1.0, 0.0, 0.0)),
+        "z": ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
+    }
+    directions = {
+        "x": (1.0, 0.0, 0.0),
+        "y": (0.0, 1.0, 0.0),
+        "z": (0.0, 0.0, 1.0),
+    }
+    x_dir, z_dir = frames[node["axis"]]
+    profile_plane = Plane(origin=(0.0, 0.0, 0.0), x_dir=x_dir, z_dir=z_dir)
+    rotation_axis = Axis((0.0, 0.0, 0.0), directions[node["axis"]])
+    part = revolve(
+        profile_plane * sketch,
+        axis=rotation_axis,
+        revolution_arc=360.0,
+    )
+    return require_single_positive_volume_solid(part, "revolve", node_id)
 
 
 def compact_json(value):
@@ -407,6 +472,7 @@ def evaluate(request):
         if kind == "box": shape = Box(scalar(node["width"], parameters), scalar(node["depth"], parameters), scalar(node["height"], parameters))
         elif kind == "cylinder": shape = Cylinder(scalar(node["radius"], parameters), scalar(node["height"], parameters))
         elif kind == "extrude": shape = extrude_profile_shape(node, parameters)
+        elif kind == "revolve": shape = revolve_profile_shape(node, parameters)
         elif kind == "transform":
             shape = evaluate_node(node["input"])
             translation = vector(node.get("translate", [0, 0, 0]), parameters)
