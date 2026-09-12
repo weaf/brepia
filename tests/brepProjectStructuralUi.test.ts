@@ -54,6 +54,7 @@ describe('BRep structural DAG authoring UI boundary', () => {
       'mirror',
       'linearPattern',
       'rectangularPattern',
+      'circularPattern',
       'subtract',
       'union',
       'intersect',
@@ -63,7 +64,7 @@ describe('BRep structural DAG authoring UI boundary', () => {
     }
     assert.match(
       featureEditorSource,
-      /type === 'linearPattern' \|\|\s+type === 'rectangularPattern'/,
+      /type === 'linearPattern' \|\|\s+type === 'rectangularPattern' \|\|\s+type === 'circularPattern'/,
     );
     assert.match(
       featureEditorSource,
@@ -93,6 +94,7 @@ describe('BRep structural DAG authoring UI boundary', () => {
     assert.match(featureEditorSource, /canonical\s+index order/);
     assert.match(featureEditorSource, /Instance set/);
   });
+
   it('exposes bounded M3C rectangular pattern authoring controls', () => {
     assert.match(featureEditorSource, /case 'rectangularPattern'/);
     assert.match(featureEditorSource, /Rectangular pattern/);
@@ -107,4 +109,19 @@ describe('BRep structural DAG authoring UI boundary', () => {
     assert.match(featureEditorSource, /valueKind="single"/);
   });
 
+  it('exposes bounded M3D circular pattern authoring controls without a second collection model', () => {
+    assert.match(featureEditorSource, /case 'circularPattern'/);
+    assert.match(featureEditorSource, /Circular pattern/);
+    assert.match(featureEditorSource, /Pattern center/);
+    assert.match(featureEditorSource, /Angle step/);
+    assert.match(featureEditorSource, /unit="deg"/);
+    assert.match(featureEditorSource, /angleStepDeg/);
+    assert.match(featureEditorSource, /count: 6/);
+    assert.match(featureEditorSource, /angleStepDeg: 60/);
+    assert.match(featureEditorSource, /right-hand rotation/);
+    assert.match(featureEditorSource, /must not exceed 360°/);
+    assert.match(featureEditorSource, /valueKind="single"/);
+    assert.doesNotMatch(featureEditorSource, /startAngleDeg/);
+    assert.doesNotMatch(featureEditorSource, /totalAngleDeg/);
+  });
 });
