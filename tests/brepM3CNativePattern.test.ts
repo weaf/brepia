@@ -52,7 +52,10 @@ describe('M3C native rectangular-pattern execution contract', () => {
   });
 
   it('keeps rectangularPattern as instanceSet output rather than silently fusing bodies', () => {
-    assert.match(driver, /result_node\["type"\] in \{"linearPattern", "rectangularPattern"\}/);
+    assert.match(
+      driver,
+      /result_node\["type"\] in \{"linearPattern", "rectangularPattern", "circularPattern"\}/,
+    );
     assert.match(driver, /result_shape = Compound\(children=result_instances\)/);
     assert.match(driver, /result_kind = "instanceSet"/);
   });
