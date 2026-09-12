@@ -301,6 +301,32 @@ function extrudePlaneExpressions(
   };
 }
 
+function revolveFrameExpressions(axis: 'x' | 'y' | 'z'): {
+  xAxis: string;
+  yAxis: string;
+  axisVector: string;
+} {
+  if (axis === 'x') {
+    return {
+      xAxis: 'rg.Vector3d(1, 0, 0)',
+      yAxis: 'rg.Vector3d(0, 1, 0)',
+      axisVector: 'rg.Vector3d(1, 0, 0)',
+    };
+  }
+  if (axis === 'y') {
+    return {
+      xAxis: 'rg.Vector3d(0, 1, 0)',
+      yAxis: 'rg.Vector3d(0, 0, 1)',
+      axisVector: 'rg.Vector3d(0, 1, 0)',
+    };
+  }
+  return {
+    xAxis: 'rg.Vector3d(0, 0, 1)',
+    yAxis: 'rg.Vector3d(1, 0, 0)',
+    axisVector: 'rg.Vector3d(0, 0, 1)',
+  };
+}
+
 function mirrorPlaneExpressions(
   axis: 'x' | 'y' | 'z',
   offset: string,
@@ -492,6 +518,64 @@ function buildGraphSource(
       lines.push(`if ${variable} is None or not ${variable}.IsSolid:`);
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino extrusion for Brepia node ${node.id} did not produce one closed solid Brep.`)})`,
+      );
+    } else if (node.type === 'revolve') {
+      if (node.profile.type !== 'closedPolyline') {
+        throw new BrepGrasshopperRhinoScriptError(
+          'invalid_model',
+          `Rhino revolve node ${node.id} requires a closedPolyline profile in the bounded first slice.`,
+        );
+      }
+      const frame = revolveFrameExpressions(node.axis);
+      const uvExpressions = node.profile.points.map(
+        (point) =>
+          `(float(${scalarExpression(point.u, variables)}), float(${scalarExpression(point.v, variables)}))`,
+      );
+      lines.push(
+        `${variable}Plane = rg.Plane(rg.Point3d(0, 0, 0), ${frame.xAxis}, ${frame.yAxis})`,
+      );
+      lines.push(`if not ${variable}Plane.IsValid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct the canonical revolve profile plane for Brepia node ${node.id}.`)})`,
+      );
+      lines.push(`${variable}ProfileUV = [${uvExpressions.join(', ')}]`);
+      lines.push(`if any(item[1] < 0.0 for item in ${variable}ProfileUV):`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia revolve node ${node.id} profile must keep radial v >= 0 and must not cross the rotation axis.`)})`,
+      );
+      lines.push(`if any(item[1] == 0.0 for item in ${variable}ProfileUV):`);
+      lines.push(
+        `    ${variable}AxisContact = any(${variable}ProfileUV[i][1] == 0.0 and ${variable}ProfileUV[(i + 1) % len(${variable}ProfileUV)][1] == 0.0 for i in range(len(${variable}ProfileUV)))`,
+      );
+      lines.push(`    if not ${variable}AxisContact:`);
+      lines.push(
+        `        raise ValueError(${pythonString(`Brepia revolve node ${node.id} profile may touch the rotation axis only through a non-zero-length boundary segment on v = 0.`)})`,
+      );
+      lines.push(
+        `${variable}ProfilePoints = [${variable}Plane.PointAt(item[0], item[1]) for item in ${variable}ProfileUV]`,
+      );
+      lines.push(`${variable}ProfilePoints.append(${variable}ProfilePoints[0])`);
+      lines.push(`${variable}Profile = rg.PolylineCurve(${variable}ProfilePoints)`);
+      lines.push(
+        `if ${variable}Profile is None or not ${variable}Profile.IsValid or not ${variable}Profile.IsClosed:`,
+      );
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct a closed profile for Brepia revolve node ${node.id}.`)})`,
+      );
+      lines.push(
+        `${variable}Axis = rg.Line(rg.Point3d(0, 0, 0), rg.Point3d(${frame.axisVector}.X, ${frame.axisVector}.Y, ${frame.axisVector}.Z))`,
+      );
+      lines.push(`${variable}RevSurface = rg.RevSurface.Create(${variable}Profile, ${variable}Axis)`);
+      lines.push(`if ${variable}RevSurface is None:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not create a full revolution surface for Brepia node ${node.id}.`)})`,
+      );
+      lines.push(
+        `${variable} = rg.Brep.CreateFromRevSurface(${variable}RevSurface, False, False)`,
+      );
+      lines.push(`if ${variable} is None or not ${variable}.IsSolid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino revolve for Brepia node ${node.id} did not produce one closed solid Brep.`)})`,
       );
     } else if (node.type === 'transform') {
       const input = emitNode(node.input);
