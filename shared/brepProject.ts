@@ -6,7 +6,11 @@ import {
   resolveBrepScalar,
   validateBrepProjectScalarDefaults,
 } from './brepScalar.ts';
-import { validateBrepClosedPolylineProfilePoints } from './brepProfileGeometry.ts';
+import {
+  validateBrepClosedPolylineProfilePoints,
+  validateBrepMultiLoopProfileGeometry,
+  type BrepResolvedProfileLoop,
+} from './brepProfileGeometry.ts';
 
 export const BREP_PROJECT_SCHEMA_VERSION = 1 as const;
 export const BREP_PROJECT_MAX_PARAMETERS = 128;
@@ -15,6 +19,8 @@ export const BREP_PROJECT_MAX_NODE_INPUTS = 32;
 export const BREP_PROJECT_MAX_PATTERN_COUNT = 32;
 export const BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES = 64;
 export const BREP_PROJECT_MAX_PROFILE_POINTS = 32;
+export const BREP_PROJECT_MAX_PROFILE_HOLES = 8;
+export const BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS = 128;
 export const BREP_PROJECT_MAX_ID_CHARS = 64;
 export const BREP_PROJECT_MAX_NAME_CHARS = 120;
 export const BREP_PROJECT_MAX_DESCRIPTION_CHARS = 500;
@@ -141,10 +147,21 @@ export type BrepClosedPolylineProfile = {
   points: BrepClosedPolylineProfilePoint[];
 };
 
-export type BrepProfile =
+export type BrepProfileLoop =
   | BrepRectangleProfile
   | BrepCircleProfile
   | BrepClosedPolylineProfile;
+
+export type BrepProfileHole = {
+  loop: BrepProfileLoop;
+  offsetU: BrepScalar;
+  offsetV: BrepScalar;
+};
+
+export type BrepProfile =
+  | (BrepRectangleProfile & { holes?: BrepProfileHole[] })
+  | (BrepCircleProfile & { holes?: BrepProfileHole[] })
+  | (BrepClosedPolylineProfile & { holes?: BrepProfileHole[] });
 
 export type BrepExtrudeNode = {
   id: string;
@@ -779,17 +796,26 @@ function normalizeEdgeSelector(
   return { kind: 'parallelToAxis', axis: value.axis as BrepAxis };
 }
 
-function normalizeProfile(
+function normalizeProfileLoop(
   value: unknown,
-  nodeId: string,
-  operation: 'extrude' | 'revolve',
+  owner: string,
   parameterIds: ReadonlySet<string>,
   parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
-): BrepProfile {
+  rejectNestedHoles = false,
+): BrepProfileLoop {
   if (!isRecord(value) || typeof value.type !== 'string') {
     throw new BrepProjectError(
       'invalid_node',
-      `BRep ${operation} ${nodeId} profile must be a typed object.`,
+      `${owner} profile must be a typed object.`,
+    );
+  }
+  if (
+    rejectNestedHoles &&
+    Object.prototype.hasOwnProperty.call(value, 'holes')
+  ) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `${owner} profile loop cannot contain nested holes.`,
     );
   }
 
@@ -799,14 +825,14 @@ function normalizeProfile(
         type: 'rectangle',
         width: normalizeScalar(
           value.width,
-          `BRep ${operation} ${nodeId} rectangle profile width`,
+          `${owner} rectangle profile width`,
           parameterIds,
           parameterUnits,
           ['mm'],
         ),
         height: normalizeScalar(
           value.height,
-          `BRep ${operation} ${nodeId} rectangle profile height`,
+          `${owner} rectangle profile height`,
           parameterIds,
           parameterUnits,
           ['mm'],
@@ -817,7 +843,7 @@ function normalizeProfile(
         type: 'circle',
         radius: normalizeScalar(
           value.radius,
-          `BRep ${operation} ${nodeId} circle profile radius`,
+          `${owner} circle profile radius`,
           parameterIds,
           parameterUnits,
           ['mm'],
@@ -831,27 +857,27 @@ function normalizeProfile(
       ) {
         throw new BrepProjectError(
           'invalid_node',
-          `BRep ${operation} ${nodeId} closedPolyline profile must contain between 3 and ${BREP_PROJECT_MAX_PROFILE_POINTS} points.`,
+          `${owner} closedPolyline profile must contain between 3 and ${BREP_PROJECT_MAX_PROFILE_POINTS} points.`,
         );
       }
       const points = value.points.map((point, index) => {
         if (!isRecord(point)) {
           throw new BrepProjectError(
             'invalid_node',
-            `BRep ${operation} ${nodeId} closedPolyline profile point ${index} must be an object.`,
+            `${owner} closedPolyline profile point ${index} must be an object.`,
           );
         }
         return {
           u: normalizeScalar(
             point.u,
-            `BRep ${operation} ${nodeId} closedPolyline profile points[${index}].u`,
+            `${owner} closedPolyline profile points[${index}].u`,
             parameterIds,
             parameterUnits,
             ['mm'],
           ),
           v: normalizeScalar(
             point.v,
-            `BRep ${operation} ${nodeId} closedPolyline profile points[${index}].v`,
+            `${owner} closedPolyline profile points[${index}].v`,
             parameterIds,
             parameterUnits,
             ['mm'],
@@ -863,9 +889,100 @@ function normalizeProfile(
     default:
       throw new BrepProjectError(
         'invalid_node',
-        `BRep ${operation} ${nodeId} profile type must be rectangle, circle, or closedPolyline.`,
+        `${owner} profile type must be rectangle, circle, or closedPolyline.`,
       );
   }
+}
+
+function profileLoopPointCount(loop: BrepProfileLoop): number {
+  return loop.type === 'closedPolyline' ? loop.points.length : 0;
+}
+
+function normalizeProfile(
+  value: unknown,
+  nodeId: string,
+  operation: 'extrude' | 'revolve',
+  parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+): BrepProfile {
+  if (!isRecord(value)) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep ${operation} ${nodeId} profile must be a typed object.`,
+    );
+  }
+
+  const owner = `BRep ${operation} ${nodeId}`;
+  const outer = normalizeProfileLoop(
+    value,
+    owner,
+    parameterIds,
+    parameterUnits,
+  );
+  if (!Object.prototype.hasOwnProperty.call(value, 'holes')) return outer;
+  if (!Array.isArray(value.holes)) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `${owner} profile holes must be an array when present.`,
+    );
+  }
+  if (value.holes.length === 0) return outer;
+  if (operation === 'revolve') {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep revolve ${nodeId} does not support profile holes in the bounded first multi-loop slice.`,
+    );
+  }
+  if (value.holes.length > BREP_PROJECT_MAX_PROFILE_HOLES) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep extrude ${nodeId} profile cannot contain more than ${BREP_PROJECT_MAX_PROFILE_HOLES} holes.`,
+    );
+  }
+
+  const holes = value.holes.map((hole, index): BrepProfileHole => {
+    if (!isRecord(hole)) {
+      throw new BrepProjectError(
+        'invalid_node',
+        `BRep extrude ${nodeId} hole ${index} must be an object.`,
+      );
+    }
+    return {
+      loop: normalizeProfileLoop(
+        hole.loop,
+        `BRep extrude ${nodeId} hole ${index}`,
+        parameterIds,
+        parameterUnits,
+        true,
+      ),
+      offsetU: normalizeScalar(
+        hole.offsetU,
+        `BRep extrude ${nodeId} hole ${index} offsetU`,
+        parameterIds,
+        parameterUnits,
+        ['mm'],
+      ),
+      offsetV: normalizeScalar(
+        hole.offsetV,
+        `BRep extrude ${nodeId} hole ${index} offsetV`,
+        parameterIds,
+        parameterUnits,
+        ['mm'],
+      ),
+    };
+  });
+
+  const totalPoints =
+    profileLoopPointCount(outer) +
+    holes.reduce((sum, hole) => sum + profileLoopPointCount(hole.loop), 0);
+  if (totalPoints > BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep extrude ${nodeId} profile cannot contain more than ${BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS} explicit closedPolyline points across outer and holes.`,
+    );
+  }
+
+  return { ...outer, holes } as BrepProfile;
 }
 
 function normalizeNode(
@@ -1437,6 +1554,61 @@ function requirePositiveExtrudeValue(value: number, field: string): void {
   }
 }
 
+function resolveExtrudeProfileLoop(
+  loop: BrepProfileLoop,
+  nodeId: string,
+  parameterValues: Readonly<Record<string, number>>,
+  offsetU = 0,
+  offsetV = 0,
+  holeIndex?: number,
+): BrepResolvedProfileLoop {
+  const owner =
+    holeIndex == null
+      ? `BRep extrude ${nodeId}`
+      : `BRep extrude ${nodeId} hole ${holeIndex}`;
+
+  switch (loop.type) {
+    case 'rectangle': {
+      const width = resolveBrepScalar(loop.width, parameterValues);
+      const height = resolveBrepScalar(loop.height, parameterValues);
+      requirePositiveExtrudeValue(width, `${owner} rectangle profile width`);
+      requirePositiveExtrudeValue(height, `${owner} rectangle profile height`);
+      return {
+        type: 'rectangle',
+        centerU: offsetU,
+        centerV: offsetV,
+        width,
+        height,
+      };
+    }
+    case 'circle': {
+      const radius = resolveBrepScalar(loop.radius, parameterValues);
+      requirePositiveExtrudeValue(radius, `${owner} circle profile radius`);
+      return {
+        type: 'circle',
+        centerU: offsetU,
+        centerV: offsetV,
+        radius,
+      };
+    }
+    case 'closedPolyline': {
+      const points = loop.points.map(
+        (point) =>
+          [
+            resolveBrepScalar(point.u, parameterValues) + offsetU,
+            resolveBrepScalar(point.v, parameterValues) + offsetV,
+          ] as const,
+      );
+      validateBrepClosedPolylineProfilePoints(
+        points,
+        holeIndex == null ? nodeId : `${nodeId} hole ${holeIndex}`,
+        'extrude',
+      );
+      return { type: 'closedPolyline', points };
+    }
+  }
+}
+
 export function validateBrepExtrudeProfileValues(
   project: BrepProject,
   parameterValues: Readonly<Record<string, number>>,
@@ -1449,35 +1621,24 @@ export function validateBrepExtrudeProfileValues(
       `BRep extrude ${node.id} depth`,
     );
 
-    switch (node.profile.type) {
-      case 'rectangle':
-        requirePositiveExtrudeValue(
-          resolveBrepScalar(node.profile.width, parameterValues),
-          `BRep extrude ${node.id} rectangle profile width`,
-        );
-        requirePositiveExtrudeValue(
-          resolveBrepScalar(node.profile.height, parameterValues),
-          `BRep extrude ${node.id} rectangle profile height`,
-        );
-        break;
-      case 'circle':
-        requirePositiveExtrudeValue(
-          resolveBrepScalar(node.profile.radius, parameterValues),
-          `BRep extrude ${node.id} circle profile radius`,
-        );
-        break;
-      case 'closedPolyline': {
-        const points = node.profile.points.map(
-          (point) =>
-            [
-              resolveBrepScalar(point.u, parameterValues),
-              resolveBrepScalar(point.v, parameterValues),
-            ] as const,
-        );
-        validateBrepClosedPolylineProfilePoints(points, node.id, 'extrude');
-        break;
-      }
-    }
+    const outer = resolveExtrudeProfileLoop(
+      node.profile,
+      node.id,
+      parameterValues,
+    );
+    const holes = (node.profile.holes ?? []).map((hole, index) => {
+      const offsetU = resolveBrepScalar(hole.offsetU, parameterValues);
+      const offsetV = resolveBrepScalar(hole.offsetV, parameterValues);
+      return resolveExtrudeProfileLoop(
+        hole.loop,
+        node.id,
+        parameterValues,
+        offsetU,
+        offsetV,
+        index,
+      );
+    });
+    validateBrepMultiLoopProfileGeometry(outer, holes, node.id);
   }
 }
 
@@ -1487,6 +1648,12 @@ export function validateBrepRevolveProfileValues(
 ): void {
   for (const node of project.nodes) {
     if (node.type !== 'revolve') continue;
+
+    if (node.profile.holes?.length) {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} does not support profile holes in the bounded first multi-loop slice.`,
+      );
+    }
 
     if (node.profile.type !== 'closedPolyline') {
       throw new BrepScalarEvaluationError(

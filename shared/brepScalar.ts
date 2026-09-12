@@ -1,6 +1,7 @@
 import type {
   BrepNode,
   BrepParameterUnit,
+  BrepProfileLoop,
   BrepProject,
   BrepScalar,
   BrepScalarExpression,
@@ -317,29 +318,45 @@ function appendVectorScalars(
   vector.forEach((value, index) => scalars.push({ value, field: `${field}[${index}]` }));
 }
 
-function appendProfileScalars(
+function appendProfileLoopScalars(
   scalars: Array<{ value: BrepScalar; field: string }>,
-  node: Extract<BrepNode, { type: 'extrude' | 'revolve' }>,
+  loop: BrepProfileLoop,
+  field: string,
 ): void {
-  switch (node.profile.type) {
+  switch (loop.type) {
     case 'rectangle':
       scalars.push(
-        { value: node.profile.width, field: `${node.id}.profile.width` },
-        { value: node.profile.height, field: `${node.id}.profile.height` },
+        { value: loop.width, field: `${field}.width` },
+        { value: loop.height, field: `${field}.height` },
       );
       break;
     case 'circle':
-      scalars.push({ value: node.profile.radius, field: `${node.id}.profile.radius` });
+      scalars.push({ value: loop.radius, field: `${field}.radius` });
       break;
     case 'closedPolyline':
-      node.profile.points.forEach((point, index) => {
+      loop.points.forEach((point, index) => {
         scalars.push(
-          { value: point.u, field: `${node.id}.profile.points[${index}].u` },
-          { value: point.v, field: `${node.id}.profile.points[${index}].v` },
+          { value: point.u, field: `${field}.points[${index}].u` },
+          { value: point.v, field: `${field}.points[${index}].v` },
         );
       });
       break;
   }
+}
+
+function appendProfileScalars(
+  scalars: Array<{ value: BrepScalar; field: string }>,
+  node: Extract<BrepNode, { type: 'extrude' | 'revolve' }>,
+): void {
+  appendProfileLoopScalars(scalars, node.profile, `${node.id}.profile`);
+  node.profile.holes?.forEach((hole, index) => {
+    const field = `${node.id}.profile.holes[${index}]`;
+    scalars.push(
+      { value: hole.offsetU, field: `${field}.offsetU` },
+      { value: hole.offsetV, field: `${field}.offsetV` },
+    );
+    appendProfileLoopScalars(scalars, hole.loop, `${field}.loop`);
+  });
 }
 
 function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field: string }> {
@@ -433,24 +450,32 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
     for (const parameter of brepScalarParameterReferences(scalar)) references.add(parameter);
   };
   const appendVector = (vector: BrepVector3 | undefined): void => vector?.forEach(append);
-  const appendProfile = (
-    profileNode: Extract<BrepNode, { type: 'extrude' | 'revolve' }>,
-  ): void => {
-    switch (profileNode.profile.type) {
+  const appendLoop = (loop: BrepProfileLoop): void => {
+    switch (loop.type) {
       case 'rectangle':
-        append(profileNode.profile.width);
-        append(profileNode.profile.height);
+        append(loop.width);
+        append(loop.height);
         break;
       case 'circle':
-        append(profileNode.profile.radius);
+        append(loop.radius);
         break;
       case 'closedPolyline':
-        profileNode.profile.points.forEach((point) => {
+        loop.points.forEach((point) => {
           append(point.u);
           append(point.v);
         });
         break;
     }
+  };
+  const appendProfile = (
+    profileNode: Extract<BrepNode, { type: 'extrude' | 'revolve' }>,
+  ): void => {
+    appendLoop(profileNode.profile);
+    profileNode.profile.holes?.forEach((hole) => {
+      append(hole.offsetU);
+      append(hole.offsetV);
+      appendLoop(hole.loop);
+    });
   };
   switch (node.type) {
     case 'box':
