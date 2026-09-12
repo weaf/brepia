@@ -24,6 +24,7 @@ import {
   messageRowToChatMessage,
   type ChatMessage,
 } from '@/lib/aiMessages';
+import { UNCONFIGURED_MODEL_ID } from '@/lib/defaultModels';
 import parseParameters from '@shared/parseParameters';
 import { normalizeModelId } from '@shared/models';
 import { replaceOpenScadProjectFileContent } from '@shared/openScadProject';
@@ -198,7 +199,7 @@ function ConversationEditor() {
       ? normalizeModelId(conversation.settings.model)
       : conversation.type === 'creative'
         ? 'quality'
-        : 'openai/gpt-5.6-sol',
+        : UNCONFIGURED_MODEL_ID,
   );
   const [executionMode, setExecutionMode] = useState<'cli' | 'streaming'>(
     conversation.settings?.openCodeExecutionMode ?? 'cli',

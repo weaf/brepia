@@ -28,6 +28,24 @@ type SnapshotProfileRow = {
 
 type InstructionProfileSnapshot = Map<string, SnapshotProfileRow>;
 
+export function parametricCadSpecializationKey(
+  key: AiInstructionKey,
+): AiInstructionKey | undefined {
+  if (key === 'tool.build_parametric_model') return 'parametric.openscad';
+  if (key === 'tool.build_brep_project') return 'parametric.brep';
+  return undefined;
+}
+
+export function composeParametricCadToolInstruction(
+  toolInstruction: string,
+  cadSpecialization: string,
+): string {
+  const tool = toolInstruction.trim();
+  const specialization = cadSpecialization.trim();
+  if (!specialization) return tool;
+  return `${specialization}\n\n## Tool contract\n\n${tool}`;
+}
+
 function configuredProfileId(
   preferences: AiPreferencesDto,
   key: AiInstructionKey,
@@ -208,12 +226,26 @@ export async function createUserAiRuntimeContext(
       selectedInstructionProfileId,
     );
 
+  const instruction = async (
+    key: AiInstructionKey,
+    values: InstructionValues = {},
+  ): Promise<string> => {
+    const rendered = renderInstructionTemplate(await template(key), values);
+    const specializationKey = parametricCadSpecializationKey(key);
+    if (!specializationKey) return rendered;
+
+    const specialization = renderInstructionTemplate(
+      await template(specializationKey),
+      values,
+    );
+    return composeParametricCadToolInstruction(rendered, specialization);
+  };
+
   return {
     preferences,
     instructionProfileId: selectedInstructionProfileId,
     template,
-    instruction: async (key, values = {}) =>
-      renderInstructionTemplate(await template(key), values),
+    instruction,
     number: (key) => resolveRuntimeNumberFromPreferences(preferences, key),
     string: (key) => resolveRuntimeStringFromPreferences(preferences, key),
   };

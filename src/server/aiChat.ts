@@ -1,7 +1,4 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { chatTools, type AppUIMessage, type AppTools } from '@shared/chatAi';
 import {
   resolveActiveBrepAiSource,
@@ -15,7 +12,6 @@ import {
 } from '@shared/aiInstructionCatalog';
 import {
   cleanAssistantText,
-  getParametricText,
   isParametricArtifact,
 } from '@shared/parametricParts';
 import {
@@ -23,7 +19,6 @@ import {
   type OpenScadProjectAsset,
 } from '@shared/openScadProject';
 import { imageIdFromFilename, imageStoragePath } from '@shared/imageRefs';
-import { normalizeConversationSuggestions } from '@shared/suggestions';
 import { normalizeModelId } from '@shared/models';
 import {
   opencodeChatModel,
@@ -38,22 +33,17 @@ import {
   consumeStream,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  generateText,
   hasToolCall,
-  Output,
   smoothStream,
   stepCountIs,
   streamText,
   type LanguageModel,
-  type UIMessageStreamWriter,
 } from 'ai';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import imageType from 'image-type';
-import { z } from 'zod';
 import { corsHeaders, isRecord } from './api';
 import {
   loadBuiltinProviderRuntimeOverrides,
-  type BuiltinProviderDriver,
   type BuiltinProviderRuntimeOverrides,
 } from './builtinProviderOverrides';
 import { env } from './env';
@@ -87,9 +77,34 @@ import { resolveCreativeAgentModel } from './creativeAgentModel';
 import { createUserAiRuntimeContext } from './aiInstructionRuntime';
 import {
   beginActiveGeneration,
-  cancelActiveGeneration,
+  cancelActiveGenerationWithRunId,
 } from './activeGeneration';
+import {
+  AiGenerationRunLifecycle,
+  cancelDurableGenerationRun,
+} from './aiGenerationRunLifecycle';
+import { generationRunKindForConversation } from './generationRunPersistence';
+import { resolveAiTurnProvenance } from './aiTurnProvenance';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
+import {
+  buildAiContextDiagnostics,
+  resolveAiModelBudgetMetadata,
+} from './aiContextDiagnostics';
+import {
+  AiContextBudgetError,
+  assertAiHardContextBudget,
+  deriveAiHardContextBudget,
+  estimateModelMessagesForHardBudget,
+  type AiHardContextBudget,
+} from './aiContextBudget';
+import { shouldStopAfterAcceptedBrepBuild } from './aiBrepStopCondition';
+import {
+  classifyAiToolError,
+  measureAiStepContext,
+  summarizeAiToolChoice,
+  type AiStepContextMeasurement,
+  type AiToolErrorClassification,
+} from './aiStepDiagnostics';
 
 export const PARAMETRIC_AGENT_PROMPT = loadBundledInstruction('parametric');
 export const CREATIVE_AGENT_PROMPT = loadBundledInstruction('creative');
@@ -177,107 +192,37 @@ function collectAuthoritativeOpenScadAssets(
 }
 
 type ChatProvider =
-  'anthropic' | 'google' | 'openrouter' | 'local' | 'opencode' | 'cli-agent';
+  | 'custom'
+  | 'local'
+  | 'opencode'
+  | 'cli-agent'
+  | 'unsupported';
 
 function providerFor(modelId: string): ChatProvider {
-  if (modelId.startsWith('anthropic/')) return 'anthropic';
-  if (modelId.startsWith('google/')) return 'google';
+  if (isCustomProviderModel(modelId)) return 'custom';
   if (modelId.startsWith('local/')) return 'local';
   if (modelId.startsWith('opencode/')) return 'opencode';
   if (isCliAgentModel(modelId)) return 'cli-agent';
-  return 'openrouter';
+  return 'unsupported';
 }
 
-function builtinDriverForModelId(
-  modelId: string,
-): BuiltinProviderDriver | undefined {
-  if (
-    isCustomProviderModel(modelId) ||
-    modelId.startsWith('opencode/') ||
-    isCliAgentModel(modelId)
-  ) {
-    return undefined;
-  }
-  if (modelId.startsWith('anthropic/')) return 'anthropic';
-  if (modelId.startsWith('google/')) return 'google';
-  if (modelId.startsWith('local/')) return 'openai-compatible';
-  return 'openrouter';
-}
-
-type AnthropicProvider = ReturnType<typeof createAnthropic>;
-type GoogleProvider = ReturnType<typeof createGoogleGenerativeAI>;
 type LocalProvider = ReturnType<typeof createOpenAICompatible>;
 
-function normalizedAnthropicBaseURL(rawOverride?: string): string | undefined {
-  const raw = (rawOverride ?? env('ANTHROPIC_BASE_URL')).trim();
-  if (!raw) return undefined;
-  const base = raw.replace(/\/+$/, '');
-  return base.endsWith('/v1') ? base : `${base}/v1`;
-}
-
 type ChatProviders = {
-  anthropic: () => AnthropicProvider;
-  google: () => GoogleProvider;
-  openrouter: () => ReturnType<typeof createOpenRouter>;
   local: () => LocalProvider;
 };
-
-function enabledBuiltinOverride(
-  overrides: BuiltinProviderRuntimeOverrides,
-  driver: BuiltinProviderDriver,
-) {
-  const override = overrides[driver];
-  if (override?.enabled === false) {
-    throw new Error(`${driver} provider is disabled in AI Settings`);
-  }
-  return override;
-}
 
 function createChatProviders(
   overrides: BuiltinProviderRuntimeOverrides = {},
 ): ChatProviders {
-  let anthropic: AnthropicProvider | undefined;
-  let google: GoogleProvider | undefined;
-  let openrouter: ReturnType<typeof createOpenRouter> | undefined;
   let local: LocalProvider | undefined;
   return {
-    anthropic: () => {
-      if (!anthropic) {
-        const override = enabledBuiltinOverride(overrides, 'anthropic');
-        const key = override?.credential ?? env('ANTHROPIC_API_KEY');
-        const baseURL = normalizedAnthropicBaseURL(override?.baseUrl);
-        anthropic = createAnthropic({
-          apiKey: key,
-          ...(baseURL ? { baseURL } : {}),
-        });
-      }
-      return anthropic;
-    },
-    google: () => {
-      if (!google) {
-        const override = enabledBuiltinOverride(overrides, 'google');
-        const baseURL = override?.baseUrl || env('GOOGLE_BASE_URL').trim();
-        google = createGoogleGenerativeAI({
-          apiKey: override?.credential ?? env('GOOGLE_API_KEY'),
-          ...(baseURL ? { baseURL } : {}),
-        });
-      }
-      return google;
-    },
-    openrouter: () => {
-      if (!openrouter) {
-        const override = enabledBuiltinOverride(overrides, 'openrouter');
-        const baseURL = override?.baseUrl || env('OPENROUTER_BASE_URL').trim();
-        openrouter = createOpenRouter({
-          apiKey: override?.credential ?? env('OPENROUTER_API_KEY'),
-          ...(baseURL ? { baseURL } : {}),
-        });
-      }
-      return openrouter;
-    },
     local: () => {
       if (!local) {
-        const override = enabledBuiltinOverride(overrides, 'openai-compatible');
+        const override = overrides['openai-compatible'];
+        if (override?.enabled === false) {
+          throw new Error('Local OpenAI provider is disabled in AI Settings');
+        }
         local = createOpenAICompatible({
           name: 'local',
           baseURL:
@@ -286,6 +231,7 @@ function createChatProviders(
             'http://localhost:11434/v1',
           apiKey:
             (override?.credential ?? env('LOCAL_LLM_API_KEY')) || 'ollama',
+          includeUsage: true,
         });
       }
       return local;
@@ -302,57 +248,6 @@ function buildChatModel(
   openCodeRuntime: OpenCodeRuntimeOptions,
 ): { model: LanguageModel; providerOptions?: ProviderOptions } {
   const hasCappedThinkingBudget = thinking && thinkingBudgetOverridden;
-
-  if (providerFor(modelId) === 'openrouter') {
-    return {
-      model: providers.openrouter().chat(modelId, {
-        ...(thinking ? { reasoning: { max_tokens: thinkingBudget } } : {}),
-        usage: { include: true },
-      }),
-    };
-  }
-
-  if (modelId.startsWith('anthropic/')) {
-    const id = modelId.slice('anthropic/'.length).replace(/\./g, '-');
-    const adaptiveThinking = usesAdaptiveAnthropicThinking(id);
-    return {
-      model: providers.anthropic()(id),
-      providerOptions: thinking
-        ? {
-            anthropic: {
-              ...(adaptiveThinking
-                ? {
-                    thinking: {
-                      type: 'adaptive' as const,
-                      display: 'summarized' as const,
-                    },
-                    effort: hasCappedThinkingBudget ? 'low' : 'high',
-                  }
-                : {
-                    thinking: {
-                      type: 'enabled' as const,
-                      budgetTokens: thinkingBudget,
-                    },
-                  }),
-            },
-          }
-        : undefined,
-    };
-  }
-
-  if (modelId.startsWith('google/')) {
-    const id = modelId.slice('google/'.length);
-    return {
-      model: providers.google()(id),
-      providerOptions: {
-        google: {
-          thinkingConfig: {
-            includeThoughts: true,
-          },
-        },
-      },
-    };
-  }
 
   if (modelId.startsWith('local/')) {
     const id = modelId.slice('local/'.length);
@@ -384,16 +279,6 @@ function buildChatModel(
 function bareModelId(modelId: string): string {
   const id = modelId.slice(modelId.lastIndexOf('/') + 1);
   return id.replace(/\./g, '-');
-}
-
-function isClaude5Model(modelId: string): boolean {
-  return /^claude-[a-z]+-5\b/.test(bareModelId(modelId));
-}
-
-function usesAdaptiveAnthropicThinking(modelId: string) {
-  if (isClaude5Model(modelId)) return true;
-  const match = /^claude-(?:opus|sonnet)-4-(\d+)/.exec(bareModelId(modelId));
-  return match ? Number(match[1]) >= 6 : false;
 }
 
 function rejectsForcedToolChoice(modelId: string): boolean {
@@ -545,73 +430,6 @@ async function loadBranchFromDb({
     branch: path.map((row) => messageRowToUIMessage(row, conversationId)),
     leafRole: path[path.length - 1].role,
   };
-}
-
-async function generateConversationTitle({
-  anthropic,
-  firstMessage,
-  systemInstruction,
-}: {
-  anthropic: AnthropicProvider;
-  firstMessage: AppUIMessage;
-  systemInstruction: string;
-}) {
-  const text = getParametricText(firstMessage.parts) || 'New conversation';
-  try {
-    const result = await generateText({
-      model: anthropic('claude-haiku-4-5'),
-      system: systemInstruction,
-      prompt: text,
-      output: Output.object({
-        schema: z.object({ title: z.string().min(1) }),
-      }),
-    });
-    return result.output.title.slice(0, 80);
-  } catch {
-    return text.trim().split(/\s+/).slice(0, 5).join(' ') || 'New Creation';
-  }
-}
-
-async function generateConversationSuggestions({
-  anthropic,
-  branch,
-  systemInstruction,
-}: {
-  anthropic: AnthropicProvider;
-  branch: AppUIMessage[];
-  systemInstruction: string;
-}): Promise<string[]> {
-  const firstUserText =
-    getParametricText(branch.find((m) => m.role === 'user')?.parts ?? []) || '';
-  const lastAssistantText = getParametricText(
-    branch
-      .slice()
-      .reverse()
-      .find((m) => m.role === 'assistant')?.parts ?? [],
-  );
-  const summary = `User request: ${firstUserText.slice(0, 400)}\n\nMost recent assistant reply: ${lastAssistantText.slice(0, 400)}`;
-  try {
-    const result = await generateText({
-      model: anthropic('claude-haiku-4-5'),
-      system: systemInstruction,
-      prompt: summary,
-      output: Output.object({
-        schema: z.object({
-          suggestions: z.array(z.string().min(1).max(80)).length(2),
-        }),
-      }),
-    });
-    return normalizeConversationSuggestions(result.output.suggestions);
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: 500,
-      userId: '',
-      conversationId: '',
-      additionalContext: { operation: 'suggestion_generate_text' },
-    });
-    return [];
-  }
 }
 
 function creativeTools({
@@ -844,12 +662,18 @@ export async function handleAiChatRequest(req: Request) {
   }
 
   if (parsedBody.kind === 'cancel') {
-    return jsonResponse(
-      {
-        canceled: cancelActiveGeneration(user.id, conversation.id),
-      },
-      200,
+    const cancellation = cancelActiveGenerationWithRunId(
+      user.id,
+      conversation.id,
     );
+    if (cancellation.durableRunId) {
+      await cancelDurableGenerationRun(
+        cancellation.durableRunId,
+        user.id,
+        conversation.id,
+      );
+    }
+    return jsonResponse({ canceled: cancellation.cancelled }, 200);
   }
 
   const rawBody = parsedBody.body;
@@ -935,9 +759,6 @@ export async function handleAiChatRequest(req: Request) {
   let creativeReferenceTemplate: string;
   let meshPreferencesTemplate: string;
   let inspectionOutputTemplate: string;
-  let titleInstruction: string;
-  let parametricSuggestionsInstruction: string;
-  let creativeSuggestionsInstruction: string;
   let openCodeTransportInstruction: string;
   let codexTransportInstruction: string;
   let openCodeBrepTransportInstruction: string;
@@ -953,9 +774,6 @@ export async function handleAiChatRequest(req: Request) {
       creativeReferenceTemplate,
       meshPreferencesTemplate,
       inspectionOutputTemplate,
-      titleInstruction,
-      parametricSuggestionsInstruction,
-      creativeSuggestionsInstruction,
       openCodeTransportInstruction,
       codexTransportInstruction,
       openCodeBrepTransportInstruction,
@@ -970,9 +788,6 @@ export async function handleAiChatRequest(req: Request) {
       aiRuntime.template('context.creative_reference_mesh'),
       aiRuntime.template('context.mesh_preferences'),
       aiRuntime.template('context.parametric_inspection_output'),
-      aiRuntime.instruction('conversation.title'),
-      aiRuntime.instruction('suggestions.parametric'),
-      aiRuntime.instruction('suggestions.creative'),
       aiRuntime.instruction('transport.opencode'),
       aiRuntime.instruction('transport.codex'),
       aiRuntime.instruction('transport.opencode_brep'),
@@ -1032,6 +847,7 @@ export async function handleAiChatRequest(req: Request) {
     }
   }
 
+  const systemPromptBeforeBrepContext = resolvedSystemPrompt;
   resolvedSystemPrompt = withBrepProjectSystemContext({
     systemPrompt: resolvedSystemPrompt,
     contextTemplate: brepProjectContextTemplate,
@@ -1039,6 +855,15 @@ export async function handleAiChatRequest(req: Request) {
   });
 
   let acceptedBrepBuildInput: BrepAiBuildInput | undefined;
+  let activeAiStepNumber = 0;
+  const brepBuildAttemptsByStep = new Map<
+    number,
+    Array<{
+      accepted: boolean;
+      durationMs: number;
+      error?: AiToolErrorClassification;
+    }>
+  >();
 
   const tools =
     conversation.type === 'creative'
@@ -1055,6 +880,16 @@ export async function handleAiChatRequest(req: Request) {
             answerDescription: answerToolDescription,
             onAcceptedBuild: (input) => {
               acceptedBrepBuildInput = input;
+            },
+            onBuildAttempt: ({ accepted, durationMs, error }) => {
+              const attempts =
+                brepBuildAttemptsByStep.get(activeAiStepNumber) ?? [];
+              attempts.push({
+                accepted,
+                durationMs,
+                ...(error ? { error: classifyAiToolError(error) } : {}),
+              });
+              brepBuildAttemptsByStep.set(activeAiStepNumber, attempts);
             },
           })
         : parametricTools({
@@ -1091,15 +926,6 @@ export async function handleAiChatRequest(req: Request) {
       503,
     );
   }
-
-  const anthropicAuxiliaryAvailable =
-    builtinProviderOverrides.anthropic?.enabled !== false &&
-    Boolean(
-      builtinProviderOverrides.anthropic?.credential ||
-      env('ANTHROPIC_API_KEY'),
-    );
-
-  const isFirstUserTurn = branchMessages.length === 1 && leafRole === 'user';
 
   const hydratedMessages = await Promise.all(
     branchMessages.map(async (message) => ({
@@ -1248,10 +1074,7 @@ export async function handleAiChatRequest(req: Request) {
     provider: resolvedProvider,
   };
 
-  const thinkingEnabled =
-    (rawBody.thinking ?? false) ||
-    (resolvedProvider === 'anthropic' &&
-      usesAdaptiveAnthropicThinking(actualModelId));
+  const thinkingEnabled = rawBody.thinking ?? false;
   const thinkingBudget = aiRuntime.number('chat.thinkingBudgetTokens');
   const thinkingBudgetOverridden = Object.prototype.hasOwnProperty.call(
     aiRuntime.preferences.runtimeOverrides,
@@ -1268,6 +1091,10 @@ export async function handleAiChatRequest(req: Request) {
       : thinkingEnabled
         ? 'chat.creativeThinkingMaxOutputTokens'
         : 'chat.creativeMaxOutputTokens',
+  );
+  const modelBudgetMetadata = await resolveAiModelBudgetMetadata(
+    user.id,
+    actualModelId,
   );
   const openCodeRuntime: OpenCodeRuntimeOptions = {
     transportInstruction: activeBrepSource
@@ -1293,6 +1120,48 @@ export async function handleAiChatRequest(req: Request) {
       400,
     );
   }
+  const turnProvenance = resolveAiTurnProvenance({
+    actualModelId,
+    transport,
+    executionMode,
+  });
+  const turnMetadata: AppUIMessage['metadata'] = {
+    model: rawBody.model,
+    ...(conversation.type === 'creative'
+      ? { agentModel: actualModelId }
+      : {}),
+    ...turnProvenance,
+  };
+  let generationRun: AiGenerationRunLifecycle;
+  try {
+    generationRun = await AiGenerationRunLifecycle.create({
+      userId: user.id,
+      conversationId: conversation.id,
+      requestMessageId: leafMessageId,
+      kind: generationRunKindForConversation(
+        conversation.type,
+        Boolean(activeBrepSource),
+      ),
+      requestedModelId: baseLogContext.requestedModelId,
+    });
+    await generationRun.dispatched(turnProvenance);
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-chat',
+      statusCode: 500,
+      userId: user.id,
+      conversationId: conversation.id,
+      additionalContext: {
+        ...baseLogContext,
+        operation: 'create_generation_run',
+      },
+    });
+    return jsonResponse(
+      { error: 'Generation status could not be initialized' },
+      500,
+    );
+  }
+
   console.info('transport', {
     modelId: actualModelId,
     executionMode,
@@ -1305,7 +1174,6 @@ export async function handleAiChatRequest(req: Request) {
   let chatLanguageModel: LanguageModel;
   let chatProviderOptions: ProviderOptions | undefined;
   let customSupportsVision: boolean | undefined;
-  const _builtinDriver = builtinDriverForModelId(actualModelId);
   try {
     if (transport.kind === 'streaming-opencode') {
       chatLanguageModel = streamingOpencodeChatModel(
@@ -1342,6 +1210,7 @@ export async function handleAiChatRequest(req: Request) {
 
         const supportsTools = built.capabilities.supportsTools;
         if (!supportsTools) {
+          await generationRun.failed('provider_tools_unsupported');
           return jsonResponse(
             { error: 'Provider does not support required CAD tools' },
             400,
@@ -1362,6 +1231,7 @@ export async function handleAiChatRequest(req: Request) {
             operation: 'build_custom_chat_model',
           },
         });
+        await generationRun.failed('model_initialization_failed');
         const message =
           error instanceof Error ? error.message : 'Custom provider error';
         return jsonResponse({ error: message }, 400);
@@ -1389,6 +1259,7 @@ export async function handleAiChatRequest(req: Request) {
         operation: 'build_chat_model',
       },
     });
+    await generationRun.failed('model_initialization_failed');
     const message = error instanceof Error ? error.message : String(error);
     return jsonResponse(
       { error: `Failed to initialize model ${actualModelId}: ${message}` },
@@ -1419,15 +1290,109 @@ export async function handleAiChatRequest(req: Request) {
   const streamingOpenCode = transport.kind === 'streaming-opencode';
   const forceBuildToolChoice =
     !streamingOpenCode && supportsForcedToolChoice(actualModelId);
-  const disableThinkingForBuildStep =
-    forceBuildToolChoice && thinkingEnabled && resolvedProvider === 'anthropic';
   const usingAutoToolChoiceFallback =
     conversation.type === 'parametric' &&
     leafRole === 'user' &&
     !streamingOpenCode &&
     !forceBuildToolChoice;
 
-  const activeGeneration = beginActiveGeneration(user.id, conversation.id);
+  let contextDiagnostics: Awaited<ReturnType<typeof buildAiContextDiagnostics>>;
+  try {
+    contextDiagnostics = await buildAiContextDiagnostics({
+      systemPrompt: resolvedSystemPrompt,
+      systemPromptBeforeBrepContext,
+      tools: tools as Record<string, unknown>,
+      branchMessages,
+      modelMessages,
+      currentBrepProject: activeBrepSource?.project,
+      modelContextLimit: modelBudgetMetadata.contextLimit,
+      modelOutputLimit: modelBudgetMetadata.outputLimit,
+      reservedOutputTokens: maxOutputTokens,
+    });
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-chat',
+      statusCode: 500,
+      userId: user.id,
+      conversationId: conversation.id,
+      additionalContext: {
+        ...baseLogContext,
+        operation: 'context_preflight',
+      },
+    });
+    await generationRun.failed('context_preflight_failed');
+    return jsonResponse(
+      { error: 'AI context could not be prepared safely' },
+      500,
+    );
+  }
+
+  const requestHardBudget = deriveAiHardContextBudget({
+    estimatedInputTokens: contextDiagnostics.total.estimatedInputTokens,
+    contextWindowTokens: modelBudgetMetadata.contextLimit,
+    configuredMaxOutputTokens: maxOutputTokens,
+    modelOutputLimitTokens: modelBudgetMetadata.outputLimit,
+    safetyMarginTokens: contextDiagnostics.budget.safetyMarginTokens,
+  });
+  console.info('ai context diagnostics', {
+    modelId: actualModelId,
+    transportKind: transport.kind,
+    modelBudgetSource: modelBudgetMetadata.source,
+    ...contextDiagnostics,
+    hardBudget: requestHardBudget,
+  });
+
+  try {
+    assertAiHardContextBudget(requestHardBudget);
+  } catch (error) {
+    logError(error, {
+      functionName: 'ai-chat',
+      statusCode: 413,
+      userId: user.id,
+      conversationId: conversation.id,
+      additionalContext: {
+        ...baseLogContext,
+        operation: 'context_budget_preflight',
+        hardBudget: requestHardBudget,
+      },
+    });
+    await generationRun.failed('context_budget_exceeded');
+    return jsonResponse(
+      {
+        error:
+          'AI context is too large for the selected model. Shorten the conversation or choose a model with a larger context window.',
+      },
+      413,
+    );
+  }
+
+  const fixedContextEstimatedTokens =
+    contextDiagnostics.systemInstructions.estimatedTokens +
+    contextDiagnostics.providerToolSchemas.estimatedTokens;
+
+  const activeGeneration = beginActiveGeneration(
+    user.id,
+    conversation.id,
+    generationRun.id,
+  );
+  if (activeGeneration.replacedDurableRunId) {
+    await cancelDurableGenerationRun(
+      activeGeneration.replacedDurableRunId,
+      user.id,
+      conversation.id,
+      'Generation superseded by a newer request.',
+    );
+  }
+  await generationRun.generating();
+
+  const generationStartedAt = Date.now();
+  const stepStartedAt = new Map<number, number>();
+  const stepContextByNumber = new Map<number, AiStepContextMeasurement>();
+  const stepBudgetByNumber = new Map<number, AiHardContextBudget>();
+  const stepPolicyByNumber = new Map<
+    number,
+    { activeTools: string[]; toolChoice: string; maxOutputTokens: number }
+  >();
 
   const result = streamText({
     model: chatLanguageModel,
@@ -1435,33 +1400,125 @@ export async function handleAiChatRequest(req: Request) {
     system: resolvedSystemPrompt,
     messages: modelMessages,
     tools,
-    prepareStep: ({ stepNumber }) => {
-      if (streamingOpenCode) return {};
-      if (
+    prepareStep: ({ stepNumber, messages }) => {
+      activeAiStepNumber = stepNumber;
+      const stepMessages = estimateModelMessagesForHardBudget(messages);
+      const stepBudget = deriveAiHardContextBudget({
+        estimatedInputTokens:
+          fixedContextEstimatedTokens + stepMessages.estimatedTokens,
+        contextWindowTokens: modelBudgetMetadata.contextLimit,
+        configuredMaxOutputTokens: maxOutputTokens,
+        modelOutputLimitTokens: modelBudgetMetadata.outputLimit,
+        safetyMarginTokens: contextDiagnostics.budget.safetyMarginTokens,
+      });
+      stepBudgetByNumber.set(stepNumber, stepBudget);
+      assertAiHardContextBudget(stepBudget);
+
+      const forceInitialBuild =
+        !streamingOpenCode &&
         conversation.type === 'parametric' &&
         leafRole === 'user' &&
-        stepNumber === 0
-      ) {
+        stepNumber === 0;
+      const stepPolicy = forceInitialBuild
+        ? {
+            activeTools: [buildToolName],
+            toolChoice: forceBuildToolChoice
+              ? `tool:${buildToolName}`
+              : 'auto',
+            maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
+          }
+        : {
+            activeTools: Object.keys(tools),
+            toolChoice: 'auto',
+            maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
+          };
+      stepPolicyByNumber.set(stepNumber, stepPolicy);
+
+      if (streamingOpenCode) {
+        return { maxOutputTokens: stepBudget.effectiveMaxOutputTokens };
+      }
+      if (forceInitialBuild) {
         return {
           activeTools: [buildToolName as never],
+          maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
           ...(forceBuildToolChoice
             ? {
                 toolChoice: {
                   type: 'tool' as const,
                   toolName: buildToolName as never,
                 },
-                ...(disableThinkingForBuildStep
-                  ? {
-                      providerOptions: {
-                        anthropic: { thinking: { type: 'disabled' as const } },
-                      },
-                    }
-                  : {}),
               }
             : {}),
         };
       }
-      return {};
+      return { maxOutputTokens: stepBudget.effectiveMaxOutputTokens };
+    },
+    experimental_onStepStart: ({ stepNumber, messages }) => {
+      activeAiStepNumber = stepNumber;
+      const startedAt = Date.now();
+      const context = measureAiStepContext(messages);
+      const previousContext = stepContextByNumber.get(stepNumber - 1);
+      stepStartedAt.set(stepNumber, startedAt);
+      stepContextByNumber.set(stepNumber, context);
+      const policy = stepPolicyByNumber.get(stepNumber);
+      console.info('ai step started', {
+        modelId: actualModelId,
+        transportKind: transport.kind,
+        stepNumber: stepNumber + 1,
+        totalElapsedMs: startedAt - generationStartedAt,
+        activeTools: policy?.activeTools ?? Object.keys(tools),
+        toolChoice: summarizeAiToolChoice(policy?.toolChoice ?? 'auto'),
+        maxOutputTokens:
+          policy?.maxOutputTokens ?? requestHardBudget.effectiveMaxOutputTokens,
+        hardBudget: stepBudgetByNumber.get(stepNumber) ?? requestHardBudget,
+        context: {
+          ...context,
+          modelMessageGrowthBytes: previousContext
+            ? context.modelMessageBytes - previousContext.modelMessageBytes
+            : 0,
+          brepToolPayloadGrowthBytes: previousContext
+            ? context.brepToolPayloadBytes - previousContext.brepToolPayloadBytes
+            : 0,
+        },
+      });
+    },
+    onStepFinish: ({ stepNumber, finishReason, usage, toolCalls }) => {
+      const finishedAt = Date.now();
+      const context = stepContextByNumber.get(stepNumber);
+      const policy = stepPolicyByNumber.get(stepNumber);
+      const buildAttempts = brepBuildAttemptsByStep.get(stepNumber) ?? [];
+      const usageAvailable =
+        (usage.inputTokens ?? 0) > 0 ||
+        (usage.outputTokens ?? 0) > 0 ||
+        (usage.totalTokens ?? 0) > 0;
+      console.info('ai step diagnostics', {
+        modelId: actualModelId,
+        transportKind: transport.kind,
+        stepNumber: stepNumber + 1,
+        stepDurationMs:
+          finishedAt - (stepStartedAt.get(stepNumber) ?? generationStartedAt),
+        totalElapsedMs: finishedAt - generationStartedAt,
+        finishReason,
+        activeTools: policy?.activeTools ?? Object.keys(tools),
+        toolChoice: summarizeAiToolChoice(policy?.toolChoice ?? 'auto'),
+        maxOutputTokens:
+          policy?.maxOutputTokens ?? requestHardBudget.effectiveMaxOutputTokens,
+        hardBudget: stepBudgetByNumber.get(stepNumber) ?? requestHardBudget,
+        toolCalls: toolCalls.map((call) => call.toolName),
+        buildBrepProject: {
+          attemptCount: buildAttempts.length,
+          accepted: buildAttempts.some((attempt) => attempt.accepted),
+          attempts: buildAttempts,
+        },
+        context: context ?? null,
+        providerUsage: usageAvailable
+          ? {
+              inputTokens: usage.inputTokens ?? null,
+              outputTokens: usage.outputTokens ?? null,
+              totalTokens: usage.totalTokens ?? null,
+            }
+          : null,
+      });
     },
     stopWhen:
       activeBrepSource && transport.kind !== 'normal'
@@ -1469,14 +1526,41 @@ export async function handleAiChatRequest(req: Request) {
         : streamingOpenCode
           ? hasToolCall('build_parametric_model')
           : activeBrepSource
-            ? [hasToolCall('answer_user'), stepCountIs(maxSteps)]
+            ? [
+                ({ steps }) =>
+                  shouldStopAfterAcceptedBrepBuild(
+                    brepBuildAttemptsByStep,
+                    steps.length,
+                  ),
+                hasToolCall('answer_user'),
+                stepCountIs(maxSteps),
+              ]
             : stepCountIs(maxSteps),
-    maxOutputTokens,
+    maxOutputTokens: requestHardBudget.effectiveMaxOutputTokens,
     abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
     onError: ({ error }) => {
       activeGeneration.finish();
-      if (isRequestAbort(error, activeGeneration.signal)) return;
+      if (isRequestAbort(error, activeGeneration.signal)) {
+        void generationRun.cancelled('Generation aborted.');
+        return;
+      }
+      if (error instanceof AiContextBudgetError) {
+        void generationRun.failed('context_budget_exceeded');
+        logError(error, {
+          functionName: 'ai-chat',
+          statusCode: 413,
+          userId: logContext.userId,
+          conversationId: logContext.conversationId,
+          additionalContext: {
+            ...logContext,
+            operation: 'step_context_budget',
+            hardBudget: error.budget,
+          },
+        });
+        return;
+      }
+      void generationRun.failed('model_stream_failed');
 
       logError(error, {
         functionName: 'ai-chat',
@@ -1491,6 +1575,47 @@ export async function handleAiChatRequest(req: Request) {
     },
     onFinish: ({ steps }) => {
       activeGeneration.finish();
+      void generationRun.responseReceived();
+      const usageAvailable = steps.some(
+        (step) =>
+          (step.usage.inputTokens ?? 0) > 0 ||
+          (step.usage.outputTokens ?? 0) > 0 ||
+          (step.usage.totalTokens ?? 0) > 0,
+      );
+      const inputTokens = usageAvailable
+        ? steps.reduce(
+            (total, step) => total + (step.usage.inputTokens ?? 0),
+            0,
+          )
+        : null;
+      const outputTokens = usageAvailable
+        ? steps.reduce(
+            (total, step) => total + (step.usage.outputTokens ?? 0),
+            0,
+          )
+        : null;
+      const totalTokens = usageAvailable
+        ? steps.reduce(
+            (total, step) => total + (step.usage.totalTokens ?? 0),
+            0,
+          )
+        : null;
+      const acceptedBrepBuildSteps = [...brepBuildAttemptsByStep.entries()]
+        .filter(([, attempts]) => attempts.some((attempt) => attempt.accepted))
+        .map(([stepNumber]) => stepNumber + 1)
+        .sort((left, right) => left - right);
+      console.info('ai context actual usage', {
+        modelId: actualModelId,
+        transportKind: transport.kind,
+        stepCount: steps.length,
+        providerUsageRequested: actualModelId.startsWith('local/'),
+        providerUsageAvailable: usageAvailable,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        totalElapsedMs: Date.now() - generationStartedAt,
+        acceptedBrepBuildSteps,
+      });
       if (!usingAutoToolChoiceFallback) return;
       const calledBuildTool = steps.some((step) =>
         step.toolCalls?.some((call) => call.toolName === buildToolName),
@@ -1520,8 +1645,14 @@ export async function handleAiChatRequest(req: Request) {
     onError: (error) => {
       activeGeneration.finish();
       if (isRequestAbort(error, activeGeneration.signal)) {
+        void generationRun.cancelled('Generation aborted.');
         return 'Generation stopped';
       }
+      if (error instanceof AiContextBudgetError) {
+        void generationRun.failed('context_budget_exceeded');
+        return 'AI context became too large for the selected model before the next provider step.';
+      }
+      void generationRun.failed('ui_stream_failed');
 
       logError(error, {
         functionName: 'ai-chat',
@@ -1537,28 +1668,18 @@ export async function handleAiChatRequest(req: Request) {
       return `Model call failed (${resolvedProvider}/${actualModelId}): ${message}`;
     },
     execute: async ({ writer }) => {
-      if (isFirstUserTurn && anthropicAuxiliaryAvailable) {
-        void emitConversationTitle({
-          writer,
-          anthropic: providers.anthropic(),
-          supabaseClient,
-          conversation,
-          firstMessage: branchMessages[0],
-          systemInstruction: titleInstruction,
-        });
-      }
-
       writer.merge(
         result.toUIMessageStream<AppUIMessage>({
           originalMessages: branchMessages,
           generateMessageId: () => crypto.randomUUID(),
+          messageMetadata: ({ part }) =>
+            part.type === 'start' ? turnMetadata : undefined,
           onFinish: async ({ responseMessage, isContinuation }) => {
+            await generationRun.validatingArtifact(responseMessage.id);
+
             const metadata = {
               ...(responseMessage.metadata ?? {}),
-              model: rawBody.model,
-              ...(conversation.type === 'creative'
-                ? { agentModel: actualModelId }
-                : {}),
+              ...turnMetadata,
             };
 
             const baseFinalizedParts =
@@ -1584,6 +1705,7 @@ export async function handleAiChatRequest(req: Request) {
               isContinuation,
               hasPendingToolCall,
             });
+            await generationRun.savingRevision(responseMessage.id);
             let error: { message: string } | null = null;
             if (persistAction === 'update') {
               if (activeBrepSource) {
@@ -1642,23 +1764,12 @@ export async function handleAiChatRequest(req: Request) {
                 conversationId: conversation.id,
                 additionalContext: { operation: 'persist_response_message' },
               });
-            }
-
-            if (!error && !hasPendingToolCall && anthropicAuxiliaryAvailable) {
-              await emitConversationSuggestions({
-                writer,
-                anthropic: providers.anthropic(),
-                supabaseClient,
-                conversation,
-                branch: [
-                  ...branchMessages,
-                  { ...responseMessage, parts: finalizedParts },
-                ],
-                systemInstruction:
-                  conversation.type === 'creative'
-                    ? creativeSuggestionsInstruction
-                    : parametricSuggestionsInstruction,
-              });
+              await generationRun.failed('response_persistence_failed');
+            } else {
+              await generationRun.persisted(
+                responseMessage.id,
+                Boolean(activeBrepSource),
+              );
             }
           },
         }),
@@ -1671,100 +1782,4 @@ export async function handleAiChatRequest(req: Request) {
     headers: corsHeaders,
     consumeSseStream: consumeStream,
   });
-}
-
-async function emitConversationTitle({
-  writer,
-  anthropic,
-  supabaseClient,
-  conversation,
-  firstMessage,
-  systemInstruction,
-}: {
-  writer: UIMessageStreamWriter<AppUIMessage>;
-  anthropic: AnthropicProvider;
-  supabaseClient: SupabaseAnon;
-  conversation: ConversationAccess;
-  firstMessage: AppUIMessage;
-  systemInstruction: string;
-}) {
-  try {
-    const title = await generateConversationTitle({
-      anthropic,
-      firstMessage,
-      systemInstruction,
-    });
-    await supabaseClient
-      .from('conversations')
-      .update({ title })
-      .eq('id', conversation.id);
-    writer.write({
-      transient: true,
-      type: 'data-title-update',
-      data: { conversationId: conversation.id, title },
-    });
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: 500,
-      userId: '',
-      conversationId: conversation.id,
-      additionalContext: { operation: 'title_update' },
-    });
-  }
-}
-
-async function emitConversationSuggestions({
-  writer,
-  anthropic,
-  supabaseClient,
-  conversation,
-  branch,
-  systemInstruction,
-}: {
-  writer: UIMessageStreamWriter<AppUIMessage>;
-  anthropic: AnthropicProvider;
-  supabaseClient: SupabaseAnon;
-  conversation: ConversationAccess;
-  branch: AppUIMessage[];
-  systemInstruction: string;
-}) {
-  try {
-    const suggestions = await generateConversationSuggestions({
-      anthropic,
-      branch,
-      systemInstruction,
-    });
-    if (suggestions.length === 0) return;
-
-    const { data: convRow } = await supabaseClient
-      .from('conversations')
-      .select('settings')
-      .eq('id', conversation.id)
-      .single();
-    const currentSettings =
-      convRow?.settings &&
-      typeof convRow.settings === 'object' &&
-      !Array.isArray(convRow.settings)
-        ? (convRow.settings as Record<string, unknown>)
-        : {};
-    await supabaseClient
-      .from('conversations')
-      .update({ settings: { ...currentSettings, suggestions } })
-      .eq('id', conversation.id);
-
-    writer.write({
-      transient: true,
-      type: 'data-suggestions-update',
-      data: { conversationId: conversation.id, suggestions },
-    });
-  } catch (error) {
-    logError(error, {
-      functionName: 'ai-chat',
-      statusCode: 500,
-      userId: '',
-      conversationId: conversation.id,
-      additionalContext: { operation: 'suggestions_update' },
-    });
-  }
 }

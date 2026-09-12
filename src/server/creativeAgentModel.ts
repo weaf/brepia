@@ -1,6 +1,5 @@
 import type { User } from '@supabase/supabase-js';
 import { isInternalCreativeRuntimeModelId } from '@shared/creativeRuntimeModels';
-import { normalizeModelId } from '@shared/models';
 import type { Conversation, Model } from '@shared/types';
 import { buildSelectableCatalog, type CatalogEntry } from './modelCatalog';
 
@@ -33,45 +32,33 @@ function isAutomaticCreativeAgentCandidate(entry: CatalogEntry): boolean {
 }
 
 /**
- * Choose a Creative-mode LLM independently from the Creative mesh backend.
- *
- * Explicit request and conversation-pinned choices are authoritative unless
- * they point at an internal Creative runtime endpoint. Runtime IDs such as
- * Z-Image-Turbo and TRELLIS.2 are generation services, not chat language
- * models, and must never be selected as the Creative agent.
- *
- * Automatic fallback prefers a tool-capable non-vision chat model. Vision
- * models remain eligible only as a last resort because Creative already has a
- * separate vision-routing path; using a vision-specialized model as the agent
- * can otherwise couple unrelated model alignment/behavior to mesh requests.
- *
- * OpenCode/Codex catalog entries are excluded from automatic Creative fallback
- * because pCAD's current agent adapters are intentionally parametric/OpenSCAD
- * specific. They can be enabled for Creative later when those adapters gain a
- * create_mesh result contract instead of being selected accidentally here.
+ * Choose a Creative-mode LLM from the user's selectable Settings catalog.
+ * Explicit request and conversation-pinned choices remain preferred, but they
+ * are no longer authoritative when they are stale, hidden, disabled, or not
+ * present in Settings.
  */
 export function selectCreativeAgentModel(
   conversation: CreativeConversation,
   requestedAgentModel: Model | undefined,
   selectableCatalog: CatalogEntry[],
 ): CreativeAgentModelResolution | null {
+  const selectableIds = new Set(selectableCatalog.map((entry) => entry.id));
+
   const requested = creativeAgentModel(requestedAgentModel);
-  if (requested) {
-    return { modelId: normalizeModelId(requested), source: 'request' };
+  if (requested && selectableIds.has(requested)) {
+    return { modelId: requested, source: 'request' };
   }
 
   const pinned = creativeAgentModel(conversation.settings?.creativeAgentModel);
-  if (pinned) {
-    return { modelId: normalizeModelId(pinned), source: 'conversation' };
+  if (pinned && selectableIds.has(pinned)) {
+    return { modelId: pinned, source: 'conversation' };
   }
 
   const eligible = selectableCatalog.filter(isAutomaticCreativeAgentCandidate);
   const fallback =
     eligible.find((entry) => entry.supportsVision !== true) ?? eligible[0];
 
-  return fallback
-    ? { modelId: normalizeModelId(fallback.id), source: 'catalog' }
-    : null;
+  return fallback ? { modelId: fallback.id, source: 'catalog' } : null;
 }
 
 export async function resolveCreativeAgentModel({
@@ -83,16 +70,6 @@ export async function resolveCreativeAgentModel({
   requestedAgentModel?: Model;
   user: User;
 }): Promise<CreativeAgentModelResolution | null> {
-  const requested = creativeAgentModel(requestedAgentModel);
-  const pinned = creativeAgentModel(conversation.settings?.creativeAgentModel);
-
-  // Avoid catalog discovery on the hot path when the conversation already has
-  // a valid explicit agent identity. Internal Creative runtime IDs are ignored
-  // so an accidentally pinned runtime can self-heal through catalog fallback.
-  if (requested || pinned) {
-    return selectCreativeAgentModel(conversation, requestedAgentModel, []);
-  }
-
   const catalog = await buildSelectableCatalog(user);
   return selectCreativeAgentModel(conversation, requestedAgentModel, catalog);
 }

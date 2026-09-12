@@ -15,7 +15,7 @@ function entry(
     supportsTools: true,
     supportsThinking: false,
     supportsVision: false,
-    source: 'builtin',
+    source: 'local',
     enabled: true,
     available: true,
     ...overrides,
@@ -23,34 +23,35 @@ function entry(
 }
 
 describe('Creative agent model selection', () => {
-  it('keeps an explicit request separate from the mesh backend', () => {
+  it('keeps an explicit request only when that model exists in Settings', () => {
+    const requested = entry('local/qwen3.6-35b');
     const result = selectCreativeAgentModel(
       { settings: { model: 'quality' } },
-      'local/qwen3.6-35b',
-      [entry('google/gemini-3.1-pro-preview')],
+      requested.id,
+      [requested],
     );
 
     assert.deepEqual(result, {
-      modelId: 'local/qwen3.6-35b',
+      modelId: requested.id,
       source: 'request',
     });
   });
 
-  it('uses the conversation-pinned Creative agent before catalog fallback', () => {
+  it('ignores a stale pinned Creative agent and uses Settings fallback', () => {
     const result = selectCreativeAgentModel(
       {
         settings: {
           model: 'ultra',
-          creativeAgentModel: 'agent/opencode/llama-swap/qwen3.6-35b',
+          creativeAgentModel: 'agent/opencode/deleted/model',
         },
       },
       undefined,
-      [entry('google/gemini-3.1-pro-preview')],
+      [entry('local/qwen3.6-35b')],
     );
 
     assert.deepEqual(result, {
-      modelId: 'agent/opencode/llama-swap/qwen3.6-35b',
-      source: 'conversation',
+      modelId: 'local/qwen3.6-35b',
+      source: 'catalog',
     });
   });
 
@@ -62,7 +63,7 @@ describe('Creative agent model selection', () => {
         entry('disabled/model', { enabled: false }),
         entry('no-tools/model', { supportsTools: false }),
         entry('agent/opencode/test/model', { source: 'opencode' }),
-        entry('local/qwen3.6-35b', { source: 'local' }),
+        entry('local/qwen3.6-35b'),
       ],
     );
 

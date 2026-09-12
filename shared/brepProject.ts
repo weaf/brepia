@@ -1,28 +1,62 @@
+import {
+  BREP_SCALAR_MAX_ABS_VALUE,
+  BrepScalarEvaluationError,
+  BrepScalarValidationError,
+  normalizeBrepScalarValue,
+  resolveBrepScalar,
+  validateBrepProjectScalarDefaults,
+} from './brepScalar.ts';
+import {
+  validateBrepClosedPolylineProfilePoints,
+  validateBrepMultiLoopProfileGeometry,
+  type BrepResolvedProfileLoop,
+} from './brepProfileGeometry.ts';
+
 export const BREP_PROJECT_SCHEMA_VERSION = 1 as const;
 export const BREP_PROJECT_MAX_PARAMETERS = 128;
 export const BREP_PROJECT_MAX_NODES = 256;
 export const BREP_PROJECT_MAX_NODE_INPUTS = 32;
+export const BREP_PROJECT_MAX_PATTERN_COUNT = 32;
+export const BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES = 64;
+export const BREP_PROJECT_MAX_PROFILE_POINTS = 32;
+export const BREP_PROJECT_MAX_PROFILE_HOLES = 8;
+export const BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS = 128;
 export const BREP_PROJECT_MAX_ID_CHARS = 64;
 export const BREP_PROJECT_MAX_NAME_CHARS = 120;
 export const BREP_PROJECT_MAX_DESCRIPTION_CHARS = 500;
-export const BREP_PROJECT_MAX_ABS_SCALAR = 1_000_000_000;
+export const BREP_PROJECT_MAX_ABS_SCALAR = BREP_SCALAR_MAX_ABS_VALUE;
 export const BREP_PROJECT_MAX_METADATA_PROPERTIES = 64;
 export const BREP_PROJECT_MAX_OBJECT_POINTS = 128;
 
 export type BrepProjectUnitSystem = 'mm';
 export type BrepParameterUnit = 'mm' | 'deg' | 'none';
 export type BrepAxis = 'x' | 'y' | 'z';
+export type BrepNodeValueKind = 'single' | 'instanceSet';
 
 export type BrepParameterReference = {
   parameter: string;
 };
 
-export type BrepScalar = number | BrepParameterReference;
+export type BrepScalarBinaryExpression = {
+  op: 'add' | 'sub' | 'mul' | 'div';
+  args: [BrepScalar, BrepScalar];
+};
+
+export type BrepScalarNegateExpression = {
+  op: 'neg';
+  args: [BrepScalar];
+};
+
+export type BrepScalarExpression =
+  | BrepScalarBinaryExpression
+  | BrepScalarNegateExpression;
+
+export type BrepScalar = number | BrepParameterReference | BrepScalarExpression;
 export type BrepVector3 = [BrepScalar, BrepScalar, BrepScalar];
 
 /**
- * Kernel-neutral object placement.  This maps directly to a future
- * Grasshopper Plane input without making Rhino a runtime dependency.
+ * Kernel-neutral object placement. This maps directly to a future Grasshopper
+ * Plane input without making Rhino a runtime dependency.
  */
 export type BrepProjectPlacement = {
   origin: BrepVector3;
@@ -92,6 +126,58 @@ export type BrepCylinderNode = {
   height: BrepScalar;
 };
 
+export type BrepRectangleProfile = {
+  type: 'rectangle';
+  width: BrepScalar;
+  height: BrepScalar;
+};
+
+export type BrepCircleProfile = {
+  type: 'circle';
+  radius: BrepScalar;
+};
+
+export type BrepClosedPolylineProfilePoint = {
+  u: BrepScalar;
+  v: BrepScalar;
+};
+
+export type BrepClosedPolylineProfile = {
+  type: 'closedPolyline';
+  points: BrepClosedPolylineProfilePoint[];
+};
+
+export type BrepProfileLoop =
+  | BrepRectangleProfile
+  | BrepCircleProfile
+  | BrepClosedPolylineProfile;
+
+export type BrepProfileHole = {
+  loop: BrepProfileLoop;
+  offsetU: BrepScalar;
+  offsetV: BrepScalar;
+};
+
+export type BrepProfile =
+  | (BrepRectangleProfile & { holes?: BrepProfileHole[] })
+  | (BrepCircleProfile & { holes?: BrepProfileHole[] })
+  | (BrepClosedPolylineProfile & { holes?: BrepProfileHole[] });
+
+export type BrepExtrudeNode = {
+  id: string;
+  type: 'extrude';
+  profile: BrepProfile;
+  axis: BrepAxis;
+  depth: BrepScalar;
+};
+
+export type BrepRevolveNode = {
+  id: string;
+  type: 'revolve';
+  profile: BrepProfile;
+  axis: BrepAxis;
+};
+
 export type BrepTransformNode = {
   id: string;
   type: 'transform';
@@ -100,11 +186,62 @@ export type BrepTransformNode = {
   rotateDeg?: BrepVector3;
 };
 
+export type BrepMirrorNode = {
+  id: string;
+  type: 'mirror';
+  input: string;
+  normalAxis: BrepAxis;
+  offset: BrepScalar;
+};
+
+export type BrepLinearPatternNode = {
+  id: string;
+  type: 'linearPattern';
+  input: string;
+  axis: BrepAxis;
+  count: number;
+  spacing: BrepScalar;
+};
+
+export type BrepRectangularPatternNode = {
+  id: string;
+  type: 'rectangularPattern';
+  input: string;
+  axisA: BrepAxis;
+  axisB: BrepAxis;
+  countA: number;
+  countB: number;
+  spacingA: BrepScalar;
+  spacingB: BrepScalar;
+};
+
+export type BrepCircularPatternNode = {
+  id: string;
+  type: 'circularPattern';
+  input: string;
+  axis: BrepAxis;
+  center: BrepVector3;
+  count: number;
+  angleStepDeg: BrepScalar;
+};
+
 export type BrepSubtractNode = {
   id: string;
   type: 'subtract';
   base: string;
   tools: string[];
+};
+
+export type BrepUnionNode = {
+  id: string;
+  type: 'union';
+  inputs: string[];
+};
+
+export type BrepIntersectNode = {
+  id: string;
+  type: 'intersect';
+  inputs: string[];
 };
 
 export type BrepFilletNode = {
@@ -118,8 +255,16 @@ export type BrepFilletNode = {
 export type BrepNode =
   | BrepBoxNode
   | BrepCylinderNode
+  | BrepExtrudeNode
+  | BrepRevolveNode
   | BrepTransformNode
+  | BrepMirrorNode
+  | BrepLinearPatternNode
+  | BrepRectangularPatternNode
+  | BrepCircularPatternNode
   | BrepSubtractNode
+  | BrepUnionNode
+  | BrepIntersectNode
   | BrepFilletNode;
 
 export type BrepProject = {
@@ -308,21 +453,6 @@ function normalizeParameter(value: unknown): BrepPublishedNumberParameter {
   };
 }
 
-function validateReferencedParameterUnit(
-  parameter: string,
-  field: string,
-  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
-  allowedUnits: readonly BrepParameterUnit[],
-): void {
-  const unit = parameterUnits.get(parameter);
-  if (!unit || !allowedUnits.includes(unit)) {
-    throw new BrepProjectError(
-      'invalid_parameter',
-      `${field} must reference a parameter with unit ${allowedUnits.join(' or ')}.`,
-    );
-  }
-}
-
 function normalizeScalar(
   value: unknown,
   field: string,
@@ -330,31 +460,23 @@ function normalizeScalar(
   parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
   allowedUnits: readonly BrepParameterUnit[],
 ): BrepScalar {
-  if (typeof value === 'number') return normalizeNumber(value, field);
-  if (!isRecord(value)) {
-    throw new BrepProjectError(
-      'invalid_node',
-      `${field} must be a number or published parameter reference.`,
-    );
+  try {
+    return normalizeBrepScalarValue(value, {
+      field,
+      parameterIds,
+      parameterUnits,
+      allowedUnits,
+      normalizeNumber,
+      normalizeParameterId: normalizeId,
+    });
+  } catch (error) {
+    if (error instanceof BrepScalarValidationError) {
+      const code: BrepProjectErrorCode =
+        error.code === 'invalid_scalar' ? 'invalid_node' : error.code;
+      throw new BrepProjectError(code, error.message);
+    }
+    throw error;
   }
-
-  const parameter = normalizeId(
-    value.parameter,
-    `${field} parameter reference`,
-  );
-  if (!parameterIds.has(parameter)) {
-    throw new BrepProjectError(
-      'invalid_reference',
-      `${field} references unknown published parameter ${parameter}.`,
-    );
-  }
-  validateReferencedParameterUnit(
-    parameter,
-    field,
-    parameterUnits,
-    allowedUnits,
-  );
-  return { parameter };
 }
 
 function normalizeVector3(
@@ -400,9 +522,6 @@ function normalizePlacement(
   parameterIds: ReadonlySet<string>,
   parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
 ): BrepProjectPlacement {
-  // An omitted placement is canonicalized to the world XY plane. This keeps
-  // older hand-authored v1 examples deterministic while every normalized
-  // project has an explicit future GH Plane mapping.
   if (value == null) {
     return { origin: [0, 0, 0], xAxis: [1, 0, 0], yAxis: [0, 1, 0] };
   }
@@ -631,6 +750,33 @@ function normalizeNodeReference(value: unknown, field: string): string {
   return normalizeId(value, field);
 }
 
+function normalizeBooleanInputs(
+  value: unknown,
+  nodeId: string,
+  kind: 'union' | 'intersect',
+): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length < 2 ||
+    value.length > BREP_PROJECT_MAX_NODE_INPUTS
+  ) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep ${kind} ${nodeId} must contain between 2 and ${BREP_PROJECT_MAX_NODE_INPUTS} input references.`,
+    );
+  }
+  const inputs = value.map((input, index) =>
+    normalizeNodeReference(input, `BRep ${kind} ${nodeId} inputs[${index}]`),
+  );
+  if (new Set(inputs).size !== inputs.length) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep ${kind} ${nodeId} cannot contain duplicate input references.`,
+    );
+  }
+  return inputs;
+}
+
 function normalizeEdgeSelector(
   value: unknown,
   nodeId: string,
@@ -648,6 +794,195 @@ function normalizeEdgeSelector(
     );
   }
   return { kind: 'parallelToAxis', axis: value.axis as BrepAxis };
+}
+
+function normalizeProfileLoop(
+  value: unknown,
+  owner: string,
+  parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+  rejectNestedHoles = false,
+): BrepProfileLoop {
+  if (!isRecord(value) || typeof value.type !== 'string') {
+    throw new BrepProjectError(
+      'invalid_node',
+      `${owner} profile must be a typed object.`,
+    );
+  }
+  if (
+    rejectNestedHoles &&
+    Object.prototype.hasOwnProperty.call(value, 'holes')
+  ) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `${owner} profile loop cannot contain nested holes.`,
+    );
+  }
+
+  switch (value.type) {
+    case 'rectangle':
+      return {
+        type: 'rectangle',
+        width: normalizeScalar(
+          value.width,
+          `${owner} rectangle profile width`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        height: normalizeScalar(
+          value.height,
+          `${owner} rectangle profile height`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    case 'circle':
+      return {
+        type: 'circle',
+        radius: normalizeScalar(
+          value.radius,
+          `${owner} circle profile radius`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    case 'closedPolyline': {
+      if (
+        !Array.isArray(value.points) ||
+        value.points.length < 3 ||
+        value.points.length > BREP_PROJECT_MAX_PROFILE_POINTS
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `${owner} closedPolyline profile must contain between 3 and ${BREP_PROJECT_MAX_PROFILE_POINTS} points.`,
+        );
+      }
+      const points = value.points.map((point, index) => {
+        if (!isRecord(point)) {
+          throw new BrepProjectError(
+            'invalid_node',
+            `${owner} closedPolyline profile point ${index} must be an object.`,
+          );
+        }
+        return {
+          u: normalizeScalar(
+            point.u,
+            `${owner} closedPolyline profile points[${index}].u`,
+            parameterIds,
+            parameterUnits,
+            ['mm'],
+          ),
+          v: normalizeScalar(
+            point.v,
+            `${owner} closedPolyline profile points[${index}].v`,
+            parameterIds,
+            parameterUnits,
+            ['mm'],
+          ),
+        };
+      });
+      return { type: 'closedPolyline', points };
+    }
+    default:
+      throw new BrepProjectError(
+        'invalid_node',
+        `${owner} profile type must be rectangle, circle, or closedPolyline.`,
+      );
+  }
+}
+
+function profileLoopPointCount(loop: BrepProfileLoop): number {
+  return loop.type === 'closedPolyline' ? loop.points.length : 0;
+}
+
+function normalizeProfile(
+  value: unknown,
+  nodeId: string,
+  operation: 'extrude' | 'revolve',
+  parameterIds: ReadonlySet<string>,
+  parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
+): BrepProfile {
+  if (!isRecord(value)) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep ${operation} ${nodeId} profile must be a typed object.`,
+    );
+  }
+
+  const owner = `BRep ${operation} ${nodeId}`;
+  const outer = normalizeProfileLoop(
+    value,
+    owner,
+    parameterIds,
+    parameterUnits,
+  );
+  if (!Object.prototype.hasOwnProperty.call(value, 'holes')) return outer;
+  if (!Array.isArray(value.holes)) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `${owner} profile holes must be an array when present.`,
+    );
+  }
+  if (value.holes.length === 0) return outer;
+  if (operation === 'revolve') {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep revolve ${nodeId} does not support profile holes in the bounded first multi-loop slice.`,
+    );
+  }
+  if (value.holes.length > BREP_PROJECT_MAX_PROFILE_HOLES) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep extrude ${nodeId} profile cannot contain more than ${BREP_PROJECT_MAX_PROFILE_HOLES} holes.`,
+    );
+  }
+
+  const holes = value.holes.map((hole, index): BrepProfileHole => {
+    if (!isRecord(hole)) {
+      throw new BrepProjectError(
+        'invalid_node',
+        `BRep extrude ${nodeId} hole ${index} must be an object.`,
+      );
+    }
+    return {
+      loop: normalizeProfileLoop(
+        hole.loop,
+        `BRep extrude ${nodeId} hole ${index}`,
+        parameterIds,
+        parameterUnits,
+        true,
+      ),
+      offsetU: normalizeScalar(
+        hole.offsetU,
+        `BRep extrude ${nodeId} hole ${index} offsetU`,
+        parameterIds,
+        parameterUnits,
+        ['mm'],
+      ),
+      offsetV: normalizeScalar(
+        hole.offsetV,
+        `BRep extrude ${nodeId} hole ${index} offsetV`,
+        parameterIds,
+        parameterUnits,
+        ['mm'],
+      ),
+    };
+  });
+
+  const totalPoints =
+    profileLoopPointCount(outer) +
+    holes.reduce((sum, hole) => sum + profileLoopPointCount(hole.loop), 0);
+  if (totalPoints > BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS) {
+    throw new BrepProjectError(
+      'invalid_node',
+      `BRep extrude ${nodeId} profile cannot contain more than ${BREP_PROJECT_MAX_PROFILE_TOTAL_POINTS} explicit closedPolyline points across outer and holes.`,
+    );
+  }
+
+  return { ...outer, holes } as BrepProfile;
 }
 
 function normalizeNode(
@@ -712,6 +1047,55 @@ function normalizeNode(
         ),
       };
 
+    case 'extrude': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep extrude ${id} axis must be x, y, or z.`,
+        );
+      }
+      return {
+        id,
+        type: 'extrude',
+        profile: normalizeProfile(
+          value.profile,
+          id,
+          'extrude',
+          parameterIds,
+          parameterUnits,
+        ),
+        axis: value.axis as BrepAxis,
+        depth: normalizeScalar(
+          value.depth,
+          `BRep extrude ${id} depth`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
+    case 'revolve': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep revolve ${id} axis must be x, y, or z.`,
+        );
+      }
+      return {
+        id,
+        type: 'revolve',
+        profile: normalizeProfile(
+          value.profile,
+          id,
+          'revolve',
+          parameterIds,
+          parameterUnits,
+        ),
+        axis: value.axis as BrepAxis,
+      };
+    }
+
     case 'transform': {
       if (value.translate == null && value.rotateDeg == null) {
         throw new BrepProjectError(
@@ -751,6 +1135,183 @@ function normalizeNode(
       };
     }
 
+    case 'mirror': {
+      if (
+        typeof value.normalAxis !== 'string' ||
+        !AXES.has(value.normalAxis as BrepAxis)
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep mirror ${id} normalAxis must be x, y, or z.`,
+        );
+      }
+      return {
+        id,
+        type: 'mirror',
+        input: normalizeNodeReference(value.input, `BRep mirror ${id} input`),
+        normalAxis: value.normalAxis as BrepAxis,
+        offset: normalizeScalar(
+          value.offset,
+          `BRep mirror ${id} offset`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
+    case 'linearPattern': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep linearPattern ${id} axis must be x, y, or z.`,
+        );
+      }
+      if (
+        typeof value.count !== 'number' ||
+        !Number.isInteger(value.count) ||
+        value.count < 2 ||
+        value.count > BREP_PROJECT_MAX_PATTERN_COUNT
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep linearPattern ${id} count must be a literal integer between 2 and ${BREP_PROJECT_MAX_PATTERN_COUNT}.`,
+        );
+      }
+      return {
+        id,
+        type: 'linearPattern',
+        input: normalizeNodeReference(
+          value.input,
+          `BRep linearPattern ${id} input`,
+        ),
+        axis: value.axis as BrepAxis,
+        count: value.count,
+        spacing: normalizeScalar(
+          value.spacing,
+          `BRep linearPattern ${id} spacing`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
+    case 'rectangularPattern': {
+      if (
+        typeof value.axisA !== 'string' ||
+        !AXES.has(value.axisA as BrepAxis) ||
+        typeof value.axisB !== 'string' ||
+        !AXES.has(value.axisB as BrepAxis)
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep rectangularPattern ${id} axisA and axisB must each be x, y, or z.`,
+        );
+      }
+      if (value.axisA === value.axisB) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep rectangularPattern ${id} axisA and axisB must be different axes.`,
+        );
+      }
+      const countFields = [
+        ['countA', value.countA],
+        ['countB', value.countB],
+      ] as const;
+      for (const [field, count] of countFields) {
+        if (
+          typeof count !== 'number' ||
+          !Number.isInteger(count) ||
+          count < 2 ||
+          count > BREP_PROJECT_MAX_PATTERN_COUNT
+        ) {
+          throw new BrepProjectError(
+            'invalid_node',
+            `BRep rectangularPattern ${id} ${field} must be a literal integer between 2 and ${BREP_PROJECT_MAX_PATTERN_COUNT}.`,
+          );
+        }
+      }
+      const countA = value.countA as number;
+      const countB = value.countB as number;
+      if (countA * countB > BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep rectangularPattern ${id} countA * countB must not exceed ${BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES}.`,
+        );
+      }
+      return {
+        id,
+        type: 'rectangularPattern',
+        input: normalizeNodeReference(
+          value.input,
+          `BRep rectangularPattern ${id} input`,
+        ),
+        axisA: value.axisA as BrepAxis,
+        axisB: value.axisB as BrepAxis,
+        countA,
+        countB,
+        spacingA: normalizeScalar(
+          value.spacingA,
+          `BRep rectangularPattern ${id} spacingA`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        spacingB: normalizeScalar(
+          value.spacingB,
+          `BRep rectangularPattern ${id} spacingB`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+      };
+    }
+
+    case 'circularPattern': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep circularPattern ${id} axis must be x, y, or z.`,
+        );
+      }
+      if (
+        typeof value.count !== 'number' ||
+        !Number.isInteger(value.count) ||
+        value.count < 2 ||
+        value.count > BREP_PROJECT_MAX_PATTERN_COUNT
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep circularPattern ${id} count must be a literal integer between 2 and ${BREP_PROJECT_MAX_PATTERN_COUNT}.`,
+        );
+      }
+      return {
+        id,
+        type: 'circularPattern',
+        input: normalizeNodeReference(
+          value.input,
+          `BRep circularPattern ${id} input`,
+        ),
+        axis: value.axis as BrepAxis,
+        center: normalizeVector3(
+          value.center,
+          `BRep circularPattern ${id} center`,
+          parameterIds,
+          parameterUnits,
+          ['mm'],
+        ),
+        count: value.count,
+        angleStepDeg: normalizeScalar(
+          value.angleStepDeg,
+          `BRep circularPattern ${id} angleStepDeg`,
+          parameterIds,
+          parameterUnits,
+          ['deg'],
+        ),
+      };
+    }
+
     case 'subtract': {
       if (
         !Array.isArray(value.tools) ||
@@ -779,6 +1340,14 @@ function normalizeNode(
       };
     }
 
+    case 'union':
+    case 'intersect':
+      return {
+        id,
+        type: value.type,
+        inputs: normalizeBooleanInputs(value.inputs, id, value.type),
+      };
+
     case 'fillet':
       return {
         id,
@@ -802,16 +1371,33 @@ function normalizeNode(
   }
 }
 
+export function brepNodeValueKind(node: BrepNode): BrepNodeValueKind {
+  return node.type === 'linearPattern' ||
+    node.type === 'rectangularPattern' ||
+    node.type === 'circularPattern'
+    ? 'instanceSet'
+    : 'single';
+}
+
 function nodeDependencies(node: BrepNode): string[] {
   switch (node.type) {
     case 'box':
     case 'cylinder':
+    case 'extrude':
+    case 'revolve':
       return [];
     case 'transform':
+    case 'mirror':
+    case 'linearPattern':
+    case 'rectangularPattern':
+    case 'circularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
       return [node.base, ...node.tools];
+    case 'union':
+    case 'intersect':
+      return node.inputs;
   }
 }
 
@@ -841,12 +1427,268 @@ function validateNodeReferencesAndCycles(nodes: BrepNode[]): void {
     }
 
     state.set(nodeId, 'visiting');
-    for (const dependency of nodeDependencies(byId.get(nodeId)!))
-      visit(dependency);
+    for (const dependency of nodeDependencies(byId.get(nodeId)!)) visit(dependency);
     state.set(nodeId, 'done');
   };
 
   for (const node of nodes) visit(node.id);
+}
+
+function validateNodeValueCompatibility(
+  nodes: BrepNode[],
+  projectObject: BrepProjectObjectDefinition | undefined,
+): void {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const requireSingle = (owner: BrepNode, dependencyId: string, field: string) => {
+    const dependency = byId.get(dependencyId)!;
+    if (brepNodeValueKind(dependency) !== 'single') {
+      throw new BrepProjectError(
+        'invalid_node',
+        `BRep ${owner.type} ${owner.id} ${field} requires a single-shape node; ${dependencyId} is an instance set.`,
+      );
+    }
+  };
+
+  for (const node of nodes) {
+    switch (node.type) {
+      case 'box':
+      case 'cylinder':
+      case 'extrude':
+      case 'revolve':
+        break;
+      case 'transform':
+      case 'mirror':
+      case 'fillet':
+      case 'linearPattern':
+      case 'rectangularPattern':
+      case 'circularPattern':
+        requireSingle(node, node.input, 'input');
+        break;
+      case 'subtract':
+        requireSingle(node, node.base, 'base');
+        break;
+      case 'union':
+      case 'intersect':
+        node.inputs.forEach((input, index) =>
+          requireSingle(node, input, `inputs[${index}]`),
+        );
+        break;
+    }
+  }
+
+  const rolePairs = [
+    ['footprintNodeId', projectObject?.footprintNodeId],
+    ['clearanceEnvelopeNodeId', projectObject?.clearanceEnvelopeNodeId],
+    ['maintenanceEnvelopeNodeId', projectObject?.maintenanceEnvelopeNodeId],
+  ] as const;
+  for (const [field, nodeId] of rolePairs) {
+    if (!nodeId) continue;
+    if (brepNodeValueKind(byId.get(nodeId)!) !== 'single') {
+      throw new BrepProjectError(
+        'invalid_project_object',
+        `BRep project-object ${field} must reference a single-shape node; ${nodeId} is an instance set.`,
+      );
+    }
+  }
+}
+
+export function validateBrepLinearPatternSpacingValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'linearPattern') continue;
+    const spacing = resolveBrepScalar(node.spacing, parameterValues);
+    if (spacing === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep linearPattern ${node.id} spacing must resolve to a non-zero millimetre value.`,
+      );
+    }
+  }
+}
+
+export function validateBrepRectangularPatternSpacingValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'rectangularPattern') continue;
+    const spacingA = resolveBrepScalar(node.spacingA, parameterValues);
+    const spacingB = resolveBrepScalar(node.spacingB, parameterValues);
+    if (spacingA === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep rectangularPattern ${node.id} spacingA must resolve to a non-zero millimetre value.`,
+      );
+    }
+    if (spacingB === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep rectangularPattern ${node.id} spacingB must resolve to a non-zero millimetre value.`,
+      );
+    }
+  }
+}
+
+export function validateBrepCircularPatternAngleValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'circularPattern') continue;
+    const angleStepDeg = resolveBrepScalar(node.angleStepDeg, parameterValues);
+    if (angleStepDeg === 0) {
+      throw new BrepScalarEvaluationError(
+        `BRep circularPattern ${node.id} angleStepDeg must resolve to a non-zero degree value.`,
+      );
+    }
+    if (Math.abs(angleStepDeg) * node.count > 360) {
+      throw new BrepScalarEvaluationError(
+        `BRep circularPattern ${node.id} abs(angleStepDeg) * count must not exceed 360 degrees.`,
+      );
+    }
+  }
+}
+
+function requirePositiveExtrudeValue(value: number, field: string): void {
+  if (value <= 0) {
+    throw new BrepScalarEvaluationError(`${field} must resolve to a positive millimetre value.`);
+  }
+}
+
+function resolveExtrudeProfileLoop(
+  loop: BrepProfileLoop,
+  nodeId: string,
+  parameterValues: Readonly<Record<string, number>>,
+  offsetU = 0,
+  offsetV = 0,
+  holeIndex?: number,
+): BrepResolvedProfileLoop {
+  const owner =
+    holeIndex == null
+      ? `BRep extrude ${nodeId}`
+      : `BRep extrude ${nodeId} hole ${holeIndex}`;
+
+  switch (loop.type) {
+    case 'rectangle': {
+      const width = resolveBrepScalar(loop.width, parameterValues);
+      const height = resolveBrepScalar(loop.height, parameterValues);
+      requirePositiveExtrudeValue(width, `${owner} rectangle profile width`);
+      requirePositiveExtrudeValue(height, `${owner} rectangle profile height`);
+      return {
+        type: 'rectangle',
+        centerU: offsetU,
+        centerV: offsetV,
+        width,
+        height,
+      };
+    }
+    case 'circle': {
+      const radius = resolveBrepScalar(loop.radius, parameterValues);
+      requirePositiveExtrudeValue(radius, `${owner} circle profile radius`);
+      return {
+        type: 'circle',
+        centerU: offsetU,
+        centerV: offsetV,
+        radius,
+      };
+    }
+    case 'closedPolyline': {
+      const points = loop.points.map(
+        (point) =>
+          [
+            resolveBrepScalar(point.u, parameterValues) + offsetU,
+            resolveBrepScalar(point.v, parameterValues) + offsetV,
+          ] as const,
+      );
+      validateBrepClosedPolylineProfilePoints(
+        points,
+        holeIndex == null ? nodeId : `${nodeId} hole ${holeIndex}`,
+        'extrude',
+      );
+      return { type: 'closedPolyline', points };
+    }
+  }
+}
+
+export function validateBrepExtrudeProfileValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'extrude') continue;
+
+    requirePositiveExtrudeValue(
+      resolveBrepScalar(node.depth, parameterValues),
+      `BRep extrude ${node.id} depth`,
+    );
+
+    const outer = resolveExtrudeProfileLoop(
+      node.profile,
+      node.id,
+      parameterValues,
+    );
+    const holes = (node.profile.holes ?? []).map((hole, index) => {
+      const offsetU = resolveBrepScalar(hole.offsetU, parameterValues);
+      const offsetV = resolveBrepScalar(hole.offsetV, parameterValues);
+      return resolveExtrudeProfileLoop(
+        hole.loop,
+        node.id,
+        parameterValues,
+        offsetU,
+        offsetV,
+        index,
+      );
+    });
+    validateBrepMultiLoopProfileGeometry(outer, holes, node.id);
+  }
+}
+
+export function validateBrepRevolveProfileValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'revolve') continue;
+
+    if (node.profile.holes?.length) {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} does not support profile holes in the bounded first multi-loop slice.`,
+      );
+    }
+
+    if (node.profile.type !== 'closedPolyline') {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} currently requires a closedPolyline profile because centered rectangle and circle profiles cross the rotation axis.`,
+      );
+    }
+
+    const points = node.profile.points.map(
+      (point) =>
+        [
+          resolveBrepScalar(point.u, parameterValues),
+          resolveBrepScalar(point.v, parameterValues),
+        ] as const,
+    );
+    validateBrepClosedPolylineProfilePoints(points, node.id, 'revolve');
+
+    if (points.some((point) => point[1] < 0)) {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} profile must keep radial v >= 0 and must not cross the rotation axis.`,
+      );
+    }
+
+    const touchesAxis = points.some((point) => point[1] === 0);
+    if (!touchesAxis) continue;
+
+    const hasAxisSegment = points.some((point, index) => {
+      const next = points[(index + 1) % points.length]!;
+      return point[1] === 0 && next[1] === 0;
+    });
+    if (!hasAxisSegment) {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} profile may touch the rotation axis only through a non-zero-length boundary segment on v = 0.`,
+      );
+    }
+  }
 }
 
 export function normalizeBrepProject(project: unknown): BrepProject {
@@ -869,10 +1711,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
       `BRep project exceeds ${BREP_PROJECT_MAX_PARAMETERS} published parameters.`,
     );
   }
-  if (
-    project.nodes.length === 0 ||
-    project.nodes.length > BREP_PROJECT_MAX_NODES
-  ) {
+  if (project.nodes.length === 0 || project.nodes.length > BREP_PROJECT_MAX_NODES) {
     throw new BrepProjectError(
       'too_many_nodes',
       `BRep project must contain between 1 and ${BREP_PROJECT_MAX_NODES} nodes.`,
@@ -900,11 +1739,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     parameterUnits.set(parameter.id, parameter.unit);
   }
 
-  const placement = normalizePlacement(
-    project.placement,
-    parameterIds,
-    parameterUnits,
-  );
+  const placement = normalizePlacement(project.placement, parameterIds, parameterUnits);
   const metadata = normalizeMetadata(project.metadata);
   const nodes = project.nodes.map((node) =>
     normalizeNode(node, parameterIds, parameterUnits),
@@ -936,11 +1771,12 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     parameterUnits,
     nodeIds,
   );
+  validateNodeValueCompatibility(nodes, projectObject);
 
   parameters.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
   nodes.sort((left, right) => left.id.localeCompare(right.id, 'en-US'));
 
-  return {
+  const normalized: BrepProject = {
     schemaVersion: BREP_PROJECT_SCHEMA_VERSION,
     id,
     name,
@@ -952,4 +1788,23 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     nodes,
     resultNodeId,
   };
+
+  try {
+    validateBrepProjectScalarDefaults(normalized);
+    const defaultParameterValues = Object.fromEntries(
+      normalized.parameters.map((parameter) => [parameter.id, parameter.default]),
+    );
+    validateBrepLinearPatternSpacingValues(normalized, defaultParameterValues);
+    validateBrepRectangularPatternSpacingValues(normalized, defaultParameterValues);
+    validateBrepCircularPatternAngleValues(normalized, defaultParameterValues);
+    validateBrepExtrudeProfileValues(normalized, defaultParameterValues);
+    validateBrepRevolveProfileValues(normalized, defaultParameterValues);
+  } catch (error) {
+    if (error instanceof BrepScalarEvaluationError) {
+      throw new BrepProjectError('invalid_parameter', error.message);
+    }
+    throw error;
+  }
+
+  return normalized;
 }

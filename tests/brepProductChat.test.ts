@@ -6,8 +6,12 @@ const brepChatSource = fs.readFileSync(
   new URL('../src/components/brep/BrepChatSession.tsx', import.meta.url),
   'utf8',
 );
-const brepCreateSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepAiCreatePanel.tsx', import.meta.url),
+const brepIterationCardSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepIterationModelCard.tsx', import.meta.url),
+  'utf8',
+);
+const promptViewSource = fs.readFileSync(
+  new URL('../src/views/PromptView.tsx', import.meta.url),
   'utf8',
 );
 const brepEditorSource = fs.readFileSync(
@@ -26,6 +30,14 @@ const brepProjectServiceSource = fs.readFileSync(
   new URL('../src/services/brepProjectService.ts', import.meta.url),
   'utf8',
 );
+const brepWorkspaceSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
+  'utf8',
+);
+const brepGhxImportSource = fs.readFileSync(
+  new URL('../src/components/brep/BrepGrasshopperImportButton.tsx', import.meta.url),
+  'utf8',
+);
 const brepViewSource = fs.readFileSync(
   new URL('../src/views/BrepProjectView.tsx', import.meta.url),
   'utf8',
@@ -42,23 +54,84 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /<ConversationView/);
     assert.match(
       brepViewSource,
-      /previewSlot={<BrepProjectWorkspacePanel \/>}/,
+      /previewSlot={<BrepProjectWorkspacePanel readOnly={viewingHistorical} \/>}/,
     );
     assert.match(
       brepViewSource,
-      /parametersSlot={<BrepProjectParametersPanel \/>}/,
+      /parametersSlot={\s*<fieldset disabled={projectEditingDisabled} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
     );
     assert.match(
       brepViewSource,
-      /mobilePreviewSlot={<BrepProjectWorkspacePanel isMobile \/>}/,
+      /<BrepProjectWorkspacePanel isMobile readOnly={viewingHistorical} \/>/,
     );
     assert.match(
       brepViewSource,
-      /mobileParametersSlot={<BrepProjectParametersPanel \/>}/,
+      /mobileParametersSlot={\s*<fieldset disabled={projectEditingDisabled} className="contents">\s*<BrepProjectParametersPanel \/>\s*<\/fieldset>\s*}/,
+    );
+    assert.match(
+      brepViewSource,
+      /sourceEditingDisabled={projectEditingDisabled}/,
     );
     assert.match(brepViewSource, /<BrepFeatureWorkspaceProvider>/);
     assert.match(brepViewSource, /setMobilePreviewVersion/);
     assert.match(brepViewSource, /\bWorkspace\b/);
+  });
+
+  it('loads a visible BRep iteration into the workspace without moving the authoritative chat leaf', () => {
+    assert.match(brepChatSource, /getBrepProjectArtifact\(node\.parts\)/);
+    assert.match(brepChatSource, /<BrepIterationModelCard/);
+    assert.match(brepChatSource, /onViewRevision\(messageId\)/);
+    assert.match(brepChatSource, /setView\('model'\)/);
+    assert.match(brepIterationCardSource, /Load model/);
+    assert.match(brepIterationCardSource, /Active model/);
+
+    assert.match(brepViewSource, /viewedRevisionId/);
+    assert.match(brepViewSource, /const displayedSource = useMemo/);
+    assert.match(brepViewSource, /const viewingHistorical = Boolean/);
+    assert.match(brepViewSource, /setViewedRevisionId\(/);
+    assert.match(
+      brepViewSource,
+      /messageId === activeSource\?\.messageId \? null : messageId/,
+    );
+    assert.match(
+      brepViewSource,
+      /onViewRevision={handleViewRevision}/,
+    );
+    assert.match(
+      brepViewSource,
+      /mobilePreviewKey={`brep:\$\{displayedSource\.messageId\}`}/,
+    );
+    assert.doesNotMatch(
+      brepViewSource,
+      /handleViewRevision[\s\S]{0,500}selectBrepProjectRevision/,
+    );
+  });
+
+  it('keeps historical iteration preview read only until an explicit revision action', () => {
+    assert.match(
+      brepViewSource,
+      /const projectEditingDisabled = isAiEditing \|\| viewingHistorical/,
+    );
+    assert.match(
+      brepViewSource,
+      /Restore this historical BRep revision before editing its parameters/,
+    );
+    assert.match(
+      brepViewSource,
+      /Restore this historical BRep revision before editing its features/,
+    );
+    assert.match(brepViewSource, /Back to active/);
+    assert.match(brepViewSource, /Historical preview/);
+    assert.match(brepWorkspaceSource, /readOnly = false/);
+    assert.match(
+      brepWorkspaceSource,
+      /<BrepGrasshopperImportButton disabled={readOnly} \/>/,
+    );
+    assert.match(brepGhxImportSource, /if \(disabled \|\| !activeSource/);
+    assert.match(
+      brepGhxImportSource,
+      /Return to the active BRep revision before importing Grasshopper changes/,
+    );
   });
 
   it('matches the responsive Parametric sidebar hierarchy and exposes canonical BRep JSON', () => {
@@ -105,7 +178,8 @@ describe('BRep product chat client boundary', () => {
 
   it('keeps persisted BRep leaf authority server-side while message caches synchronize', () => {
     assert.match(brepViewSource, /leafPresentInMessages/);
-    assert.match(brepViewSource, /Synchronizing BRep conversation/);
+    assert.match(brepViewSource, /isRecentPendingBrepCreation/);
+    assert.match(brepViewSource, /<BrepCreationProgress/);
     assert.doesNotMatch(
       brepViewSource,
       /current_message_leaf_id:\s*userMessageId/,
@@ -182,14 +256,24 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepChatSource, /STL attachments are OpenSCAD-only/);
   });
 
-  it('exposes explicit AI BRep creation without changing the ordinary Generative start page', () => {
-    assert.match(brepIndexSource, /<BrepAiCreatePanel \/>/);
-    assert.match(brepCreateSource, /type:\s*'parametric'/);
-    assert.match(brepCreateSource, /parametricSourceKind:\s*'brep'/);
-    assert.match(brepCreateSource, /id:\s*`brep:\$\{conversationId\}`/);
-    assert.match(brepCreateSource, /apiUrl\('parametric-chat'\)/);
-    assert.match(brepCreateSource, /sendAutomaticallyWhen:\s*\(\) => false/);
-    assert.match(brepCreateSource, /submitInFlightRef/);
-    assert.doesNotMatch(brepCreateSource, /build_parametric_model/);
+  it('creates native BRep from the ordinary home prompt through explicit Parametric model type selection', () => {
+    assert.match(promptViewSource, /Parametric model type/);
+    assert.match(promptViewSource, /OpenSCAD/);
+    assert.match(promptViewSource, /Native BRep/);
+    assert.match(promptViewSource, /parametricSourceKind:\s*'brep'/);
+    assert.match(
+      promptViewSource,
+      /id:\s*isNativeBrep\s*\?\s*`brep:\$\{conversation\.id\}`/,
+    );
+    assert.match(promptViewSource, /apiUrl\([\s\S]*'parametric-chat'/);
+    assert.match(
+      promptViewSource,
+      /sendAutomaticallyWhen:\s*isNativeBrep[\s\S]*\(\) => false/,
+    );
+    assert.match(
+      promptViewSource,
+      /window\.location\.assign\(`\/brep\/\$\{data\.conversationId\}`\)/,
+    );
+    assert.doesNotMatch(brepIndexSource, /BrepAiCreatePanel/);
   });
 });

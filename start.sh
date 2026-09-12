@@ -19,6 +19,15 @@ systemctl --user enable podman.socket --now
 export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
 echo "DOCKER_HOST=$DOCKER_HOST"
 
+# The canonical local launcher owns the native BRep evaluator configuration.
+# Keep an operator-supplied runner authoritative; otherwise use the repository
+# sandbox with an absolute path so both Vite/HMR and the stable preview child
+# inherit the same native evaluator configuration.
+if [ -z "${PCAD_BREP_RUNNER:-}" ]; then
+  export PCAD_BREP_RUNNER="${SCRIPT_DIR}/scripts/brep/pcad-brep-sandbox"
+fi
+echo "BRep runner: configured"
+
 echo "=== Starting llama-swap ==="
 systemctl --user start llama-swap 2>/dev/null || echo "llama-swap: systemd start failed - trying to proceed anyway"
 LLAMA_HEALTH="http://127.0.0.1:9292/health"

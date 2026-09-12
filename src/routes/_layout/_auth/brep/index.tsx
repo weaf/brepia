@@ -1,16 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { BrepAiCreatePanel } from '@/components/brep/BrepAiCreatePanel';
-import { BrepProjectPreview } from '@/components/brep/BrepProjectPreview';
+import { BrepModelLibrary } from '@/components/brep/BrepModelLibrary';
 
 export const Route = createFileRoute('/_layout/_auth/brep/')({
-  component: BrepCreatePage,
+  component: BrepModelLibrary,
 });
-
-function BrepCreatePage() {
-  return (
-    <div className="h-full overflow-auto">
-      <BrepAiCreatePanel />
-      <BrepProjectPreview createProject importPackage />
-    </div>
-  );
-}

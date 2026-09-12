@@ -1,15 +1,10 @@
 import type { Model } from './types';
 
-// Model ids persisted in conversation settings (and submitted by stale
-// clients) outlive the picker catalog. Map retired ids to their successors
-// so old conversations keep resolving to a routable, correctly priced model.
-export const LEGACY_MODEL_IDS: Record<string, Model> = {
-  'openai/gpt-5.5': 'openai/gpt-5.6-sol',
-  'google/gemini-3.6-flash': 'google/gemini-3.7-flash',
-};
-
+// Model identity is configuration-owned. Historical/stale ids are never
+// remapped to a different hardcoded model; callers must validate them against
+// the user's current Settings catalog instead.
 export function normalizeModelId(model: Model): Model {
-  return LEGACY_MODEL_IDS[model] ?? model;
+  return model;
 }
 
 // Canonical OpenCode agent model ID: `agent/opencode/<provider>/<model>`.

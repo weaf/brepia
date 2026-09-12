@@ -10,6 +10,9 @@ Use these as current references where relevant:
 
 - `README.md` for product capabilities and basic setup;
 - `docs/brepia_branding.md` for naming and compatibility boundaries;
+- `docs/grasshopper_roundtrip_architecture.md` for the current Grasshopper/GHX product loop, validation boundary and round-trip compatibility contract;
+- `docs/brep_phase9_rhino_acceptance.md` for the deferred installed Rhino/Grasshopper runtime acceptance; Phase 8 repository work is not blocked on access to that workstation;
+- `docs/references/rhino8_mcneel_sources.md` for the permanent Rhino 8 / Grasshopper upstream-source policy, pinned McNeel branch-8 reference and evidence hierarchy;
 - `docs/local_supabase_lifecycle.md` and `.cursor/rules/database-workflow.mdc` for database lifecycle;
 - `docs/INTEGRATION.md` for the current OpenCode integration;
 - `docs/conversation_workspace.md` for persistent local conversation artifacts;
@@ -17,6 +20,20 @@ Use these as current references where relevant:
 - `docs/billing_free_architecture.md` for the billing-free runtime contract.
 
 Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files.
+
+## Rhino 8 / Grasshopper upstream references
+
+Before changing RhinoCommon geometry translation, Grasshopper GH/GHX persistence, Rhino Python, `rhino3dm`, Rhino.Compute or related interoperability, read `docs/references/rhino8_mcneel_sources.md` and apply its source hierarchy.
+
+In particular:
+
+- use `mcneel/rhino-developer-samples` **branch `8`** for Rhino 8 compatibility work; do not silently take behavior from the repository's newer default/development branch or branch `9`;
+- consult the corresponding official branch-8 McNeel sample before inventing serialization or geometry behavior when a relevant sample exists;
+- current online McNeel API pages may describe a newer Rhino release, so version-sensitive behavior must be cross-checked against Rhino 8 sources or the installed Rhino 8 host;
+- GHX that merely parses as XML is not host acceptance; installed Rhino 8 / Grasshopper open/solve/save/reopen evidence remains the runtime authority;
+- newly translated canonical BRep operations remain fail-closed until repository parity tests and installed-host evidence support them.
+
+Do not vendor the full McNeel sample repository into Brepia merely to make it available to agents. Keep the reviewed upstream reference/pin in the repository documentation instead.
 
 ## Application architecture
 

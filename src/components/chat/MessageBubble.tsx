@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { CREATIVE_MODELS } from '@/lib/utils';
+import { buildAiTurnProvenanceLines } from '@/lib/aiTurnProvenanceDisplay';
 import { useSelectableParametricModelCatalog } from '@/hooks/useParametricModelCatalog';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -481,6 +482,16 @@ function AssistantBubble({
   const { models: parametricOptions } = useSelectableParametricModelCatalog();
   const modelOptions =
     conversation.type === 'creative' ? CREATIVE_MODELS : parametricOptions;
+  const provenanceLines = useMemo(
+    () =>
+      buildAiTurnProvenanceLines({
+        metadata: message.metadata,
+        conversationType: conversation.type,
+        aiModels: parametricOptions,
+        meshModels: CREATIVE_MODELS,
+      }),
+    [conversation.type, message.metadata, parametricOptions],
+  );
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const lastParametricBuildIndex = useMemo(() => {
     if (conversation.type !== 'parametric') return -1;
@@ -741,6 +752,19 @@ function AssistantBubble({
 
           return null;
         })}
+
+        {!(isLoading && isLastMessage) && provenanceLines.length > 0 ? (
+          <div
+            className="flex min-w-0 flex-col gap-0.5 text-[10px] leading-4 text-adam-text-tertiary"
+            aria-label="AI turn provenance"
+          >
+            {provenanceLines.map((line) => (
+              <span key={line} className="break-words">
+                {line}
+              </span>
+            ))}
+          </div>
+        ) : null}
 
         {/* Suppress the rating/retry/copy/restore strip while the latest
             assistant message is still streaming — those controls don't

@@ -74,7 +74,7 @@ describe('BRep Rhino/openNURBS interoperability contract', () => {
     assert.match(editor, /Rhino interoperability/);
     assert.match(
       editor,
-      /STEP and 3DM can still export the\s+current preview values/,
+      /STEP and 3DM can still export the\s+current\s+preview values/,
     );
   });
 });

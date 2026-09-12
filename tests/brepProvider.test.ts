@@ -99,6 +99,73 @@ describe('BRep provider contract', () => {
     );
   });
 
+  it('rejects runtime overrides that make geometry expressions divide by zero', () => {
+    const source = project();
+    source.parameters.push({
+      id: 'scale',
+      label: 'Scale divisor',
+      type: 'number',
+      unit: 'none',
+      default: 1,
+      min: 0,
+      max: 10,
+    });
+    source.nodes[0] = {
+      ...source.nodes[0],
+      type: 'box',
+      width: {
+        op: 'div',
+        args: [{ parameter: 'width' }, { parameter: 'scale' }],
+      },
+      depth: 600,
+      height: { parameter: 'height' },
+    };
+
+    expect(
+      normalizeBrepEvaluationRequest({ project: source }).parameterValues.scale,
+    ).toBe(1);
+    expectRequestError(
+      () =>
+        normalizeBrepEvaluationRequest({
+          project: source,
+          parameterValues: { scale: 0 },
+        }),
+      'invalid_parameter_value',
+    );
+  });
+
+  it('rejects runtime overrides that overflow a bounded expression intermediate', () => {
+    const source = project();
+    source.parameters.push({
+      id: 'scale',
+      label: 'Scale factor',
+      type: 'number',
+      unit: 'none',
+      default: 1,
+      min: 0,
+      max: 1_000_000_000,
+    });
+    source.nodes[0] = {
+      ...source.nodes[0],
+      type: 'box',
+      width: {
+        op: 'mul',
+        args: [{ parameter: 'width' }, { parameter: 'scale' }],
+      },
+      depth: 600,
+      height: { parameter: 'height' },
+    };
+
+    expectRequestError(
+      () =>
+        normalizeBrepEvaluationRequest({
+          project: source,
+          parameterValues: { scale: 1_000_000_000 },
+        }),
+      'invalid_parameter_value',
+    );
+  });
+
   it('resolves a valid placement into an explicit future Grasshopper plane basis', () => {
     const source = project();
     const normalized = normalizeBrepEvaluationRequest({ project: source });

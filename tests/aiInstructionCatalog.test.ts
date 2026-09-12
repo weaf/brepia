@@ -31,10 +31,12 @@ describe('repository-driven AI instruction catalog', () => {
     }
   });
 
-  it('registers primary, auxiliary and transport instruction surfaces', () => {
+  it('registers primary, source-kind, auxiliary and transport instruction surfaces', () => {
     const keys = new Set(AI_INSTRUCTION_DEFINITIONS.map((entry) => entry.key));
     for (const key of [
       'parametric',
+      'parametric.openscad',
+      'parametric.brep',
       'creative',
       'tool.build_parametric_model',
       'tool.build_brep_project',
@@ -52,8 +54,12 @@ describe('repository-driven AI instruction catalog', () => {
   });
 
   it('documents centered-origin primitive semantics across native BRep generation paths', () => {
+    const specialization = loadBundledInstruction('parametric.brep');
+    expect(specialization).toMatch(/centered local-origin semantics/i);
+    expect(specialization).toMatch(/center \+\/- half-extent/i);
+    expect(specialization).toMatch(/minimum corner/i);
+
     for (const key of [
-      'tool.build_brep_project',
       'transport.opencode_brep',
       'transport.codex_brep',
     ] as const) {
@@ -99,7 +105,7 @@ describe('AI instruction profile packages', () => {
     expect(getAiInstructionProfileDefinition('standard')).toMatchObject({
       id: 'standard',
       managedBy: 'brepia',
-      revision: 'cadam-split-2026-08-29',
+      revision: 'brepia-standard-c25-2026-09-10',
       origin: {
         profile: 'cadam',
         revision: 'cadam-split-2026-08-29',
@@ -131,8 +137,19 @@ describe('AI instruction profile packages', () => {
     }
   });
 
-  it('keeps Standard and CADAM on the same frozen split revision', () => {
+  it('keeps CADAM frozen and does not alter undeclared Standard surfaces', () => {
+    const specializedKeys = new Set([
+      'parametric',
+      'parametric.openscad',
+      'parametric.brep',
+      'tool.build_brep_project',
+      'context.brep_project',
+      'transport.opencode_brep',
+      'transport.codex_brep',
+    ]);
+
     for (const key of AI_INSTRUCTION_KEYS) {
+      if (specializedKeys.has(key)) continue;
       expect(loadBundledInstruction(key, 'standard')).toBe(
         loadBundledInstruction(key, 'cadam'),
       );

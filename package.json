@@ -8,8 +8,8 @@
     "npm": ">=10"
   },
   "scripts": {
-    "dev": "vite",
-    "dev:stable": "PCAD_DISABLE_HMR=1 vite",
+    "dev": "PCAD_BREP_RUNNER=${PCAD_BREP_RUNNER:-./scripts/brep/pcad-brep-sandbox} vite",
+    "dev:stable": "PCAD_BREP_RUNNER=${PCAD_BREP_RUNNER:-./scripts/brep/pcad-brep-sandbox} PCAD_DISABLE_HMR=1 vite",
     "build": "tsc -b && vite build",
     "lint": "eslint . --ignore-pattern 'supabase/**'",
     "typecheck": "tsc -b --noEmit",

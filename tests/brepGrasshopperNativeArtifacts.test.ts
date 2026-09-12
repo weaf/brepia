@@ -25,12 +25,13 @@ describe('BRep Phase 7 native exact role artifacts', () => {
     }
   });
 
-  it('exports optional role shapes as exact STEP instead of promoting viewer meshes', () => {
-    assert.match(driver, /role_shapes = \{"result": result\}/);
+  it('exports exact result/role shapes instead of promoting viewer meshes', () => {
+    assert.match(driver, /role_shapes = \{"result": result_shape\}/);
     assert.match(driver, /role_shapes\[role\] = evaluate_node\(node_id\)/);
     assert.match(driver, /export_step\(role_shape, role_step_path\)/);
     assert.match(driver, /"representation": "exact-brep"/);
     assert.match(driver, /"brepia\.exactBrepArtifacts"/);
+    assert.match(driver, /result_shape = Compound\(children=result_instances\)/);
     assert.doesNotMatch(driver, /Brep\.CreateFromMesh/);
   });
 

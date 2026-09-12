@@ -31,7 +31,7 @@ export async function createBrepProjectConversation({
       user_id: userId,
       title: artifact.title,
       type: 'parametric',
-      settings: { model: 'openai/gpt-5.6-sol' },
+      settings: { parametricSourceKind: 'brep' },
     });
   if (conversationError) throw conversationError;
 

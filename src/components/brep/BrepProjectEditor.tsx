@@ -8,17 +8,20 @@ import {
   useRef,
   useState,
 } from 'react';
-import { BufferAttribute, BufferGeometry } from 'three';
 import {
+  Check,
   ChevronDown,
   ChevronUp,
   Download,
   FileCode2,
+  Pencil,
   RefreshCcw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { BrepFeatureEditor } from '@/components/brep/BrepFeatureEditor';
 import { BrepProjectDefinitionEditor } from '@/components/brep/BrepProjectDefinitionEditor';
+import { brepViewerGeometryFromResult } from '@/components/brep/brepViewerGeometry';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,12 +57,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/services/api';
+import { exportBrepGrasshopperGhx } from '@/services/brepGrasshopperExport';
 import { exportBrep3dm, exportBrepStep } from '@/services/brepStepExport';
-import { download3DMFile, downloadSTEPFile } from '@/utils/downloadUtils';
+import { BREP_REVISION_LABEL_MAX_LENGTH } from '@/services/brepRevisionLabelService';
 import {
-  createBrepGrasshopperContract,
-  serializeBrepGrasshopperContract,
-} from '@shared/brepGrasshopperContract';
+  download3DMFile,
+  downloadFile,
+  downloadSTEPFile,
+} from '@/utils/downloadUtils';
 import type { BrepNode, BrepProject } from '@shared/brepProject';
 import { replaceExistingBrepProjectNode } from '@shared/brepProjectEditing';
 import {
@@ -77,11 +82,12 @@ const BREP_EVALUATION_DEBOUNCE_MS = 120;
 // race the Podman request from the previous source snapshot.
 let browserBrepEditorEvaluationQueue: Promise<void> = Promise.resolve();
 
-type BrepDownloadFormat = 'step' | '3dm' | 'brep' | 'grasshopper';
+type BrepDownloadFormat = 'step' | '3dm' | 'brep' | 'ghx';
 
 export type BrepEditorRevision = {
   id: string;
   label: string;
+  name?: string;
 };
 
 type BrepProjectEditorContextValue = {
@@ -104,11 +110,12 @@ type BrepProjectEditorContextValue = {
   exportStep: () => Promise<void>;
   export3dm: () => Promise<void>;
   exportProjectPackage: () => void;
-  exportGrasshopperContract: () => void;
+  exportGrasshopperGhx: () => Promise<void>;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
   revisionActionId: string | null;
   selectRevision: (id: string) => Promise<void>;
+  renameRevision: (id: string, label: string) => Promise<void>;
   restoreRevision: (id: string) => Promise<void>;
   deleteRevision: (id: string) => Promise<void>;
 };
@@ -144,24 +151,9 @@ function parameterValuesEqual(
   );
 }
 
-function geometryFromResult(
-  result: BrepEvaluationSuccess,
-): BufferGeometry | null {
-  const mesh = result.bodies[0]?.viewerMesh;
-  if (!mesh) return null;
-  const geometry = new BufferGeometry();
-  geometry.setAttribute(
-    'position',
-    new BufferAttribute(new Float32Array(mesh.positions), 3),
-  );
-  geometry.setIndex(mesh.indices);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
-}
-
 export function BrepProjectEditorProvider({
   project,
+  conversationId,
   packageTitle,
   revisions,
   activeRevisionId,
@@ -169,11 +161,13 @@ export function BrepProjectEditorProvider({
   onParameterValuesCommit,
   onProjectSourceCommit,
   onSelectRevision,
+  onRenameRevision,
   onRestoreRevision,
   onDeleteRevision,
   children,
 }: {
   project: BrepProject;
+  conversationId?: string;
   packageTitle?: string;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
@@ -181,6 +175,7 @@ export function BrepProjectEditorProvider({
   onParameterValuesCommit: (values: BrepParameterValues) => Promise<void>;
   onProjectSourceCommit: (project: BrepProject) => Promise<void>;
   onSelectRevision: (id: string) => Promise<void>;
+  onRenameRevision: (id: string, label: string) => Promise<void>;
   onRestoreRevision: (id: string) => Promise<void>;
   onDeleteRevision: (id: string) => Promise<void>;
   children: ReactNode;
@@ -269,6 +264,14 @@ export function BrepProjectEditorProvider({
               body: JSON.stringify({
                 project: requestProject,
                 parameterValues: requestValues,
+                ...(conversationId && activeRevisionId
+                  ? {
+                      generationContext: {
+                        conversationId,
+                        revisionMessageId: activeRevisionId,
+                      },
+                    }
+                  : {}),
               }),
             });
             const payload: unknown = await response.json();
@@ -317,7 +320,7 @@ export function BrepProjectEditorProvider({
     }, BREP_EVALUATION_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [evaluationNonce, project, values]);
+  }, [activeRevisionId, conversationId, evaluationNonce, project, values]);
 
   const reEvaluate = useCallback(() => {
     setEvaluationNonce((current) => current + 1);
@@ -488,40 +491,41 @@ export function BrepProjectEditorProvider({
     URL.revokeObjectURL(url);
   }, [packageTitle, project]);
 
-  const exportGrasshopperContract = useCallback(() => {
+  const exportGrasshopperGhx = useCallback(async () => {
     if (!activeRevisionId) {
-      setError(
-        'Grasshopper contract export requires an active immutable BRep revision.',
-      );
+      setError('Grasshopper GHX export requires an active immutable BRep revision.');
       return;
     }
+    if (dirty || exporting || saving || sourceSaving) return;
 
+    setExporting(true);
+    setError(null);
     try {
       const title = packageTitle ?? project.name;
-      const text = serializeBrepGrasshopperContract(
-        createBrepGrasshopperContract({
-          project,
-          sourceRevisionId: activeRevisionId,
-        }),
-      );
-      const url = URL.createObjectURL(
-        new Blob([text], { type: 'application/json' }),
-      );
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.brepia-grasshopper.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      const { ghx } = await exportBrepGrasshopperGhx(project, activeRevisionId);
+      downloadFile({
+        content: ghx,
+        filename: `${title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.ghx`,
+        mimeType: 'application/xml',
+      });
     } catch (reason) {
       if (mountedRef.current) {
         setError(
-          reason instanceof Error
-            ? reason.message
-            : 'Grasshopper contract export failed.',
+          reason instanceof Error ? reason.message : 'Grasshopper GHX export failed.',
         );
       }
+    } finally {
+      if (mountedRef.current) setExporting(false);
     }
-  }, [activeRevisionId, packageTitle, project]);
+  }, [
+    activeRevisionId,
+    dirty,
+    exporting,
+    packageTitle,
+    project,
+    saving,
+    sourceSaving,
+  ]);
 
   const runRevisionAction = useCallback(
     async (id: string, action: (id: string) => Promise<void>) => {
@@ -566,11 +570,13 @@ export function BrepProjectEditorProvider({
       exportStep,
       export3dm,
       exportProjectPackage,
-      exportGrasshopperContract,
+      exportGrasshopperGhx,
       revisions,
       activeRevisionId,
       revisionActionId,
       selectRevision: (id) => runRevisionAction(id, onSelectRevision),
+      renameRevision: (id, label) =>
+        runRevisionAction(id, (revisionId) => onRenameRevision(revisionId, label)),
       restoreRevision: (id) => runRevisionAction(id, onRestoreRevision),
       deleteRevision: (id) => runRevisionAction(id, onDeleteRevision),
     }),
@@ -579,12 +585,13 @@ export function BrepProjectEditorProvider({
       dirty,
       error,
       export3dm,
-      exportGrasshopperContract,
+      exportGrasshopperGhx,
       exportProjectPackage,
       exportStep,
       exporting,
       loading,
       onDeleteRevision,
+      onRenameRevision,
       onRestoreRevision,
       onSelectRevision,
       packageTitle,
@@ -619,7 +626,7 @@ export function BrepProjectViewerPanel({
 }) {
   const { result, loading, error } = useBrepProjectEditor();
   const geometry = useMemo(
-    () => (result ? geometryFromResult(result) : null),
+    () => (result ? brepViewerGeometryFromResult(result) : null),
     [result],
   );
 
@@ -647,7 +654,7 @@ export function BrepProjectViewerPanel({
         </div>
       ) : null}
       {error ? (
-        <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-destructive bg-adam-bg-secondary-dark/95 p-3 text-sm text-destructive">
+        <div className="absolute left-3 right-3 top-3 rounded-lg border border-destructive bg-adam-bg-secondary-dark/95 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
@@ -741,13 +748,24 @@ function RevisionHistory() {
     revisionActionId,
     sourceSaving,
     selectRevision,
+    renameRevision,
     restoreRevision,
     deleteRevision,
   } = useBrepProjectEditor();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(
+    null,
+  );
   const orderedRevisions = useMemo(() => [...revisions].reverse(), [revisions]);
 
   if (revisions.length === 0) return null;
+
+  const saveName = async () => {
+    if (!editing) return;
+    const { id, value } = editing;
+    setEditing(null);
+    await renameRevision(id, value);
+  };
 
   return (
     <Collapsible
@@ -772,74 +790,146 @@ function RevisionHistory() {
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-3 max-h-[220px] space-y-1 overflow-y-auto pr-1">
+        <div className="mt-3 max-h-[220px] min-w-0 space-y-1 overflow-y-auto pr-1">
           {orderedRevisions.map((revision) => {
             const active = revision.id === activeRevisionId;
             const busy = revisionActionId === revision.id;
+            const displayLabel = revision.name ?? revision.label;
+            const isEditing = editing?.id === revision.id;
+
             return (
               <div
                 key={revision.id}
-                className="flex items-center gap-1 rounded-lg border border-adam-neutral-700 bg-adam-neutral-900/40 p-1"
+                className="flex min-w-0 items-center gap-1 rounded-lg border border-adam-neutral-700 bg-adam-neutral-900/40 p-1"
               >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-w-0 flex-1 justify-start px-2 text-xs"
-                  disabled={active || !!revisionActionId || sourceSaving}
-                  onClick={() => void selectRevision(revision.id)}
-                >
-                  <span className="truncate">
-                    {revision.label}
-                    {active ? ' · Active' : ''}
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs"
-                  disabled={!!revisionActionId || sourceSaving}
-                  onClick={() => void restoreRevision(revision.id)}
-                >
-                  {busy ? 'Working…' : 'Restore'}
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
+                {isEditing ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editing.value}
+                      maxLength={BREP_REVISION_LABEL_MAX_LENGTH}
+                      aria-label={`Rename ${revision.label}`}
+                      placeholder={revision.label}
+                      onChange={(event) =>
+                        setEditing({ id: revision.id, value: event.target.value })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void saveName();
+                        } else if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
+                      className="h-8 min-w-0 flex-1 rounded-md border border-adam-neutral-700 bg-adam-neutral-950 px-2 text-xs text-adam-text-primary outline-none focus:border-adam-blue"
+                    />
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-adam-text-tertiary hover:text-destructive"
-                      aria-label={`Delete ${revision.label}`}
-                      disabled={active || !!revisionActionId || sourceSaving}
+                      className="h-8 w-8 shrink-0"
+                      aria-label="Save revision name"
+                      disabled={!!revisionActionId || sourceSaving}
+                      onClick={() => void saveName()}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Check className="h-4 w-4" />
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        Delete {revision.label}?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This removes the revision from the project revision list.
-                        Its immutable lineage record is retained internally so
-                        historical AI branches and retries cannot be corrupted.
-                        The active revision cannot be deleted.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={() => void deleteRevision(revision.id)}
-                      >
-                        Delete revision
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      aria-label="Cancel revision rename"
+                      onClick={() => setEditing(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-w-0 flex-1 justify-start px-2 text-xs"
+                      disabled={active || !!revisionActionId || sourceSaving}
+                      onClick={() => void selectRevision(revision.id)}
+                    >
+                      <span className="min-w-0 text-left">
+                        <span className="block truncate" title={displayLabel}>
+                          {displayLabel}
+                          {active ? ' · Active' : ''}
+                        </span>
+                        {revision.name ? (
+                          <span className="block truncate text-[10px] text-adam-neutral-500">
+                            {revision.label}
+                          </span>
+                        ) : null}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-adam-text-tertiary"
+                      aria-label={`Rename ${revision.label}`}
+                      title="Rename revision"
+                      disabled={!!revisionActionId || sourceSaving}
+                      onClick={() =>
+                        setEditing({ id: revision.id, value: revision.name ?? '' })
+                      }
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-xs"
+                      disabled={!!revisionActionId || sourceSaving}
+                      onClick={() => void restoreRevision(revision.id)}
+                    >
+                      {busy ? 'Working…' : 'Restore'}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-adam-text-tertiary hover:text-destructive"
+                          aria-label={`Delete ${displayLabel}`}
+                          disabled={active || !!revisionActionId || sourceSaving}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Delete {displayLabel}?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This removes the revision from the project revision list.
+                            Its immutable lineage record is retained internally so
+                            historical AI branches and retries cannot be corrupted.
+                            The active revision cannot be deleted.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => void deleteRevision(revision.id)}
+                          >
+                            Delete revision
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
+                )}
               </div>
             );
           })}
@@ -860,20 +950,20 @@ function BrepExportBar() {
     exportStep,
     export3dm,
     exportProjectPackage,
-    exportGrasshopperContract,
+    exportGrasshopperGhx,
   } = useBrepProjectEditor();
   const [selectedFormat, setSelectedFormat] =
     useState<BrepDownloadFormat>('step');
 
   const nativeArtifactAvailable =
     !saving && !sourceSaving && !loading && !exporting;
-  const brepAvailable = !dirty && !saving && !sourceSaving;
-  const grasshopperAvailable = brepAvailable && Boolean(activeRevisionId);
+  const brepAvailable = !dirty && !saving && !sourceSaving && !exporting;
+  const ghxAvailable = brepAvailable && Boolean(activeRevisionId);
   const selectedAvailable =
     selectedFormat === 'brep'
       ? brepAvailable
-      : selectedFormat === 'grasshopper'
-        ? grasshopperAvailable
+      : selectedFormat === 'ghx'
+        ? ghxAvailable
         : nativeArtifactAvailable;
 
   const handleDownload = () => {
@@ -889,7 +979,7 @@ function BrepExportBar() {
       exportProjectPackage();
       return;
     }
-    exportGrasshopperContract();
+    void exportGrasshopperGhx();
   };
 
   return (
@@ -903,8 +993,7 @@ function BrepExportBar() {
           className="h-11 flex-1 rounded-r-none bg-adam-neutral-50 text-adam-neutral-800 hover:bg-adam-neutral-100 hover:text-adam-neutral-900 lg:h-12"
         >
           <Download className="mr-2 h-4 w-4" />
-          {exporting &&
-          (selectedFormat === 'step' || selectedFormat === '3dm')
+          {exporting && selectedFormat !== 'brep'
             ? 'EXPORTING…'
             : selectedFormat.toUpperCase()}
         </Button>
@@ -953,13 +1042,13 @@ function BrepExportBar() {
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setSelectedFormat('grasshopper')}
-              disabled={!grasshopperAvailable}
+              onClick={() => setSelectedFormat('ghx')}
+              disabled={!ghxAvailable}
               className="cursor-pointer text-adam-text-primary"
             >
-              <span className="text-sm">.GH CONTRACT</span>
+              <span className="text-sm">.GHX</span>
               <span className="ml-3 text-xs text-adam-text-primary/60">
-                Grasshopper interoperability
+                Editable Grasshopper model
               </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -968,8 +1057,8 @@ function BrepExportBar() {
       {dirty ? (
         <p className="text-[10px] text-adam-neutral-400">
           Save the parameter draft before exporting the canonical BRep project
-          package or Grasshopper contract. STEP and 3DM can still export the
-          current preview values.
+          package or Grasshopper GHX. STEP and 3DM can still export the current
+          preview values.
         </p>
       ) : null}
     </div>
@@ -1002,9 +1091,10 @@ export function BrepProjectParametersPanel() {
     sourceSaving ||
     exporting ||
     Boolean(revisionActionId);
+  const parameterEditingDisabled = saving || sourceSaving || exporting;
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden break-words border-l border-gray-200/20 bg-adam-bg-secondary-dark text-adam-text-primary dark:border-gray-800">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-adam-neutral-700 bg-gradient-to-r from-adam-bg-secondary-dark to-adam-bg-secondary-dark/95 px-4 py-3 lg:h-14 lg:px-6 lg:py-6">
         <span className="text-base font-semibold tracking-tight text-adam-text-primary lg:text-lg">
           Parameters
@@ -1022,7 +1112,7 @@ export function BrepProjectParametersPanel() {
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between overflow-hidden">
         <ScrollArea className="flex-1 px-4 py-4 lg:px-6 lg:py-6">
           <div className="mb-4 lg:mb-6">
             <BrepProjectFilesPanel />
@@ -1055,34 +1145,75 @@ export function BrepProjectParametersPanel() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="mt-3 flex flex-col gap-3">
-                {project.parameters.map((parameter) => (
-                  <label
-                    className="grid grid-cols-[minmax(0,1fr)_92px_28px] items-center gap-2 text-xs"
-                    key={parameter.id}
-                  >
-                    <span className="min-w-0 truncate text-adam-neutral-300">
-                      {parameter.label}
-                    </span>
-                    <input
-                      className="h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-adam-text-primary outline-none focus:border-adam-blue-dark"
-                      type="number"
-                      min={parameter.min}
-                      max={parameter.max}
-                      step={parameter.step}
-                      value={values[parameter.id]}
-                      disabled={saving || sourceSaving || exporting}
-                      onChange={(event) =>
-                        setParameterValue(
-                          parameter.id,
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                    <span className="truncate text-[10px] text-adam-neutral-400">
-                      {parameter.unit}
-                    </span>
-                  </label>
-                ))}
+                {project.parameters.map((parameter) => {
+                  const hasSliderRange =
+                    typeof parameter.min === 'number' &&
+                    Number.isFinite(parameter.min) &&
+                    typeof parameter.max === 'number' &&
+                    Number.isFinite(parameter.max) &&
+                    parameter.max > parameter.min;
+                  const inputId = `brep-parameter-${parameter.id}`;
+
+                  return (
+                    <div
+                      className="grid grid-cols-[minmax(0,1fr)_92px_28px] items-center gap-x-2 gap-y-1 text-xs"
+                      key={parameter.id}
+                    >
+                      <label
+                        htmlFor={inputId}
+                        className="min-w-0 truncate text-adam-neutral-300"
+                      >
+                        {parameter.label}
+                      </label>
+                      <input
+                        id={inputId}
+                        aria-label={`${parameter.label} value`}
+                        className="h-9 w-full rounded-lg border border-adam-neutral-700 bg-adam-neutral-900 px-2 text-adam-text-primary outline-none focus:border-adam-blue-dark"
+                        type="number"
+                        min={parameter.min}
+                        max={parameter.max}
+                        step={parameter.step}
+                        value={values[parameter.id]}
+                        disabled={parameterEditingDisabled}
+                        onChange={(event) =>
+                          setParameterValue(
+                            parameter.id,
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                      <span className="truncate text-[10px] text-adam-neutral-400">
+                        {parameter.unit}
+                      </span>
+                      {hasSliderRange ? (
+                        <div className="col-span-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 pt-1">
+                          <span className="tabular-nums text-[10px] text-adam-neutral-500">
+                            {parameter.min}
+                          </span>
+                          <input
+                            aria-label={`${parameter.label} slider`}
+                            className="h-5 w-full cursor-pointer accent-adam-blue disabled:cursor-not-allowed disabled:opacity-50"
+                            type="range"
+                            min={parameter.min}
+                            max={parameter.max}
+                            step={parameter.step}
+                            value={values[parameter.id]}
+                            disabled={parameterEditingDisabled}
+                            onChange={(event) =>
+                              setParameterValue(
+                                parameter.id,
+                                Number(event.target.value),
+                              )
+                            }
+                          />
+                          <span className="tabular-nums text-[10px] text-adam-neutral-500">
+                            {parameter.max}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </CollapsibleContent>
           </Collapsible>

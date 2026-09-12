@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CreatePromptProfileSchema } from '../shared/aiSettings';
-import {
-  CREATIVE_AGENT_PROMPT,
-  PARAMETRIC_AGENT_PROMPT,
-} from '../src/server/aiChat';
+import { loadBundledInstruction } from '../shared/aiInstructionCatalog';
+import { CREATIVE_AGENT_PROMPT } from '../src/server/aiChat';
 import {
   BUILTIN_CREATIVE_PROFILE_ID,
   BUILTIN_PROFILE_ID,
@@ -17,7 +15,9 @@ describe('prompt profile scopes', () => {
     expect(profile.id).toBe(BUILTIN_PROFILE_ID);
     expect(profile.name).toBe('CADAM Original');
     expect(profile.scope).toBe('parametric');
-    expect(profile.promptTemplate).toBe(PARAMETRIC_AGENT_PROMPT);
+    expect(profile.promptTemplate).toBe(
+      loadBundledInstruction('parametric', 'cadam'),
+    );
   });
 
   it('exposes an independent Creative Original built-in', () => {

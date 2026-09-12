@@ -2,8 +2,8 @@ import { tool, type InferUITools, type UIMessage } from 'ai';
 import { z } from 'zod';
 import { loadBundledInstruction } from './aiInstructionCatalog.ts';
 import {
-  brepAiBuildInputSchema,
   brepAiBuildOutputSchema,
+  brepAiBuildProviderInputSchema,
 } from './brepAiTool.ts';
 import {
   OPENSCAD_PROJECT_MAX_ASSETS,
@@ -129,7 +129,7 @@ export const chatTools = {
   }),
   build_brep_project: tool({
     description: loadBundledInstruction('tool.build_brep_project'),
-    inputSchema: brepAiBuildInputSchema,
+    inputSchema: brepAiBuildProviderInputSchema,
     outputSchema: brepAiBuildOutputSchema,
   }),
   answer_user: tool({
@@ -221,10 +221,27 @@ export const meshPreferencesDataSchema = z.object({
 
 export type AppUIMessage = UIMessage<
   {
+    /** Product-facing model selection for this immutable turn. In Parametric
+     * mode this is the requested/used AI model. In Creative mode it remains
+     * the 3D backend ID so existing retry and mesh semantics stay compatible. */
     model?: Model;
     /** Actual LLM/agent used by a Creative turn. `model` remains the mesh
      * backend ID in Creative mode so retry/UI behavior stays compatible. */
     agentModel?: Model;
+    /** Actual normalized LLM/agent model dispatched by the server for this
+     * assistant turn. Forward-going provenance must not be reconstructed from
+     * the conversation's current model after the turn has completed. */
+    actualModel?: Model;
+    /** Immutable transport selected for this assistant turn. Legacy messages
+     * may omit this and the UI must then avoid inventing a transport label. */
+    transportKind?:
+      | 'direct'
+      | 'opencode'
+      | 'codex'
+      | 'cli-agent';
+    /** OpenCode execution mode used for this turn when relevant. It belongs to
+     * message provenance, not only mutable conversation settings. */
+    openCodeExecutionMode?: 'cli' | 'streaming';
     /** Provenance for an OpenSCAD artifact that entered Brepia through import.
      * UI-only metadata: the complete project snapshot remains in the normal
      * build_parametric_model tool input and is not duplicated here. */
