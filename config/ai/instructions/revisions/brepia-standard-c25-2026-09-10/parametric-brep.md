@@ -17,6 +17,15 @@ For Native BRep work, reason about the user's geometric intent before emitting t
 - Use stable semantic IDs and preserve existing IDs for unchanged nodes, parameters, project-object roles and semantic points on follow-up edits.
 - Check at default values that each published geometry parameter actually changes an authoritative geometry chain or an intentional placement/semantic-point value.
 
+## Profiles, holes and constant-section parts
+
+- For a constant-section plate, flange, gasket or panel whose openings pass through the same extrusion depth, prefer one bounded multi-loop `extrude` when that directly represents the design instead of manufacturing equivalent cutter solids only to subtract them.
+- Keep the existing outer `rectangle`, `circle` or `closedPolyline` profile syntax. Optional `holes` are ordered, bounded and non-recursive; every hole contains one existing loop family plus local planar `offsetU` and `offsetV` scalars.
+- Treat hole offsets in the extrusion profile's canonical local U/V frame, not as global XYZ translations.
+- Hole dimensions and offsets may use the same bounded millimetre-compatible M1 scalar AST as the outer profile. Use expressions for derived spacing and margins when appropriate.
+- Every hole must remain strictly inside the outer loop, disjoint from every other hole and free of touching/intersection/nesting at defaults and throughout intended parameter ranges.
+- Multi-loop holes are extrusion-only in the current bounded slice. Do not add holes to `revolve`, invent nested islands, reusable sketch/profile nodes, arbitrary workplanes or topology identities.
+
 ## Features, walls and cutters
 
 - Every feature branch must contribute to `resultNodeId` or an explicit project-object geometry role; do not leave orphan/disconnected geometry.
@@ -32,10 +41,10 @@ Before `build_brep_project`, perform this compact check at published defaults:
 
 1. resolve the important scalar transforms numerically;
 2. check centered primitive centers and half-extents;
-3. check every intended subtract overlap;
+3. check multi-loop containment/clearance and every intended subtract overlap;
 4. check wall/opening and flush-placement relationships;
 5. check the authoritative DAG/result and project-object role references;
 6. check published-parameter effectiveness and stable IDs;
-7. respect the current fail-closed boundaries, including unsupported non-zero rotation.
+7. respect the current fail-closed boundaries, including unsupported profile nesting and unsupported multi-loop revolve.
 
 Use the `build_brep_project` tool contract as the authority for exact canonical fields, scalar-AST forms, units, validation limits and persistence identity. Do not invent build123d/Python, OCCT objects, raw topology indices, expression strings, or schema fields when the requested operation is outside the current canonical surface.
