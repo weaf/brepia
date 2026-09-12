@@ -1,6 +1,6 @@
 # Bounded full revolve status
 
-Status: **repository/CI and pinned native build123d/OCCT runtime accepted — installed Rhino 8 / Grasshopper Gate C pending**
+Status: **complete — repository/CI, pinned native build123d/OCCT runtime and installed Rhino 8 / Grasshopper runtime accepted**
 
 Date: 2026-09-12
 
@@ -29,7 +29,7 @@ type BrepRevolveNode = {
 };
 ```
 
-The slice remains deliberately bounded:
+The accepted slice remains deliberately bounded:
 
 - full 360 degree revolve only;
 - existing inline M4 `BrepProfile` grammar;
@@ -56,11 +56,11 @@ Resolved radial `v` must remain non-negative. Axis contact at `v=0` is accepted 
 
 Centered M4 rectangle/circle profiles remain unchanged for extrusion but are rejected for the bounded first revolve slice; `closedPolyline` is the intended turned-part profile family.
 
-## Repository implementation — accepted
+## Gate A — repository / CI — accepted
 
 Implementation spans canonical normalization/validation, M0/M1 traversal and effectiveness, runtime override validation, provider/AI schema, structural editor, native build123d/OCCT translation, Rhino/GHX translation, Result Item semantics and focused regression coverage.
 
-Accepted repository checkpoints include:
+Primary accepted checkpoints include:
 
 ```text
 7f01c9feecdba991d85c648f6257391eb512f218
@@ -82,6 +82,16 @@ cc9470c5e69e2cd972f65d8f13ac0a0a8882857e
 runtime-harness/status checkpoint
 Quality Gate #1079       PASS
 Grasshopper Build #651   PASS
+
+be8e5e730568e80e83e91e79966d6720ce65b98c
+Remove one-shot revolve native Gate B runner
+Quality Gate #1084       PASS
+Grasshopper Build #656   PASS
+
+679bdc015707e6bb130e19979ec92af523279037
+Add bounded revolve Rhino Gate C acceptance tooling
+Quality Gate #1085       PASS
+Grasshopper Build #657   PASS
 ```
 
 Repository CI remains repository evidence only.
@@ -94,7 +104,7 @@ Full evidence:
 docs/brep_revolve_native_runtime_evidence_2026-09-12.md
 ```
 
-Gate B executed through a temporary one-shot runner at:
+Gate B executed through the temporary one-shot runner at:
 
 ```text
 82de6ec07713d5d0d429f7cad4ff303047c51b76
@@ -103,7 +113,7 @@ run id 34713678232
 conclusion: success
 ```
 
-The job explicitly verified:
+Verified runtime:
 
 ```text
 podman 4.9.3
@@ -136,34 +146,57 @@ R4 negative-radial crossing:
 failed closed as required
 ```
 
-Independent exact STEP re-import in the same pinned CAD runtime produced:
+Independent exact STEP re-import produced exactly one solid with positive volume `68612.38355440038` and bounds `(-22,-22,-26) -> (22,22,26)`.
+
+## Gate C — installed Rhino 8 / Grasshopper — accepted
+
+Full evidence:
 
 ```text
-exactStepSolids = 1
-volume = 68612.38355440038
-bounds = (-22,-22,-26) -> (22,22,26)
+docs/brep_revolve_rhino8_runtime_evidence_2026-09-12.md
 ```
 
-Gate B therefore confirms real kernel execution, radial + axial parameter effect, supported axis contact, fail-closed unsupported crossing, exact-one positive-volume solid and independently importable exact STEP.
+Fresh current-compiler fixtures:
 
-## Gate C — installed Rhino 8 / Grasshopper — next active gate
+```text
+revolve-parameterized-z.ghx
+revolve-axis-adjacent-y.ghx
+```
 
-Still required before full revolve closeout:
+The installed-host acceptance run was reported green for both definitions. The primary parameterized fixture exercised:
 
-- generate fresh GHX from the accepted compiler;
-- open and solve in installed Rhino 8 / Grasshopper;
-- verify intended turned geometry;
-- perturb the same bounded radial and axial parameters;
-- verify recomputation;
-- save -> close -> reopen;
-- verify persisted values and solve state;
-- run strict returned-GHX validation and confirm only published parameter values changed;
-- record results in a separate Rhino evidence document.
+```text
+outerRadius: 18 -> 22 mm
+length:      40 -> 52 mm
+```
+
+The host-saved returned definitions were then checked through the strict parameter-only validator.
+
+Observed returned validation:
+
+```text
+{"returnedValidation":"accepted","parameterized":{"kind":"parameterized","filename":"revolve-parameterized-z-returned.ghx","parameters":{"length":52,"outerRadius":22},"expectedResultAccess":"Item"},"axisAdjacent":{"kind":"axisAdjacent","filename":"revolve-axis-adjacent-y-returned.ghx","parameters":{},"expectedResultAccess":"Item"}}
+```
+
+The dedicated validator test passed:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed (1)
+```
+
+Gate C therefore confirms installed Rhino/Grasshopper execution for the current full-revolve compiler path, persisted radial and axial parameter edits, supported axis-adjacent geometry, save/close/reopen host persistence, Result Item access and the unchanged strict returned-GHX parameter-only boundary.
 
 ## Preserved architecture
 
 Revolve does not change:
 
+- `conversation.type = 'parametric'`;
+- `parametricSourceKind = 'brep'`;
+- canonical BRep project plus immutable revision authority;
+- build123d/OCCT geometry authority;
+- Rhino/GHX interoperability-only authority;
+- canonical `schemaVersion: 1`;
 - M0 parameter effectiveness;
 - M1 depth 12 / node limit 64;
 - provider expression depth 2;
@@ -180,8 +213,14 @@ Revolve does not change:
 - M5 shell/thickness deferral;
 - M7 topology/finishing deferral.
 
-## Current decision
+## Closeout
 
-Bounded full revolve is now accepted across **repository/CI and pinned native build123d/OCCT runtime**.
+Bounded full revolve is complete across all required acceptance layers:
 
-It is not yet complete across all three evidence layers. The only active revolve scope is now **Gate C — installed Rhino 8 / Grasshopper acceptance**.
+```text
+repository/CI
+-> pinned native build123d/OCCT
+-> installed Rhino 8 / Grasshopper
+```
+
+No revolve scope broadening is active after this closeout.
