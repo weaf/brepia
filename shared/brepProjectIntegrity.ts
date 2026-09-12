@@ -17,13 +17,9 @@ export type BrepParameterEffectiveness =
   | 'unused';
 
 export type BrepProjectIntegrityAnalysis = {
-  /** Dependency closure rooted at the canonical primary result. */
   resultReachableNodeIds: string[];
-  /** Dependency closure rooted at project-object geometry roles. */
   roleReachableNodeIds: string[];
-  /** Union of primary-result and role reachability. */
   authoritativeReachableNodeIds: string[];
-  /** Feature nodes that cannot influence any authoritative geometry output. */
   orphanNodeIds: string[];
   parameterClassifications: Readonly<Record<string, BrepParameterEffectiveness>>;
   effectiveParameterIds: string[];
@@ -48,6 +44,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'mirror':
     case 'linearPattern':
     case 'rectangularPattern':
+    case 'circularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
@@ -121,21 +118,6 @@ function parameterReferencesForNodes(
   return parameters;
 }
 
-/**
- * Deterministically classify canonical graph reachability and published
- * parameter effectiveness without changing schema validity. This is a shared
- * analysis boundary: legacy/manual/imported v1 projects remain valid canonical
- * snapshots even when this analysis reports graph-integrity diagnostics.
- *
- * A parameter is effective when it influences a feature in the dependency
- * closure of resultNodeId or an explicit project-object geometry role,
- * including references nested inside M1 scalar expressions. References from
- * placement and semantic points are classified as semantic-only when the
- * parameter is not referenced by any feature node. Parameters referenced by
- * orphan feature nodes remain orphan-only even when they are also referenced
- * by semantic data, because they still expose a disconnected geometry
- * dependency. Parameters with no references are unused.
- */
 export function analyzeBrepProjectIntegrity(
   projectInput: unknown,
 ): BrepProjectIntegrityAnalysis {
