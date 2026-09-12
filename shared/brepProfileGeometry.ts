@@ -1,6 +1,7 @@
 import { BrepScalarEvaluationError } from './brepScalar.ts';
 
 export type BrepResolvedProfilePoint = readonly [number, number];
+export type BrepProfileOperation = 'extrude' | 'revolve';
 
 function samePoint(
   left: BrepResolvedProfilePoint,
@@ -72,12 +73,14 @@ function edgesAreAdjacent(left: number, right: number, edgeCount: number): boole
 export function validateBrepClosedPolylineProfilePoints(
   points: readonly BrepResolvedProfilePoint[],
   nodeId: string,
+  operation: BrepProfileOperation = 'extrude',
 ): void {
+  const owner = `BRep ${operation} ${nodeId}`;
   for (let index = 0; index < points.length; index += 1) {
     const next = (index + 1) % points.length;
     if (samePoint(points[index]!, points[next]!)) {
       throw new BrepScalarEvaluationError(
-        `BRep extrude ${nodeId} closedPolyline profile contains a zero-length edge at index ${index}.`,
+        `${owner} closedPolyline profile contains a zero-length edge at index ${index}.`,
       );
     }
   }
@@ -90,7 +93,7 @@ export function validateBrepClosedPolylineProfilePoints(
   }
   if (doubledArea === 0) {
     throw new BrepScalarEvaluationError(
-      `BRep extrude ${nodeId} closedPolyline profile must have non-zero area.`,
+      `${owner} closedPolyline profile must have non-zero area.`,
     );
   }
 
@@ -108,7 +111,7 @@ export function validateBrepClosedPolylineProfilePoints(
         )
       ) {
         throw new BrepScalarEvaluationError(
-          `BRep extrude ${nodeId} closedPolyline profile self-intersects between edges ${left} and ${right}.`,
+          `${owner} closedPolyline profile self-intersects between edges ${left} and ${right}.`,
         );
       }
     }

@@ -2,6 +2,7 @@ import {
   normalizeBrepProject,
   type BrepNode,
   type BrepParameterUnit,
+  type BrepProfile,
   type BrepProject,
   type BrepProjectMetadata,
   type BrepProjectObjectDefinition,
@@ -18,6 +19,7 @@ export function brepNodeDependencies(node: BrepNode): string[] {
     case 'box':
     case 'cylinder':
     case 'extrude':
+    case 'revolve':
       return [];
     case 'transform':
     case 'mirror':
@@ -107,6 +109,34 @@ function appendVectorParameterUsages(
   });
 }
 
+function appendProfileParameterUsages(
+  usages: string[],
+  profile: BrepProfile,
+  parameterId: string,
+  nodeId: string,
+): void {
+  switch (profile.type) {
+    case 'rectangle':
+      if (brepScalarReferencesParameter(profile.width, parameterId))
+        usages.push(`${nodeId}.profile.width`);
+      if (brepScalarReferencesParameter(profile.height, parameterId))
+        usages.push(`${nodeId}.profile.height`);
+      break;
+    case 'circle':
+      if (brepScalarReferencesParameter(profile.radius, parameterId))
+        usages.push(`${nodeId}.profile.radius`);
+      break;
+    case 'closedPolyline':
+      profile.points.forEach((point, index) => {
+        if (brepScalarReferencesParameter(point.u, parameterId))
+          usages.push(`${nodeId}.profile.points[${index}].u`);
+        if (brepScalarReferencesParameter(point.v, parameterId))
+          usages.push(`${nodeId}.profile.points[${index}].v`);
+      });
+      break;
+  }
+}
+
 export function brepProjectParameterUsages(
   project: BrepProject,
   parameterId: string,
@@ -166,26 +196,10 @@ export function brepProjectParameterUsages(
       case 'extrude':
         if (brepScalarReferencesParameter(node.depth, parameterId))
           usages.push(`${node.id}.depth`);
-        switch (node.profile.type) {
-          case 'rectangle':
-            if (brepScalarReferencesParameter(node.profile.width, parameterId))
-              usages.push(`${node.id}.profile.width`);
-            if (brepScalarReferencesParameter(node.profile.height, parameterId))
-              usages.push(`${node.id}.profile.height`);
-            break;
-          case 'circle':
-            if (brepScalarReferencesParameter(node.profile.radius, parameterId))
-              usages.push(`${node.id}.profile.radius`);
-            break;
-          case 'closedPolyline':
-            node.profile.points.forEach((point, index) => {
-              if (brepScalarReferencesParameter(point.u, parameterId))
-                usages.push(`${node.id}.profile.points[${index}].u`);
-              if (brepScalarReferencesParameter(point.v, parameterId))
-                usages.push(`${node.id}.profile.points[${index}].v`);
-            });
-            break;
-        }
+        appendProfileParameterUsages(usages, node.profile, parameterId, node.id);
+        break;
+      case 'revolve':
+        appendProfileParameterUsages(usages, node.profile, parameterId, node.id);
         break;
       case 'transform':
         appendVectorParameterUsages(

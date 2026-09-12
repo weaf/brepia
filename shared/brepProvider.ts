@@ -6,6 +6,7 @@ import {
   validateBrepExtrudeProfileValues,
   validateBrepLinearPatternSpacingValues,
   validateBrepRectangularPatternSpacingValues,
+  validateBrepRevolveProfileValues,
   type BrepNodeValueKind,
   type BrepProject,
   type BrepProjectMetadata,
@@ -356,6 +357,7 @@ export function normalizeBrepEvaluationRequest(
     validateBrepRectangularPatternSpacingValues(project, parameterValues);
     validateBrepCircularPatternAngleValues(project, parameterValues);
     validateBrepExtrudeProfileValues(project, parameterValues);
+    validateBrepRevolveProfileValues(project, parameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
       throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);

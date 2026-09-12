@@ -154,6 +154,13 @@ export type BrepExtrudeNode = {
   depth: BrepScalar;
 };
 
+export type BrepRevolveNode = {
+  id: string;
+  type: 'revolve';
+  profile: BrepProfile;
+  axis: BrepAxis;
+};
+
 export type BrepTransformNode = {
   id: string;
   type: 'transform';
@@ -232,6 +239,7 @@ export type BrepNode =
   | BrepBoxNode
   | BrepCylinderNode
   | BrepExtrudeNode
+  | BrepRevolveNode
   | BrepTransformNode
   | BrepMirrorNode
   | BrepLinearPatternNode
@@ -774,13 +782,14 @@ function normalizeEdgeSelector(
 function normalizeProfile(
   value: unknown,
   nodeId: string,
+  operation: 'extrude' | 'revolve',
   parameterIds: ReadonlySet<string>,
   parameterUnits: ReadonlyMap<string, BrepParameterUnit>,
 ): BrepProfile {
   if (!isRecord(value) || typeof value.type !== 'string') {
     throw new BrepProjectError(
       'invalid_node',
-      `BRep extrude ${nodeId} profile must be a typed object.`,
+      `BRep ${operation} ${nodeId} profile must be a typed object.`,
     );
   }
 
@@ -790,14 +799,14 @@ function normalizeProfile(
         type: 'rectangle',
         width: normalizeScalar(
           value.width,
-          `BRep extrude ${nodeId} rectangle profile width`,
+          `BRep ${operation} ${nodeId} rectangle profile width`,
           parameterIds,
           parameterUnits,
           ['mm'],
         ),
         height: normalizeScalar(
           value.height,
-          `BRep extrude ${nodeId} rectangle profile height`,
+          `BRep ${operation} ${nodeId} rectangle profile height`,
           parameterIds,
           parameterUnits,
           ['mm'],
@@ -808,7 +817,7 @@ function normalizeProfile(
         type: 'circle',
         radius: normalizeScalar(
           value.radius,
-          `BRep extrude ${nodeId} circle profile radius`,
+          `BRep ${operation} ${nodeId} circle profile radius`,
           parameterIds,
           parameterUnits,
           ['mm'],
@@ -822,27 +831,27 @@ function normalizeProfile(
       ) {
         throw new BrepProjectError(
           'invalid_node',
-          `BRep extrude ${nodeId} closedPolyline profile must contain between 3 and ${BREP_PROJECT_MAX_PROFILE_POINTS} points.`,
+          `BRep ${operation} ${nodeId} closedPolyline profile must contain between 3 and ${BREP_PROJECT_MAX_PROFILE_POINTS} points.`,
         );
       }
       const points = value.points.map((point, index) => {
         if (!isRecord(point)) {
           throw new BrepProjectError(
             'invalid_node',
-            `BRep extrude ${nodeId} closedPolyline profile point ${index} must be an object.`,
+            `BRep ${operation} ${nodeId} closedPolyline profile point ${index} must be an object.`,
           );
         }
         return {
           u: normalizeScalar(
             point.u,
-            `BRep extrude ${nodeId} closedPolyline profile points[${index}].u`,
+            `BRep ${operation} ${nodeId} closedPolyline profile points[${index}].u`,
             parameterIds,
             parameterUnits,
             ['mm'],
           ),
           v: normalizeScalar(
             point.v,
-            `BRep extrude ${nodeId} closedPolyline profile points[${index}].v`,
+            `BRep ${operation} ${nodeId} closedPolyline profile points[${index}].v`,
             parameterIds,
             parameterUnits,
             ['mm'],
@@ -854,7 +863,7 @@ function normalizeProfile(
     default:
       throw new BrepProjectError(
         'invalid_node',
-        `BRep extrude ${nodeId} profile type must be rectangle, circle, or closedPolyline.`,
+        `BRep ${operation} ${nodeId} profile type must be rectangle, circle, or closedPolyline.`,
       );
   }
 }
@@ -931,7 +940,13 @@ function normalizeNode(
       return {
         id,
         type: 'extrude',
-        profile: normalizeProfile(value.profile, id, parameterIds, parameterUnits),
+        profile: normalizeProfile(
+          value.profile,
+          id,
+          'extrude',
+          parameterIds,
+          parameterUnits,
+        ),
         axis: value.axis as BrepAxis,
         depth: normalizeScalar(
           value.depth,
@@ -940,6 +955,27 @@ function normalizeNode(
           parameterUnits,
           ['mm'],
         ),
+      };
+    }
+
+    case 'revolve': {
+      if (typeof value.axis !== 'string' || !AXES.has(value.axis as BrepAxis)) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep revolve ${id} axis must be x, y, or z.`,
+        );
+      }
+      return {
+        id,
+        type: 'revolve',
+        profile: normalizeProfile(
+          value.profile,
+          id,
+          'revolve',
+          parameterIds,
+          parameterUnits,
+        ),
+        axis: value.axis as BrepAxis,
       };
     }
 
@@ -1231,6 +1267,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'box':
     case 'cylinder':
     case 'extrude':
+    case 'revolve':
       return [];
     case 'transform':
     case 'mirror':
@@ -1300,6 +1337,7 @@ function validateNodeValueCompatibility(
       case 'box':
       case 'cylinder':
       case 'extrude':
+      case 'revolve':
         break;
       case 'transform':
       case 'mirror':
@@ -1436,9 +1474,52 @@ export function validateBrepExtrudeProfileValues(
               resolveBrepScalar(point.v, parameterValues),
             ] as const,
         );
-        validateBrepClosedPolylineProfilePoints(points, node.id);
+        validateBrepClosedPolylineProfilePoints(points, node.id, 'extrude');
         break;
       }
+    }
+  }
+}
+
+export function validateBrepRevolveProfileValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'revolve') continue;
+
+    if (node.profile.type !== 'closedPolyline') {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} currently requires a closedPolyline profile because centered rectangle and circle profiles cross the rotation axis.`,
+      );
+    }
+
+    const points = node.profile.points.map(
+      (point) =>
+        [
+          resolveBrepScalar(point.u, parameterValues),
+          resolveBrepScalar(point.v, parameterValues),
+        ] as const,
+    );
+    validateBrepClosedPolylineProfilePoints(points, node.id, 'revolve');
+
+    if (points.some((point) => point[1] < 0)) {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} profile must keep radial v >= 0 and must not cross the rotation axis.`,
+      );
+    }
+
+    const touchesAxis = points.some((point) => point[1] === 0);
+    if (!touchesAxis) continue;
+
+    const hasAxisSegment = points.some((point, index) => {
+      const next = points[(index + 1) % points.length]!;
+      return point[1] === 0 && next[1] === 0;
+    });
+    if (!hasAxisSegment) {
+      throw new BrepScalarEvaluationError(
+        `BRep revolve ${node.id} profile may touch the rotation axis only through a non-zero-length boundary segment on v = 0.`,
+      );
     }
   }
 }
@@ -1550,6 +1631,7 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     validateBrepRectangularPatternSpacingValues(normalized, defaultParameterValues);
     validateBrepCircularPatternAngleValues(normalized, defaultParameterValues);
     validateBrepExtrudeProfileValues(normalized, defaultParameterValues);
+    validateBrepRevolveProfileValues(normalized, defaultParameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
       throw new BrepProjectError('invalid_parameter', error.message);

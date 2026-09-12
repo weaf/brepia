@@ -317,11 +317,10 @@ function appendVectorScalars(
   vector.forEach((value, index) => scalars.push({ value, field: `${field}[${index}]` }));
 }
 
-function appendExtrudeProfileScalars(
+function appendProfileScalars(
   scalars: Array<{ value: BrepScalar; field: string }>,
-  node: Extract<BrepNode, { type: 'extrude' }>,
+  node: Extract<BrepNode, { type: 'extrude' | 'revolve' }>,
 ): void {
-  scalars.push({ value: node.depth, field: `${node.id}.depth` });
   switch (node.profile.type) {
     case 'rectangle':
       scalars.push(
@@ -368,7 +367,11 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
         );
         break;
       case 'extrude':
-        appendExtrudeProfileScalars(scalars, node);
+        scalars.push({ value: node.depth, field: `${node.id}.depth` });
+        appendProfileScalars(scalars, node);
+        break;
+      case 'revolve':
+        appendProfileScalars(scalars, node);
         break;
       case 'transform':
         appendVectorScalars(scalars, node.translate, `${node.id}.translate`);
@@ -430,6 +433,25 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
     for (const parameter of brepScalarParameterReferences(scalar)) references.add(parameter);
   };
   const appendVector = (vector: BrepVector3 | undefined): void => vector?.forEach(append);
+  const appendProfile = (
+    profileNode: Extract<BrepNode, { type: 'extrude' | 'revolve' }>,
+  ): void => {
+    switch (profileNode.profile.type) {
+      case 'rectangle':
+        append(profileNode.profile.width);
+        append(profileNode.profile.height);
+        break;
+      case 'circle':
+        append(profileNode.profile.radius);
+        break;
+      case 'closedPolyline':
+        profileNode.profile.points.forEach((point) => {
+          append(point.u);
+          append(point.v);
+        });
+        break;
+    }
+  };
   switch (node.type) {
     case 'box':
       append(node.width);
@@ -442,21 +464,10 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
       break;
     case 'extrude':
       append(node.depth);
-      switch (node.profile.type) {
-        case 'rectangle':
-          append(node.profile.width);
-          append(node.profile.height);
-          break;
-        case 'circle':
-          append(node.profile.radius);
-          break;
-        case 'closedPolyline':
-          node.profile.points.forEach((point) => {
-            append(point.u);
-            append(point.v);
-          });
-          break;
-      }
+      appendProfile(node);
+      break;
+    case 'revolve':
+      appendProfile(node);
       break;
     case 'transform':
       appendVector(node.translate);
