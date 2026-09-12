@@ -16,18 +16,31 @@ describe('M4 native profile extrusion translation', () => {
     assert.match(driver, /"x": Plane\.YZ/);
     assert.match(driver, /"y": Plane\.ZX/);
     assert.match(driver, /"z": Plane\.XY/);
-    assert.match(driver, /extrude\(plane \* sketch, amount=depth \/ 2\.0, both=True\)/);
+    assert.match(
+      driver,
+      /extrude\(plane \* region, amount=depth \/ 2\.0, both=True\)/,
+    );
   });
 
   it('uses bounded rectangle, circle and closed-polyline sketch primitives', () => {
+    assert.match(driver, /def profile_sketch\(profile, parameters, label\):/);
     assert.match(driver, /profile_kind == "rectangle"/);
-    assert.match(driver, /sketch = Rectangle\(/);
+    assert.match(driver, /return Rectangle\(/);
     assert.match(driver, /profile_kind == "circle"/);
-    assert.match(driver, /sketch = Circle\(/);
+    assert.match(driver, /return Circle\(/);
     assert.match(driver, /profile_kind == "closedPolyline"/);
-    assert.match(driver, /sketch = Polygon\(\*points\)/);
+    assert.match(driver, /return Polygon\(\*points\)/);
     assert.match(driver, /positive_scalar\(node\["depth"\]/);
     assert.match(driver, /require_single_boolean_solid\(part, "extrude", node_id\)/);
+  });
+
+  it('preserves the established single-loop region path', () => {
+    assert.match(driver, /outer_sketch = profile_sketch\(/);
+    assert.match(driver, /region = outer_sketch/);
+    assert.match(
+      driver,
+      /return require_single_boolean_solid\(part, "extrude", node_id\)/,
+    );
   });
 
   it('keeps native smoke coverage explicit for all axes and profile variants', () => {
