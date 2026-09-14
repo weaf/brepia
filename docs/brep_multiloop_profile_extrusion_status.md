@@ -1,8 +1,8 @@
 # Bounded multi-loop profile extrusion status
 
-Status: **Gate A repository/CI and Gate B native runtime accepted; Gate C installed Rhino 8 runtime prepared but not yet accepted**
+Status: **Fully accepted — Gate A repository/CI, Gate B pinned native runtime and Gate C installed Rhino 8 runtime complete**
 
-Date: 2026-09-12
+Date: 2026-09-14
 
 Repository: `weaf/brepia`
 
@@ -74,7 +74,7 @@ Quality Gate #1106       PASS
 Grasshopper Build #678   PASS
 ```
 
-The accepted repository surface now covers:
+The accepted repository surface covers:
 
 - canonical additive hole grammar;
 - bounded hole/point counts;
@@ -107,7 +107,7 @@ tests/brepMultiLoopSmokeHarness.test.ts
 tests/brepMultiLoopRhinoAcceptanceFixtures.test.ts
 ```
 
-## Native build123d / OCCT translation
+## Gate B — pinned native build123d / OCCT complete
 
 `scripts/brep/brep_driver.py` preserves the legacy single-loop M4 path unchanged.
 
@@ -136,26 +136,7 @@ Quality Gate #1104       PASS
 Grasshopper Build #676   PASS
 ```
 
-The harness locks:
-
-- one rectangle outer loop;
-- one circular hole;
-- one non-circular closedPolyline hole;
-- expression-backed placement `width / 2 - margin`;
-- effective parameter perturbation;
-- exact STEP output;
-- independent exact STEP re-import in the pinned CAD image;
-- exactly one imported solid;
-- positive volume;
-- exact outer bounds;
-- analytic volume including both holes;
-- build123d `0.11.1`;
-- `cadquery-ocp-novtk 7.9.3.1.1`;
-- rootless/offline/read-only/capability-dropped verification constraints.
-
-### Gate B — pinned native runtime complete
-
-The real local pinned build123d / OCCT runtime executed the Gate-B harness successfully.
+The real local pinned build123d / OCCT runtime executed the harness successfully.
 
 Default fixture:
 
@@ -175,21 +156,12 @@ Independent exact STEP re-import in the pinned CAD image:
 {'build123d': '0.11.1', 'cadqueryOcpNovtk': '7.9.3.1.1', 'exactStepSolids': 1, 'volume': 64524.24796047347, 'bounds': (-60.0, -35.0, -4.0, 60.0, 35.0, 4.0)}
 ```
 
-The imported STEP therefore preserves:
-
-- exactly one solid;
-- exact perturbed outer bounds;
-- positive volume;
-- the analytical volume of the outer plate minus both inner holes.
-
-The accepted volume is:
+The imported STEP therefore preserves exactly one solid, exact perturbed outer bounds, positive volume and the analytical volume of the outer plate minus both inner holes:
 
 ```text
 120*70*8 - pi*9^2*8 - 10*8*8
 = 64524.24796047347 mm^3
 ```
-
-That volume check proves the hole geometry survived exact STEP export/re-import rather than merely preserving the same outer envelope.
 
 Full native evidence:
 
@@ -199,33 +171,25 @@ docs/brep_multiloop_native_runtime_evidence_2026-09-12.md
 
 Canonical invalid-loop behavior remains separately repository/server accepted before native execution, including runtime overrides that make a hole touch the outer boundary.
 
-## Rhino 8 / Grasshopper translation
+## Gate C — installed Rhino 8 / Grasshopper complete
 
 Multi-loop extrusion retains the existing built-in Rhino Python 3 Script carrier and strict GHX ownership boundary.
 
 Legacy no-hole extrusions continue through the accepted `Extrusion.Create(...)` path unchanged.
 
-For a profile with holes the compiler constructs canonical outer/inner curves and then uses:
+For a profile with holes the compiler constructs canonical outer/inner curves and uses:
 
 ```text
 Rhino.Geometry.Brep.CreatePlanarBreps(curves, tolerance)
 ```
 
-It fails closed unless the planar operation yields:
-
-- exactly one Brep region;
-- exactly one face;
-- exactly `1 + holeCount` loops.
-
-That trimmed face is extruded along the existing centered M4 axis path with:
+It fails closed unless the planar operation yields exactly one Brep region, exactly one face and exactly `1 + holeCount` loops. That trimmed face is extruded along the existing centered M4 axis path with:
 
 ```text
 BrepFace.CreateExtrusion(path, true)
 ```
 
-and must produce one valid solid Brep.
-
-No Rhino BooleanDifference is used to encode canonical profile holes.
+and must produce one valid solid Brep. No Rhino BooleanDifference is used to encode canonical profile holes.
 
 The strict GHX compiler/validator path is repository-accepted at:
 
@@ -236,15 +200,13 @@ Quality Gate #1103       PASS
 Grasshopper Build #675   PASS
 ```
 
-## Installed Rhino 8 acceptance fixture
-
-The Gate-C fixture generator is:
+The installed-host acceptance fixture is:
 
 ```text
 tests/brepMultiLoopRhinoAcceptanceFixtures.test.ts
 ```
 
-Repository acceptance for the fixture generator:
+with repository acceptance at:
 
 ```text
 5dbf60142d54651693ea7e9694c3228f4e791752
@@ -253,48 +215,31 @@ Quality Gate #1105       PASS
 Grasshopper Build #677   PASS
 ```
 
-Generate the fresh current-compiler fixture with:
-
-```bash
-BREPIA_WRITE_MULTILOOP_RHINO_FIXTURES=1 \
-  npx vitest run tests/brepMultiLoopRhinoAcceptanceFixtures.test.ts
-```
-
-Default output:
+The Rhino host workflow exercised the locked edit:
 
 ```text
-test-results/multiloop-rhino-acceptance/
+Plate width:        100 -> 120
+Right-hole margin:   35 -> 40
+Right-hole radius:    7 -> 9
 ```
 
-The fixture requires installed Rhino 8 / Grasshopper acceptance of:
+The user explicitly confirmed that the edited model looked correct in installed Rhino 8 / Grasshopper, both holes were present, and the geometry remained correct after save -> close Rhino/Grasshopper -> reopen.
 
-1. fresh GHX open without repair prompts;
-2. successful solve to exactly one solid Result Item;
-3. both the circular and non-circular inner holes visibly present;
-4. `Plate width` 100 -> 120;
-5. `Right-hole margin` 35 -> 40;
-6. `Right-hole radius` 7 -> 9;
-7. visible recomputation including expression-backed circular-hole movement;
-8. save;
-9. close Rhino/Grasshopper;
-10. reopen the saved GHX;
-11. solve again;
-12. strict returned-GHX parameter-only validation.
-
-The host-saved file must be named:
+The returned host-saved GHX then passed strict parameter-only validation:
 
 ```text
-multiloop-extrude-plate-host-saved.ghx
+v4.1.11 /home/thn/ai/pCAD
+
+ ✓ tests/brepMultiLoopRhinoAcceptanceFixtures.test.ts (2 tests) 24ms
+   ✓ bounded multi-loop installed Rhino 8 acceptance fixture (2)
+     ✓ compiles and strictly validates a fresh multi-hole Item-access GHX fixture 18ms
+     ✓ strictly validates a Rhino-saved parameter-only GHX when requested 4ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
 ```
 
-Then validate it with:
-
-```bash
-BREPIA_MULTILOOP_RHINO_SAVED_DIR=<directory-containing-host-saved-ghx> \
-  npx vitest run tests/brepMultiLoopRhinoAcceptanceFixtures.test.ts
-```
-
-Expected persisted parameters are exactly:
+The validator confirms persisted parameters exactly:
 
 ```text
 width=120
@@ -302,13 +247,13 @@ margin=40
 holeRadius=9
 ```
 
-Result access remains ordinary Grasshopper **Item Access**.
+and preserves Result **Item Access** plus the existing Brepia-owned executable/graph boundary.
 
-### Gate C status
+Full installed-host evidence:
 
-**Pending installed Rhino 8 / Grasshopper execution.**
-
-The repository test proves that the fresh fixture compiles and passes generated-GHX strict validation and that a returned host file, when supplied, must obey the existing parameter-only mutation boundary. It is not installed-host evidence.
+```text
+docs/brep_multiloop_rhino8_runtime_evidence_2026-09-14.md
+```
 
 ## Preserved boundaries
 
@@ -330,16 +275,14 @@ This slice does not change:
 - M5 shell/thickness deferral;
 - M7 topology/finishing deferral.
 
-## Current closeout state
+## Final closeout state
 
-Repository implementation and native runtime acceptance are complete.
-
-Only the installed-host gate remains:
+Bounded multi-loop profile extrusion is fully accepted across all three required evidence layers:
 
 ```text
 Gate A repository / CI                  COMPLETE
 Gate B pinned native build123d / OCCT   COMPLETE
-Gate C installed Rhino 8 / Grasshopper  PENDING RUNTIME
+Gate C installed Rhino 8 / Grasshopper  COMPLETE
 ```
 
-Do not mark bounded multi-loop profile extrusion fully complete until Gate C has separate recorded installed-host runtime evidence.
+The slice is closed without broadening the locked canonical boundary.
