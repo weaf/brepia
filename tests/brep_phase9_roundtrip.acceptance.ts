@@ -186,6 +186,18 @@ async function ensureRevisionHistoryOpen(page: Page) {
   return revisionButtons;
 }
 
+async function waitForRevisionCount(
+  page: Page,
+  expectedCount: number,
+  timeout = 30000,
+) {
+  await expect(
+    page.getByRole('button', {
+      name: new RegExp(`^Revision history\\s+${expectedCount}$`, 'i'),
+    }),
+  ).toBeVisible({ timeout });
+}
+
 async function downloadText(download: Download): Promise<string> {
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
@@ -339,28 +351,42 @@ test.describe('BRep Phase 9 full product round-trip', () => {
       { timeout: 30000 },
     );
 
-    const revisionButtonsAfter = await ensureRevisionHistoryOpen(page);
-    await expect(revisionButtonsAfter).toHaveCount(revisionCountBefore + 1);
-    const importedRevision = revisionButtonsAfter.first();
+    const revisionCountAfterImport = revisionCountBefore + 1;
+    const revisionButtonsAfterImport = await ensureRevisionHistoryOpen(page);
+    await expect(revisionButtonsAfterImport).toHaveCount(revisionCountAfterImport);
+    const importedRevision = revisionButtonsAfterImport.first();
     await expect(importedRevision).not.toContainText('Active');
     await importedRevision.click();
-    await expect(importedRevision).toContainText('Active', { timeout: 30000 });
 
+    // Selecting a revision can remount/collapse the revision history. Verify the
+    // authoritative product state first, then reacquire locators from the new DOM.
     await expect(widthInput(page)).toHaveValue('1500', { timeout: 30000 });
     await expect(heightInput(page)).toHaveValue('2300', { timeout: 30000 });
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 120000 });
 
-    const revisionCountAfterImport = await revisionButtonsAfter.count();
+    const revisionButtonsAfterActivation = await ensureRevisionHistoryOpen(page);
+    await expect(revisionButtonsAfterActivation).toHaveCount(revisionCountAfterImport);
+    await expect(revisionButtonsAfterActivation.first()).toContainText('Active', {
+      timeout: 30000,
+    });
+
     const chatInput = page.getByPlaceholder('Describe the next BRep edit...');
     await expect(chatInput).toBeVisible();
     await chatInput.fill(CONTINUATION_PROMPT);
     await chatInput.press('Enter');
 
-    await expect(revisionButtonsAfter).toHaveCount(revisionCountAfterImport + 1, {
-      timeout: 240000,
+    const revisionCountAfterContinuation = revisionCountAfterImport + 1;
+    await waitForRevisionCount(page, revisionCountAfterContinuation, 240000);
+
+    // The AI update can also remount/collapse history, so reacquire it before
+    // checking which immutable revision is active.
+    const revisionButtonsAfterContinuation = await ensureRevisionHistoryOpen(page);
+    await expect(revisionButtonsAfterContinuation).toHaveCount(
+      revisionCountAfterContinuation,
+    );
+    await expect(revisionButtonsAfterContinuation.first()).toContainText('Active', {
+      timeout: 30000,
     });
-    const continuedRevision = revisionButtonsAfter.first();
-    await expect(continuedRevision).toContainText('Active', { timeout: 30000 });
     await expect(widthInput(page)).toHaveValue('1500', { timeout: 30000 });
     await expect(heightInput(page)).toHaveValue('2300', { timeout: 30000 });
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 120000 });
