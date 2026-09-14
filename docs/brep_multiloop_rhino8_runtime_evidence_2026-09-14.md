@@ -1,6 +1,6 @@
 # Bounded multi-loop profile extrusion — installed Rhino 8 / Grasshopper runtime evidence
 
-Status: **Gate C partial — host-saved returned GHX strict validation PASS; visual host observations not yet separately recorded**
+Status: **Gate C accepted — installed Rhino 8 / Grasshopper runtime PASS**
 
 Date: 2026-09-14
 
@@ -22,7 +22,7 @@ Gate B: pinned native build123d / OCCT
 Gate C: installed Rhino 8 / Grasshopper
 ```
 
-Gate A and Gate B are already accepted. The terminal result below is real returned-document evidence, but it does not by itself prove the visual host observations required by the Gate-C fixture.
+Gate A and Gate B were already accepted before this run. Gate C below combines real installed-host observation with strict returned-document validation; repository CI is not used as a substitute for host evidence.
 
 ## Gate-C fixture
 
@@ -39,7 +39,7 @@ multiloop-extrude-plate.ghx
 multiloop-extrude-plate-host-saved.ghx
 ```
 
-The parameter perturbation locked by the fixture is:
+The locked parameter perturbation is:
 
 ```text
 Plate width:        100 -> 120
@@ -47,7 +47,7 @@ Right-hole margin:   35 -> 40
 Right-hole radius:    7 -> 9
 ```
 
-The expected persisted returned parameters are therefore exactly:
+Expected persisted returned parameters:
 
 ```text
 width=120
@@ -56,6 +56,21 @@ holeRadius=9
 ```
 
 The result remains ordinary Grasshopper Result **Item Access**.
+
+## Installed Rhino 8 / Grasshopper observation
+
+The fixture was exercised in the installed Rhino 8 / Grasshopper host.
+
+The user explicitly confirmed the final required host observation on 2026-09-14:
+
+- the edited model looked correct in Rhino;
+- both inner holes were present;
+- after save -> close Rhino/Grasshopper -> reopen, the model still solved/displayed correctly;
+- both holes and the expected edited geometry remained intact after reopen.
+
+This supplies the host-persistence observation that cannot be established by repository tests or returned-GHX parsing alone.
+
+Combined with the locked acceptance edit and the strict persisted parameter values below, the installed-host run covers the intended multi-loop plate after the width, right-hole margin and right-hole radius perturbations.
 
 ## Strict returned-GHX validation
 
@@ -85,26 +100,55 @@ This establishes that:
 - the current compiler still produces a fresh multi-hole GHX accepted by the strict generated-document validator;
 - the returned host-saved GHX is accepted by the strict returned-document validator;
 - the returned file preserves the expected parameter-only mutation boundary;
-- the returned parameters match `width=120`, `margin=40`, `holeRadius=9` because the test would fail otherwise;
+- the returned parameters are exactly `width=120`, `margin=40`, `holeRadius=9`;
 - Result access remains Item Access;
 - no script, component identity, port identity, graph-shape or other Brepia-owned executable mutation was accepted by the returned-document validator.
 
-## Installed-host observations still requiring an explicit record
+## Rhino compiler path exercised
 
-The fixture's full Gate-C boundary also requires installed Rhino 8 / Grasshopper observation of:
+The accepted multi-loop definition exercises the current built-in Rhino 8 Python 3 carrier and the bounded planar-region extrusion path:
 
-1. fresh GHX opens without repair prompts;
-2. the solution produces exactly one solid Brep Result item;
-3. both inner holes are visibly present;
-4. the outer plate visibly widens after `width 100 -> 120`;
-5. the expression-backed circular hole visibly moves after the width/margin perturbation;
-6. the circular hole visibly grows after `holeRadius 7 -> 9`;
-7. save -> close Rhino/Grasshopper -> reopen -> solve preserves the result.
+```text
+canonical outer profile curve
++ canonical translated inner profile curves
+-> Rhino.Geometry.Brep.CreatePlanarBreps(curves, tolerance)
+-> require exactly one Brep region
+-> require exactly one face
+-> require exactly 1 + holeCount loops
+-> BrepFace.CreateExtrusion(centered axis path, true)
+-> require one valid solid Brep
+-> Result Item
+```
 
-Those visual/persistence observations were not separately stated in the terminal output supplied on 2026-09-14, so this document deliberately does not infer them from the passing validator alone.
+No Rhino BooleanDifference is used to encode canonical profile holes.
 
-## Current Gate-C conclusion
+## Preserved bounded contract
 
-The returned-GHX part of Gate C is accepted.
+Gate C does not broaden the canonical surface. The accepted contract remains:
 
-The multi-loop slice must not yet be described as fully Gate-C accepted solely from this terminal result. A final explicit installed-host observation that the fresh/edited geometry looked correct and remained correct after save -> close -> reopen is still required before changing Gate C to complete.
+- canonical `schemaVersion: 1` unchanged;
+- existing single-loop rectangle/circle/closedPolyline extrusion unchanged;
+- optional ordered non-recursive holes;
+- maximum 8 holes;
+- rectangle, circle and closedPolyline loop families only;
+- maximum 32 points per closedPolyline;
+- maximum 128 explicit closedPolyline points across outer + holes;
+- hole offsets use M1 millimetre scalar/expression semantics;
+- holes remain extrusion-only;
+- strict inside/separation rules remain fail-closed;
+- exactly one positive-volume `single` result;
+- build123d/OCCT remains geometry authority;
+- Rhino/GHX remains interoperability compiler/runtime evidence;
+- GHX return remains parameter-only.
+
+## Gate C conclusion
+
+Gate C is accepted.
+
+Bounded multi-loop profile extrusion is now accepted across all three required evidence layers:
+
+1. repository / CI;
+2. real pinned rootless build123d / OCCT runtime with exact STEP re-import;
+3. installed Rhino 8 / Grasshopper runtime with edited geometry, save -> close -> reopen persistence, and strict returned-GHX parameter-only validation.
+
+The bounded multi-loop profile extrusion slice is therefore fully accepted without changing its locked canonical boundary.
