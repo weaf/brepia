@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test, type Download, type Page } from '@playwright/test';
 
-const ORIGIN = (process.env.BREPIA_ACCEPTANCE_ORIGIN ?? 'http://localhost:3002').replace(/\/+$/, '');
+const ORIGIN = (process.env.BREPIA_ACCEPTANCE_ORIGIN ?? 'http://localhost:3000').replace(/\/+$/, '');
 const IDENTIFIER =
   process.env.BREP_GHX_IDENTIFIER ??
   process.env.BREP_GHX_EMAIL ??
@@ -112,11 +112,7 @@ async function signIn(page: Page) {
 }
 
 function parameterInput(page: Page, label: string) {
-  return page
-    .locator('label')
-    .filter({ hasText: new RegExp(`^\\s*${label}\\s*`, 'i') })
-    .locator('input[type="number"]')
-    .first();
+  return page.getByLabel(`${label} value`, { exact: true });
 }
 
 function widthInput(page: Page) {
