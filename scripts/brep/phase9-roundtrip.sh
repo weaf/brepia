@@ -9,6 +9,7 @@ identifier="${BREP_GHX_IDENTIFIER:-${BREP_GHX_EMAIL:-${B9_EMAIL:-}}}"
 password="${BREP_GHX_PASSWORD:-${B9_PASSWORD:-}}"
 origin="${BREPIA_ACCEPTANCE_ORIGIN:-http://localhost:3000}"
 output_dir="${BREPIA_PHASE9_DIR:-test-results/phase9-roundtrip}"
+manifest="$output_dir/manifest.json"
 returned_default="$output_dir/phase9-host-saved.ghx"
 
 if [[ -z "$identifier" || -z "$password" ]]; then
@@ -29,6 +30,11 @@ case "$stage" in
     ;;
   finalize)
     returned="${2:-${BREPIA_PHASE9_RETURNED_GHX:-$returned_default}}"
+    if [[ ! -f "$manifest" ]]; then
+      echo "Phase 9 manifest not found: $manifest" >&2
+      echo "Run '$0 prepare' first and complete the Rhino save/reopen step before finalize." >&2
+      exit 2
+    fi
     if [[ ! -f "$returned" ]]; then
       echo "Returned Rhino-saved GHX not found: $returned" >&2
       exit 2
