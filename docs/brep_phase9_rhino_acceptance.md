@@ -1,122 +1,261 @@
-# BRep Phase 9 — installed Rhino/Grasshopper acceptance
+# BRep Phase 9 — installed Rhino / Grasshopper product-loop acceptance
 
-## Status
+Status: **CLOSEOUT IN PROGRESS — operation-level Rhino evidence is broad; the remaining gap is one current-product end-to-end round trip through real Rhino-saved GHX, Brepia import/activation, AI continuation and fresh GHX reopen.**
 
-**In progress with real installed-host evidence.**
+Date: 2026-09-14
 
-Phase 9 is intentionally separated from Phase 8 because repository CI cannot prove installed Rhino 8 / Grasshopper runtime behavior.
+Repository: `weaf/brepia`
 
-Phase 8 is repository-complete through the strict GHX export/import boundary. Phase 9 supplies the real-runtime interoperability evidence and feeds narrowly scoped host-compatibility fixes back into the GHX compiler when required.
+Branch: `feature/brep-grasshopper-gh-packaging`
 
-## Current installed-host evidence — 2026-09-09
+PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
 
-Real Rhino 8 / Grasshopper testing has now established the following:
+## Purpose
 
-1. The original reduced hand-written executable GHX envelope did **not** open in the installed host. Grasshopper IO reported `Object reference not set to an instance of an object` before the definition was usable.
-2. Removing the embedded executable component did not remove that error, which isolated the first defect to the GHX document/archive envelope rather than the model script itself.
-3. Moving the same Brepia objects into an envelope derived from a Grasshopper-saved document opened successfully.
-4. A built-in Rhino 8 **Python 3 Script** component, using `RhinoCodePluginGH`, opened without installing `Brepia.Grasshopper.gha`.
-5. A focused Python 3 diagnostic with Height/Width inputs and a Result Brep solved successfully, displayed the expected box and loaded quickly in the installed host once the Python source identifiers exactly matched the runtime-visible serialized port names.
-6. The production GHX compiler was updated to the fuller host-compatible envelope plus the built-in Python 3 carrier.
-7. The first fresh product export exposed a runtime identifier mismatch between serialized ports and embedded Python source. The production script plan was corrected so both are generated from the same deterministic names.
-8. A **fresh Brepia product export after that correction has now been opened and solved successfully in the installed Rhino 8 / Grasshopper host**. The native box geometry is visible and solves quickly.
-9. `Height` and `Width` are working Grasshopper inputs and drive the product geometry as intended.
-10. The former editable `Plane` product input has been removed. Canonical Brepia placement remains internal and is applied by the generated Python carrier, preserving the product's placement authority rather than exposing it as a casual Grasshopper parameter.
-11. Two additional, more complex Brepia-generated GHX models have now also been opened successfully in the installed Rhino 8 / Grasshopper host. This demonstrates that the zero-install Python 3 carrier and host-compatible GHX envelope are not limited to the original single-box diagnostic.
+Phase 9 is the installed-host acceptance layer for the existing zero-install GHX product architecture.
 
-The broader two-model host result is deliberately recorded as **definition-level interoperability evidence**, not as an unqualified parity claim for every canonical operation. Exact operation-level acceptance remains tied to the concrete canonical node graph exercised by a host test; operations whose presence in those two models has not been recorded must not inherit acceptance by implication.
-
-This advances the zero-install product path beyond the earlier single-box checkpoint. It does **not** complete Phase 9 as a whole: save/reopen, returned-GHX import/activation/continuation and the broader canonical BRep operation surface remain separately evidenced acceptance work.
-
-The next explicit geometry-runtime acceptance target remains the repository-supported canonical graph:
+The target loop is:
 
 ```text
-box -> cylinder -> translate -> subtract
+Brepia AI
+  -> canonical BRep model
+  -> native Brepia preview
+  -> current-product GHX export
+  -> installed Rhino 8 / Grasshopper open + solve
+  -> supported parameter edits
+  -> save + close + reopen + solve
+  -> Rhino-saved GHX returned to Brepia
+  -> strict parameter-only import
+  -> new immutable inactive revision
+  -> explicit activation
+  -> native Brepia preview
+  -> continued Brepia AI edit
+  -> fresh current-product GHX export
+  -> installed Rhino 8 / Grasshopper reopen + solve
 ```
 
-That through-hole path is covered by deterministic repository generation tests. If one of the newly accepted complex definitions is confirmed to contain this exact canonical graph, record that graph-level evidence explicitly before describing it as installed-host parity; otherwise keep the graph-specific acceptance open.
+Phase 9 does not broaden the canonical schema or the supported GHX return contract.
 
-The current RhinoCommon implementation review for this graph is pinned through `docs/references/rhino8_mcneel_sources.md`. The reviewed McNeel Rhino 8 branch-8 Python examples cover tolerance-aware `Brep.CreateBooleanDifference(...)` and `Transform.Translation(...)`; Brepia still owns and tests primitive centering, canonical placement, graph ordering, result cardinality and fail-closed semantics.
+## Reconciliation against the current branch
 
-## Current repository scope for complex geometry
+The older 2026-09-09 Phase 9 text predated the later modeling-capability work and is no longer an accurate description of the repository-supported Rhino compiler surface.
 
-The executable Python/GHX compiler currently has repository support for:
+Since that checkpoint, separate Gate-A/B/C work has accepted additional canonical behavior including the M1 scalar AST, additive Booleans, mirror, bounded linear/rectangular/circular patterns, M4 profile extrusion, M6 non-zero rotation parity, bounded full revolve and bounded multi-loop profile extrusion.
 
-- centered canonical `box` primitives;
-- centered canonical `cylinder` primitives;
-- canonical translation-only `transform` nodes, including parameter-backed translation scalars;
-- canonical `subtract` nodes;
-- multiple subtract tools applied deterministically in canonical `tools[]` order, with each boolean step required to produce exactly one Brep;
-- canonical `fillet` nodes using the currently accepted semantic `parallelToAxis` selector;
-- parameter-backed fillet radii;
-- exact project-object role-node reuse where the referenced node is supported.
+Those operation-specific Gate-C records are valid installed-host evidence for the exact graphs they exercise. They do **not** by themselves close the Phase 9 product loop because they are compiler/fixture acceptance rather than one continuous product export -> Rhino save -> Brepia import -> AI continuation -> fresh Rhino reopen sequence.
 
-The fillet translation mirrors the authoritative native evaluator's accepted selector semantics rather than exposing Rhino edge indices as Brepia state. `parallelToAxis` samples the normalized edge midpoint tangent and applies the same `1e-3` axis-parallel threshold. Rhino execution uses `Brep.CreateFilletEdges(...)` with `BlendType.Fillet`, `RailType.RollingBall` and document absolute tolerance. Non-positive radius, empty selector result or a Rhino result other than exactly one Brep fails closed. Canonical v1 normalization does not currently admit an `all` selector, and the GHX exporter does not broaden that boundary independently. The Rhino 8 upstream/API review is recorded in `docs/references/rhino8_mcneel_sources.md`.
+Likewise, `docs/brep_phase8h_browser_acceptance.md` already proves the Brepia-side strict v1 lifecycle in the real authenticated browser/runtime:
 
-**Fillet support is repository-level only at this checkpoint unless a recorded installed-host test is confirmed to include a canonical fillet node.** Do not infer fillet host parity from a complex-model success without recording that the exercised graph actually contained the fillet operation and produced the expected topology.
+- native BRep creation;
+- native preview;
+- GHX product export;
+- parameter-only GHX import;
+- new immutable imported revision;
+- imported revision initially inactive;
+- explicit activation;
+- recovered parameter value;
+- native preview after activation.
 
-Still intentionally fail-closed on the active Rhino/GHX path:
+That Phase 8H run edited textual GHX directly and therefore is not a substitute for importing a file genuinely saved by Rhino/Grasshopper.
 
-- non-zero transform rotation;
-- canonical node types that have not been explicitly mapped and tested in the Rhino compiler.
+The 2026-09-14 bounded multi-loop Gate-C run additionally proves that a Rhino-saved GHX can survive save -> close -> reopen and pass the strict parameter-only returned-GHX validator. That fixture was not created through the complete Brepia product/UI loop, so it also remains supporting evidence rather than final Phase 9 closeout evidence.
 
-Repository support is not installed-host acceptance. The sequence remains: compare against the authoritative native build123d evaluator, inspect the Rhino 8 upstream reference, add deterministic tests, then obtain real Rhino 8 host evidence before claiming parity.
+## Reconciled 12-step acceptance matrix
 
-## Scope
+The original Phase 9 acceptance sequence remains the correct product boundary, but the current evidence state is now:
 
-Validate the zero-install GHX baseline in an actual Rhino 8 / Grasshopper host with no Brepia GHA installed.
+| Step | Requirement | Current evidence | Final closeout requirement |
+| --- | --- | --- | --- |
+| 1 | create supported canonical model + native preview | Phase 8H accepted | rerun on current product path as part of staged closeout |
+| 2 | export GHX from saved immutable Brepia revision | Phase 8H accepted | rerun on current product path |
+| 3 | open generated GHX in installed Rhino 8 / Grasshopper | repeatedly accepted by later Gate-C fixtures | use the exact current-product export from step 2 |
+| 4 | standard controls + built-in Python 3 carrier load without Brepia GHA | accepted installed-host architecture | verify on exact current-product export |
+| 5 | solve expected native Rhino Brep geometry | broadly accepted operation-level | verify exact closeout box |
+| 6 | change at least two published parameters | accepted in later host fixtures | perform Width 1200 -> 1500 and Height 2100 -> 2300 |
+| 7 | save -> close -> reopen -> solve | accepted in later host fixtures | perform on the exact current-product closeout GHX |
+| 8 | return Rhino-saved GHX to Brepia | strict validator accepted on fixture | import the exact host-saved current-product GHX through browser UI |
+| 9 | deterministic compatibility validation + parameter recovery | Phase 8H accepted for textual edit | prove from real Rhino-saved file; exactly two changes |
+| 10 | activate imported immutable revision + native preview | Phase 8H accepted | prove in same real-host closeout run |
+| 11 | continue editing canonical model with Brepia AI | repository/product chat exists | prove after activation in same closeout run |
+| 12 | export fresh GHX and reopen/solve in installed Rhino 8 / Grasshopper | operation fixtures prove compiler path | prove from the AI-continued revision |
 
-Required acceptance sequence:
+Therefore the remaining work is not another geometry mapping project. It is one controlled current-product end-to-end acceptance run.
 
-1. create a supported canonical Brepia model and verify native Brepia 3D preview;
-2. export `.ghx` from the saved immutable Brepia revision;
-3. open the generated GHX in Grasshopper without installing `Brepia.Grasshopper.gha`;
-4. verify standard controls and the embedded Rhino 8 Python 3 Script component load correctly;
-5. solve the definition and verify expected native Rhino Brep geometry and Brepia semantic outputs;
-6. change at least two published parameters and verify geometry responds correctly;
-7. save and reopen the GHX in Grasshopper;
-8. return the Rhino-saved GHX to Brepia;
-9. verify deterministic compatibility validation and recovery of the supported parameter values;
-10. activate the imported immutable revision in Brepia and verify native Brepia preview;
-11. continue editing the canonical model with Brepia AI;
-12. export a fresh GHX and reopen/solve it successfully in Grasshopper.
+## Dedicated closeout harness
 
-For the current simple-box product path, steps 1–5 are proven with a fresh product export, and the working Height/Width controls provide parameter-response evidence toward step 6. Two additional nontrivial product definitions have also opened successfully, broadening the definition-level host evidence. The remaining sequence must still be completed before full Phase 9 acceptance is claimed.
+The closeout harness is deliberately split around the real Rhino workstation boundary:
 
-For each newly broadened canonical geometry operation, opening and solving another model is only transferable runtime evidence when the exact exercised graph is recorded. The broadened graph must separately pass installed-host acceptance before operation-level parity is claimed.
+```text
+scripts/brep/phase9-roundtrip.sh prepare
+  -> browser creates current canonical box
+  -> native preview
+  -> current-product GHX export
+  -> writes manifest + phase9-source.ghx
 
-## Acceptance boundaries
+installed Rhino 8 / Grasshopper
+  -> open phase9-source.ghx without repair
+  -> verify one box Result
+  -> Width 1200 -> 1500
+  -> Height 2100 -> 2300
+  -> verify recomputation
+  -> save as phase9-host-saved.ghx
+  -> close Rhino/Grasshopper
+  -> reopen saved file
+  -> solve again
 
-This phase tests the product loop already implemented in Phase 8. It is not an invitation to broaden the v1 round-trip contract.
+scripts/brep/phase9-roundtrip.sh finalize
+  -> browser opens the same persisted Brepia conversation
+  -> imports the actual Rhino-saved GHX
+  -> requires exactly two supported parameter changes
+  -> requires one new immutable imported revision
+  -> requires imported revision to remain inactive initially
+  -> explicitly activates imported revision
+  -> requires Width=1500 and Height=2300
+  -> requires native preview
+  -> asks Brepia AI to change only literal box depth 600 -> 700
+  -> requires one new active AI revision
+  -> requires Width/Height values to remain 1500/2300
+  -> exports phase9-continued.ghx
+  -> verifies generated GHX contains literal 700 depth plus persisted 1500/2300 controls
 
-Still unsupported unless separately implemented and validated:
+installed Rhino 8 / Grasshopper
+  -> open phase9-continued.ghx without repair
+  -> solve
+  -> verify expected 1500 x 700 x 2300 box
+```
 
-- arbitrary native Grasshopper graph mutations that affect Brepia-owned semantics;
+Implementation files:
+
+```text
+tests/brep_phase9_roundtrip.acceptance.ts
+playwright.brep-phase9.config.ts
+scripts/brep/phase9-roundtrip.sh
+```
+
+Default evidence directory:
+
+```text
+test-results/phase9-roundtrip/
+```
+
+The harness writes:
+
+```text
+manifest.json
+phase9-source.ghx
+phase9-prepare.png
+phase9-host-saved.ghx        # supplied by installed Rhino host
+phase9-continued.ghx
+phase9-finalize.png
+```
+
+## Running the closeout
+
+Use the existing authenticated local acceptance credentials:
+
+```bash
+export BREP_GHX_IDENTIFIER='...'
+export BREP_GHX_PASSWORD='...'
+```
+
+`BREP_GHX_EMAIL` or the historical `B9_EMAIL` / `B9_PASSWORD` names remain accepted.
+
+Optional application origin override:
+
+```bash
+export BREPIA_ACCEPTANCE_ORIGIN='http://localhost:3002'
+```
+
+### Stage 1 — prepare current-product export
+
+```bash
+./scripts/brep/phase9-roundtrip.sh prepare
+```
+
+Open:
+
+```text
+test-results/phase9-roundtrip/phase9-source.ghx
+```
+
+in installed Rhino 8 / Grasshopper.
+
+Required host observations:
+
+1. opens without repair prompt;
+2. built-in Python 3 component loads without Brepia GHA;
+3. exactly one box Result solves;
+4. Width = 1200 and Height = 2100 initially;
+5. change Width to 1500;
+6. change Height to 2300;
+7. geometry recomputes correctly;
+8. save as `phase9-host-saved.ghx`;
+9. close Rhino/Grasshopper;
+10. reopen the saved file and solve again;
+11. edited geometry and controls remain correct.
+
+Place/copy the saved file at:
+
+```text
+test-results/phase9-roundtrip/phase9-host-saved.ghx
+```
+
+or pass an explicit path to the finalize command.
+
+### Stage 2 — Brepia import, activation, AI continuation and fresh export
+
+Default returned-file location:
+
+```bash
+./scripts/brep/phase9-roundtrip.sh finalize
+```
+
+Explicit returned file:
+
+```bash
+./scripts/brep/phase9-roundtrip.sh finalize /path/to/rhino-saved.ghx
+```
+
+The browser stage fails unless the actual host-saved document is accepted as exactly two supported parameter changes, becomes a new inactive immutable revision, activates explicitly, renders natively, survives AI continuation and emits a fresh GHX with the requested continued depth.
+
+### Stage 3 — final installed-host reopen
+
+Open:
+
+```text
+test-results/phase9-roundtrip/phase9-continued.ghx
+```
+
+Required final host observations:
+
+- opens without repair prompt;
+- solves successfully;
+- Result remains an ordinary single box Brep;
+- dimensions are the expected 1500 x 700 x 2300 mm;
+- Width and Height controls remain 1500 and 2300.
+
+After those observations are recorded, Phase 9 can be closed with a dedicated runtime-evidence document and exact repository/CI checkpoint.
+
+## Strict compatibility boundary
+
+The closeout harness intentionally exercises only the already-supported parameter-only GHX return contract.
+
+Still unsupported for canonical round trip unless separately implemented and accepted:
+
+- arbitrary new Grasshopper components that affect Brepia-owned semantics;
 - rewiring Brepia-owned inputs through unknown logic;
 - edited embedded Brepia script/runtime code;
 - arbitrary plug-in components;
-- generic Grasshopper graph to canonical `BrepProject` reconstruction.
+- generic Grasshopper graph -> canonical `BrepProject` reconstruction.
 
-If the returned file contains unsupported changes, Brepia should continue to fail closed rather than infer canonical state.
+Unsupported returned content must continue to fail closed. Phase 9 completion must not weaken the strict validator merely to accept a host-saved document.
 
-## Evidence classes
+## Evidence policy
 
-Repository CI evidence is necessary but not sufficient for this phase.
+Keep these evidence classes distinct:
 
-Required evidence must come from the installed Rhino/Grasshopper host and should record:
+1. repository/CI proves the deterministic harness and product code;
+2. installed Rhino 8 / Grasshopper proves open/solve/edit/save/reopen behavior;
+3. authenticated browser/runtime proves returned-file import, immutable revision semantics, explicit activation, native preview and AI continuation.
 
-- Rhino and Grasshopper versions;
-- exported GHX source Brepia revision;
-- successful open/solve;
-- native geometry/output verification;
-- parameter edits performed;
-- save/reopen result;
-- Brepia re-import compatibility result;
-- recovered parameter values;
-- successful continuation/regeneration result.
-
-## Relationship to Phase 8
-
-Historical Phase 8 documentation may refer to the same runtime work as `8H`. Those references are superseded by this document: installed Rhino/Grasshopper acceptance is **Phase 9**, not a blocking Phase 8 sub-step.
-
-Phase 8 can therefore be reviewed independently from the installed-host acceptance evidence. Phase 9 remains open until the full product loop above is completed.
+The final Phase 9 closeout document must record the exact branch/head, CI runs, source and continued GHX filenames, parameter edits, browser acceptance output and installed-host observations. If the exact Rhino 8 point release is not captured, record only the supported installed target `Rhino 8` rather than inventing a version.
