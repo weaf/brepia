@@ -214,6 +214,16 @@ async function exportGhx(page: Page, destination: string): Promise<string> {
   return ghx;
 }
 
+function embeddedRhinoScriptSource(ghx: string): string {
+  const encoded = ghx.match(
+    /<item name="Text" type_name="gh_string" type_code="10">([A-Za-z0-9+/=]+)<\/item>/,
+  )?.[1];
+  if (!encoded) {
+    throw new Error('Generated GHX is missing the embedded Brepia Rhino Python source.');
+  }
+  return Buffer.from(encoded, 'base64').toString('utf8');
+}
+
 async function readManifest(): Promise<Phase9Manifest> {
   const parsed = JSON.parse(await readFile(MANIFEST_PATH, 'utf8')) as Phase9Manifest;
   if (
@@ -260,7 +270,9 @@ test.describe('BRep Phase 9 full product round-trip', () => {
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 120000 });
 
     const sourceGhx = await exportGhx(page, SOURCE_GHX_PATH);
-    expect(sourceGhx).toContain('brepiaNode0Depth = float(600)');
+    expect(embeddedRhinoScriptSource(sourceGhx)).toContain(
+      'brepiaNode0Depth = float(600)',
+    );
     expect(sourceGhx).toContain(
       '<item name="Value" type_name="gh_double" type_code="6">1200</item>',
     );
@@ -354,7 +366,9 @@ test.describe('BRep Phase 9 full product round-trip', () => {
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 120000 });
 
     const continuedGhx = await exportGhx(page, CONTINUED_GHX_PATH);
-    expect(continuedGhx).toContain('brepiaNode0Depth = float(700)');
+    expect(embeddedRhinoScriptSource(continuedGhx)).toContain(
+      'brepiaNode0Depth = float(700)',
+    );
     expect(continuedGhx).toContain(
       '<item name="Value" type_name="gh_double" type_code="6">1500</item>',
     );
