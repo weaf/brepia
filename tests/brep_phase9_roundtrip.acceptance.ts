@@ -198,6 +198,41 @@ async function waitForRevisionCount(
   ).toBeVisible({ timeout });
 }
 
+async function restorePreparedSourceRevisionIfNeeded(page: Page) {
+  const width = await widthInput(page).inputValue();
+  const height = await heightInput(page).inputValue();
+
+  if (width === '1200' && height === '2100') return;
+
+  if (width !== '1500' || height !== '2300') {
+    throw new Error(
+      `Phase 9 finalize found unexpected persisted parameter state Width=${width} Height=${height}.`,
+    );
+  }
+
+  const revisions = await ensureRevisionHistoryOpen(page);
+  if ((await revisions.count()) < 2) {
+    throw new Error(
+      'Phase 9 finalize found host-edited parameters without a recoverable prepared source revision.',
+    );
+  }
+
+  // A previous finalize attempt may already have activated the Rhino-imported
+  // revision. The acceptance project is dedicated to this run, so its oldest
+  // immutable revision is the prepared 1200 x 600 x 2100 source. Return to that
+  // baseline and rerun the complete import/activation chain instead of creating
+  // assertions that depend on partial state from a failed attempt.
+  await revisions.last().click();
+  await expect(widthInput(page)).toHaveValue('1200', { timeout: 30000 });
+  await expect(heightInput(page)).toHaveValue('2100', { timeout: 30000 });
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 120000 });
+
+  const revisionsAfterRestore = await ensureRevisionHistoryOpen(page);
+  await expect(revisionsAfterRestore.last()).toContainText('Active', {
+    timeout: 30000,
+  });
+}
+
 async function downloadText(download: Download): Promise<string> {
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
@@ -336,6 +371,7 @@ test.describe('BRep Phase 9 full product round-trip', () => {
     await signIn(page);
     await page.goto(manifest.conversationUrl);
     await waitForExistingBrepWorkspace(page);
+    await restorePreparedSourceRevisionIfNeeded(page);
     await expect(widthInput(page)).toHaveValue('1200', { timeout: 30000 });
     await expect(heightInput(page)).toHaveValue('2100', { timeout: 30000 });
 
