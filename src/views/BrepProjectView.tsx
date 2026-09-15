@@ -47,7 +47,10 @@ import { resolveActiveBrepAiSourceForLeaf } from '@shared/brepAiContext';
 import type { BrepProject } from '@shared/brepProject';
 import type { BrepParameterValues } from '@shared/brepProvider';
 import type { AppUIMessage } from '@shared/chatAi';
-import { isGenerationRunAiEditing } from '@shared/generationRun';
+import {
+  isGenerationRunAiEditing,
+  isGenerationRunTerminal,
+} from '@shared/generationRun';
 import Tree from '@shared/Tree';
 import type { Conversation, Message, Model } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -555,23 +558,96 @@ function BrepProjectWorkspace() {
     Boolean(generationRun) &&
     generationRun?.status !== 'completed';
   const generationRunLookupPending = !activeSource && !isGenerationRunFetched;
+  const creationWorkspacePending =
+    !activeSource &&
+    (pendingBrepCreation ||
+      durableCreationWithoutSource ||
+      generationRunLookupPending);
+  const showActiveGenerationProgress = Boolean(
+    activeSource &&
+      (generationHandoffPending ||
+        (!generationAttempt && isChatStreaming) ||
+        (generationRun &&
+          (!isGenerationRunTerminal(generationRun.status) ||
+            (Boolean(generationAttempt) &&
+              generationRun.status !== 'completed')))),
+  );
 
-  if (
-    !areMessagesFetched ||
-    !leafPresentInMessages ||
-    pendingBrepCreation ||
-    durableCreationWithoutSource ||
-    generationRunLookupPending
-  ) {
+  if (!areMessagesFetched || !leafPresentInMessages) {
     return (
-      <BrepCreationProgress
-        messages={dbMessages}
-        messagesFetched={areMessagesFetched}
-        leafPresent={leafPresentInMessages}
-        model={model}
-        executionMode={executionMode}
-        generationRun={generationRun}
-      />
+      <div className="flex h-full items-center justify-center">
+        <ActivityIndicator label="Synchronizing BRep conversation" showLabel />
+      </div>
+    );
+  }
+
+  if (creationWorkspacePending) {
+    return (
+      <BrepFeatureWorkspaceProvider>
+        <ConversationView
+          hasParameters={false}
+          chatPanelSlot={
+            <>
+              <div className="flex w-full items-center justify-between gap-3 border-b border-adam-neutral-700 px-4 py-3 md:pl-12">
+                <div className="min-w-0 flex-1">
+                  <ChatTitle />
+                </div>
+                <span className="hidden shrink-0 text-xs text-adam-text-tertiary sm:inline">
+                  {generationRun?.status === 'failed'
+                    ? 'Generation failed'
+                    : generationRun?.status === 'cancelled'
+                      ? 'Generation stopped'
+                      : 'AI creating…'}
+                </span>
+              </div>
+              <BrepCreationProgress
+                messages={dbMessages}
+                messagesFetched={areMessagesFetched}
+                leafPresent={leafPresentInMessages}
+                model={model}
+                executionMode={executionMode}
+                generationRun={generationRun}
+                variant="inline"
+              />
+              <BrepChatSession
+                conversation={conversation}
+                dbMessages={dbMessages}
+                initialBranch={initialBranch}
+                model={model}
+                setModel={updateSelectedModel}
+                executionMode={executionMode}
+                onExecutionModeChange={handleExecutionModeChange}
+                onSendParts={handleSendParts}
+                onRetry={handleRetry}
+                onEdit={handleEdit}
+                onRestore={handleRestore}
+                onSelectLeaf={handleSelectLeaf}
+                branchForLeaf={branchForLeaf}
+                onChangeRating={handleChangeRating}
+                onViewRevision={handleViewRevision}
+                displayedRevisionId=""
+                activeRevisionId=""
+                onLoadingChange={handleChatLoadingChange}
+              />
+            </>
+          }
+          previewSlot={
+            <div className="flex h-full min-h-0 items-center justify-center bg-adam-background-1 p-6 text-center">
+              <div className="max-w-sm">
+                <ActivityIndicator
+                  label="Waiting for native BRep preview"
+                  showLabel
+                />
+                <p className="mt-3 text-sm leading-5 text-adam-text-secondary">
+                  The 3D workspace will appear here after the canonical source is
+                  validated and the first immutable revision is saved.
+                </p>
+              </div>
+            </div>
+          }
+          parametersSlot={null}
+        />
+      </BrepFeatureWorkspaceProvider>
     );
   }
 
@@ -709,6 +785,18 @@ function BrepProjectWorkspace() {
                   </span>
                 </div>
               </div>
+              {showActiveGenerationProgress ? (
+                <BrepCreationProgress
+                  messages={dbMessages}
+                  messagesFetched={areMessagesFetched}
+                  leafPresent={leafPresentInMessages}
+                  model={model}
+                  executionMode={executionMode}
+                  generationRun={generationRun}
+                  variant="inline"
+                  mode="edit"
+                />
+              ) : null}
               <BrepChatSession
                 conversation={conversation}
                 dbMessages={dbMessages}
