@@ -1520,22 +1520,19 @@ export async function handleAiChatRequest(req: Request) {
           : null,
       });
     },
-    stopWhen:
-      activeBrepSource && transport.kind !== 'normal'
-        ? hasToolCall('build_brep_project')
-        : streamingOpenCode
-          ? hasToolCall('build_parametric_model')
-          : activeBrepSource
-            ? [
-                ({ steps }) =>
-                  shouldStopAfterAcceptedBrepBuild(
-                    brepBuildAttemptsByStep,
-                    steps.length,
-                  ),
-                hasToolCall('answer_user'),
-                stepCountIs(maxSteps),
-              ]
-            : stepCountIs(maxSteps),
+    stopWhen: activeBrepSource
+      ? [
+          ({ steps }) =>
+            shouldStopAfterAcceptedBrepBuild(
+              brepBuildAttemptsByStep,
+              steps.length,
+            ),
+          hasToolCall('answer_user'),
+          stepCountIs(maxSteps),
+        ]
+      : streamingOpenCode
+        ? hasToolCall('build_parametric_model')
+        : stepCountIs(maxSteps),
     maxOutputTokens: requestHardBudget.effectiveMaxOutputTokens,
     abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
@@ -1768,7 +1765,7 @@ export async function handleAiChatRequest(req: Request) {
             } else {
               await generationRun.persisted(
                 responseMessage.id,
-                Boolean(activeBrepSource),
+                Boolean(brepFinalized.artifact),
               );
             }
           },
