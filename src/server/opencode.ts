@@ -30,6 +30,10 @@ import {
   resolveAgentResultChannels,
   type AgentParametricSourceKind,
 } from './opencodeAgentResult';
+import {
+  openCodeAgentForSourceKind,
+  type OpenCodeAgentName,
+} from './opencodeAgentRouting';
 import { validateOpenScadProject } from './openScadValidation';
 import { createServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
 import { logError, logWarning } from './serverLog';
@@ -50,7 +54,6 @@ const USAGE = (): LanguageModelV3Usage => ({
 });
 
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
-const PCAD_OPENCODE_AGENT = 'pcad-builder';
 
 export type OpenCodeRuntimeOptions = {
   transportInstruction?: string;
@@ -332,7 +335,7 @@ export function buildOpenCodeSessionTitle(
 }
 
 export type OpenCodeSessionIdentity = {
-  agent: typeof PCAD_OPENCODE_AGENT;
+  agent: OpenCodeAgentName;
   model: { providerID: string; id: string };
   title: string;
 };
@@ -340,13 +343,14 @@ export type OpenCodeSessionIdentity = {
 export function buildOpenCodeSessionIdentity(
   modelId: string,
   prompt: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): OpenCodeSessionIdentity {
   const slash = modelId.indexOf('/');
   const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
   const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
   return {
     title: buildOpenCodeSessionTitle(bareId, prompt),
-    agent: PCAD_OPENCODE_AGENT,
+    agent: openCodeAgentForSourceKind(sourceKind),
     model: { providerID, id: bareId },
   };
 }
@@ -1268,7 +1272,11 @@ async function* streamParts(
       runtime.sourceKind,
       runtime.currentBrepProject,
     );
-    const identity = buildOpenCodeSessionIdentity(modelId, formattedPrompt);
+    const identity = buildOpenCodeSessionIdentity(
+      modelId,
+      formattedPrompt,
+      runtime.sourceKind,
+    );
     const { providerID, id: bareId } = identity.model;
 
     let sessionId = '';

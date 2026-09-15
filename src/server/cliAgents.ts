@@ -45,6 +45,7 @@ import {
   type AgentParametricSourceKind,
   type AgentResult,
 } from './opencodeAgentResult';
+import { openCodeAgentForSourceKind } from './opencodeAgentRouting';
 import { logWarning } from './serverLog';
 
 const CLI_AGENT_WORKDIR = join(tmpdir(), 'pcad-cli-agent');
@@ -146,7 +147,9 @@ export function configuredCodexModels(): CliAgentModel[] {
     name:
       model === 'default' ? 'Codex (default)' : `Codex · ${displayName(model)}`,
     description:
-      model === 'default' ? 'Uses the model selected in the local Codex profile' : 'Configured Codex CLI model',
+      model === 'default'
+        ? 'Uses the model selected in the local Codex profile'
+        : 'Configured Codex CLI model',
     provider: 'Codex Agent',
     supportsTools: true,
     supportsThinking: false,
@@ -575,6 +578,7 @@ export function buildCliAgentArgs(
   agent: AgentKind,
   model: string,
   sessionId?: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): string[] {
   if (agent === 'opencode') {
     return [
@@ -582,7 +586,7 @@ export function buildCliAgentArgs(
       '--format',
       'json',
       '--agent',
-      'pcad-builder',
+      openCodeAgentForSourceKind(sourceKind),
       '-m',
       model,
       ...(sessionId ? ['--session', sessionId] : []),
@@ -641,7 +645,7 @@ async function invokeAgent(
   const runOnce = async (sessionId?: string, input = instruction) => {
     const cliResult = await runCli(
       agent,
-      buildCliAgentArgs(agent, model, sessionId),
+      buildCliAgentArgs(agent, model, sessionId, sourceKind),
       input,
       dir,
       timeoutMs,
