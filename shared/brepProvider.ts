@@ -2,6 +2,12 @@ import {
   BREP_PROJECT_MAX_ABS_SCALAR,
   BrepProjectError,
   normalizeBrepProject,
+  validateBrepCircularPatternAngleValues,
+  validateBrepExtrudeProfileValues,
+  validateBrepLinearPatternSpacingValues,
+  validateBrepRectangularPatternSpacingValues,
+  validateBrepRevolveProfileValues,
+  type BrepNodeValueKind,
   type BrepProject,
   type BrepProjectMetadata,
   type BrepProjectObjectPointKind,
@@ -9,6 +15,11 @@ import {
   type BrepScalar,
   type BrepVector3,
 } from './brepProject';
+import {
+  BrepScalarEvaluationError,
+  resolveBrepScalar,
+  validateBrepProjectScalarValues,
+} from './brepScalar.ts';
 
 export const BREP_EVALUATION_MAX_BODY_COUNT = 64;
 export const BREP_EVALUATION_MAX_VIEWER_VERTICES = 500_000;
@@ -57,7 +68,7 @@ export type BrepBounds = {
 };
 
 export type BrepViewerMesh = {
-  /** Stable body/object identity, derived from Brepia feature IDs rather than OCCT indexes. */
+  /** Stable evaluated-body identity, never a transient kernel topology index. */
   bodyId: string;
   positions: number[];
   normals: number[];
@@ -66,8 +77,15 @@ export type BrepViewerMesh = {
 };
 
 export type BrepEvaluatedBody = {
-  /** Brepia feature ID that produced this body. */
+  /** Stable evaluated-body identity. Single bodies keep id === nodeId. */
   id: string;
+  /** Canonical node whose value owns this evaluated body. */
+  nodeId: string;
+  /** Present only for a deterministic member of an instance-set result. */
+  instance?: {
+    index: number;
+    sourceNodeId: string;
+  };
   bounds: BrepBounds;
   viewerMesh?: BrepViewerMesh;
 };
@@ -105,7 +123,9 @@ export type BrepEvaluationSuccess = {
   provider: BrepProviderMetadata;
   projectId: string;
   resultNodeId: string;
+  resultKind: BrepNodeValueKind;
   bodies: BrepEvaluatedBody[];
+  /** Aggregate bounds across every primary result body. */
   bounds: BrepBounds;
   projectObject: BrepEvaluatedProjectObject;
   warnings: string[];
@@ -174,7 +194,14 @@ function resolveScalar(
   value: BrepScalar,
   parameterValues: Readonly<BrepParameterValues>,
 ): number {
-  return typeof value === 'number' ? value : parameterValues[value.parameter];
+  try {
+    return resolveBrepScalar(value, parameterValues);
+  } catch (error) {
+    if (error instanceof BrepScalarEvaluationError) {
+      throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
+    }
+    throw error;
+  }
 }
 
 function resolveVector(
@@ -203,12 +230,6 @@ function cross(
   ];
 }
 
-/**
- * Resolve the kernel-neutral placement using the same published parameter
- * values as geometry evaluation and reject planes that Rhino/Grasshopper could
- * not represent reliably. Axis magnitudes are intentionally preserved; only
- * zero/near-zero and collinear/near-collinear axes are rejected.
- */
 export function resolveBrepProjectPlacement(
   placement: BrepProjectPlacement,
   parameterValues: Readonly<BrepParameterValues>,
@@ -244,7 +265,6 @@ export function resolveBrepProjectPlacement(
   return { origin, xAxis, yAxis, zAxis };
 }
 
-/** Resolve non-kernel project-object data under the exact evaluation values. */
 export function resolveBrepProjectObjectSemantics(
   project: BrepProject,
   parameterValues: Readonly<BrepParameterValues>,
@@ -312,10 +332,7 @@ export function normalizeBrepEvaluationRequest(
 
   const parameterValues: BrepParameterValues = {};
   for (const parameter of project.parameters) {
-    const rawValue = Object.prototype.hasOwnProperty.call(
-      overrides,
-      parameter.id,
-    )
+    const rawValue = Object.prototype.hasOwnProperty.call(overrides, parameter.id)
       ? overrides[parameter.id]
       : parameter.default;
     const normalized = normalizeOverride(rawValue, parameter.id);
@@ -334,6 +351,19 @@ export function normalizeBrepEvaluationRequest(
     parameterValues[parameter.id] = normalized;
   }
 
+  try {
+    validateBrepProjectScalarValues(project, parameterValues);
+    validateBrepLinearPatternSpacingValues(project, parameterValues);
+    validateBrepRectangularPatternSpacingValues(project, parameterValues);
+    validateBrepCircularPatternAngleValues(project, parameterValues);
+    validateBrepExtrudeProfileValues(project, parameterValues);
+    validateBrepRevolveProfileValues(project, parameterValues);
+  } catch (error) {
+    if (error instanceof BrepScalarEvaluationError) {
+      throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
+    }
+    throw error;
+  }
   resolveBrepProjectObjectSemantics(project, parameterValues);
 
   return { project, parameterValues };

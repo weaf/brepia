@@ -12,6 +12,12 @@ import {
   evaluateBrepProject,
 } from '@/server/brepEvaluation';
 import {
+  BrepGenerationPreviewError,
+  BrepGenerationPreviewLifecycle,
+  isRetryableBrepPreviewErrorCode,
+  normalizeBrepGenerationPreviewContext,
+} from '@/server/brepGenerationPreviewLifecycle';
+import {
   BrepEvaluationRequestError,
   normalizeBrepEvaluationRequest,
 } from '@shared/brepProvider';
@@ -59,6 +65,8 @@ export async function readBoundedBrepJson(request: Request): Promise<unknown> {
 export function brepEvaluationErrorResponse(error: unknown) {
   if (error instanceof RangeError)
     return json({ code: 'request_too_large', error: error.message }, 413);
+  if (error instanceof BrepGenerationPreviewError)
+    return json({ code: error.code, error: error.message }, error.httpStatus);
   if (
     error instanceof SyntaxError ||
     error instanceof BrepEvaluationRequestError
@@ -91,14 +99,40 @@ export function brepEvaluationErrorResponse(error: unknown) {
   );
 }
 
+async function settleLinkedPreviewFailure(
+  lifecycle: BrepGenerationPreviewLifecycle | undefined,
+  error: unknown,
+): Promise<void> {
+  if (!lifecycle) return;
+
+  try {
+    if (
+      error instanceof BrepEvaluationError &&
+      isRetryableBrepPreviewErrorCode(error.code)
+    ) {
+      await lifecycle.retryable(error.code);
+      return;
+    }
+
+    await lifecycle.failed(
+      error instanceof BrepEvaluationError
+        ? `brep_${error.code}`
+        : 'brep_preview_status_failed',
+    );
+  } catch (statusError) {
+    console.error('[BRep evaluation] Generation status update failed:', statusError);
+  }
+}
+
 export const Route = createFileRoute('/api/brep/evaluate')({
   server: {
     handlers: {
       GET: methodNotAllowed,
       OPTIONS: preflight,
       POST: async ({ request }) => {
+        let previewLifecycle: BrepGenerationPreviewLifecycle | undefined;
         try {
-          await requireUser(request);
+          const user = await requireUser(request);
           const body = await readBoundedBrepJson(request);
           if (!isRecord(body))
             return json(
@@ -108,14 +142,26 @@ export const Route = createFileRoute('/api/brep/evaluate')({
               },
               400,
             );
+          const previewContext = normalizeBrepGenerationPreviewContext(
+            body.generationContext,
+          );
           const normalized = normalizeBrepEvaluationRequest(body);
+          previewLifecycle = await BrepGenerationPreviewLifecycle.begin({
+            userId: user.id,
+            context: previewContext,
+            project: normalized.project,
+          });
+
           const artifact = await evaluateBrepProject(
             normalized.project,
             normalized.parameterValues,
             request.signal,
           );
+          await previewLifecycle?.preparingViewer();
+          await previewLifecycle?.completed();
           return json(artifact.result);
         } catch (error) {
+          await settleLinkedPreviewFailure(previewLifecycle, error);
           return brepEvaluationErrorResponse(error);
         }
       },

@@ -63,6 +63,40 @@ describe('native BRep AI build tool contract', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts bounded derived scalar expressions instead of synthetic sliders', () => {
+    const input = brepInput();
+    input.project.parameters.push({
+      id: 'wallThickness',
+      label: 'Wall thickness',
+      type: 'number',
+      unit: 'mm',
+      default: 20,
+      min: 5,
+      max: 100,
+      step: 1,
+    });
+    input.project.nodes = [
+      {
+        id: 'body',
+        type: 'box',
+        width: {
+          op: 'sub',
+          args: [
+            { parameter: 'width' },
+            {
+              op: 'mul',
+              args: [{ parameter: 'wallThickness' }, 2],
+            },
+          ],
+        },
+        depth: 600,
+        height: 1800,
+      },
+    ] as never;
+
+    expect(brepAiBuildInputSchema.safeParse(input).success).toBe(true);
+  });
+
   it('rejects unsupported raw topology selectors', () => {
     const input = brepInput();
     input.project.nodes = [
@@ -100,6 +134,21 @@ describe('native BRep AI build tool contract', () => {
     expect(brepAiBuildInputSchema.safeParse(projectWithStep).success).toBe(
       false,
     );
+  });
+
+  it('rejects source-like scalar payloads instead of treating them as expressions', () => {
+    const input = brepInput();
+    input.project.nodes = [
+      {
+        id: 'body',
+        type: 'box',
+        width: { expression: 'width / 2' },
+        depth: 600,
+        height: 1800,
+      },
+    ] as never;
+
+    expect(brepAiBuildInputSchema.safeParse(input).success).toBe(false);
   });
 
   it('fails closed on invalid references and cycles through canonical validation', () => {

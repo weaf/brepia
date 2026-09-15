@@ -1,4 +1,5 @@
 import {
+  brepNodeValueKind,
   normalizeBrepProject,
   type BrepParameterUnit,
   type BrepProject,
@@ -46,7 +47,7 @@ export type BrepGrasshopperBrepOutput = {
   id: 'result' | 'footprint' | 'clearanceEnvelope' | 'maintenanceEnvelope';
   label: string;
   type: 'brep';
-  access: 'item';
+  access: BrepGrasshopperAccess;
   optional: boolean;
   semantic:
     | 'primary-result'
@@ -168,13 +169,16 @@ function numberInput(
   };
 }
 
-function standardOutputs(): BrepGrasshopperOutput[] {
+function standardOutputs(source: BrepProject): BrepGrasshopperOutput[] {
+  const resultNode = source.nodes.find((node) => node.id === source.resultNodeId)!;
+  const resultAccess: BrepGrasshopperAccess =
+    brepNodeValueKind(resultNode) === 'instanceSet' ? 'list' : 'item';
   return [
     {
       id: 'result',
       label: 'Result',
       type: 'brep',
-      access: 'item',
+      access: resultAccess,
       optional: false,
       semantic: 'primary-result',
     },
@@ -265,7 +269,7 @@ function buildContract(
     source,
     interface: {
       inputs,
-      outputs: standardOutputs(),
+      outputs: standardOutputs(source),
     },
     placement: {
       inputId: BREP_GRASSHOPPER_PLACEMENT_INPUT_ID,

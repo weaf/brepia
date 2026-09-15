@@ -32,6 +32,40 @@ export function shouldPollForPendingAssistant(
   });
 }
 
+function hasPersistedBrepSource(messages: Message[]): boolean {
+  return messages.some(
+    (message) =>
+      message.role === 'assistant' &&
+      Array.isArray(message.parts) &&
+      (message.parts as AppUIMessage['parts']).some(
+        (part) => part.type === 'data-brep-project',
+      ),
+  );
+}
+
+/**
+ * A newly routed native-BRep conversation is not corrupt merely because its
+ * first assistant revision has not landed yet. Keep that state explicit so
+ * product surfaces can explain what is happening while the server-side AI turn
+ * continues after a mobile browser has been backgrounded.
+ */
+export function isRecentPendingBrepCreation(
+  conversation: Conversation,
+  messages: Message[],
+): boolean {
+  if (conversation.settings?.parametricSourceKind !== 'brep') return false;
+  if (hasPersistedBrepSource(messages)) return false;
+
+  const latest = messages.at(-1);
+  const createdAt = latest?.created_at ?? conversation.created_at;
+  if (!createdAt) return false;
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) return false;
+  if (Date.now() - createdAtMs >= PENDING_ASSISTANT_MAX_AGE_MS) return false;
+
+  return messages.length === 0 || latest?.role === 'user';
+}
+
 /**
  * Insert a new user message into the conversation. The `update_leaf_trigger`
  * on `public.messages` automatically advances
@@ -149,14 +183,23 @@ export const useMessagesQuery = () => {
     // Mobile browsers may suspend the foreground fetch/SSE connection when
     // Chrome is backgrounded. The server independently consumes/persists the
     // AI stream, so poll while the newest row is still a recent non-terminal
-    // turn: either the user is awaiting the first assistant row, or an
-    // assistant exists but is still at build/tool/streaming intermediate state.
-    // Imported synthetic baselines are terminal by definition and therefore do
-    // not poll. Focus still triggers an immediate refetch after suspension.
-    refetchInterval: (query) =>
-      shouldPollForPendingAssistant(query.state.data)
-        ? PENDING_ASSISTANT_POLL_MS
-        : false,
+    // turn. A fresh native-BRep creation remains visible as its real persisted
+    // user row; the BRep product surface interprets that as an explicit pending
+    // creation instead of hiding it or misclassifying it as corrupt state.
+    refetchInterval: (query) => {
+      if (shouldPollForPendingAssistant(query.state.data)) {
+        return PENDING_ASSISTANT_POLL_MS;
+      }
+      if (
+        isRecentPendingBrepCreation(
+          conversation,
+          query.state.data ?? [],
+        )
+      ) {
+        return PENDING_ASSISTANT_POLL_MS;
+      }
+      return false;
+    },
     queryFn: async () => {
       const { data, error } = await supabase
         .from('messages')

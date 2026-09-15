@@ -119,7 +119,7 @@ describe('BRep project-object authoring', () => {
           },
         ],
       }),
-    ).toThrow(/must reference a parameter with unit mm/i);
+    ).toThrow(/must (?:reference a parameter with|resolve to) unit mm/i);
   });
 
   it('suggests deterministic stable point IDs without mutating the source', () => {

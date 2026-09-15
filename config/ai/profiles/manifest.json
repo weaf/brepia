@@ -20,6 +20,31 @@
       "transport.opencode": "revisions/cadam-split-2026-08-29/transport-opencode.md",
       "transport.codex": "revisions/cadam-split-2026-08-29/transport-codex.md",
       "provider.fal.image_conditioning": "revisions/cadam-split-2026-08-29/provider-fal-image-conditioning.md"
+    },
+    "brepia-standard-c25-2026-09-10": {
+      "parametric": "revisions/brepia-standard-c25-2026-09-10/parametric.md",
+      "parametric.openscad": "revisions/brepia-standard-c25-2026-09-10/parametric-openscad.md",
+      "parametric.brep": "revisions/brepia-standard-c25-2026-09-10/parametric-brep.md",
+      "creative": "revisions/cadam-split-2026-08-29/creative.md",
+      "tool.build_parametric_model": "revisions/cadam-split-2026-08-29/tool-build-parametric-model.md",
+      "tool.build_brep_project": "revisions/brepia-standard-c25-2026-09-10/tool-build-brep-project.md",
+      "tool.answer_user": "revisions/cadam-split-2026-08-29/tool-answer-user.md",
+      "tool.create_mesh": "revisions/cadam-split-2026-08-29/tool-create-mesh.md",
+      "vision.reference": "revisions/cadam-split-2026-08-29/vision-reference.md",
+      "vision.inspection": "revisions/cadam-split-2026-08-29/vision-inspection.md",
+      "conversation.title": "revisions/cadam-split-2026-08-29/conversation-title.md",
+      "suggestions.parametric": "revisions/cadam-split-2026-08-29/suggestions-generative.md",
+      "suggestions.creative": "revisions/cadam-split-2026-08-29/suggestions-creative.md",
+      "context.parametric_attachment": "revisions/cadam-split-2026-08-29/context-parametric-attachment.md",
+      "context.brep_project": "revisions/brepia-standard-c25-2026-09-10/context-brep-project.md",
+      "context.creative_reference_mesh": "revisions/cadam-split-2026-08-29/context-creative-reference-mesh.md",
+      "context.mesh_preferences": "revisions/cadam-split-2026-08-29/context-mesh-preferences.md",
+      "context.parametric_inspection_output": "revisions/cadam-split-2026-08-29/context-parametric-inspection-output.md",
+      "transport.opencode": "revisions/cadam-split-2026-08-29/transport-opencode.md",
+      "transport.codex": "revisions/cadam-split-2026-08-29/transport-codex.md",
+      "transport.opencode_brep": "revisions/brepia-standard-c25-2026-09-10/transport-opencode-brep.md",
+      "transport.codex_brep": "revisions/brepia-standard-c25-2026-09-10/transport-codex-brep.md",
+      "provider.fal.image_conditioning": "revisions/cadam-split-2026-08-29/provider-fal-image-conditioning.md"
     }
   },
   "profiles": [
@@ -40,7 +65,7 @@
       "label": "Standard",
       "description": "Brepia Standard profile.",
       "managedBy": "brepia",
-      "revision": "cadam-split-2026-08-29",
+      "revision": "brepia-standard-c25-2026-09-10",
       "origin": {
         "profile": "cadam",
         "revision": "cadam-split-2026-08-29"

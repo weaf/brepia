@@ -1,14 +1,15 @@
 /**
- * Model Catalog — unified model discovery layer.
+ * Model Catalog — unified Settings-owned model discovery layer.
  *
- * Merges model sources into a single effective catalog for the
- * parametric picker and settings UI:
+ * The catalog contains only models that are discoverable/configurable through
+ * AI Settings:
  *
- *   1. Built-in hosted parametric models (PARAMETRIC_MODELS from src/lib/utils.ts)
- *   2. Dynamic Local OpenAI / llama-swap models from GET /v1/models
- *   3. Dynamic OpenCode agent models (fetched from opencode serve HTTP API/CLI)
- *   4. Configured Codex CLI agent models
- *   5. Custom provider models (from the ai_provider_models DB table)
+ *   1. Dynamic Local OpenAI / llama-swap models from GET /v1/models
+ *   2. Dynamic OpenCode agent models (opt-in through Settings)
+ *   3. Configured Codex CLI agent models
+ *   4. Custom provider models from ai_provider_models
+ *
+ * There is intentionally no compile-time hosted-model catalog or default.
  */
 
 import {
@@ -22,13 +23,10 @@ import { opencodeModels } from './opencode';
 import { configuredCodexModels } from './cliAgents';
 import type { ModelConfig } from '../../src/types/misc';
 import { getPreferences } from './aiSettings';
-import {
-  loadBuiltinProviderRuntimeOverrides,
-  type BuiltinProviderDriver,
-} from './builtinProviderOverrides';
 import { discoverLocalModels } from './localModels';
-import { PARAMETRIC_MODELS } from '../../src/lib/utils';
 
+// `builtin` remains in the public type temporarily for compatibility with
+// older Settings UI filters/tests, but this module never emits builtin entries.
 export type CatalogEntrySource = 'builtin' | 'local' | 'opencode' | 'custom';
 
 export interface CatalogEntry extends ModelConfig {
@@ -42,49 +40,9 @@ export function isCustomCatalogEntry(entry: CatalogEntry): boolean {
   return entry.source === 'custom';
 }
 
-function toBuiltinCatalogEntry(m: ModelConfig): CatalogEntry {
-  return {
-    ...m,
-    source: 'builtin' as const,
-    enabled: true,
-    available: true,
-  };
-}
-
+/** @deprecated Built-in LLM models were removed; use Settings sources only. */
 export function getBuiltInModels(): CatalogEntry[] {
-  return PARAMETRIC_MODELS.map(toBuiltinCatalogEntry);
-}
-
-function builtinDriverForModelId(modelId: string): BuiltinProviderDriver {
-  if (modelId.startsWith('anthropic/')) return 'anthropic';
-  if (modelId.startsWith('google/')) return 'google';
-  return 'openrouter';
-}
-
-async function applyBuiltinProviderAvailability(
-  models: CatalogEntry[],
-  user: User | null,
-): Promise<CatalogEntry[]> {
-  if (!user) return models;
-
-  try {
-    const overrides = await loadBuiltinProviderRuntimeOverrides(user.id);
-    return models.map((entry) => {
-      const driver = builtinDriverForModelId(entry.id);
-      if (overrides[driver]?.enabled !== false) return entry;
-      return {
-        ...entry,
-        enabled: false,
-        available: false,
-        unavailableReason: `${entry.provider ?? driver} is disabled in AI Settings`,
-      };
-    });
-  } catch {
-    // Catalog discovery should remain usable if provider preference storage is
-    // temporarily unavailable. The actual inference path still fails closed
-    // when it cannot load provider overrides.
-    return models;
-  }
+  return [];
 }
 
 export async function getLocalModels(
@@ -154,9 +112,9 @@ export async function getOpencodeModels(): Promise<CatalogEntry[]> {
     const models = await opencodeModels();
     openCodeEntries = models
       .map(toOpencodeCatalogEntry)
-      .filter((e): e is CatalogEntry => e !== undefined);
+      .filter((entry): entry is CatalogEntry => entry !== undefined);
   } catch {
-    // OpenCode server/CLI unreachable — Codex may still be available.
+    // OpenCode server/CLI unreachable — configured Codex may still be available.
   }
 
   const codexEntries = configuredCodexModels().map(toCodexCatalogEntry);
@@ -208,8 +166,9 @@ export async function getCustomProviderModels(
     const results: CatalogEntry[] = [];
 
     for (const provider of providers) {
-      // Reserved builtin-* rows are configuration overlays for the canonical
-      // built-in catalog, not independent custom providers/models.
+      // Reserved builtin-* rows are credential/runtime overlays only. They do
+      // not manufacture model identities; models must exist explicitly in
+      // Settings as normal provider-model rows.
       if (provider.slug.startsWith('builtin-')) continue;
       const models = await getProviderModels(provider.id, user.id);
       for (const model of models) {
@@ -235,9 +194,7 @@ function mergeByProvider(
     const provider = entry.provider ?? 'Unknown';
     const models = customByProvider.get(provider) ?? new Map();
     const parsed = parseCustomProviderModelId(entry.id);
-    if (parsed) {
-      models.set(parsed.modelId, entry);
-    }
+    if (parsed) models.set(parsed.modelId, entry);
     customByProvider.set(provider, models);
   }
 
@@ -256,22 +213,20 @@ function mergeByProvider(
   const result: CatalogEntry[] = [];
 
   for (const { provider, nativeId } of ordering) {
-    const opencodeModels = opencodeByProvider.get(provider);
+    const opencodeModelsForProvider = opencodeByProvider.get(provider);
     const customModels = customByProvider.get(provider);
 
     if (customModels?.has(nativeId)) {
       result.push(customModels.get(nativeId)!);
     } else {
-      result.push(opencodeModels!.get(nativeId)!);
+      result.push(opencodeModelsForProvider!.get(nativeId)!);
     }
   }
 
   for (const [provider, customModels] of customByProvider) {
     for (const [nativeId, entry] of customModels) {
-      const opencodeModels = opencodeByProvider.get(provider);
-      if (!opencodeModels?.has(nativeId)) {
-        result.push(entry);
-      }
+      const opencodeModelsForProvider = opencodeByProvider.get(provider);
+      if (!opencodeModelsForProvider?.has(nativeId)) result.push(entry);
     }
   }
 
@@ -281,31 +236,20 @@ function mergeByProvider(
 export async function buildCatalog(
   user: User | null = null,
 ): Promise<CatalogEntry[]> {
-  const builtin = await applyBuiltinProviderAvailability(
-    getBuiltInModels(),
-    user,
-  );
   const local = await getLocalModels(user);
   const opencode = await getOpencodeModels();
   const custom = await getCustomProviderModels(user);
 
-  const occupiedIds = new Set([
-    ...builtin.map((m) => m.id),
-    ...local.map((m) => m.id),
-  ]);
-
-  const dedupedOpencode = opencode.filter((m) => !occupiedIds.has(m.id));
+  const occupiedIds = new Set(local.map((model) => model.id));
+  const dedupedOpencode = opencode.filter((model) => !occupiedIds.has(model.id));
   for (const entry of dedupedOpencode) occupiedIds.add(entry.id);
-  const dedupedCustom = custom.filter((m) => !occupiedIds.has(m.id));
+  const dedupedCustom = custom.filter((model) => !occupiedIds.has(model.id));
 
-  const mergedOpencode = mergeByProvider(dedupedOpencode, dedupedCustom);
-  const mergedCustom = mergedOpencode.filter((e) => e.source === 'custom');
-
+  const merged = mergeByProvider(dedupedOpencode, dedupedCustom);
   return [
-    ...builtin,
     ...local,
-    ...mergedOpencode.filter((e) => e.source === 'opencode'),
-    ...mergedCustom,
+    ...merged.filter((entry) => entry.source === 'opencode'),
+    ...merged.filter((entry) => entry.source === 'custom'),
   ];
 }
 
@@ -325,9 +269,6 @@ export function filterSelectableCatalog(
         return false;
       }
     } else if (hiddenIds.has(entry.id)) {
-      // Keep the low-level helper backwards compatible for callers that do not
-      // yet provide the explicit OpenCode allowlist. User-facing catalog paths
-      // always pass the third argument and therefore use opt-in semantics.
       return false;
     }
     if (!entry.enabled) return false;
@@ -362,6 +303,7 @@ export async function buildSelectableCatalog(
   }
 }
 
-export function getDefaultModel(): string {
-  return PARAMETRIC_MODELS[0].id;
+/** @deprecated There is no compile-time default model. */
+export function getDefaultModel(): undefined {
+  return undefined;
 }

@@ -17,6 +17,7 @@ import {
 import { createBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import { renderInstructionTemplate } from '@shared/aiInstructionCatalog';
 import { serializeBrepAiProjectContext } from '@shared/brepAiContext';
+import { boundBrepRepairDiagnostic } from './opencodeAgentResult';
 
 const DEFAULT_BREP_CREATION_CONTEXT = `This turn was explicitly routed by the product to create a new native BRep project. No previous BRep project exists. Ignore OpenSCAD-specific creation instructions for this turn and return one complete canonical native BRep project through build_brep_project. Do not fabricate previous-project state, emit OpenSCAD/Python/build123d source, STEP, mesh/tessellation authority, filesystem paths, or raw topology indices. Use only the canonical BRep schema and supported semantic selectors.`;
 
@@ -29,6 +30,16 @@ export type FinalizedBrepAiAssistant = {
   artifact?: BrepProjectArtifactData;
   diff?: BrepProjectStructuralDiff;
 };
+
+export class BrepAiFinalizationError extends Error {
+  constructor(
+    public readonly code: 'missing_creation_artifact',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'BrepAiFinalizationError';
+  }
+}
 
 export function parametricBuildToolName(
   activeBrepSource: BrepAiSourceRevision | undefined,
@@ -103,6 +114,26 @@ function finalSuccessfulBuildInput(
   return undefined;
 }
 
+function finalBrepFailureDiagnostic(
+  parts: AppUIMessage['parts'],
+): string | undefined {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (
+      part.type === 'tool-build_brep_project' &&
+      part.state === 'output-error' &&
+      typeof part.errorText === 'string' &&
+      part.errorText.trim()
+    ) {
+      return boundBrepRepairDiagnostic(part.errorText);
+    }
+    if (part.type === 'text' && part.text.trim()) {
+      return boundBrepRepairDiagnostic(part.text);
+    }
+  }
+  return undefined;
+}
+
 /**
  * Revalidate the final successful BRep candidate against the exact source
  * snapshot used for generation, or as standalone canonical creation when the
@@ -124,7 +155,21 @@ export function finalizeBrepAiAssistantParts({
   if (!activeBrepSource) return { parts };
 
   const finalInput = acceptedBuildInput ?? finalSuccessfulBuildInput(parts);
-  if (!finalInput) return { parts };
+  if (!finalInput) {
+    if (isBrepAiCreationRoute(activeBrepSource)) {
+      const diagnostic = finalBrepFailureDiagnostic(parts);
+      throw new BrepAiFinalizationError(
+        'missing_creation_artifact',
+        [
+          'Native BRep creation finished without a canonical project artifact.',
+          diagnostic ? `Final diagnostic: ${diagnostic}` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+    }
+    return { parts };
+  }
 
   let project: ReturnType<typeof validateBrepAiCreation>['project'];
   let diff: BrepProjectStructuralDiff | undefined;

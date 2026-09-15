@@ -6,10 +6,16 @@ const graphSource = fs.readFileSync(
   new URL('../src/components/brep/BrepDependencyGraph.tsx', import.meta.url),
   'utf8',
 );
-const featureEditorSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
-  'utf8',
-);
+const featureEditorSource = [
+  fs.readFileSync(
+    new URL('../src/components/brep/BrepFeatureEditor.tsx', import.meta.url),
+    'utf8',
+  ),
+  fs.readFileSync(
+    new URL('../src/components/brep/BrepFeatureEditorLegacy.tsx', import.meta.url),
+    'utf8',
+  ),
+].join('\n');
 const workspaceSource = fs.readFileSync(
   new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
   'utf8',
@@ -44,15 +50,19 @@ describe('BRep graph/editor UI boundary', () => {
     );
   });
 
-  it('moves the graph into the main Model Graph workspace instead of constraining it to the Parameters panel', () => {
+  it('moves the graph into the main Model Graph workspace and carries historical read-only state through the same shell', () => {
     assert.match(workspaceSource, />\s*Model\s*</);
     assert.match(workspaceSource, />\s*Graph\s*</);
     assert.match(workspaceSource, /BREP_GRAPH_WORKSPACE_TARGET_ID/);
+    assert.match(workspaceSource, /readOnly = false/);
     assert.match(projectViewSource, /<BrepFeatureWorkspaceProvider>/);
-    assert.match(projectViewSource, /previewSlot=\{<BrepProjectWorkspacePanel \/>\}/);
     assert.match(
       projectViewSource,
-      /mobilePreviewSlot=\{<BrepProjectWorkspacePanel isMobile \/>\}/,
+      /previewSlot=\{<BrepProjectWorkspacePanel readOnly=\{viewingHistorical\} \/>\}/,
+    );
+    assert.match(
+      projectViewSource,
+      /<BrepProjectWorkspacePanel isMobile readOnly=\{viewingHistorical\} \/>/,
     );
 
     assert.match(featureEditorSource, /createPortal\(graph, graphTarget\)/);

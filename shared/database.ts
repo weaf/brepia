@@ -219,6 +219,83 @@ export type Database = {
         };
         Relationships: [];
       };
+      generation_runs: {
+        Row: {
+          actual_model_id: string | null;
+          completed_at: string | null;
+          conversation_id: string;
+          created_at: string;
+          detail: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          execution_mode: string | null;
+          id: string;
+          kind: string;
+          phase: string;
+          request_message_id: string;
+          requested_model_id: string;
+          response_message_id: string | null;
+          sequence: number;
+          started_at: string | null;
+          status: string;
+          transport_kind: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          actual_model_id?: string | null;
+          completed_at?: string | null;
+          conversation_id: string;
+          created_at?: string;
+          detail?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          execution_mode?: string | null;
+          id?: string;
+          kind: string;
+          phase?: string;
+          request_message_id: string;
+          requested_model_id: string;
+          response_message_id?: string | null;
+          sequence?: number;
+          started_at?: string | null;
+          status?: string;
+          transport_kind?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          actual_model_id?: string | null;
+          completed_at?: string | null;
+          conversation_id?: string;
+          created_at?: string;
+          detail?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          execution_mode?: string | null;
+          id?: string;
+          kind?: string;
+          phase?: string;
+          request_message_id?: string;
+          requested_model_id?: string;
+          response_message_id?: string | null;
+          sequence?: number;
+          started_at?: string | null;
+          status?: string;
+          transport_kind?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'generation_runs_conversation_id_fkey';
+            columns: ['conversation_id'];
+            isOneToOne: false;
+            referencedRelation: 'conversations';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       images: {
         Row: {
           conversation_id: string;

@@ -2,27 +2,38 @@ import {
   normalizeBrepProject,
   type BrepNode,
   type BrepParameterUnit,
+  type BrepProfile,
+  type BrepProfileLoop,
   type BrepProject,
   type BrepProjectMetadata,
   type BrepProjectObjectDefinition,
   type BrepProjectObjectPointKind,
   type BrepProjectPlacement,
   type BrepPublishedNumberParameter,
-  type BrepScalar,
   type BrepVector3,
 } from './brepProject.ts';
 import { resolveBrepProjectPlacement } from './brepProvider.ts';
+import { brepScalarReferencesParameter } from './brepScalar.ts';
 
 export function brepNodeDependencies(node: BrepNode): string[] {
   switch (node.type) {
     case 'box':
     case 'cylinder':
+    case 'extrude':
+    case 'revolve':
       return [];
     case 'transform':
+    case 'mirror':
+    case 'linearPattern':
+    case 'rectangularPattern':
+    case 'circularPattern':
     case 'fillet':
       return [node.input];
     case 'subtract':
       return [node.base, ...node.tools];
+    case 'union':
+    case 'intersect':
+      return node.inputs;
   }
 }
 
@@ -85,13 +96,6 @@ export function suggestBrepProjectObjectPointId(
   throw new Error(`Could not suggest a unique BRep ${kind} point ID.`);
 }
 
-function scalarReferencesParameter(
-  scalar: BrepScalar,
-  parameterId: string,
-): boolean {
-  return typeof scalar !== 'number' && scalar.parameter === parameterId;
-}
-
 function appendVectorParameterUsages(
   usages: string[],
   vector: BrepVector3 | undefined,
@@ -100,18 +104,67 @@ function appendVectorParameterUsages(
 ): void {
   if (!vector) return;
   vector.forEach((scalar, index) => {
-    if (scalarReferencesParameter(scalar, parameterId)) {
+    if (brepScalarReferencesParameter(scalar, parameterId)) {
       usages.push(`${label}[${index}]`);
     }
   });
 }
 
-/**
- * Return human-readable canonical fields that currently reference a published
- * parameter. Project definition and later project-object authoring use this to
- * make destructive changes explicit rather than relying on missing-reference
- * validation after the fact.
- */
+function appendProfileLoopParameterUsages(
+  usages: string[],
+  loop: BrepProfileLoop,
+  parameterId: string,
+  label: string,
+): void {
+  switch (loop.type) {
+    case 'rectangle':
+      if (brepScalarReferencesParameter(loop.width, parameterId))
+        usages.push(`${label}.width`);
+      if (brepScalarReferencesParameter(loop.height, parameterId))
+        usages.push(`${label}.height`);
+      break;
+    case 'circle':
+      if (brepScalarReferencesParameter(loop.radius, parameterId))
+        usages.push(`${label}.radius`);
+      break;
+    case 'closedPolyline':
+      loop.points.forEach((point, index) => {
+        if (brepScalarReferencesParameter(point.u, parameterId))
+          usages.push(`${label}.points[${index}].u`);
+        if (brepScalarReferencesParameter(point.v, parameterId))
+          usages.push(`${label}.points[${index}].v`);
+      });
+      break;
+  }
+}
+
+function appendProfileParameterUsages(
+  usages: string[],
+  profile: BrepProfile,
+  parameterId: string,
+  nodeId: string,
+): void {
+  appendProfileLoopParameterUsages(
+    usages,
+    profile,
+    parameterId,
+    `${nodeId}.profile`,
+  );
+  profile.holes?.forEach((hole, index) => {
+    const label = `${nodeId}.profile.holes[${index}]`;
+    if (brepScalarReferencesParameter(hole.offsetU, parameterId))
+      usages.push(`${label}.offsetU`);
+    if (brepScalarReferencesParameter(hole.offsetV, parameterId))
+      usages.push(`${label}.offsetV`);
+    appendProfileLoopParameterUsages(
+      usages,
+      hole.loop,
+      parameterId,
+      `${label}.loop`,
+    );
+  });
+}
+
 export function brepProjectParameterUsages(
   project: BrepProject,
   parameterId: string,
@@ -155,18 +208,26 @@ export function brepProjectParameterUsages(
   for (const node of project.nodes) {
     switch (node.type) {
       case 'box':
-        if (scalarReferencesParameter(node.width, parameterId))
+        if (brepScalarReferencesParameter(node.width, parameterId))
           usages.push(`${node.id}.width`);
-        if (scalarReferencesParameter(node.depth, parameterId))
+        if (brepScalarReferencesParameter(node.depth, parameterId))
           usages.push(`${node.id}.depth`);
-        if (scalarReferencesParameter(node.height, parameterId))
+        if (brepScalarReferencesParameter(node.height, parameterId))
           usages.push(`${node.id}.height`);
         break;
       case 'cylinder':
-        if (scalarReferencesParameter(node.radius, parameterId))
+        if (brepScalarReferencesParameter(node.radius, parameterId))
           usages.push(`${node.id}.radius`);
-        if (scalarReferencesParameter(node.height, parameterId))
+        if (brepScalarReferencesParameter(node.height, parameterId))
           usages.push(`${node.id}.height`);
+        break;
+      case 'extrude':
+        if (brepScalarReferencesParameter(node.depth, parameterId))
+          usages.push(`${node.id}.depth`);
+        appendProfileParameterUsages(usages, node.profile, parameterId, node.id);
+        break;
+      case 'revolve':
+        appendProfileParameterUsages(usages, node.profile, parameterId, node.id);
         break;
       case 'transform':
         appendVectorParameterUsages(
@@ -182,11 +243,37 @@ export function brepProjectParameterUsages(
           `${node.id}.rotateDeg`,
         );
         break;
+      case 'mirror':
+        if (brepScalarReferencesParameter(node.offset, parameterId))
+          usages.push(`${node.id}.offset`);
+        break;
+      case 'linearPattern':
+        if (brepScalarReferencesParameter(node.spacing, parameterId))
+          usages.push(`${node.id}.spacing`);
+        break;
+      case 'rectangularPattern':
+        if (brepScalarReferencesParameter(node.spacingA, parameterId))
+          usages.push(`${node.id}.spacingA`);
+        if (brepScalarReferencesParameter(node.spacingB, parameterId))
+          usages.push(`${node.id}.spacingB`);
+        break;
+      case 'circularPattern':
+        appendVectorParameterUsages(
+          usages,
+          node.center,
+          parameterId,
+          `${node.id}.center`,
+        );
+        if (brepScalarReferencesParameter(node.angleStepDeg, parameterId))
+          usages.push(`${node.id}.angleStepDeg`);
+        break;
       case 'fillet':
-        if (scalarReferencesParameter(node.radius, parameterId))
+        if (brepScalarReferencesParameter(node.radius, parameterId))
           usages.push(`${node.id}.radius`);
         break;
       case 'subtract':
+      case 'union':
+      case 'intersect':
         break;
     }
   }
@@ -201,12 +288,6 @@ export type BrepProjectDefinition = {
   parameters: BrepPublishedNumberParameter[];
 };
 
-/**
- * Replace only the editable project-definition fields while preserving project
- * identity, feature DAG and result authority. Canonical normalization remains
- * authoritative for parameter/reference/schema validation, and the default
- * parameter set must also resolve to a usable placement plane before save.
- */
 export function replaceBrepProjectDefinition(
   project: BrepProject,
   definition: BrepProjectDefinition,
@@ -225,12 +306,6 @@ export function replaceBrepProjectDefinition(
   return nextProject;
 }
 
-/**
- * Replace only semantic project-object outputs while preserving project
- * identity, feature DAG, result authority, placement, metadata and published
- * parameter definitions. The canonical normalizer validates every role and
- * scalar reference and removes an empty projectObject block.
- */
 export function replaceBrepProjectObjectDefinition(
   project: BrepProject,
   projectObject?: BrepProjectObjectDefinition,
@@ -255,12 +330,6 @@ export function brepParametersByUnit(
   return parameters.filter((parameter) => parameter.unit === unit);
 }
 
-/**
- * Phase 4A edits the fields of an existing semantic feature while keeping its
- * stable identity and node type. The complete project is normalized again so
- * reference, parameter-unit and DAG validation stays centralized in the
- * canonical BrepProject contract.
- */
 export function replaceExistingBrepProjectNode(
   project: BrepProject,
   nodeId: string,
@@ -285,7 +354,6 @@ export function replaceExistingBrepProjectNode(
   });
 }
 
-/** Add one new semantic node while preserving every existing stable node ID. */
 export function addBrepProjectNode(
   project: BrepProject,
   node: BrepNode,
@@ -299,7 +367,6 @@ export function addBrepProjectNode(
   });
 }
 
-/** Select an existing semantic node as the canonical project result. */
 export function setBrepProjectResultNode(
   project: BrepProject,
   nodeId: string,
@@ -311,11 +378,6 @@ export function setBrepProjectResultNode(
   return normalizeBrepProject({ ...project, resultNodeId: nodeId });
 }
 
-/**
- * Delete exactly one unreferenced, non-result node. Structural authoring never
- * performs implicit cascading rewrites; consumers, project-object roles and
- * result authority must be changed explicitly before deletion is permitted.
- */
 export function deleteBrepProjectNode(
   project: BrepProject,
   nodeId: string,

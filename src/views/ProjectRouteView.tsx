@@ -5,8 +5,9 @@ import { ActivityIndicator } from '@/components/brand';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { getBrepProjectArtifact } from '@shared/brepProjectArtifact';
+import type { Conversation } from '@shared/types';
 
-/** Routes a persisted project by its source artifact, not its filename or title. */
+/** Routes a persisted project by its explicit source kind or source artifact. */
 export default function ProjectRouteView() {
   const { id } = useParams({ from: '/_layout/_auth/project/$id' });
   const { user } = useAuth();
@@ -17,11 +18,19 @@ export default function ProjectRouteView() {
     queryFn: async () => {
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
-        .select('current_message_leaf_id')
+        .select('current_message_leaf_id, settings')
         .eq('id', id)
         .eq('user_id', user?.id ?? '')
-        .single();
+        .single()
+        .overrideTypes<Pick<Conversation, 'current_message_leaf_id' | 'settings'>>();
       if (conversationError) throw conversationError;
+
+      // A freshly created native BRep has a persisted user leaf before the
+      // first canonical assistant artifact exists. Route by the explicit
+      // product source kind so pending creations open their BRep progress view
+      // instead of falling through to the OpenSCAD editor.
+      if (conversation.settings?.parametricSourceKind === 'brep') return true;
+
       if (!conversation.current_message_leaf_id) return false;
       const { data: message, error: messageError } = await supabase
         .from('messages')
@@ -53,7 +62,7 @@ export default function ProjectRouteView() {
   }
   return (
     <div className="flex h-full items-center justify-center">
-      <ActivityIndicator label="Opening project" />
+      <ActivityIndicator label="Opening project" showLabel />
     </div>
   );
 }
