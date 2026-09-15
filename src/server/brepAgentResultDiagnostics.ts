@@ -3,7 +3,6 @@ import {
   boundBrepRepairDiagnostic,
   buildExternalBrepRepairPrompt,
   externalBrepResultRepairDiagnostic,
-  MAX_BREP_REPAIR_DIAGNOSTIC_CHARS,
   parseStructuredAgentResult,
   type AgentResult,
 } from './opencodeAgentResult';
