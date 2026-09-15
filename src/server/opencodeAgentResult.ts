@@ -24,6 +24,14 @@ export type AgentResult<TProject extends AgentProject = OpenScadProject> = {
   message: string;
 };
 
+export const MAX_BREP_REPAIR_DIAGNOSTIC_CHARS = 12_000;
+
+export function boundBrepRepairDiagnostic(diagnostic: string): string {
+  const trimmed = diagnostic.trim();
+  if (trimmed.length <= MAX_BREP_REPAIR_DIAGNOSTIC_CHARS) return trimmed;
+  return `${trimmed.slice(0, MAX_BREP_REPAIR_DIAGNOSTIC_CHARS)}\n… diagnostics truncated …`;
+}
+
 /**
  * Canonical machine-readable contract between external agents and Brepia.
  * Behavioral and environment instructions live in editable transport profiles;
@@ -316,21 +324,25 @@ export function externalBrepResultRepairDiagnostic(
   { requireProject = false }: { requireProject?: boolean } = {},
 ): string | undefined {
   const match = structuredAgentResultMatches(text, 'brep').at(-1);
+  let diagnostic: string | undefined;
   if (!match) {
-    return requireProject
+    diagnostic = requireProject
       ? 'Native BRep creation requires one structured JSON result containing a complete `project` object.'
       : undefined;
-  }
-  if (match.result.project) return undefined;
-  if (match.projectSupplied) {
-    return (
+  } else if (match.result.project) {
+    diagnostic = undefined;
+  } else if (match.projectSupplied) {
+    diagnostic =
       match.projectDiagnostic ??
-      'The supplied native BRep `project` object is invalid.'
-    );
+      'The supplied native BRep `project` object is invalid.';
+  } else {
+    diagnostic = requireProject
+      ? 'Native BRep creation requires the structured result to contain a complete `project` object.'
+      : undefined;
   }
-  return requireProject
-    ? 'Native BRep creation requires the structured result to contain a complete `project` object.'
-    : undefined;
+  return diagnostic === undefined
+    ? undefined
+    : boundBrepRepairDiagnostic(diagnostic);
 }
 
 export function buildExternalBrepRepairPrompt({
@@ -347,7 +359,7 @@ export function buildExternalBrepRepairPrompt({
     `attempt: ${attempt}`,
     `maxAttempts: ${maxAttempts}`,
     '<canonical_diagnostics>',
-    diagnostic,
+    boundBrepRepairDiagnostic(diagnostic),
     '</canonical_diagnostics>',
     'Repair the result without changing the requested design intent.',
     'Return ONLY one corrected complete JSON object using the native BRep final-result contract.',
