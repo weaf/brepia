@@ -91,6 +91,16 @@ describe('Native BRep structured-result diagnostics', () => {
     assert.match(prompt, /<canonical_diagnostics>/);
     assert.match(prompt, /… diagnostics truncated …/);
     assert.doesNotMatch(prompt, new RegExp(sentinel));
-    assert.ok(prompt.length < diagnostic.length);
+
+    const canonicalDiagnostics =
+      /<canonical_diagnostics>\n([\s\S]*?)\n<\/canonical_diagnostics>/.exec(
+        prompt,
+      )?.[1];
+    assert.ok(canonicalDiagnostics);
+    assert.ok(
+      canonicalDiagnostics.length <=
+        MAX_BREP_REPAIR_DIAGNOSTIC_CHARS +
+          '\n… diagnostics truncated …'.length,
+    );
   });
 });
