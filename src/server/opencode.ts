@@ -31,6 +31,10 @@ import {
   type AgentParametricSourceKind,
 } from './opencodeAgentResult';
 import {
+  boundedExternalBrepResultRepairDiagnostic,
+  buildBoundedExternalBrepRepairPrompt,
+} from './brepAgentResultDiagnostics';
+import {
   openCodeAgentForSourceKind,
   type OpenCodeAgentName,
 } from './opencodeAgentRouting';
@@ -1477,9 +1481,37 @@ async function* streamParts(
         runtime.sourceKind,
       );
       const candidate = parseAgentResult(resultText, runtime.sourceKind);
-      if (!candidate.project) break;
 
-      if (runtime.sourceKind === 'brep') break;
+      if (runtime.sourceKind === 'brep') {
+        const diagnostic = boundedExternalBrepResultRepairDiagnostic(resultText, {
+          requireProject: !runtime.currentBrepProject,
+        });
+        if (!diagnostic) break;
+
+        validationAttempts += 1;
+        if (validationAttempts >= runtime.validationAttempts) {
+          state.totalText = JSON.stringify({
+            message: `Native BRep validation failed after ${runtime.validationAttempts} attempts: ${diagnostic}`,
+          });
+          break;
+        }
+
+        const repairPrompt = buildBoundedExternalBrepRepairPrompt({
+          diagnostic,
+          attempt: validationAttempts,
+          maxAttempts: runtime.validationAttempts,
+        });
+        const repairSeq = await submitOpenCodePrompt(
+          apiUrl,
+          sessionId,
+          repairPrompt,
+          ac.signal,
+        );
+        state = makeState(repairSeq ?? state.cursor);
+        continue;
+      }
+
+      if (!candidate.project) break;
 
       let candidateProject = candidate.project as OpenScadProject;
       let reconciliationDiagnostics: string | null = null;
