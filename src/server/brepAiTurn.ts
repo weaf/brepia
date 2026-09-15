@@ -30,6 +30,16 @@ export type FinalizedBrepAiAssistant = {
   diff?: BrepProjectStructuralDiff;
 };
 
+export class BrepAiFinalizationError extends Error {
+  constructor(
+    public readonly code: 'missing_creation_artifact',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'BrepAiFinalizationError';
+  }
+}
+
 export function parametricBuildToolName(
   activeBrepSource: BrepAiSourceRevision | undefined,
 ): ParametricBuildToolName {
@@ -124,7 +134,15 @@ export function finalizeBrepAiAssistantParts({
   if (!activeBrepSource) return { parts };
 
   const finalInput = acceptedBuildInput ?? finalSuccessfulBuildInput(parts);
-  if (!finalInput) return { parts };
+  if (!finalInput) {
+    if (isBrepAiCreationRoute(activeBrepSource)) {
+      throw new BrepAiFinalizationError(
+        'missing_creation_artifact',
+        'Native BRep creation finished without a canonical project artifact.',
+      );
+    }
+    return { parts };
+  }
 
   let project: ReturnType<typeof validateBrepAiCreation>['project'];
   let diff: BrepProjectStructuralDiff | undefined;
