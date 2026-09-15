@@ -1,12 +1,17 @@
 import type { BrepProject } from '@shared/brepProject';
 import {
+  boundBrepRepairDiagnostic,
   buildExternalBrepRepairPrompt,
   externalBrepResultRepairDiagnostic,
+  MAX_BREP_REPAIR_DIAGNOSTIC_CHARS,
   parseStructuredAgentResult,
   type AgentResult,
 } from './opencodeAgentResult';
 
-export const MAX_BREP_REPAIR_DIAGNOSTIC_CHARS = 12_000;
+export {
+  boundBrepRepairDiagnostic,
+  MAX_BREP_REPAIR_DIAGNOSTIC_CHARS,
+} from './opencodeAgentResult';
 
 export type StructuredBrepAgentResultInspection =
   | { kind: 'missing-envelope' }
@@ -17,12 +22,6 @@ export type StructuredBrepAgentResultInspection =
       diagnostic: string;
     }
   | { kind: 'valid-project'; result: AgentResult<BrepProject> };
-
-export function boundBrepRepairDiagnostic(diagnostic: string): string {
-  const trimmed = diagnostic.trim();
-  if (trimmed.length <= MAX_BREP_REPAIR_DIAGNOSTIC_CHARS) return trimmed;
-  return `${trimmed.slice(0, MAX_BREP_REPAIR_DIAGNOSTIC_CHARS)}\n… diagnostics truncated …`;
-}
 
 export function inspectStructuredBrepAgentResult(
   text: string,
