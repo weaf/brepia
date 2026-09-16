@@ -57,10 +57,10 @@ import {
 } from './chatToolPersistence';
 import { brepParametricTools } from './brepAiTools';
 import {
-  finalizeBrepAiAssistantParts,
   parametricBuildToolName,
   withBrepProjectSystemContext,
 } from './brepAiTurn';
+import { finalizeBrepAiAssistantPartsForRun } from './brepAiFinalizationLifecycle';
 import {
   persistBrepAiRevisionAtomically,
   type BrepAiRpcClient,
@@ -1685,10 +1685,11 @@ export async function handleAiChatRequest(req: Request) {
                     finalizeStreamingParts(responseMessage.parts),
                   )
                 : finalizeStreamingParts(responseMessage.parts);
-            const brepFinalized = finalizeBrepAiAssistantParts({
+            const brepFinalized = await finalizeBrepAiAssistantPartsForRun({
               parts: baseFinalizedParts,
               activeBrepSource,
               acceptedBuildInput: acceptedBrepBuildInput,
+              generationRun,
             });
             const finalizedParts = brepFinalized.parts;
 
