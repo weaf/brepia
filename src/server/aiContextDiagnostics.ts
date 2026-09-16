@@ -13,6 +13,11 @@ const BASE64_CHARS_PER_TOKEN = 2;
 const MIN_SAFETY_MARGIN_TOKENS = 8192;
 const MAX_SAFETY_MARGIN_TOKENS = 12288;
 const SAFETY_MARGIN_CONTEXT_FRACTION = 1 / 16;
+const LOCAL_MODEL_PREFIX = 'local/';
+const LOCAL_OPENCODE_MODEL_PREFIXES = [
+  'agent/opencode/llama-swap/',
+  'opencode/llama-swap/',
+] as const;
 
 export type AiModelBudgetMetadata = {
   contextLimit: number | null;
@@ -76,6 +81,7 @@ export type AiContextDiagnostics = {
   };
   total: {
     estimatedInputTokens: number;
+    estimatedInputTokensExcludingProviderToolSchemas: number;
   };
   budget: {
     contextWindowTokens: number | null;
@@ -326,19 +332,40 @@ export function deriveContextSafetyMargin(
   );
 }
 
+/**
+ * Map only Brepia model IDs that are known to address the configured local
+ * llama-swap runtime onto the persisted local-model metadata key. Provider
+ * aliases are explicit; context limits are never inferred from model names.
+ */
+export function localModelMetadataKeyForAiModelId(
+  modelId: string,
+): string | undefined {
+  if (modelId.startsWith(LOCAL_MODEL_PREFIX)) {
+    const metadataKey = modelId.slice(LOCAL_MODEL_PREFIX.length);
+    return metadataKey || undefined;
+  }
+
+  for (const prefix of LOCAL_OPENCODE_MODEL_PREFIXES) {
+    if (modelId.startsWith(prefix)) {
+      const metadataKey = modelId.slice(prefix.length);
+      return metadataKey || undefined;
+    }
+  }
+
+  return undefined;
+}
+
 export async function resolveAiModelBudgetMetadata(
   userId: string,
   modelId: string,
 ): Promise<AiModelBudgetMetadata> {
-  if (!modelId.startsWith('local/')) {
+  const metadataKey = localModelMetadataKeyForAiModelId(modelId);
+  if (!metadataKey) {
     return { contextLimit: null, outputLimit: null, source: 'unknown' };
   }
 
   try {
-    const metadata = await getLocalModelMetadataById(
-      userId,
-      modelId.slice('local/'.length),
-    );
+    const metadata = await getLocalModelMetadataById(userId, metadataKey);
     return {
       contextLimit: metadata?.contextLimit ?? null,
       outputLimit: metadata?.outputLimit ?? null,
@@ -393,10 +420,11 @@ export async function buildAiContextDiagnostics({
     : { bytes: 0, estimatedTokens: 0 };
   const persisted = estimatePersistedHistory(branchMessages);
   const effective = estimateEffectiveModelMessages(modelMessages);
+  const estimatedInputTokensExcludingProviderToolSchemas =
+    systemSize.estimatedTokens + effective.messages.estimatedTokens;
   const estimatedInputTokens =
-    systemSize.estimatedTokens +
-    providerToolSchemas.estimatedTokens +
-    effective.messages.estimatedTokens;
+    estimatedInputTokensExcludingProviderToolSchemas +
+    providerToolSchemas.estimatedTokens;
   const safetyMarginTokens = deriveContextSafetyMargin(modelContextLimit);
   const usableInputBudgetTokens =
     modelContextLimit !== null && safetyMarginTokens !== null
@@ -427,7 +455,10 @@ export async function buildAiContextDiagnostics({
     },
     images: effective.images,
     effectiveModelMessages: effective.messages,
-    total: { estimatedInputTokens },
+    total: {
+      estimatedInputTokens,
+      estimatedInputTokensExcludingProviderToolSchemas,
+    },
     budget: {
       contextWindowTokens: modelContextLimit,
       modelOutputLimitTokens: modelOutputLimit,

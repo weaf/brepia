@@ -3,6 +3,7 @@ import { chatTools, type AppUIMessage } from '../shared/chatAi';
 import {
   buildAiContextDiagnostics,
   deriveContextSafetyMargin,
+  localModelMetadataKeyForAiModelId,
 } from '../src/server/aiContextDiagnostics';
 
 const project = {
@@ -81,6 +82,26 @@ function branchFixture(): AppUIMessage[] {
 }
 
 describe('AI context diagnostics', () => {
+  it('maps only local llama-swap model aliases onto persisted local metadata keys', () => {
+    expect(localModelMetadataKeyForAiModelId('local/laguna-xs-128k')).toBe(
+      'laguna-xs-128k',
+    );
+    expect(
+      localModelMetadataKeyForAiModelId(
+        'agent/opencode/llama-swap/laguna-xs-128k',
+      ),
+    ).toBe('laguna-xs-128k');
+    expect(
+      localModelMetadataKeyForAiModelId('opencode/llama-swap/laguna-xs-128k'),
+    ).toBe('laguna-xs-128k');
+
+    expect(localModelMetadataKeyForAiModelId('agent/opencode/openai/gpt-5')).toBeUndefined();
+    expect(localModelMetadataKeyForAiModelId('opencode/openai/gpt-5')).toBeUndefined();
+    expect(localModelMetadataKeyForAiModelId('agent/codex/laguna-xs-128k')).toBeUndefined();
+    expect(localModelMetadataKeyForAiModelId('custom/provider/laguna-xs-128k')).toBeUndefined();
+    expect(localModelMetadataKeyForAiModelId('local/')).toBeUndefined();
+  });
+
   it('measures the C1 categories without retaining raw prompt/project/image payloads', async () => {
     const diagnostics = await buildAiContextDiagnostics({
       systemPrompt: `BASE SYSTEM\n\nCURRENT BREP ${rawProjectMarker}`,
@@ -148,6 +169,16 @@ describe('AI context diagnostics', () => {
     });
     expect(diagnostics.effectiveModelMessages.count).toBe(1);
     expect(diagnostics.total.estimatedInputTokens).toBeGreaterThan(0);
+    expect(
+      diagnostics.total.estimatedInputTokensExcludingProviderToolSchemas,
+    ).toBe(
+      diagnostics.systemInstructions.estimatedTokens +
+        diagnostics.effectiveModelMessages.estimatedTokens,
+    );
+    expect(diagnostics.total.estimatedInputTokens).toBe(
+      diagnostics.total.estimatedInputTokensExcludingProviderToolSchemas +
+        diagnostics.providerToolSchemas.estimatedTokens,
+    );
 
     expect(diagnostics.budget).toMatchObject({
       contextWindowTokens: 131072,
@@ -249,6 +280,11 @@ describe('AI context diagnostics', () => {
     });
 
     expect(diagnostics.brepModelProjection.provider.applied).toBe(false);
+    expect(diagnostics.total).toEqual({
+      estimatedInputTokens: diagnostics.systemInstructions.estimatedTokens,
+      estimatedInputTokensExcludingProviderToolSchemas:
+        diagnostics.systemInstructions.estimatedTokens,
+    });
     expect(diagnostics.budget).toMatchObject({
       contextWindowTokens: null,
       modelOutputLimitTokens: null,
