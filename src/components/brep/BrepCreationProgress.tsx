@@ -6,6 +6,8 @@ import {
   type BrepProgressStep,
   type BrepProgressStepState,
 } from '@/lib/brepGenerationProgress';
+import { generationRunEventLabel } from '@/lib/generationRunEventPresentation';
+import { useGenerationRunEvents } from '@/services/generationRunService';
 import type { GenerationRunSnapshot } from '@shared/generationRun';
 import type { Message, Model } from '@shared/types';
 import { Check, ChevronDown, Circle, X } from 'lucide-react';
@@ -185,6 +187,14 @@ export function BrepCreationProgress({
     requestSavedOverride ?? messages.some((message) => message.role === 'user');
   const terminalFailure =
     generationRun?.status === 'failed' || generationRun?.status === 'cancelled';
+  const { data: generationEvents = [] } = useGenerationRunEvents({
+    run: generationRun,
+    enabled: Boolean(generationRun),
+  });
+  const latestGenerationEvent = generationEvents.at(-1);
+  const latestActivityLabel = latestGenerationEvent
+    ? generationRunEventLabel(latestGenerationEvent)
+    : undefined;
 
   const steps: BrepProgressStep[] = generationRun
     ? durableBrepProgressSteps({ run: generationRun, conversationSynced })
@@ -265,6 +275,11 @@ export function BrepCreationProgress({
           >
             {currentLabel}
           </p>
+          {latestActivityLabel ? (
+            <p className="mt-1 break-words text-xs leading-4 text-adam-neutral-300">
+              Latest activity: {latestActivityLabel}
+            </p>
+          ) : null}
           <p className="mt-1 break-words text-[11px] text-adam-neutral-400">
             {generationRun ? 'Generation model' : 'Selected model'}: {modelLabel}
           </p>
@@ -300,6 +315,59 @@ export function BrepCreationProgress({
         </ol>
 
         {generationRun ? (
+          <section className="mt-4 border-t border-adam-neutral-700 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs font-medium text-adam-text-secondary">
+                Agent activity
+              </h2>
+              <span className="text-[10px] text-adam-neutral-500">
+                {generationEvents.length === 0
+                  ? 'No detailed events'
+                  : `${generationEvents.length} durable ${generationEvents.length === 1 ? 'event' : 'events'}`}
+              </span>
+            </div>
+            {generationEvents.length > 0 ? (
+              <ol
+                className="mt-3 space-y-2"
+                aria-label="Durable generation activity"
+              >
+                {generationEvents.map((event) => (
+                  <li
+                    key={event.id}
+                    className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-2 text-[11px] leading-4"
+                  >
+                    <span className="font-mono text-[10px] text-adam-neutral-500">
+                      #{event.sequence}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="break-words text-adam-neutral-300">
+                        {generationRunEventLabel(event)}
+                      </p>
+                      {event.errorCode && event.errorMessage ? (
+                        <p className="mt-0.5 break-words text-[10px] text-adam-neutral-500">
+                          {event.errorMessage}
+                        </p>
+                      ) : null}
+                      <time
+                        className="mt-0.5 block font-mono text-[9px] text-adam-neutral-600"
+                        dateTime={event.createdAt}
+                      >
+                        {compactTimestamp(event.createdAt)}
+                      </time>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-2 text-[11px] leading-4 text-adam-neutral-500">
+                This run has durable lifecycle state but no detailed agent telemetry.
+                Older runs remain fully supported.
+              </p>
+            )}
+          </section>
+        ) : null}
+
+        {generationRun ? (
           <dl className="mt-4 grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-adam-neutral-700 pt-3 text-[11px] leading-4">
             {detailRows(generationRun, modelLabel).map((row) => (
               <div key={row.label} className="contents">
@@ -322,7 +390,7 @@ export function BrepCreationProgress({
 
         <p className="mt-3 text-[11px] leading-4 text-adam-neutral-500">
           {generationRun
-            ? 'This status is persisted by the server. You can leave the page and return without losing the durable generation state.'
+            ? 'This status and agent activity are persisted by the server. You can leave the page and return without losing durable generation progress.'
             : 'Brepia is synchronizing generation state. Persisted project state will be reconciled when you return.'}
         </p>
       </details>
