@@ -234,36 +234,34 @@ describe('streaming OpenCode Native BRep repair', () => {
     assert.equal(toolCalls(scenario.parts)[0]?.['toolName'], 'build_brep_project');
   });
 
-  it('terminates after the configured retry budget when repeated invalid results never repair', async () => {
+  it('fails closed after the configured retry budget when repeated invalid results never repair', async () => {
     const invalidProject = {
       ...phaseOneCabinetProject,
       resultNodeId: 'stillMissing',
     };
-    const scenario = await runStreamingRepairScenario({
-      validationAttempts: 2,
-      results: [
-        'Still not a structured result.',
-        JSON.stringify({
-          project: invalidProject,
-          message: 'still invalid',
+
+    await assert.rejects(
+      () =>
+        runStreamingRepairScenario({
+          validationAttempts: 2,
+          results: [
+            'Still not a structured result.',
+            JSON.stringify({
+              project: invalidProject,
+              message: 'still invalid',
+            }),
+          ],
         }),
-      ],
-    });
-
-    assert.equal(scenario.promptBodies.length, 2);
-    assert.equal(scenario.eventUrls.length, 2);
-    assert.deepEqual(
-      scenario.eventUrls.map((url) => new URL(url).searchParams.get('after')),
-      ['10', '20'],
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(
+          error.message,
+          /Native BRep validation failed after 2 attempts/i,
+        );
+        assert.match(error.message, /stillMissing|resultNodeId/i);
+        assert.doesNotMatch(error.message, /"project"\s*:/);
+        return true;
+      },
     );
-    assert.equal(toolCalls(scenario.parts).length, 0);
-
-    const userText = scenario.parts
-      .filter((part) => part['type'] === 'text-delta')
-      .map((part) => String(part['delta'] ?? ''))
-      .join('');
-    assert.match(userText, /Native BRep validation failed after 2 attempts/i);
-    assert.match(userText, /stillMissing|resultNodeId/i);
-    assert.doesNotMatch(userText, /"project"\s*:/);
   });
 });

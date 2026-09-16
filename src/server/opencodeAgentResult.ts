@@ -30,6 +30,15 @@ export type AgentResult<TProject extends AgentProject = OpenScadProject> = {
 };
 
 export const MAX_BREP_REPAIR_DIAGNOSTIC_CHARS = 12_000;
+const BREP_REPAIR_EXHAUSTED_MESSAGE =
+  /^Native BRep validation failed after \d+ attempts:/i;
+
+export class ExternalBrepRepairExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExternalBrepRepairExhaustedError';
+  }
+}
 
 export function boundBrepRepairDiagnostic(diagnostic: string): string {
   const trimmed = diagnostic.trim();
@@ -553,7 +562,15 @@ function parametricBuildInputForKind(
   sourceKind: AgentParametricSourceKind,
 ): ParametricBuildInput<AgentProject> | undefined {
   const result = parseAgentResultForKind(text, sourceKind);
-  if (!result.project) return undefined;
+  if (!result.project) {
+    if (
+      sourceKind === 'brep' &&
+      BREP_REPAIR_EXHAUSTED_MESSAGE.test(result.message)
+    ) {
+      throw new ExternalBrepRepairExhaustedError(result.message);
+    }
+    return undefined;
+  }
   return {
     title:
       sourceKind === 'brep'
