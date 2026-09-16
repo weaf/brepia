@@ -239,29 +239,39 @@ describe('streaming OpenCode Native BRep repair', () => {
       ...phaseOneCabinetProject,
       resultNodeId: 'stillMissing',
     };
-
-    await assert.rejects(
-      () =>
-        runStreamingRepairScenario({
-          validationAttempts: 2,
-          results: [
-            'Still not a structured result.',
-            JSON.stringify({
-              project: invalidProject,
-              message: 'still invalid',
-            }),
-          ],
+    const scenario = await runStreamingRepairScenario({
+      validationAttempts: 2,
+      results: [
+        'Still not a structured result.',
+        JSON.stringify({
+          project: invalidProject,
+          message: 'still invalid',
         }),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(
-          error.message,
-          /Native BRep validation failed after 2 attempts/i,
-        );
-        assert.match(error.message, /stillMissing|resultNodeId/i);
-        assert.doesNotMatch(error.message, /"project"\s*:/);
-        return true;
-      },
+      ],
+    });
+
+    assert.equal(scenario.promptBodies.length, 2);
+    assert.equal(scenario.eventUrls.length, 2);
+    assert.deepEqual(
+      scenario.eventUrls.map((url) => new URL(url).searchParams.get('after')),
+      ['10', '20'],
     );
+    assert.equal(toolCalls(scenario.parts).length, 0);
+    assert.equal(
+      scenario.parts.some((part) => part['type'] === 'finish'),
+      false,
+    );
+
+    const errorParts = scenario.parts.filter((part) => part['type'] === 'error');
+    assert.equal(errorParts.length, 1);
+    const error = errorParts[0]?.['error'];
+    assert.ok(error instanceof Error);
+    assert.equal(error.name, 'ExternalBrepRepairExhaustedError');
+    assert.match(
+      error.message,
+      /Native BRep validation failed after 2 attempts/i,
+    );
+    assert.match(error.message, /stillMissing|resultNodeId/i);
+    assert.doesNotMatch(error.message, /"project"\s*:/);
   });
 });

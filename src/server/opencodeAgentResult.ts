@@ -40,6 +40,19 @@ export class ExternalBrepRepairExhaustedError extends Error {
   }
 }
 
+function assertNotExternalBrepRepairExhaustion(
+  result: AgentResult<AgentProject>,
+  sourceKind: AgentParametricSourceKind,
+): void {
+  if (
+    sourceKind === 'brep' &&
+    !result.project &&
+    BREP_REPAIR_EXHAUSTED_MESSAGE.test(result.message)
+  ) {
+    throw new ExternalBrepRepairExhaustedError(result.message);
+  }
+}
+
 export function boundBrepRepairDiagnostic(diagnostic: string): string {
   const trimmed = diagnostic.trim();
   if (trimmed.length <= MAX_BREP_REPAIR_DIAGNOSTIC_CHARS) return trimmed;
@@ -484,8 +497,9 @@ export function parseAgentResult(
   sourceKind: AgentParametricSourceKind = 'openscad',
 ): AgentResult<AgentProject> {
   const structured = parseStructuredAgentResultForKind(text, sourceKind);
-  if (structured) return structured;
-  return { message: text.trim() };
+  const result = structured ?? { message: text.trim() };
+  assertNotExternalBrepRepairExhaustion(result, sourceKind);
+  return result;
 }
 
 export type ParametricBuildInput<
@@ -562,15 +576,7 @@ function parametricBuildInputForKind(
   sourceKind: AgentParametricSourceKind,
 ): ParametricBuildInput<AgentProject> | undefined {
   const result = parseAgentResultForKind(text, sourceKind);
-  if (!result.project) {
-    if (
-      sourceKind === 'brep' &&
-      BREP_REPAIR_EXHAUSTED_MESSAGE.test(result.message)
-    ) {
-      throw new ExternalBrepRepairExhaustedError(result.message);
-    }
-    return undefined;
-  }
+  if (!result.project) return undefined;
   return {
     title:
       sourceKind === 'brep'
