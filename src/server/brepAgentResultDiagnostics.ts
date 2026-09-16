@@ -31,6 +31,19 @@ type MalformedEnvelopeAttempt = {
   diagnostic: string;
 };
 
+const EXTERNAL_TOOL_CALL_MARKUP =
+  /<tool_call>\s*[^<\s]+[\s\S]*?<arg_(?:key|value)>/i;
+
+function externalToolCallMarkupDiagnostic(text: string): string | undefined {
+  if (!EXTERNAL_TOOL_CALL_MARKUP.test(text)) return undefined;
+  return [
+    'Native BRep external transport received tool-call markup instead of the required final-result JSON envelope.',
+    'No Native BRep CAD tool is exposed through this external response channel.',
+    'Do not emit <tool_call>, <arg_key>, or <arg_value> markup.',
+    'Return exactly one raw JSON object with a top-level `project` object and optional `message` string.',
+  ].join(' ');
+}
+
 function malformedEnvelopeAttempt(text: string): MalformedEnvelopeAttempt | undefined {
   const starts = [
     ...text.matchAll(/\{\s*"(project|message)"\s*:/g),
@@ -122,12 +135,33 @@ export function boundedExternalBrepResultRepairDiagnostic(
   options: { requireProject?: boolean } = {},
 ): string | undefined {
   const structured = parseStructuredAgentResult(text, 'brep');
-  if (!structured) {
+  if (!structured && options.requireProject === true) {
+    const toolCallDiagnostic = externalToolCallMarkupDiagnostic(text);
+    if (toolCallDiagnostic) {
+      const diagnostic = boundBrepRepairDiagnostic(toolCallDiagnostic);
+      recordActiveExternalAgentInvocation();
+      recordActiveCanonicalCandidate({
+        accepted: false,
+        errorCode: 'tool_call_markup',
+        errorMessage: diagnostic,
+      });
+      return diagnostic;
+    }
+
     const malformed = malformedEnvelopeAttempt(text);
-    if (
-      malformed &&
-      (malformed.firstKey === 'project' || options.requireProject === true)
-    ) {
+    if (malformed) {
+      const diagnostic = boundBrepRepairDiagnostic(malformed.diagnostic);
+      recordActiveExternalAgentInvocation();
+      recordActiveCanonicalCandidate({
+        accepted: false,
+        errorCode: 'malformed_envelope',
+        errorMessage: diagnostic,
+      });
+      return diagnostic;
+    }
+  } else if (!structured) {
+    const malformed = malformedEnvelopeAttempt(text);
+    if (malformed?.firstKey === 'project') {
       const diagnostic = boundBrepRepairDiagnostic(malformed.diagnostic);
       recordActiveExternalAgentInvocation();
       recordActiveCanonicalCandidate({
