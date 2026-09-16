@@ -280,10 +280,12 @@ describe('AI context diagnostics', () => {
     });
 
     expect(diagnostics.brepModelProjection.provider.applied).toBe(false);
+    const schemaFreeEstimate =
+      diagnostics.systemInstructions.estimatedTokens +
+      diagnostics.effectiveModelMessages.estimatedTokens;
     expect(diagnostics.total).toEqual({
-      estimatedInputTokens: diagnostics.systemInstructions.estimatedTokens,
-      estimatedInputTokensExcludingProviderToolSchemas:
-        diagnostics.systemInstructions.estimatedTokens,
+      estimatedInputTokens: schemaFreeEstimate,
+      estimatedInputTokensExcludingProviderToolSchemas: schemaFreeEstimate,
     });
     expect(diagnostics.budget).toMatchObject({
       contextWindowTokens: null,
