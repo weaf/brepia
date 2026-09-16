@@ -6,6 +6,7 @@ import {
   type BrepAiBuildOutput,
 } from '@shared/brepAiTool';
 import {
+  BrepAiProjectError,
   validateBrepAiCreation,
   validateBrepAiFollowUp,
   type BrepProjectStructuralDiff,
@@ -18,6 +19,10 @@ import { createBrepProjectArtifact } from '@shared/brepProjectArtifact';
 import { renderInstructionTemplate } from '@shared/aiInstructionCatalog';
 import { serializeBrepAiProjectContext } from '@shared/brepAiContext';
 import { boundBrepRepairDiagnostic } from './opencodeAgentResult';
+import {
+  recordActiveBrepBuildAttemptFinished,
+  recordActiveBrepBuildAttemptStarted,
+} from './generationRunTelemetry';
 
 const DEFAULT_BREP_CREATION_CONTEXT = `This turn was explicitly routed by the product to create a new native BRep project. No previous BRep project exists. Ignore OpenSCAD-specific creation instructions for this turn and return one complete canonical native BRep project through build_brep_project. Do not fabricate previous-project state, emit OpenSCAD/Python/build123d source, STEP, mesh/tessellation authority, filesystem paths, or raw topology indices. Use only the canonical BRep schema and supported semantic selectors.`;
 
@@ -69,6 +74,19 @@ export function withBrepProjectSystemContext({
   return `${systemPrompt.trim()}\n\n${context.trim()}`;
 }
 
+function brepBuildTelemetryFailure(error: unknown): {
+  errorCode: string;
+  errorMessage?: string;
+} {
+  if (error instanceof BrepAiProjectError) {
+    return { errorCode: error.code, errorMessage: error.message };
+  }
+  if (error instanceof Error) {
+    return { errorCode: error.name || 'build_rejected' };
+  }
+  return { errorCode: 'build_rejected' };
+}
+
 export function executeBrepAiBuild({
   activeBrepSource,
   input,
@@ -78,23 +96,33 @@ export function executeBrepAiBuild({
   input: unknown;
   onAcceptedInput?: (input: BrepAiBuildInput) => void;
 }): BrepAiBuildOutput {
-  const parsed = brepAiBuildInputSchema.parse(input) as BrepAiBuildInput;
-  const message = isBrepAiCreationRoute(activeBrepSource)
-    ? (() => {
-        validateBrepAiCreation(parsed.project);
-        return 'Created canonical native BRep project.';
-      })()
-    : validateBrepAiFollowUp(activeBrepSource.project, parsed.project).diff
-        .summary;
-  const output = brepAiBuildOutputSchema.parse({
-    status: 'success',
-    message,
-  });
-  // Keep the last successfully validated candidate in request-local server
-  // state. Persistence must not depend on how the AI SDK later reconstructs
-  // the UI-message tool part in onFinish.
-  onAcceptedInput?.(parsed);
-  return output;
+  const telemetryAttempt = recordActiveBrepBuildAttemptStarted();
+  try {
+    const parsed = brepAiBuildInputSchema.parse(input) as BrepAiBuildInput;
+    const message = isBrepAiCreationRoute(activeBrepSource)
+      ? (() => {
+          validateBrepAiCreation(parsed.project);
+          return 'Created canonical native BRep project.';
+        })()
+      : validateBrepAiFollowUp(activeBrepSource.project, parsed.project).diff
+          .summary;
+    const output = brepAiBuildOutputSchema.parse({
+      status: 'success',
+      message,
+    });
+    // Keep the last successfully validated candidate in request-local server
+    // state. Persistence must not depend on how the AI SDK later reconstructs
+    // the UI-message tool part in onFinish.
+    onAcceptedInput?.(parsed);
+    recordActiveBrepBuildAttemptFinished(telemetryAttempt, { accepted: true });
+    return output;
+  } catch (error) {
+    recordActiveBrepBuildAttemptFinished(telemetryAttempt, {
+      accepted: false,
+      ...brepBuildTelemetryFailure(error),
+    });
+    throw error;
+  }
 }
 
 function finalSuccessfulBuildInput(

@@ -14,6 +14,11 @@ import {
   normalizeOpenScadProject,
   type OpenScadProject,
 } from '@shared/openScadProject';
+import {
+  recordActiveCanonicalCandidate,
+  recordActiveExternalAgentInvocation,
+  recordActiveTransportRepair,
+} from './generationRunTelemetry';
 
 export type AgentParametricSourceKind = 'openscad' | 'brep';
 
@@ -311,6 +316,50 @@ export function parseStructuredAgentResult(
   return structuredAgentResultMatches(text, sourceKind).at(-1)?.result;
 }
 
+type ExternalBrepResultInspection =
+  | { kind: 'message-only' }
+  | { kind: 'accepted-project' }
+  | {
+      kind: 'rejected';
+      code: 'missing_envelope' | 'missing_project' | 'invalid_project';
+      diagnostic: string;
+    };
+
+function inspectExternalBrepResult(
+  text: string,
+  requireProject: boolean,
+): ExternalBrepResultInspection {
+  const match = structuredAgentResultMatches(text, 'brep').at(-1);
+  if (!match) {
+    return requireProject
+      ? {
+          kind: 'rejected',
+          code: 'missing_envelope',
+          diagnostic:
+            'Native BRep creation requires one structured JSON result containing a complete `project` object.',
+        }
+      : { kind: 'message-only' };
+  }
+  if (match.result.project) return { kind: 'accepted-project' };
+  if (match.projectSupplied) {
+    return {
+      kind: 'rejected',
+      code: 'invalid_project',
+      diagnostic:
+        match.projectDiagnostic ??
+        'The supplied native BRep `project` object is invalid.',
+    };
+  }
+  return requireProject
+    ? {
+        kind: 'rejected',
+        code: 'missing_project',
+        diagnostic:
+          'Native BRep creation requires the structured result to contain a complete `project` object.',
+      }
+    : { kind: 'message-only' };
+}
+
 /**
  * Return a repair diagnostic only when an external BRep result should be
  * retried before it reaches the normal build_brep_project tool boundary.
@@ -323,26 +372,21 @@ export function externalBrepResultRepairDiagnostic(
   text: string,
   { requireProject = false }: { requireProject?: boolean } = {},
 ): string | undefined {
-  const match = structuredAgentResultMatches(text, 'brep').at(-1);
-  let diagnostic: string | undefined;
-  if (!match) {
-    diagnostic = requireProject
-      ? 'Native BRep creation requires one structured JSON result containing a complete `project` object.'
-      : undefined;
-  } else if (match.result.project) {
-    diagnostic = undefined;
-  } else if (match.projectSupplied) {
-    diagnostic =
-      match.projectDiagnostic ??
-      'The supplied native BRep `project` object is invalid.';
-  } else {
-    diagnostic = requireProject
-      ? 'Native BRep creation requires the structured result to contain a complete `project` object.'
-      : undefined;
+  recordActiveExternalAgentInvocation();
+  const inspection = inspectExternalBrepResult(text, requireProject);
+  if (inspection.kind === 'accepted-project') {
+    recordActiveCanonicalCandidate({ accepted: true });
+    return undefined;
   }
-  return diagnostic === undefined
-    ? undefined
-    : boundBrepRepairDiagnostic(diagnostic);
+  if (inspection.kind === 'message-only') return undefined;
+
+  const diagnostic = boundBrepRepairDiagnostic(inspection.diagnostic);
+  recordActiveCanonicalCandidate({
+    accepted: false,
+    errorCode: inspection.code,
+    errorMessage: diagnostic,
+  });
+  return diagnostic;
 }
 
 export function buildExternalBrepRepairPrompt({
@@ -354,6 +398,7 @@ export function buildExternalBrepRepairPrompt({
   attempt: number;
   maxAttempts: number;
 }): string {
+  recordActiveTransportRepair();
   return [
     '<pcad_brep_validation_failure>',
     `attempt: ${attempt}`,

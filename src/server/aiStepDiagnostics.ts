@@ -1,3 +1,6 @@
+import { estimateModelMessagesForHardBudget } from './aiContextBudget';
+import { recordActiveModelStep } from './generationRunTelemetry';
+
 type SizedJson = {
   bytes: number;
 };
@@ -97,6 +100,13 @@ export function measureAiStepContext(
   visitBrepToolPayloads(messages, measurement, new Set<object>());
   measurement.brepToolPayloadBytes =
     measurement.brepToolInputBytes + measurement.brepToolOutputBytes;
+
+  // F1 persists the deterministic provider-message estimate available at the
+  // exact step boundary. Phase G can extend this with the fixed system/tool
+  // budget and provider-reported usage without storing any message payload.
+  const contextEstimate = estimateModelMessagesForHardBudget(messages);
+  recordActiveModelStep({ contextUsedTokens: contextEstimate.estimatedTokens });
+
   return measurement;
 }
 

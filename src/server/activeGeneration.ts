@@ -1,7 +1,10 @@
+import { enterActiveGenerationTelemetry } from './generationRunTelemetry';
+
 type ActiveGenerationEntry = {
   controller: AbortController;
   runId: symbol;
   durableRunId?: string;
+  finishTelemetry?: () => void;
 };
 
 const activeGenerations = new Map<string, ActiveGenerationEntry>();
@@ -29,12 +32,20 @@ export function beginActiveGeneration(
   const key = generationKey(userId, conversationId);
   const previous = activeGenerations.get(key);
   previous?.controller.abort();
+  previous?.finishTelemetry?.();
 
   const entry: ActiveGenerationEntry = {
     controller: new AbortController(),
     runId: Symbol('generation'),
     ...(durableRunId ? { durableRunId } : {}),
   };
+  if (durableRunId) {
+    entry.finishTelemetry = enterActiveGenerationTelemetry({
+      userId,
+      conversationId,
+      runId: durableRunId,
+    });
+  }
   activeGenerations.set(key, entry);
 
   return {
@@ -42,6 +53,7 @@ export function beginActiveGeneration(
     finish: () => {
       if (activeGenerations.get(key)?.runId === entry.runId) {
         activeGenerations.delete(key);
+        entry.finishTelemetry?.();
       }
     },
     ...(previous?.durableRunId
@@ -60,6 +72,7 @@ export function cancelActiveGenerationWithRunId(
 
   activeGenerations.delete(key);
   entry.controller.abort();
+  entry.finishTelemetry?.();
   return {
     cancelled: true,
     ...(entry.durableRunId ? { durableRunId: entry.durableRunId } : {}),
@@ -100,6 +113,7 @@ export function cancelActiveGenerationForConversation(
     if (!key.endsWith(suffix)) continue;
     activeGenerations.delete(key);
     entry.controller.abort();
+    entry.finishTelemetry?.();
     cancelled = true;
   }
 
