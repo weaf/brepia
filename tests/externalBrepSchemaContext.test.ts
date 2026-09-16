@@ -11,13 +11,24 @@ function embeddedSchema(context: string): unknown {
   return JSON.parse(json) as unknown;
 }
 
+function providerProjectSchema(): unknown {
+  const schema = brepAiBuildProviderInputSchema.jsonSchema as {
+    properties?: Record<string, unknown>;
+  };
+  const project = schema.properties?.project;
+  assert.ok(project, 'expected provider build input schema to expose project');
+  return project;
+}
+
 describe('external Native BRep schema context', () => {
-  it('serializes the exact provider-facing build_brep_project schema', () => {
+  it('serializes the exact provider-facing canonical project schema without the internal tool wrapper', () => {
     const context = buildExternalAgentSchemaContext('brep');
 
-    assert.match(context, /authoritative build_brep_project input JSON Schema/i);
+    assert.match(context, /authoritative canonical Native BRep project JSON Schema/i);
+    assert.match(context, /not a tool-call schema/i);
     assert.match(context, /Do not search the repository, filesystem/i);
-    assert.deepEqual(
+    assert.deepEqual(embeddedSchema(context), providerProjectSchema());
+    assert.notDeepEqual(
       embeddedSchema(context),
       brepAiBuildProviderInputSchema.jsonSchema,
     );
