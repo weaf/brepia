@@ -4,6 +4,25 @@ import { phaseOneCabinetProject } from '@shared/brepSamples';
 import { boundedExternalBrepResultRepairDiagnostic } from '../src/server/brepAgentResultDiagnostics';
 
 describe('native BRep malformed external envelope diagnostics', () => {
+  it('distinguishes external tool-call markup from a missing creation envelope', () => {
+    const toolCall =
+      '<tool_call>build_brep_platform<arg_key>project</arg_key><arg_value>{"schemaVersion":1}</arg_value></tool_call>';
+
+    const diagnostic = boundedExternalBrepResultRepairDiagnostic(toolCall, {
+      requireProject: true,
+    });
+
+    assert.ok(diagnostic);
+    assert.match(diagnostic, /tool-call markup instead of the required final-result JSON envelope/i);
+    assert.match(diagnostic, /No Native BRep CAD tool is exposed/i);
+    assert.match(diagnostic, /Do not emit <tool_call>, <arg_key>, or <arg_value>/i);
+    assert.match(diagnostic, /top-level `project` object/i);
+    assert.doesNotMatch(
+      diagnostic,
+      /requires one structured JSON result containing a complete `project` object/i,
+    );
+  });
+
   it('distinguishes malformed project JSON from a missing envelope', () => {
     const malformed =
       '{"project":{"schemaVersion":1,"id":"cabinet" "name":"broken"},"message":"draft"}';
