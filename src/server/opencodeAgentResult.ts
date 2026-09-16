@@ -14,6 +14,7 @@ import {
   normalizeOpenScadProject,
   type OpenScadProject,
 } from '@shared/openScadProject';
+import { buildExternalAgentSchemaContext } from './externalAgentSchemaContext';
 import {
   recordActiveCanonicalCandidate,
   recordActiveExternalAgentInvocation,
@@ -61,8 +62,9 @@ export function boundBrepRepairDiagnostic(diagnostic: string): string {
 
 /**
  * Canonical machine-readable contract between external agents and Brepia.
- * Behavioral and environment instructions live in editable transport profiles;
- * this contract only defines the response protocol Brepia must be able to parse.
+ * Behavioral and environment instructions live in editable transport profiles.
+ * Native BRep also receives the exact provider-facing JSON schema here because
+ * external OpenCode/Codex transports do not receive AI SDK tool schemas directly.
  *
  * OpenSCAD remains the default to preserve the historical external-agent
  * protocol. Native BRep callers opt in explicitly.
@@ -72,6 +74,8 @@ export function buildAgentOutputContract(
 ): string {
   if (sourceKind === 'brep') {
     return [
+      buildExternalAgentSchemaContext('brep'),
+      '',
       'Final result format — return ONLY one valid JSON object.',
       '',
       'When returning a revised native BRep artifact:',
@@ -87,7 +91,8 @@ export function buildAgentOutputContract(
       '  - project is the COMPLETE canonical BRep project snapshot, not a patch.',
       '  - Preserve the existing project id on follow-up edits.',
       '  - Preserve every unchanged node id and published-parameter id.',
-      '  - Use only node/selector forms represented by the supplied BRep schema/context.',
+      '  - Use only node/selector forms represented by <pcad_brep_schema>.',
+      '  - Do not search for a different schema or infer unsupported fields.',
       '  - Never invent raw edge/face indices, OCCT identifiers, viewer triangle ids, or other topology shortcuts.',
       '  - Never return build123d/Python source, STEP, tessellation, viewer meshes, or runtime geometry as editable source.',
       '  - If <user_request> asks for a CAD change, project MUST be present.',
