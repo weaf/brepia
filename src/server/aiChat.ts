@@ -1393,6 +1393,8 @@ export async function handleAiChatRequest(req: Request) {
     number,
     { activeTools: string[]; toolChoice: string; maxOutputTokens: number }
   >();
+  let modelStreamFailed = false;
+  let modelStreamFailure: unknown;
 
   const result = streamText({
     model: chatLanguageModel,
@@ -1483,6 +1485,9 @@ export async function handleAiChatRequest(req: Request) {
       });
     },
     onStepFinish: ({ stepNumber, finishReason, usage, toolCalls }) => {
+      if (finishReason === 'error') {
+        modelStreamFailed = true;
+      }
       const finishedAt = Date.now();
       const context = stepContextByNumber.get(stepNumber);
       const policy = stepPolicyByNumber.get(stepNumber);
@@ -1537,6 +1542,8 @@ export async function handleAiChatRequest(req: Request) {
     abortSignal: activeGeneration.signal,
     experimental_transform: smoothStream({ delayInMs: 30 }),
     onError: ({ error }) => {
+      modelStreamFailed = true;
+      if (modelStreamFailure === undefined) modelStreamFailure = error;
       activeGeneration.finish();
       if (isRequestAbort(error, activeGeneration.signal)) {
         void generationRun.cancelled('Generation aborted.');
@@ -1572,7 +1579,9 @@ export async function handleAiChatRequest(req: Request) {
     },
     onFinish: ({ steps }) => {
       activeGeneration.finish();
-      void generationRun.responseReceived();
+      if (!modelStreamFailed) {
+        void generationRun.responseReceived();
+      }
       const usageAvailable = steps.some(
         (step) =>
           (step.usage.inputTokens ?? 0) > 0 ||
@@ -1649,6 +1658,26 @@ export async function handleAiChatRequest(req: Request) {
         void generationRun.failed('context_budget_exceeded');
         return 'AI context became too large for the selected model before the next provider step.';
       }
+      if (modelStreamFailed) {
+        if (modelStreamFailure === undefined) {
+          modelStreamFailure = error;
+          void generationRun.failed('model_stream_failed');
+          logError(error, {
+            functionName: 'ai-chat',
+            statusCode: 500,
+            userId: baseLogContext.userId,
+            conversationId: baseLogContext.conversationId,
+            additionalContext: {
+              ...baseLogContext,
+              operation: 'ui_message_stream_model_failure',
+            },
+          });
+        }
+        const failure = modelStreamFailure ?? error;
+        const message =
+          failure instanceof Error ? failure.message : String(failure);
+        return `Model call failed (${resolvedProvider}/${actualModelId}): ${message}`;
+      }
       void generationRun.failed('ui_stream_failed');
 
       logError(error, {
@@ -1672,6 +1701,10 @@ export async function handleAiChatRequest(req: Request) {
           messageMetadata: ({ part }) =>
             part.type === 'start' ? turnMetadata : undefined,
           onFinish: async ({ responseMessage, isContinuation }) => {
+            if (modelStreamFailed) {
+              if (modelStreamFailure !== undefined) throw modelStreamFailure;
+              throw new Error('Model stream failed before response finalization.');
+            }
             await generationRun.validatingArtifact(responseMessage.id);
 
             const metadata = {
