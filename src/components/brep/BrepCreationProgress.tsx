@@ -328,8 +328,9 @@ export function BrepCreationProgress({
             </div>
             {generationEvents.length > 0 ? (
               <ol
-                className="mt-3 space-y-2"
+                className="mt-3 max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-2"
                 aria-label="Durable generation activity"
+                tabIndex={0}
               >
                 {generationEvents.map((event) => (
                   <li
