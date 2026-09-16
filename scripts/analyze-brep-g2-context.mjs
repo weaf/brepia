@@ -26,6 +26,11 @@ function nonNegativeDelta(current, previous) {
   return Math.max(0, current - previous);
 }
 
+function estimatedTokensFromBytes(bytes, bytesPerToken) {
+  if (bytes === null || bytesPerToken === null || bytesPerToken <= 0) return null;
+  return Math.ceil(bytes / bytesPerToken);
+}
+
 export function parseEvidenceJsonl(text) {
   const records = [];
   for (const [index, rawLine] of text.split('\n').entries()) {
@@ -241,7 +246,10 @@ export function analyzeEvidenceRun(records) {
   );
 
   return {
-    status: rows.length >= 2 ? 'consecutive_steps_available' : 'insufficient_consecutive_steps',
+    status:
+      rows.length >= 2
+        ? 'consecutive_steps_available'
+        : 'insufficient_consecutive_steps',
     transportKind:
       typeof staticPayload.transportKind === 'string'
         ? staticPayload.transportKind
@@ -264,9 +272,8 @@ export function analyzeEvidenceRun(records) {
     },
     steps: rows,
     brepiaSideGrowthContributions: contributions,
-    brepiaSideDominantGrowth: rows.length >= 2
-      ? dominantContributions(contributions)
-      : [],
+    brepiaSideDominantGrowth:
+      rows.length >= 2 ? dominantContributions(contributions) : [],
     externalSessionUsage: externalUsageReported
       ? {
           status: 'reported',
@@ -287,24 +294,254 @@ export function analyzeEvidenceRun(records) {
   };
 }
 
+function summarizeTurn(records, turnNumber) {
+  const run = analyzeEvidenceRun(records);
+  const payload = asRecord(records[0]?.payload);
+  const estimator = asRecord(payload.estimator);
+  const system = asRecord(payload.systemInstructions);
+  const canonical = asRecord(payload.currentCanonicalBrep);
+  const ordinary = asRecord(payload.ordinaryConversationHistory);
+  const historicalBrep = asRecord(payload.historicalBrepToolPayloads);
+  const snapshots = asRecord(payload.historicalBrepSnapshots);
+  const effective = asRecord(payload.effectiveModelMessages);
+  const images = asRecord(payload.images);
+  const projection = asRecord(payload.brepModelProjection);
+  const providerProjection = asRecord(projection.provider);
+  const branchProjection = asRecord(projection.branch);
+  const bytesPerToken = finiteNumber(estimator.ordinaryUtf8BytesPerToken) ?? 4;
+  const addedBrepContextBytes = finiteNumber(system.addedBrepContextBytes);
+  const firstReportedInput =
+    run.steps.find(
+      (step) =>
+        step.providerUsage?.inputTokens !== null &&
+        step.providerUsage?.inputTokens !== undefined,
+    )?.providerUsage?.inputTokens ?? null;
+
+  return {
+    turnNumber,
+    transportKind: run.transportKind,
+    modelId: run.modelId,
+    modelBudgetSource: run.modelBudgetSource,
+    requiredLabelsPresent: run.requiredLabelsPresent,
+    internalStepStatus: run.status,
+    internalStepCount: run.steps.length,
+    schemaFreeEstimatedInputTokens:
+      run.staticContext.estimatedInputTokensExcludingProviderToolSchemas,
+    conservativeEstimatedInputTokens: run.staticContext.estimatedInputTokens,
+    providerToolSchemaEstimatedTokens:
+      run.staticContext.providerToolSchemaEstimatedTokens,
+    systemEstimatedTokens: finiteNumber(system.estimatedTokens),
+    systemBytesBeforeBrepContext: finiteNumber(system.bytesBeforeBrepContext),
+    addedBrepContextBytes,
+    addedBrepContextEstimatedTokens: estimatedTokensFromBytes(
+      addedBrepContextBytes,
+      bytesPerToken,
+    ),
+    currentCanonicalBrepPresent:
+      typeof canonical.present === 'boolean' ? canonical.present : null,
+    currentCanonicalBrepEstimatedTokens: finiteNumber(canonical.estimatedTokens),
+    ordinaryConversationEstimatedTokens: finiteNumber(ordinary.estimatedTokens),
+    historicalBrepToolPayloadEstimatedTokens: finiteNumber(
+      historicalBrep.estimatedTokens,
+    ),
+    historicalBrepSnapshotPersistedBytes: finiteNumber(snapshots.persistedBytes),
+    effectiveModelMessageEstimatedTokens: finiteNumber(effective.estimatedTokens),
+    imageEstimatedTokens: finiteNumber(images.estimatedTokens),
+    providerProjection: {
+      applied:
+        typeof providerProjection.applied === 'boolean'
+          ? providerProjection.applied
+          : null,
+      removedToolCalls: finiteNumber(providerProjection.removedToolCalls),
+      removedToolResults: finiteNumber(providerProjection.removedToolResults),
+      removedToolInputBytes: finiteNumber(providerProjection.removedToolInputBytes),
+      removedToolOutputBytes: finiteNumber(providerProjection.removedToolOutputBytes),
+      insertedRevisionSummaries: finiteNumber(
+        providerProjection.insertedRevisionSummaries,
+      ),
+    },
+    branchProjection: {
+      applied:
+        typeof branchProjection.applied === 'boolean'
+          ? branchProjection.applied
+          : null,
+      removedBrepSnapshotParts: finiteNumber(
+        branchProjection.removedBrepSnapshotParts,
+      ),
+      removedBuildToolParts: finiteNumber(branchProjection.removedBuildToolParts),
+      removedSnapshotBytes: finiteNumber(branchProjection.removedSnapshotBytes),
+    },
+    openCodeFirstStepInputTokens: finiteNumber(firstReportedInput),
+    run,
+  };
+}
+
+export function analyzeEvidenceCapture(records) {
+  const runs = segmentEvidenceRuns(records);
+  if (runs.length === 0) {
+    throw new Error('No ai context diagnostics record found in G2 evidence file');
+  }
+
+  const turns = runs.map((run, index) => summarizeTurn(run, index + 1));
+  const sameTransportAndModel = turns.every(
+    (turn) =>
+      turn.transportKind === turns[0].transportKind &&
+      turn.modelId === turns[0].modelId,
+  );
+
+  const turnDeltas = [];
+  const contributions = {
+    'current canonical BRep size changes after activation': 0,
+    'conversation/projection model-message state': 0,
+    images: 0,
+    'transport/system instructions outside current BRep': 0,
+  };
+  let oneTimeCurrentBrepActivationTokens = 0;
+
+  for (let index = 1; index < turns.length; index += 1) {
+    const previous = turns[index - 1];
+    const current = turns[index];
+    const schemaFreeGrowthTokens = nonNegativeDelta(
+      current.schemaFreeEstimatedInputTokens,
+      previous.schemaFreeEstimatedInputTokens,
+    );
+    const systemGrowthTokens = nonNegativeDelta(
+      current.systemEstimatedTokens,
+      previous.systemEstimatedTokens,
+    );
+    const brepContextGrowthTokens = nonNegativeDelta(
+      current.addedBrepContextEstimatedTokens,
+      previous.addedBrepContextEstimatedTokens,
+    );
+    const modelMessageGrowthTokens = nonNegativeDelta(
+      current.effectiveModelMessageEstimatedTokens,
+      previous.effectiveModelMessageEstimatedTokens,
+    );
+    const imageGrowthTokens = nonNegativeDelta(
+      current.imageEstimatedTokens,
+      previous.imageEstimatedTokens,
+    );
+    const residualModelMessageGrowthTokens =
+      modelMessageGrowthTokens === null
+        ? null
+        : Math.max(0, modelMessageGrowthTokens - (imageGrowthTokens ?? 0));
+    const nonBrepSystemGrowthTokens =
+      systemGrowthTokens === null
+        ? null
+        : Math.max(0, systemGrowthTokens - (brepContextGrowthTokens ?? 0));
+    const persistedBrepToolPayloadGrowthTokens = nonNegativeDelta(
+      current.historicalBrepToolPayloadEstimatedTokens,
+      previous.historicalBrepToolPayloadEstimatedTokens,
+    );
+    const persistedBrepSnapshotGrowthBytes = nonNegativeDelta(
+      current.historicalBrepSnapshotPersistedBytes,
+      previous.historicalBrepSnapshotPersistedBytes,
+    );
+    const openCodeInputGrowthTokens = nonNegativeDelta(
+      current.openCodeFirstStepInputTokens,
+      previous.openCodeFirstStepInputTokens,
+    );
+    const externalGrowthBeyondBrepiaEstimateTokens =
+      openCodeInputGrowthTokens === null || schemaFreeGrowthTokens === null
+        ? null
+        : Math.max(0, openCodeInputGrowthTokens - schemaFreeGrowthTokens);
+    const activatesCurrentBrep =
+      previous.currentCanonicalBrepPresent === false &&
+      current.currentCanonicalBrepPresent === true;
+
+    if (activatesCurrentBrep) {
+      oneTimeCurrentBrepActivationTokens += brepContextGrowthTokens ?? 0;
+    } else if (
+      previous.currentCanonicalBrepPresent === true &&
+      current.currentCanonicalBrepPresent === true
+    ) {
+      contributions['current canonical BRep size changes after activation'] +=
+        brepContextGrowthTokens ?? 0;
+    }
+    contributions['conversation/projection model-message state'] +=
+      residualModelMessageGrowthTokens ?? 0;
+    contributions.images += imageGrowthTokens ?? 0;
+    contributions['transport/system instructions outside current BRep'] +=
+      nonBrepSystemGrowthTokens ?? 0;
+
+    turnDeltas.push({
+      fromTurn: previous.turnNumber,
+      toTurn: current.turnNumber,
+      schemaFreeGrowthTokens,
+      systemGrowthTokens,
+      brepContextGrowthTokens,
+      activatesCurrentBrep,
+      modelMessageGrowthTokens,
+      imageGrowthTokens,
+      residualModelMessageGrowthTokens,
+      nonBrepSystemGrowthTokens,
+      persistedBrepToolPayloadGrowthTokens,
+      persistedBrepSnapshotGrowthBytes,
+      openCodeInputGrowthTokens,
+      externalGrowthBeyondBrepiaEstimateTokens,
+    });
+  }
+
+  const openCodeInputByTurn = turns.map((turn) => turn.openCodeFirstStepInputTokens);
+  const openCodeUsageReported = openCodeInputByTurn.some((value) => value !== null);
+  const openCodeGrowth = turnDeltas
+    .map((delta) => delta.openCodeInputGrowthTokens)
+    .filter((value) => value !== null);
+  const externalExcess = turnDeltas
+    .map((delta) => delta.externalGrowthBeyondBrepiaEstimateTokens)
+    .filter((value) => value !== null);
+
+  const status = !sameTransportAndModel
+    ? 'incompatible_turn_series'
+    : turns.length >= 2
+      ? 'consecutive_turns_available'
+      : 'insufficient_consecutive_turns';
+
+  return {
+    status,
+    turnCount: turns.length,
+    transportKind: turns[0].transportKind,
+    modelId: turns[0].modelId,
+    modelBudgetSource: turns[0].modelBudgetSource,
+    sameTransportAndModel,
+    turns,
+    turnDeltas,
+    oneTimeCurrentBrepActivationTokens,
+    brepiaSideTurnGrowthContributions: contributions,
+    brepiaSideDominantTurnGrowth:
+      status === 'consecutive_turns_available'
+        ? dominantContributions(contributions)
+        : [],
+    externalSessionUsage: openCodeUsageReported
+      ? {
+          status: 'reported',
+          firstStepInputTokensByTurn: openCodeInputByTurn,
+          growthAvailable: openCodeGrowth.length > 0,
+          positiveInputGrowthObserved: openCodeGrowth.some((value) => value > 0),
+          inputGrowthTokens: openCodeGrowth,
+          externalGrowthBeyondBrepiaEstimateTokens: externalExcess,
+        }
+      : {
+          status: 'unavailable',
+          firstStepInputTokensByTurn: openCodeInputByTurn,
+          growthAvailable: false,
+          positiveInputGrowthObserved: null,
+          inputGrowthTokens: [],
+          externalGrowthBeyondBrepiaEstimateTokens: [],
+        },
+    latestRun: turns.at(-1).run,
+  };
+}
+
 function formatNullable(value) {
   return value === null || value === undefined ? 'unavailable' : String(value);
 }
 
-export function formatEvidenceMarkdown(report) {
+export function formatEvidenceRunMarkdown(report) {
   const lines = [
-    '# Native BRep Phase G2 context-growth evidence',
+    '## Latest turn internal-step evidence',
     '',
-    `- Status: **${report.status}**`,
-    `- Transport: \`${formatNullable(report.transportKind)}\``,
-    `- Model: \`${formatNullable(report.modelId)}\``,
-    `- Model budget source: \`${formatNullable(report.modelBudgetSource)}\``,
-    `- Conservative estimated input: ${formatNullable(report.staticContext.estimatedInputTokens)} tokens`,
-    `- Schema-free estimated input: ${formatNullable(report.staticContext.estimatedInputTokensExcludingProviderToolSchemas)} tokens`,
-    `- Provider tool-schema estimate: ${formatNullable(report.staticContext.providerToolSchemaEstimatedTokens)} tokens`,
-    `- Hard budget enforced: ${formatNullable(report.staticContext.hardBudgetEnforced)}`,
-    '',
-    '## Consecutive step deltas',
+    `- Internal-step status: **${report.status}**`,
     '',
     '| Step | Model msg tokens | Δ model | Tool-result tokens | Δ tool results | BRep payload tokens | Δ BRep | Δ residual | OpenCode input | Δ OpenCode input |',
     '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
@@ -316,23 +553,66 @@ export function formatEvidenceMarkdown(report) {
     );
   }
 
-  lines.push('', '## Classification inputs', '');
-  if (report.brepiaSideDominantGrowth.length === 0) {
+  return lines;
+}
+
+export function formatEvidenceMarkdown(report) {
+  const latest = report.turns.at(-1);
+  const lines = [
+    '# Native BRep Phase G2 context-growth evidence',
+    '',
+    `- Status: **${report.status}**`,
+    `- Captured turns: ${report.turnCount}`,
+    `- Transport: \`${formatNullable(report.transportKind)}\``,
+    `- Model: \`${formatNullable(report.modelId)}\``,
+    `- Model budget source: \`${formatNullable(report.modelBudgetSource)}\``,
+    `- Latest conservative estimated input: ${formatNullable(latest?.conservativeEstimatedInputTokens)} tokens`,
+    `- Latest schema-free estimated input: ${formatNullable(latest?.schemaFreeEstimatedInputTokens)} tokens`,
+    `- Provider tool-schema estimate: ${formatNullable(latest?.providerToolSchemaEstimatedTokens)} tokens`,
+    '',
+    '## Consecutive turn deltas',
+    '',
+    '| Turn | Schema-free | Δ schema-free | System | Δ system | Current BRep ctx | Δ BRep ctx | Model msgs | Δ model msgs | OpenCode first-step input | Δ OpenCode | Δ external excess |',
+    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+  ];
+
+  for (const turn of report.turns) {
+    const delta = report.turnDeltas.find((entry) => entry.toTurn === turn.turnNumber);
     lines.push(
-      report.status === 'insufficient_consecutive_steps'
-        ? '- Brepia-side dominant growth: **not classifiable — fewer than two steps**'
-        : '- Brepia-side dominant growth: **no positive measured step growth**',
+      `| ${turn.turnNumber} | ${formatNullable(turn.schemaFreeEstimatedInputTokens)} | ${delta ? formatNullable(delta.schemaFreeGrowthTokens) : '0'} | ${formatNullable(turn.systemEstimatedTokens)} | ${delta ? formatNullable(delta.systemGrowthTokens) : '0'} | ${formatNullable(turn.addedBrepContextEstimatedTokens)} | ${delta ? formatNullable(delta.brepContextGrowthTokens) : '0'} | ${formatNullable(turn.effectiveModelMessageEstimatedTokens)} | ${delta ? formatNullable(delta.modelMessageGrowthTokens) : '0'} | ${formatNullable(turn.openCodeFirstStepInputTokens)} | ${delta ? formatNullable(delta.openCodeInputGrowthTokens) : 'unavailable'} | ${delta ? formatNullable(delta.externalGrowthBeyondBrepiaEstimateTokens) : 'unavailable'} |`,
+    );
+  }
+
+  lines.push('', '## Classification inputs', '');
+  if (report.status === 'incompatible_turn_series') {
+    lines.push(
+      '- Brepia-side dominant turn growth: **not classifiable — model or transport changed inside the capture**.',
+    );
+  } else if (report.brepiaSideDominantTurnGrowth.length === 0) {
+    lines.push(
+      report.status === 'insufficient_consecutive_turns'
+        ? '- Brepia-side dominant turn growth: **not classifiable — fewer than two captured turns**.'
+        : '- Brepia-side dominant turn growth: **no positive measured turn-to-turn growth after excluding one-time current-BRep activation**.',
     );
   } else {
     lines.push(
-      `- Brepia-side dominant measured growth: ${report.brepiaSideDominantGrowth
+      `- Brepia-side dominant measured turn growth: ${report.brepiaSideDominantTurnGrowth
         .map(
           (entry) =>
             `**${entry.name}** (${entry.estimatedGrowthTokens} estimated tokens)`,
         )
-        .join(', ')}`,
+        .join(', ')}.`,
     );
   }
+
+  lines.push(
+    `- One-time current canonical BRep activation: ${report.oneTimeCurrentBrepActivationTokens} estimated tokens; this is authoritative working state, not historical duplication.`,
+  );
+
+  const latestProjection = latest?.providerProjection;
+  lines.push(
+    `- Latest persisted historical BRep tool payload estimate: ${formatNullable(latest?.historicalBrepToolPayloadEstimatedTokens)} tokens; provider projection applied: **${formatNullable(latestProjection?.applied)}**; removed historical tool input/output bytes: ${formatNullable(latestProjection?.removedToolInputBytes)}/${formatNullable(latestProjection?.removedToolOutputBytes)}.`,
+  );
 
   if (report.externalSessionUsage.status === 'unavailable') {
     lines.push(
@@ -340,13 +620,19 @@ export function formatEvidenceMarkdown(report) {
     );
   } else {
     lines.push(
-      `- External OpenCode session usage: **reported**; positive input-token growth observed: **${report.externalSessionUsage.positiveInputGrowthObserved}**.`,
+      `- External OpenCode first-step usage: **reported**; turn-to-turn growth available: **${report.externalSessionUsage.growthAvailable}**; positive input-token growth observed: **${report.externalSessionUsage.positiveInputGrowthObserved}**.`,
     );
+    if (report.externalSessionUsage.growthAvailable) {
+      lines.push(
+        `- OpenCode input growth by turn: ${report.externalSessionUsage.inputGrowthTokens.join(', ')} tokens; growth beyond Brepia's schema-free estimate: ${report.externalSessionUsage.externalGrowthBeyondBrepiaEstimateTokens.join(', ')} tokens. Treat the latter as a diagnostic residual, not an exact tokenizer-equivalent decomposition.`,
+      );
+    }
   }
 
+  lines.push('', ...formatEvidenceRunMarkdown(report.latestRun));
   lines.push(
     '',
-    '> This report classifies measured deltas only. Static provider schemas and transport/system instructions are reported separately and are not mislabeled as step-to-step growth.',
+    '> Turn-to-turn classification is the primary G2 boundary for normal successful Native BRep edits because those turns are expected to stop after the first accepted build. Internal step deltas remain useful when bounded repair actually occurs. Static provider schemas are reported separately and are not treated as OpenCode transport cost.',
   );
 
   return `${lines.join('\n')}\n`;
@@ -365,11 +651,7 @@ function main() {
   }
 
   const records = parseEvidenceJsonl(readFileSync(path, 'utf8'));
-  const runs = segmentEvidenceRuns(records);
-  if (runs.length === 0) {
-    throw new Error('No ai context diagnostics record found in G2 evidence file');
-  }
-  const report = analyzeEvidenceRun(runs.at(-1));
+  const report = analyzeEvidenceCapture(records);
   process.stdout.write(
     json ? `${JSON.stringify(report, null, 2)}\n` : formatEvidenceMarkdown(report),
   );
