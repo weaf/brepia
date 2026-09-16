@@ -24,7 +24,7 @@ import {
   recordActiveBrepBuildAttemptStarted,
 } from './generationRunTelemetry';
 
-const DEFAULT_BREP_CREATION_CONTEXT = `This turn was explicitly routed by the product to create a new native BRep project. No previous BRep project exists. Ignore OpenSCAD-specific creation instructions for this turn and return one complete canonical native BRep project through build_brep_project. Do not fabricate previous-project state, emit OpenSCAD/Python/build123d source, STEP, mesh/tessellation authority, filesystem paths, or raw topology indices. Use only the canonical BRep schema and supported semantic selectors.`;
+const DEFAULT_BREP_CREATION_CONTEXT = `This turn was explicitly routed by the product to create a new native BRep project. No previous BRep project exists. Ignore OpenSCAD-specific creation instructions for this turn and return one complete canonical native BRep project in the final-result JSON envelope. The external transport does not expose build_brep_project as a callable tool: do not emit or imitate a build_brep_project tool call, <tool_call>, <arg_key>, or <arg_value> markup. Brepia validates the JSON envelope and converts its project into build_brep_project itself. Do not fabricate previous-project state, emit OpenSCAD/Python/build123d source, STEP, mesh/tessellation authority, filesystem paths, or raw topology indices. Use only the canonical BRep schema and supported semantic selectors.`;
 
 export type ParametricBuildToolName =
   | 'build_parametric_model'
