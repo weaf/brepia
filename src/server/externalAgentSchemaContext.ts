@@ -1,10 +1,9 @@
 import { brepAiBuildProviderInputSchema } from '@shared/brepAiTool';
-import type { AgentParametricSourceKind } from './opencodeAgentResult';
 
 export const BREP_AGENT_SCHEMA_CONTEXT_TAG = 'pcad_brep_schema';
 
 export function buildExternalAgentSchemaContext(
-  sourceKind: AgentParametricSourceKind,
+  sourceKind: 'openscad' | 'brep',
 ): string {
   if (sourceKind !== 'brep') return '';
 
