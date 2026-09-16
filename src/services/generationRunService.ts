@@ -7,12 +7,60 @@ import {
   type GenerationRunStatus,
   type GenerationRunTransportKind,
 } from '@shared/generationRun';
+import {
+  GENERATION_RUN_EVENT_MAX_COUNT,
+  type GenerationRunEventKind,
+  type GenerationRunEventSnapshot,
+} from '@shared/generationRunEvent';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
 type GenerationRunRow = Database['public']['Tables']['generation_runs']['Row'];
 
+type GenerationRunEventRow = {
+  id: string;
+  generation_run_id: string;
+  user_id: string;
+  sequence: number;
+  kind: string;
+  invocation_number: number | null;
+  candidate_number: number | null;
+  build_attempt_number: number | null;
+  model_step_number: number | null;
+  repair_count: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  context_used_tokens: number | null;
+  context_limit_tokens: number | null;
+  created_at: string;
+};
+
+type GenerationRunEventQueryResult = {
+  data: GenerationRunEventRow[] | null;
+  error: { message: string } | null;
+};
+
+type GenerationRunEventQuery = {
+  select: (columns: string) => GenerationRunEventQuery;
+  eq: (column: string, value: string) => GenerationRunEventQuery;
+  order: (
+    column: string,
+    options: { ascending: boolean },
+  ) => PromiseLike<GenerationRunEventQueryResult>;
+};
+
+type GenerationRunEventClient = {
+  from: (table: 'generation_run_events') => GenerationRunEventQuery;
+};
+
 const GENERATION_RUN_POLL_MS = 1_000;
+
+function generationRunEventClient(): GenerationRunEventClient {
+  // `shared/database.ts` is generated from the local Supabase schema and is not
+  // hand-edited at a migration boundary. Isolate the temporary table cast here
+  // until the next schema-driven type regeneration includes generation_run_events.
+  return supabase as unknown as GenerationRunEventClient;
+}
 
 export function generationRunRowToClientSnapshot(
   row: GenerationRunRow,
@@ -47,12 +95,67 @@ export function generationRunRowToClientSnapshot(
   };
 }
 
+export function generationRunEventRowToClientSnapshot(
+  row: GenerationRunEventRow,
+): GenerationRunEventSnapshot {
+  return {
+    id: row.id,
+    generationRunId: row.generation_run_id,
+    userId: row.user_id,
+    sequence: row.sequence,
+    kind: row.kind as GenerationRunEventKind,
+    ...(row.invocation_number !== null
+      ? { invocationNumber: row.invocation_number }
+      : {}),
+    ...(row.candidate_number !== null
+      ? { candidateNumber: row.candidate_number }
+      : {}),
+    ...(row.build_attempt_number !== null
+      ? { buildAttemptNumber: row.build_attempt_number }
+      : {}),
+    ...(row.model_step_number !== null
+      ? { modelStepNumber: row.model_step_number }
+      : {}),
+    ...(row.repair_count !== null ? { repairCount: row.repair_count } : {}),
+    ...(row.error_code !== null ? { errorCode: row.error_code } : {}),
+    ...(row.error_message !== null ? { errorMessage: row.error_message } : {}),
+    ...(row.context_used_tokens !== null
+      ? { contextUsedTokens: row.context_used_tokens }
+      : {}),
+    ...(row.context_limit_tokens !== null
+      ? { contextLimitTokens: row.context_limit_tokens }
+      : {}),
+    createdAt: row.created_at,
+  };
+}
+
+export function reconcileGenerationRunEvents(
+  current: readonly GenerationRunEventSnapshot[],
+  incoming: readonly GenerationRunEventSnapshot[],
+  generationRunId: string,
+): GenerationRunEventSnapshot[] {
+  const bySequence = new Map<number, GenerationRunEventSnapshot>();
+  for (const event of [...current, ...incoming]) {
+    if (event.generationRunId !== generationRunId) continue;
+    bySequence.set(event.sequence, event);
+  }
+  return [...bySequence.values()]
+    .sort((left, right) => left.sequence - right.sequence)
+    .slice(-GENERATION_RUN_EVENT_MAX_COUNT);
+}
+
 export function shouldPollGenerationRun(
   run: GenerationRunSnapshot | undefined,
   pollWhenMissing: boolean,
 ): boolean {
   if (!run) return pollWhenMissing;
   return !isGenerationRunTerminal(run.status);
+}
+
+export function shouldPollGenerationRunEvents(
+  run: GenerationRunSnapshot | undefined,
+): boolean {
+  return Boolean(run && !isGenerationRunTerminal(run.status));
 }
 
 export function selectGenerationRunAfterBaseline(
@@ -89,6 +192,23 @@ export async function getLatestBrepGenerationRun({
   return data
     ? generationRunRowToClientSnapshot(data as GenerationRunRow)
     : undefined;
+}
+
+export async function getGenerationRunEvents(
+  generationRunId: string,
+): Promise<GenerationRunEventSnapshot[]> {
+  const { data, error } = await generationRunEventClient()
+    .from('generation_run_events')
+    .select('*')
+    .eq('generation_run_id', generationRunId)
+    .order('sequence', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return reconcileGenerationRunEvents(
+    [],
+    (data ?? []).map(generationRunEventRowToClientSnapshot),
+    generationRunId,
+  );
 }
 
 export function useLatestBrepGenerationRun({
@@ -128,5 +248,23 @@ export function useLatestBrepGenerationRun({
         ? selectGenerationRunAfterBaseline(run, baselineRunId)
         : run;
     },
+  });
+}
+
+export function useGenerationRunEvents({
+  run,
+  enabled = true,
+}: {
+  run: GenerationRunSnapshot | undefined;
+  enabled?: boolean;
+}) {
+  return useQuery<GenerationRunEventSnapshot[]>({
+    queryKey: ['generation-run-events', run?.id ?? null],
+    enabled: enabled && Boolean(run?.id),
+    refetchOnWindowFocus: 'always',
+    refetchIntervalInBackground: true,
+    refetchInterval: () =>
+      shouldPollGenerationRunEvents(run) ? GENERATION_RUN_POLL_MS : false,
+    queryFn: () => (run ? getGenerationRunEvents(run.id) : Promise.resolve([])),
   });
 }
