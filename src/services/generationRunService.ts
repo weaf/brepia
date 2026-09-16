@@ -54,6 +54,7 @@ type GenerationRunEventClient = {
 };
 
 const GENERATION_RUN_POLL_MS = 1_000;
+export const GENERATION_RUN_EVENT_TERMINAL_SETTLE_MS = 5_000;
 
 function generationRunEventClient(): GenerationRunEventClient {
   // `shared/database.ts` is generated from the local Supabase schema and is not
@@ -154,8 +155,15 @@ export function shouldPollGenerationRun(
 
 export function shouldPollGenerationRunEvents(
   run: GenerationRunSnapshot | undefined,
+  nowMs = Date.now(),
 ): boolean {
-  return Boolean(run && !isGenerationRunTerminal(run.status));
+  if (!run) return false;
+  if (!isGenerationRunTerminal(run.status)) return true;
+
+  const terminalUpdatedAt = Date.parse(run.updatedAt);
+  if (!Number.isFinite(terminalUpdatedAt)) return false;
+  const terminalAgeMs = Math.max(0, nowMs - terminalUpdatedAt);
+  return terminalAgeMs < GENERATION_RUN_EVENT_TERMINAL_SETTLE_MS;
 }
 
 export function selectGenerationRunAfterBaseline(
@@ -261,6 +269,8 @@ export function useGenerationRunEvents({
   return useQuery<GenerationRunEventSnapshot[]>({
     queryKey: ['generation-run-events', run?.id ?? null],
     enabled: enabled && Boolean(run?.id),
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
     refetchOnWindowFocus: 'always',
     refetchIntervalInBackground: true,
     refetchInterval: () =>
