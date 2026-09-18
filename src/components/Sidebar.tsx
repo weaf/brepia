@@ -271,7 +271,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
               <Tooltip>
                 <TooltipTrigger asChild>{children}</TooltipTrigger>
                 <TooltipContent side="right">
-                  New native BRep project
+                  Saved native BRep models
                 </TooltipContent>
               </Tooltip>
             )}
@@ -283,7 +283,7 @@ function DesktopSidebar({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) {
                 onClick={() => sidebarNavigate('/brep')}
               >
                 <Box className="h-5 w-5" />
-                {isSidebarOpen && 'New BRep project'}
+                {isSidebarOpen && 'BRep Models'}
               </Button>
             </div>
           </ConditionalWrapper>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BufferAttribute, BufferGeometry } from 'three';
+import { brepViewerGeometryFromResult } from '@/components/brep/brepViewerGeometry';
 import { ThreeScene } from '@/components/viewer/ThreeScene';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,22 +29,6 @@ const BREP_EVALUATION_DEBOUNCE_MS = 120;
 // still-finishing Podman request from the previous revision without weakening
 // the server-side capacity guard.
 let browserBrepEvaluationQueue: Promise<void> = Promise.resolve();
-
-function geometryFromResult(
-  result: BrepEvaluationSuccess,
-): BufferGeometry | null {
-  const mesh = result.bodies[0]?.viewerMesh;
-  if (!mesh) return null;
-  const geometry = new BufferGeometry();
-  geometry.setAttribute(
-    'position',
-    new BufferAttribute(new Float32Array(mesh.positions), 3),
-  );
-  geometry.setIndex(mesh.indices);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
-}
 
 function parameterValuesEqual(
   left: BrepParameterValues,
@@ -102,7 +86,7 @@ export function BrepProjectPreview({
     committedValuesRef.current,
   );
   const geometry = useMemo(
-    () => (result ? geometryFromResult(result) : null),
+    () => (result ? brepViewerGeometryFromResult(result) : null),
     [result],
   );
 

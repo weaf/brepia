@@ -9,13 +9,14 @@ import {
   BREP_EVALUATION_MAX_VIEWER_VERTICES,
   normalizeBrepEvaluationRequest,
   resolveBrepProjectObjectSemantics,
+  type BrepBounds,
   type BrepEvaluatedBody,
   type BrepEvaluationResult,
   type BrepEvaluationSuccess,
   type BrepParameterValues,
   type NormalizedBrepEvaluationRequest,
 } from '@shared/brepProvider';
-import type { BrepProject } from '@shared/brepProject';
+import { brepNodeValueKind, type BrepProject } from '@shared/brepProject';
 
 const execFileAsync = promisify(execFile);
 export const BREP_EVALUATION_TIMEOUT_MS = 45_000;
@@ -96,6 +97,14 @@ function finiteVector(value: unknown): value is [number, number, number] {
   );
 }
 
+function validBounds(value: unknown): value is BrepBounds {
+  if (!isRecord(value)) return false;
+  const min = value.min;
+  const max = value.max;
+  if (!finiteVector(min) || !finiteVector(max)) return false;
+  return min.every((component, index) => component <= max[index]!);
+}
+
 function valuesEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -118,15 +127,35 @@ function valuesEqual(left: unknown, right: unknown): boolean {
   return false;
 }
 
+function aggregateBodyBounds(bodies: readonly BrepEvaluatedBody[]): BrepBounds {
+  return {
+    min: [0, 1, 2].map((axis) =>
+      Math.min(...bodies.map((body) => body.bounds.min[axis]!)),
+    ) as [number, number, number],
+    max: [0, 1, 2].map((axis) =>
+      Math.max(...bodies.map((body) => body.bounds.max[axis]!)),
+    ) as [number, number, number],
+  };
+}
+
 function validEvaluatedBody(value: unknown): value is BrepEvaluatedBody {
   if (!isRecord(value)) return false;
   const body = value as unknown as BrepEvaluatedBody;
   if (
     typeof body.id !== 'string' ||
-    !finiteVector(body.bounds?.min) ||
-    !finiteVector(body.bounds?.max)
+    typeof body.nodeId !== 'string' ||
+    !validBounds(body.bounds)
   )
     return false;
+  if (body.instance != null) {
+    if (
+      !isRecord(body.instance) ||
+      !Number.isInteger(body.instance.index) ||
+      body.instance.index < 0 ||
+      typeof body.instance.sourceNodeId !== 'string'
+    )
+      return false;
+  }
   const mesh = body.viewerMesh;
   return (
     !mesh ||
@@ -192,9 +221,58 @@ function validProjectObjectResult(
       if (body != null) return false;
       continue;
     }
-    if (!validEvaluatedBody(body) || body.id !== expectedNodeId) return false;
+    if (
+      !validEvaluatedBody(body) ||
+      body.id !== expectedNodeId ||
+      body.nodeId !== expectedNodeId ||
+      body.instance != null
+    )
+      return false;
   }
   return true;
+}
+
+function validPrimaryBodies(
+  result: BrepEvaluationSuccess,
+  request: NormalizedBrepEvaluationRequest,
+): boolean {
+  const resultNode = request.project.nodes.find(
+    (node) => node.id === request.project.resultNodeId,
+  );
+  if (!resultNode) return false;
+  const expectedKind = brepNodeValueKind(resultNode);
+  if (result.resultKind !== expectedKind) return false;
+  if (!result.bodies.every(validEvaluatedBody)) return false;
+  if (!valuesEqual(result.bounds, aggregateBodyBounds(result.bodies))) return false;
+
+  if (expectedKind === 'single') {
+    const body = result.bodies[0];
+    return (
+      result.bodies.length === 1 &&
+      body?.id === request.project.resultNodeId &&
+      body.nodeId === request.project.resultNodeId &&
+      body.instance == null
+    );
+  }
+
+  if (
+    resultNode.type !== 'linearPattern' &&
+    resultNode.type !== 'rectangularPattern' &&
+    resultNode.type !== 'circularPattern'
+  )
+    return false;
+  const expectedBodyCount =
+    resultNode.type === 'rectangularPattern'
+      ? resultNode.countA * resultNode.countB
+      : resultNode.count;
+  if (result.bodies.length !== expectedBodyCount) return false;
+  return result.bodies.every(
+    (body, index) =>
+      body.id === `${resultNode.id}::${index}` &&
+      body.nodeId === resultNode.id &&
+      body.instance?.index === index &&
+      body.instance.sourceNodeId === resultNode.input,
+  );
 }
 
 function validSuccess(
@@ -207,16 +285,15 @@ function validSuccess(
     result.status !== 'success' ||
     result.projectId !== request.project.id ||
     result.resultNodeId !== request.project.resultNodeId ||
+    (result.resultKind !== 'single' && result.resultKind !== 'instanceSet') ||
     !Array.isArray(result.bodies) ||
     result.bodies.length < 1 ||
     result.bodies.length > BREP_EVALUATION_MAX_BODY_COUNT ||
-    result.bodies[0]?.id !== request.project.resultNodeId ||
-    !finiteVector(result.bounds?.min) ||
-    !finiteVector(result.bounds?.max) ||
+    !validBounds(result.bounds) ||
     !validProjectObjectResult(result.projectObject, request)
   )
     return false;
-  return result.bodies.every(validEvaluatedBody);
+  return validPrimaryBodies(result, request);
 }
 
 export type BrepEvaluationArtifact = {

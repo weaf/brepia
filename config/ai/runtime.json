@@ -114,17 +114,17 @@
     },
     "transport.openCodeTimeoutMs": {
       "label": "OpenCode request timeout",
-      "description": "Maximum time for one OpenCode-backed Generative request.",
+      "description": "Maximum wall-clock time for one OpenCode-backed Generative request.",
       "type": "integer",
-      "default": 480000,
+      "default": 1200000,
       "min": 30000,
       "max": 3600000
     },
     "transport.cliTimeoutMs": {
       "label": "CLI agent timeout",
-      "description": "Maximum time for one OpenCode or Codex CLI agent invocation.",
+      "description": "Maximum wall-clock time for one OpenCode or Codex CLI agent invocation.",
       "type": "integer",
-      "default": 480000,
+      "default": 1200000,
       "min": 30000,
       "max": 3600000
     },

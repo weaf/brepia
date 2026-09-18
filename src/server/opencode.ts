@@ -30,6 +30,14 @@ import {
   resolveAgentResultChannels,
   type AgentParametricSourceKind,
 } from './opencodeAgentResult';
+import {
+  boundedExternalBrepResultRepairDiagnostic,
+  buildBoundedExternalBrepRepairPrompt,
+} from './brepAgentResultDiagnostics';
+import {
+  openCodeAgentForSourceKind,
+  type OpenCodeAgentName,
+} from './opencodeAgentRouting';
 import { validateOpenScadProject } from './openScadValidation';
 import { createServerOpenScadProjectAssetResolver } from './openScadProjectAssetStorage';
 import { logError, logWarning } from './serverLog';
@@ -50,7 +58,6 @@ const USAGE = (): LanguageModelV3Usage => ({
 });
 
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
-const PCAD_OPENCODE_AGENT = 'pcad-builder';
 
 export type OpenCodeRuntimeOptions = {
   transportInstruction?: string;
@@ -332,7 +339,7 @@ export function buildOpenCodeSessionTitle(
 }
 
 export type OpenCodeSessionIdentity = {
-  agent: typeof PCAD_OPENCODE_AGENT;
+  agent: OpenCodeAgentName;
   model: { providerID: string; id: string };
   title: string;
 };
@@ -340,13 +347,14 @@ export type OpenCodeSessionIdentity = {
 export function buildOpenCodeSessionIdentity(
   modelId: string,
   prompt: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): OpenCodeSessionIdentity {
   const slash = modelId.indexOf('/');
   const providerID = slash > 0 ? modelId.slice(0, slash) : 'opencode';
   const bareId = slash > 0 ? modelId.slice(slash + 1) : modelId;
   return {
     title: buildOpenCodeSessionTitle(bareId, prompt),
-    agent: PCAD_OPENCODE_AGENT,
+    agent: openCodeAgentForSourceKind(sourceKind),
     model: { providerID, id: bareId },
   };
 }
@@ -932,16 +940,58 @@ export function parseSSE(text: string): SSEEvent[] {
   return events;
 }
 
+function errorChain(error: unknown): unknown[] {
+  const chain: unknown[] = [];
+  let current = error;
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    chain.push(current);
+    if (typeof current !== 'object') break;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return chain;
+}
+
+export function isRecoverableOpenCodeEventStreamError(error: unknown): boolean {
+  const recoverableCodes = new Set([
+    'UND_ERR_BODY_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_SOCKET',
+    'ECONNRESET',
+    'EPIPE',
+    'ETIMEDOUT',
+  ]);
+
+  for (const candidate of errorChain(error)) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const record = candidate as { code?: unknown; message?: unknown };
+    if (
+      typeof record.code === 'string' &&
+      recoverableCodes.has(record.code)
+    ) {
+      return true;
+    }
+    if (
+      typeof record.message === 'string' &&
+      /\bterminated\b|body timeout|fetch failed|socket hang up|other side closed/i.test(
+        record.message,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function createIncrementalSseReader(
   eventRes: Response,
   ac: AbortController,
-): AsyncIterableIterator<SSEEvent[]> & { close: () => void } {
+): AsyncIterableIterator<SSEEvent[]> & { close: () => Promise<void> } {
   const body = eventRes.body;
   if (!body) {
     const empty = (async function* () {})() as AsyncIterableIterator<
       SSEEvent[]
-    > & { close: () => void };
-    empty.close = () => {};
+    > & { close: () => Promise<void> };
+    empty.close = async () => {};
     return empty;
   }
 
@@ -977,10 +1027,18 @@ function createIncrementalSseReader(
         const events = parseSSE(textBuffer);
         if (events.length) yield events;
       }
-      reader.cancel();
-      reader.releaseLock();
+      try {
+        await reader.cancel();
+      } catch {
+        // A transport that already closed may reject cancel(); cleanup is best effort.
+      }
+      try {
+        reader.releaseLock();
+      } catch {
+        // Ignore an already released/invalid reader during transport teardown.
+      }
     }
-  })() as AsyncIterableIterator<SSEEvent[]> & { close: () => void };
+  })() as AsyncIterableIterator<SSEEvent[]> & { close: () => Promise<void> };
 
   gen.close = async () => {
     try {
@@ -1218,7 +1276,11 @@ async function* streamParts(
       runtime.sourceKind,
       runtime.currentBrepProject,
     );
-    const identity = buildOpenCodeSessionIdentity(modelId, formattedPrompt);
+    const identity = buildOpenCodeSessionIdentity(
+      modelId,
+      formattedPrompt,
+      runtime.sourceKind,
+    );
     const { providerID, id: bareId } = identity.model;
 
     let sessionId = '';
@@ -1328,6 +1390,7 @@ async function* streamParts(
     });
     let state = makeState(admittedSeq ?? 0);
     let validationAttempts = 0;
+    let eventStreamFailureCount = 0;
     const resolveAsset =
       runtime.sourceKind === 'openscad' && conversationId
         ? createServerOpenScadProjectAssetResolver(conversationId)
@@ -1366,6 +1429,7 @@ async function* streamParts(
         eventReader = createIncrementalSseReader(eventRes, ac);
 
         for await (const events of eventReader) {
+          eventStreamFailureCount = 0;
           const { newParts } = processBatch(state, events);
           for (const part of newParts) {
             if (
@@ -1382,13 +1446,32 @@ async function* streamParts(
           if (state.isTerminal) break;
         }
       } catch (err) {
-        if (!ac.signal.aborted) throw err;
+        if (!ac.signal.aborted) {
+          if (!isRecoverableOpenCodeEventStreamError(err)) throw err;
+          eventStreamFailureCount += 1;
+          if (
+            eventStreamFailureCount <= 3 ||
+            eventStreamFailureCount % 10 === 0
+          ) {
+            logWarning(
+              `OpenCode event stream disconnected; resuming session ${sessionId} after durable cursor ${state.cursor}: ${err instanceof Error ? err.message : String(err)}`,
+              {
+                functionName: 'opencode-event-reconnect',
+                failureCount: eventStreamFailureCount,
+              },
+            );
+          }
+        }
       } finally {
-        eventReader?.close();
+        await eventReader?.close();
       }
 
       if (!state.isTerminal) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        const reconnectDelayMs = Math.min(
+          500 * 2 ** Math.min(eventStreamFailureCount, 2),
+          2_000,
+        );
+        await new Promise((resolve) => setTimeout(resolve, reconnectDelayMs));
         continue;
       }
 
@@ -1398,9 +1481,37 @@ async function* streamParts(
         runtime.sourceKind,
       );
       const candidate = parseAgentResult(resultText, runtime.sourceKind);
-      if (!candidate.project) break;
 
-      if (runtime.sourceKind === 'brep') break;
+      if (runtime.sourceKind === 'brep') {
+        const diagnostic = boundedExternalBrepResultRepairDiagnostic(resultText, {
+          requireProject: !runtime.currentBrepProject,
+        });
+        if (!diagnostic) break;
+
+        validationAttempts += 1;
+        if (validationAttempts >= runtime.validationAttempts) {
+          state.totalText = JSON.stringify({
+            message: `Native BRep validation failed after ${runtime.validationAttempts} attempts: ${diagnostic}`,
+          });
+          break;
+        }
+
+        const repairPrompt = buildBoundedExternalBrepRepairPrompt({
+          diagnostic,
+          attempt: validationAttempts,
+          maxAttempts: runtime.validationAttempts,
+        });
+        const repairSeq = await submitOpenCodePrompt(
+          apiUrl,
+          sessionId,
+          repairPrompt,
+          ac.signal,
+        );
+        state = makeState(repairSeq ?? state.cursor);
+        continue;
+      }
+
+      if (!candidate.project) break;
 
       let candidateProject = candidate.project as OpenScadProject;
       let reconciliationDiagnostics: string | null = null;

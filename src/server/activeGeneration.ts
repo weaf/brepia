@@ -1,6 +1,10 @@
+import { enterActiveGenerationTelemetry } from './generationRunTelemetry';
+
 type ActiveGenerationEntry = {
   controller: AbortController;
   runId: symbol;
+  durableRunId?: string;
+  finishTelemetry?: () => void;
 };
 
 const activeGenerations = new Map<string, ActiveGenerationEntry>();
@@ -12,20 +16,36 @@ function generationKey(userId: string, conversationId: string): string {
 export type ActiveGeneration = {
   signal: AbortSignal;
   finish: () => void;
+  replacedDurableRunId?: string;
+};
+
+export type CancelledActiveGeneration = {
+  cancelled: boolean;
+  durableRunId?: string;
 };
 
 export function beginActiveGeneration(
   userId: string,
   conversationId: string,
+  durableRunId?: string,
 ): ActiveGeneration {
   const key = generationKey(userId, conversationId);
   const previous = activeGenerations.get(key);
   previous?.controller.abort();
+  previous?.finishTelemetry?.();
 
   const entry: ActiveGenerationEntry = {
     controller: new AbortController(),
     runId: Symbol('generation'),
+    ...(durableRunId ? { durableRunId } : {}),
   };
+  if (durableRunId) {
+    entry.finishTelemetry = enterActiveGenerationTelemetry({
+      userId,
+      conversationId,
+      runId: durableRunId,
+    });
+  }
   activeGenerations.set(key, entry);
 
   return {
@@ -33,8 +53,29 @@ export function beginActiveGeneration(
     finish: () => {
       if (activeGenerations.get(key)?.runId === entry.runId) {
         activeGenerations.delete(key);
+        entry.finishTelemetry?.();
       }
     },
+    ...(previous?.durableRunId
+      ? { replacedDurableRunId: previous.durableRunId }
+      : {}),
+  };
+}
+
+export function cancelActiveGenerationWithRunId(
+  userId: string,
+  conversationId: string,
+): CancelledActiveGeneration {
+  const key = generationKey(userId, conversationId);
+  const entry = activeGenerations.get(key);
+  if (!entry) return { cancelled: false };
+
+  activeGenerations.delete(key);
+  entry.controller.abort();
+  entry.finishTelemetry?.();
+  return {
+    cancelled: true,
+    ...(entry.durableRunId ? { durableRunId: entry.durableRunId } : {}),
   };
 }
 
@@ -42,13 +83,7 @@ export function cancelActiveGeneration(
   userId: string,
   conversationId: string,
 ): boolean {
-  const key = generationKey(userId, conversationId);
-  const entry = activeGenerations.get(key);
-  if (!entry) return false;
-
-  activeGenerations.delete(key);
-  entry.controller.abort();
-  return true;
+  return cancelActiveGenerationWithRunId(userId, conversationId).cancelled;
 }
 
 export function hasActiveGenerationForConversation(
@@ -78,6 +113,7 @@ export function cancelActiveGenerationForConversation(
     if (!key.endsWith(suffix)) continue;
     activeGenerations.delete(key);
     entry.controller.abort();
+    entry.finishTelemetry?.();
     cancelled = true;
   }
 

@@ -91,6 +91,12 @@ export type ConversationSettings = {
    */
   brepHiddenRevisionIds?: string[];
   /**
+   * Optional user-facing names for immutable BRep source revisions. Keys are
+   * persisted message/revision IDs; changing a label never mutates canonical
+   * source bytes, parent lineage or export provenance.
+   */
+  brepRevisionLabels?: Record<string, string>;
+  /**
    * Repository-backed AI instruction package pinned when the conversation is
    * created. Model selection remains independent. Old conversations without
    * this field fall back to the user's current package for compatibility.

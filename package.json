@@ -1,15 +1,15 @@
 {
   "name": "brepia",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.5.0",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0",
     "npm": ">=10"
   },
   "scripts": {
-    "dev": "vite",
-    "dev:stable": "PCAD_DISABLE_HMR=1 vite",
+    "dev": "PCAD_BREP_RUNNER=${PCAD_BREP_RUNNER:-./scripts/brep/pcad-brep-sandbox} vite",
+    "dev:stable": "PCAD_BREP_RUNNER=${PCAD_BREP_RUNNER:-./scripts/brep/pcad-brep-sandbox} PCAD_DISABLE_HMR=1 vite",
     "build": "tsc -b && vite build",
     "lint": "eslint . --ignore-pattern 'supabase/**'",
     "typecheck": "tsc -b --noEmit",

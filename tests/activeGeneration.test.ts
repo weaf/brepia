@@ -3,6 +3,7 @@ import { afterEach, describe, it, vi } from 'vitest';
 import {
   beginActiveGeneration,
   cancelActiveGeneration,
+  cancelActiveGenerationWithRunId,
   scheduleActiveGenerationCancellation,
 } from '../src/server/activeGeneration';
 
@@ -39,6 +40,40 @@ describe('detached active generation lifecycle', () => {
 
     assert.equal(cancelActiveGeneration('user-a', 'conversation-c'), true);
     assert.equal(newer.signal.aborted, true);
+  });
+
+  it('returns the durable run id for explicit cancellation', () => {
+    const generation = beginActiveGeneration(
+      'user-a',
+      'conversation-durable',
+      'run-123',
+    );
+
+    assert.deepEqual(
+      cancelActiveGenerationWithRunId('user-a', 'conversation-durable'),
+      { cancelled: true, durableRunId: 'run-123' },
+    );
+    assert.equal(generation.signal.aborted, true);
+  });
+
+  it('reports the durable run replaced by a newer generation', () => {
+    const older = beginActiveGeneration(
+      'user-a',
+      'conversation-replaced',
+      'run-old',
+    );
+    const newer = beginActiveGeneration(
+      'user-a',
+      'conversation-replaced',
+      'run-new',
+    );
+
+    assert.equal(older.signal.aborted, true);
+    assert.equal(newer.replacedDurableRunId, 'run-old');
+    assert.deepEqual(
+      cancelActiveGenerationWithRunId('user-a', 'conversation-replaced'),
+      { cancelled: true, durableRunId: 'run-new' },
+    );
   });
 
   it('cancels the matching conversation on the next macrotask', () => {

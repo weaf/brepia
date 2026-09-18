@@ -39,10 +39,13 @@ import {
 } from '@shared/openScadProjectAssetReconciliation';
 import {
   buildAgentOutputContract,
+  buildExternalBrepRepairPrompt,
+  externalBrepResultRepairDiagnostic,
   parseAgentResult,
   type AgentParametricSourceKind,
   type AgentResult,
 } from './opencodeAgentResult';
+import { openCodeAgentForSourceKind } from './opencodeAgentRouting';
 import { logWarning } from './serverLog';
 
 const CLI_AGENT_WORKDIR = join(tmpdir(), 'pcad-cli-agent');
@@ -163,6 +166,18 @@ function bundledCliTimeoutMs(): number {
   const definition = getAiRuntimeLimitDefinition('transport.cliTimeoutMs');
   if (!definition || typeof definition.defaultValue !== 'number') {
     throw new Error('Missing transport.cliTimeoutMs runtime definition');
+  }
+  return definition.defaultValue;
+}
+
+function bundledCliValidationAttempts(): number {
+  const definition = getAiRuntimeLimitDefinition(
+    'transport.openCodeValidationAttempts',
+  );
+  if (!definition || typeof definition.defaultValue !== 'number') {
+    throw new Error(
+      'Missing transport.openCodeValidationAttempts runtime definition',
+    );
   }
   return definition.defaultValue;
 }
@@ -563,6 +578,7 @@ export function buildCliAgentArgs(
   agent: AgentKind,
   model: string,
   sessionId?: string,
+  sourceKind: AgentParametricSourceKind = 'openscad',
 ): string[] {
   if (agent === 'opencode') {
     return [
@@ -570,7 +586,7 @@ export function buildCliAgentArgs(
       '--format',
       'json',
       '--agent',
-      'pcad-builder',
+      openCodeAgentForSourceKind(sourceKind),
       '-m',
       model,
       ...(sessionId ? ['--session', sessionId] : []),
@@ -616,6 +632,8 @@ async function invokeAgent(
   model: string,
   prompt: string,
   timeoutMs: number,
+  validationAttempts: number,
+  requireBrepProject: boolean,
   existingSessionId?: string,
   signal?: AbortSignal,
   sourceKind: AgentParametricSourceKind = 'openscad',
@@ -624,11 +642,11 @@ async function invokeAgent(
     agent === 'opencode' ? OPEN_CODE_WORKDIR : await ensureCliAgentWorkdir();
   const instruction = buildCliAgentInstruction(agent, prompt, sourceKind);
 
-  const runOnce = async (sessionId?: string) => {
+  const runOnce = async (sessionId?: string, input = instruction) => {
     const cliResult = await runCli(
       agent,
-      buildCliAgentArgs(agent, model, sessionId),
-      instruction,
+      buildCliAgentArgs(agent, model, sessionId, sourceKind),
+      input,
       dir,
       timeoutMs,
       signal,
@@ -659,7 +677,50 @@ async function invokeAgent(
     reused = false;
   }
 
-  const sessionId = parsed.sessionId ?? existingSessionId;
+  let sessionId = parsed.sessionId ?? existingSessionId;
+  let result = parseAgentResult(parsed.text, sourceKind);
+  let brepValidationAttempt = 0;
+
+  if (sourceKind === 'brep') {
+    while (!result.project) {
+      const diagnostic = externalBrepResultRepairDiagnostic(parsed.text, {
+        requireProject: requireBrepProject,
+      });
+      if (!diagnostic) break;
+
+      brepValidationAttempt += 1;
+      if (brepValidationAttempt >= validationAttempts) {
+        result = {
+          message: `Native BRep validation failed after ${validationAttempts} attempts: ${diagnostic}`,
+        };
+        break;
+      }
+      if (!sessionId) {
+        result = {
+          message: `Native BRep validation failed and ${agent} exposed no resumable session for repair: ${diagnostic}`,
+        };
+        break;
+      }
+
+      console.info('cli agent native BRep repair', {
+        agent,
+        model,
+        sessionId,
+        attempt: brepValidationAttempt,
+        maxAttempts: validationAttempts,
+        diagnostic,
+      });
+      const repairPrompt = buildExternalBrepRepairPrompt({
+        diagnostic,
+        attempt: brepValidationAttempt,
+        maxAttempts: validationAttempts,
+      });
+      parsed = await runOnce(sessionId, repairPrompt);
+      sessionId = parsed.sessionId ?? sessionId;
+      result = parseAgentResult(parsed.text, sourceKind);
+    }
+  }
+
   if (!sessionId) {
     logWarning(`${agent} CLI did not expose a resumable session ID`, {
       functionName: 'cli-agent-session-id',
@@ -671,10 +732,13 @@ async function invokeAgent(
     model,
     sessionId,
     reused,
+    ...(sourceKind === 'brep'
+      ? { brepValidationAttempts: brepValidationAttempt }
+      : {}),
   });
 
   return {
-    result: parseAgentResult(parsed.text, sourceKind),
+    result,
     sessionId,
     reused,
   };
@@ -685,6 +749,7 @@ export function cliAgentChatModel(
   options: {
     transportInstruction?: string;
     timeoutMs?: number;
+    validationAttempts?: number;
     authoritativeAssets?: readonly OpenScadProjectAsset[];
     sourceKind?: AgentParametricSourceKind;
     currentBrepProject?: BrepProject;
@@ -697,6 +762,8 @@ export function cliAgentChatModel(
       agent === 'opencode' ? 'transport.opencode' : 'transport.codex',
     );
   const timeoutMs = options.timeoutMs ?? bundledCliTimeoutMs();
+  const validationAttempts =
+    options.validationAttempts ?? bundledCliValidationAttempts();
   const sourceKind = options.sourceKind ?? 'openscad';
 
   return {
@@ -719,6 +786,8 @@ export function cliAgentChatModel(
           { sourceKind, currentBrepProject: options.currentBrepProject },
         ),
         timeoutMs,
+        validationAttempts,
+        sourceKind === 'brep' && !options.currentBrepProject,
         existingSessionId,
         optionsForCall.abortSignal,
         sourceKind,

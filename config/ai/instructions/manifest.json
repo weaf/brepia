@@ -10,6 +10,22 @@
       "supportsOverlay": true
     },
     {
+      "key": "parametric.openscad",
+      "label": "Parametric OpenSCAD CAD specialization",
+      "description": "Source-kind CAD methodology added automatically for OpenSCAD Parametric conversations.",
+      "category": "agent",
+      "template": "parametric-openscad-compat.md",
+      "supportsOverlay": true
+    },
+    {
+      "key": "parametric.brep",
+      "label": "Parametric Native BRep CAD specialization",
+      "description": "Source-kind CAD methodology added automatically for Native BRep Parametric conversations.",
+      "category": "agent",
+      "template": "parametric-brep-compat.md",
+      "supportsOverlay": true
+    },
+    {
       "key": "creative",
       "label": "Creative",
       "description": "Primary system prompt for Creative mesh conversations.",

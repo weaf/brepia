@@ -305,7 +305,7 @@ export function ConversationView({
                     <div className="w-full px-4">
                       <Separator className="w-full bg-adam-neutral-700" />
                     </div>
-                    <div className="min-h-0 w-full flex-1">
+                    <div className="min-h-0 min-w-0 w-full flex-1 overflow-hidden">
                       {mobileParametersSlot ?? parametersSlot}
                     </div>
                   </>
@@ -320,12 +320,12 @@ export function ConversationView({
 
   return (
     <div
-      className="flex h-full w-full overflow-hidden bg-[#292828]"
+      className="flex h-full w-full min-w-0 overflow-hidden bg-[#292828]"
       ref={setContainerRef}
     >
       <PanelGroup
         direction="horizontal"
-        className="h-full w-full"
+        className="h-full w-full min-w-0 overflow-hidden"
         autoSaveId="editor-panels"
       >
         <Panel
@@ -336,6 +336,7 @@ export function ConversationView({
           maxSize={chatPanelSizes.maxSize}
           id="chat-panel"
           order={0}
+          className="min-w-0 overflow-hidden"
         >
           <div className="relative flex h-full min-w-0 flex-col border-r border-adam-neutral-700 bg-adam-bg-secondary-dark">
             {chatPanelSlot}
@@ -383,6 +384,7 @@ export function ConversationView({
           }
           id="preview-panel"
           order={1}
+          className="min-w-0 overflow-hidden"
         >
           {previewSlot}
         </Panel>
@@ -435,6 +437,7 @@ export function ConversationView({
           maxSize={parametersPanelSizes.maxSize}
           id="parameters-panel"
           order={2}
+          className="min-w-0 overflow-hidden"
         >
           {hasParameters && parametersSlot}
         </Panel>

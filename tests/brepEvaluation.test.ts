@@ -91,19 +91,19 @@ async function fakeRunner(body: string): Promise<string> {
 }
 
 const primaryBody =
-  '{"id":"body","bounds":{"min":[0,0,0],"max":[20,5,5]},"viewerMesh":{"bodyId":"body","positions":[0,0,0,20,0,0,0,5,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}';
+  '{"id":"body","nodeId":"body","bounds":{"min":[0,0,0],"max":[20,5,5]},"viewerMesh":{"bodyId":"body","positions":[0,0,0,20,0,0,0,5,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}';
 
 const emptyProjectObject =
   '{"placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0],"zAxis":[0,0,1]},"geometry":{},"points":[]}';
 
 const validRunnerBody = `cat > "$OUTPUT/result.json" <<'JSON'
-{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.3.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":true}}
+{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.3.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","resultKind":"single","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":true}}
 JSON
 printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"
 printf '3D Geometry File Format 80\n' > "$OUTPUT/model.3dm"`;
 
 const projectObjectRunnerBody = `cat > "$OUTPUT/result.json" <<'JSON'
-{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.3.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":{"placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0],"zAxis":[0,0,1]},"metadata":{"objectType":"cabinet","classification":"equipment"},"geometry":{"footprint":${primaryBody},"clearanceEnvelope":{"id":"clearance","bounds":{"min":[0,0,0],"max":[30,15,10]},"viewerMesh":{"bodyId":"clearance","positions":[0,0,0,30,0,0,0,15,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}},"points":[{"id":"cableEntry","kind":"cable","position":[20,2,0],"direction":[0,0,1],"label":"Cable entry"}]},"warnings":[],"exactExport":{"format":"step","available":true}}
+{"status":"success","provider":{"id":"build123d-occt","providerVersion":"0.3.0","kernelVersion":"7.9.3.1"},"projectId":"box","resultNodeId":"body","resultKind":"single","bodies":[${primaryBody}],"bounds":{"min":[0,0,0],"max":[20,5,5]},"projectObject":{"placement":{"origin":[0,0,0],"xAxis":[1,0,0],"yAxis":[0,1,0],"zAxis":[0,0,1]},"metadata":{"objectType":"cabinet","classification":"equipment"},"geometry":{"footprint":${primaryBody},"clearanceEnvelope":{"id":"clearance","nodeId":"clearance","bounds":{"min":[0,0,0],"max":[30,15,10]},"viewerMesh":{"bodyId":"clearance","positions":[0,0,0,30,0,0,0,15,0],"normals":[0,0,1,0,0,1,0,0,1],"indices":[0,1,2]}}},"points":[{"id":"cableEntry","kind":"cable","position":[20,2,0],"direction":[0,0,1],"label":"Cable entry"}]},"warnings":[],"exactExport":{"format":"step","available":true}}
 JSON
 printf 'ISO-10303-21;\nEND-ISO-10303-21;' > "$OUTPUT/model.step"
 printf '3D Geometry File Format 80\n' > "$OUTPUT/model.3dm"`;
@@ -132,6 +132,8 @@ describe('isolated BRep evaluation boundary', () => {
     const artifact = await evaluateBrepProject(project(), { width: 20 });
     expect(artifact.result.status).toBe('success');
     if (artifact.result.status !== 'success') throw new Error('Expected success');
+    expect(artifact.result.resultKind).toBe('single');
+    expect(artifact.result.bodies[0]).toMatchObject({ id: 'body', nodeId: 'body' });
     expect(artifact.result.projectObject).toEqual({
       placement: {
         origin: [0, 0, 0],
@@ -152,13 +154,18 @@ describe('isolated BRep evaluation boundary', () => {
     expect(artifact.result.status).toBe('success');
     if (artifact.result.status !== 'success') throw new Error('Expected success');
 
+    expect(artifact.result.resultKind).toBe('single');
     expect(artifact.result.bodies).toHaveLength(1);
-    expect(artifact.result.bodies[0].id).toBe('body');
+    expect(artifact.result.bodies[0]).toMatchObject({ id: 'body', nodeId: 'body' });
     expect(artifact.result.bounds.max).toEqual([20, 5, 5]);
-    expect(artifact.result.projectObject.geometry.footprint?.id).toBe('body');
-    expect(
-      artifact.result.projectObject.geometry.clearanceEnvelope?.id,
-    ).toBe('clearance');
+    expect(artifact.result.projectObject.geometry.footprint).toMatchObject({
+      id: 'body',
+      nodeId: 'body',
+    });
+    expect(artifact.result.projectObject.geometry.clearanceEnvelope).toMatchObject({
+      id: 'clearance',
+      nodeId: 'clearance',
+    });
     expect(artifact.result.projectObject.points[0]).toMatchObject({
       id: 'cableEntry',
       position: [20, 2, 0],
@@ -215,7 +222,7 @@ describe('isolated BRep evaluation boundary', () => {
   it('requires exact STEP availability for STEP export', async () => {
     process.env.PCAD_BREP_RUNNER = await fakeRunner(
       `cat > "$OUTPUT/result.json" <<'JSON'
-{"status":"success","provider":{},"projectId":"box","resultNodeId":"body","bodies":[{"id":"body","bounds":{"min":[0,0,0],"max":[1,1,1]}}],"bounds":{"min":[0,0,0],"max":[1,1,1]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":false}}
+{"status":"success","provider":{},"projectId":"box","resultNodeId":"body","resultKind":"single","bodies":[{"id":"body","nodeId":"body","bounds":{"min":[0,0,0],"max":[1,1,1]}}],"bounds":{"min":[0,0,0],"max":[1,1,1]},"projectObject":${emptyProjectObject},"warnings":[],"exactExport":{"format":"step","available":false}}
 JSON`,
     );
     await expectBrepError(
