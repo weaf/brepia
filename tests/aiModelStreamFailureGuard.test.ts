@@ -23,7 +23,7 @@ describe('AI model stream failure guard', () => {
       /onFinish: \(\{ steps \}\) => \{\s*activeGeneration\.finish\(\);\s*if \(!modelStreamFailed\) \{\s*void generationRun\.responseReceived\(\);\s*\}/,
     );
     expect(source).toMatch(
-      /onFinish: async \(\{ responseMessage, isContinuation \}\) => \{\s*if \(modelStreamFailed\) \{\s*if \(modelStreamFailure !== undefined\) throw modelStreamFailure;\s*throw new Error\('Model stream failed before response finalization\.'\);\s*\}\s*await generationRun\.validatingArtifact/,
+      /onFinish: async \(\{ responseMessage, isContinuation \}\) => \{\s*if \(modelStreamFailed\) \{\s*if \(modelStreamFailure !== undefined\) throw modelStreamFailure;\s*throw new Error\(\s*'Model stream failed before response finalization\.'\s*,?\s*\);\s*\}\s*await generationRun\.validatingArtifact/,
     );
   });
 });
