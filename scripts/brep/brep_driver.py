@@ -9,6 +9,17 @@ from build123d import Box, Cylinder, Location, export_step
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
 THREEDM_EXACT_STEP_NAME = "brepia-primary.step"
+THREEDM_EXACT_STEP_NAMES = {
+    "result": THREEDM_EXACT_STEP_NAME,
+    "footprint": "brepia-footprint.step",
+    "clearanceEnvelope": "brepia-clearance-envelope.step",
+    "maintenanceEnvelope": "brepia-maintenance-envelope.step",
+}
+PROJECT_OBJECT_ROLE_FIELDS = (
+    ("footprint", "footprintNodeId"),
+    ("clearanceEnvelope", "clearanceEnvelopeNodeId"),
+    ("maintenanceEnvelope", "maintenanceEnvelopeNodeId"),
+)
 
 
 def scalar(value, parameters):
@@ -96,22 +107,55 @@ def rhino_mesh(viewer_mesh):
     return target
 
 
-def write_3dm(project, result, step_path, three_dm_path):
+def exact_role_node_ids(project):
+    definition = project.get("projectObject") or {}
+    roles = {"result": project["resultNodeId"]}
+    for role, field in PROJECT_OBJECT_ROLE_FIELDS:
+        node_id = definition.get(field)
+        if node_id:
+            roles[role] = node_id
+    return roles
+
+
+def exact_artifact_entries(project):
+    role_node_ids = exact_role_node_ids(project)
+    return [
+        {
+            "role": role,
+            "nodeId": role_node_ids[role],
+            "format": "step",
+            "representation": "exact-brep",
+            "contentType": "model/step",
+            "fileName": THREEDM_EXACT_STEP_NAMES[role],
+        }
+        for role in THREEDM_EXACT_STEP_NAMES
+        if role in role_node_ids
+    ]
+
+
+def validate_exact_step_file(path, role):
+    if not path.is_file():
+        raise ValueError(f"3dm_export_failed: missing exact STEP for {role}")
+    with path.open("rb") as stream:
+        if b"ISO-10303-21" not in stream.read(128):
+            raise ValueError(f"3dm_export_failed: invalid exact STEP for {role}")
+
+
+def write_3dm(project, result, exact_step_paths, three_dm_path):
     model = rhino3dm.File3dm()
     model.Settings.ModelUnitSystem = rhino3dm.UnitSystem.Millimeters
 
     placement = result["projectObject"]["placement"]
     metadata = result["projectObject"].get("metadata")
-    definition = project.get("projectObject") or {}
-    role_node_ids = {
-        "footprint": definition.get("footprintNodeId"),
-        "clearanceEnvelope": definition.get("clearanceEnvelopeNodeId"),
-        "maintenanceEnvelope": definition.get("maintenanceEnvelopeNodeId"),
+    role_node_ids = exact_role_node_ids(project)
+    optional_role_node_ids = {
+        role: node_id for role, node_id in role_node_ids.items() if role != "result"
     }
     semantic_contract = {
-        "roles": {key: value for key, value in role_node_ids.items() if value},
+        "roles": optional_role_node_ids,
         "points": result["projectObject"]["points"],
     }
+    exact_artifacts = exact_artifact_entries(project)
     document_strings = {
         "brepia.schemaVersion": str(project["schemaVersion"]),
         "brepia.projectId": project["id"],
@@ -120,8 +164,10 @@ def write_3dm(project, result, step_path, three_dm_path):
         "brepia.units": project["units"],
         "brepia.geometryRepresentation": "tessellated-mesh",
         "brepia.exactPrimaryArtifact": f"embedded:{THREEDM_EXACT_STEP_NAME}",
+        "brepia.exactBrepArtifacts": compact_json(exact_artifacts),
         "brepia.placement": compact_json(placement),
         "brepia.projectObject": compact_json(semantic_contract),
+        "brepia.warnings": compact_json(result["warnings"]),
     }
     if metadata is not None:
         document_strings["brepia.metadata"] = compact_json(metadata)
@@ -132,10 +178,9 @@ def write_3dm(project, result, step_path, three_dm_path):
     for body in result["projectObject"]["geometry"].values():
         bodies[body["id"]] = body
 
-    roles_by_node = {project["resultNodeId"]: ["result"]}
+    roles_by_node = {}
     for role, node_id in role_node_ids.items():
-        if node_id:
-            roles_by_node.setdefault(node_id, []).append(role)
+        roles_by_node.setdefault(node_id, []).append(role)
 
     for node_id, roles in roles_by_node.items():
         body = bodies[node_id]
@@ -168,18 +213,24 @@ def write_3dm(project, result, step_path, three_dm_path):
         x, y, z = point["position"]
         model.Objects.AddPoint(x, y, z, attributes)
 
-    embedded = rhino3dm.EmbeddedFile.Read(str(step_path))
-    if embedded is None:
-        raise ValueError("3dm_export_failed: could not embed exact primary STEP")
-    embedded.Filename = THREEDM_EXACT_STEP_NAME
-    model.EmbeddedFiles.Add(embedded)
+    for artifact in exact_artifacts:
+        role = artifact["role"]
+        step_path = exact_step_paths.get(role)
+        if step_path is None:
+            raise ValueError(f"3dm_export_failed: exact STEP path missing for {role}")
+        validate_exact_step_file(step_path, role)
+        embedded = rhino3dm.EmbeddedFile.Read(str(step_path))
+        if embedded is None:
+            raise ValueError(f"3dm_export_failed: could not embed exact STEP for {role}")
+        embedded.Filename = artifact["fileName"]
+        model.EmbeddedFiles.Add(embedded)
 
     if not model.Write(str(three_dm_path), THREEDM_VERSION):
         raise ValueError("3dm_export_failed: rhino3dm could not write model.3dm")
 
     # Fail closed inside the native sandbox too: independently re-open the
-    # written document, verify the core semantic contract and prove that the
-    # embedded exact STEP survives the 3DM serialization round trip.
+    # written document, verify the semantic/exact contracts and prove that all
+    # embedded exact STEP artifacts survive the 3DM serialization round trip.
     check = rhino3dm.File3dm.Read(str(three_dm_path))
     if check is None:
         raise ValueError("3dm_export_failed: rhino3dm could not re-open model.3dm")
@@ -189,19 +240,26 @@ def write_3dm(project, result, step_path, three_dm_path):
         raise ValueError("3dm_export_failed: project identity did not round trip")
     if check.Strings["brepia.placement"] != compact_json(placement):
         raise ValueError("3dm_export_failed: placement did not round trip")
-    if len(check.EmbeddedFiles) != 1:
+    if check.Strings["brepia.exactBrepArtifacts"] != compact_json(exact_artifacts):
+        raise ValueError("3dm_export_failed: exact artifact manifest did not round trip")
+    if check.Strings["brepia.warnings"] != compact_json(result["warnings"]):
+        raise ValueError("3dm_export_failed: warnings did not round trip")
+
+    expected_names = {artifact["fileName"] for artifact in exact_artifacts}
+    embedded_by_name = {item.Filename: item for item in check.EmbeddedFiles}
+    if set(embedded_by_name) != expected_names:
         raise ValueError("3dm_export_failed: exact STEP embedding did not round trip")
-    embedded_check = check.EmbeddedFiles[0]
-    if embedded_check.Filename != THREEDM_EXACT_STEP_NAME:
-        raise ValueError("3dm_export_failed: embedded STEP identity did not round trip")
-    extracted_step = three_dm_path.with_suffix(".embedded.step")
-    if not embedded_check.Write(str(extracted_step)):
-        raise ValueError("3dm_export_failed: embedded STEP could not be extracted")
-    try:
-        if b"ISO-10303-21" not in extracted_step.read_bytes()[:128]:
-            raise ValueError("3dm_export_failed: embedded exact STEP is invalid")
-    finally:
-        extracted_step.unlink(missing_ok=True)
+
+    for artifact in exact_artifacts:
+        role = artifact["role"]
+        embedded_check = embedded_by_name[artifact["fileName"]]
+        extracted_step = three_dm_path.parent / f"verify-{artifact['fileName']}"
+        if not embedded_check.Write(str(extracted_step)):
+            raise ValueError(f"3dm_export_failed: embedded STEP for {role} could not be extracted")
+        try:
+            validate_exact_step_file(extracted_step, role)
+        finally:
+            extracted_step.unlink(missing_ok=True)
 
 
 def evaluate(request):
@@ -244,17 +302,14 @@ def evaluate(request):
     result_id = project["resultNodeId"]
     result = evaluate_node(result_id)
     primary_body = evaluated_body(result_id)
+    role_shapes = {"result": result}
 
     definition = project.get("projectObject") or {}
     geometry = {}
-    role_fields = (
-        ("footprint", "footprintNodeId"),
-        ("clearanceEnvelope", "clearanceEnvelopeNodeId"),
-        ("maintenanceEnvelope", "maintenanceEnvelopeNodeId"),
-    )
-    for role, field in role_fields:
+    for role, field in PROJECT_OBJECT_ROLE_FIELDS:
         node_id = definition.get(field)
         if node_id:
+            role_shapes[role] = evaluate_node(node_id)
             geometry[role] = evaluated_body(node_id)
 
     project_object = {
@@ -275,17 +330,24 @@ def evaluate(request):
         "projectObject": project_object,
         "warnings": [],
         "exactExport": {"format": "step", "available": True},
-    }
+    }, role_shapes
 
 
 if __name__ == "__main__":
     try:
         request = json.loads(Path(sys.argv[1]).read_text())
         output = Path(sys.argv[2]); output.mkdir(parents=True, exist_ok=True)
-        shape, result = evaluate(request)
+        shape, result, role_shapes = evaluate(request)
         step_path = output / "model.step"
         export_step(shape, step_path)
-        write_3dm(request["project"], result, step_path, output / "model.3dm")
+        exact_step_paths = {"result": step_path}
+        for role, role_shape in role_shapes.items():
+            if role == "result":
+                continue
+            role_step_path = output / THREEDM_EXACT_STEP_NAMES[role]
+            export_step(role_shape, role_step_path)
+            exact_step_paths[role] = role_step_path
+        write_3dm(request["project"], result, exact_step_paths, output / "model.3dm")
         (output / "result.json").write_text(json.dumps(result, separators=(",", ":")))
     except Exception as error:
         print(str(error), file=sys.stderr)
