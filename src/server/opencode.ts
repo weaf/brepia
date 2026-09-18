@@ -964,10 +964,7 @@ export function isRecoverableOpenCodeEventStreamError(error: unknown): boolean {
   for (const candidate of errorChain(error)) {
     if (!candidate || typeof candidate !== 'object') continue;
     const record = candidate as { code?: unknown; message?: unknown };
-    if (
-      typeof record.code === 'string' &&
-      recoverableCodes.has(record.code)
-    ) {
+    if (typeof record.code === 'string' && recoverableCodes.has(record.code)) {
       return true;
     }
     if (
@@ -980,6 +977,14 @@ export function isRecoverableOpenCodeEventStreamError(error: unknown): boolean {
     }
   }
   return false;
+}
+
+export function openCodeEventAfterCursor(
+  cursor: number,
+  eventStreamFailureCount: number,
+): number {
+  if (cursor <= 0) return 0;
+  return eventStreamFailureCount > 0 ? cursor - 1 : cursor;
 }
 
 function createIncrementalSseReader(
@@ -1114,7 +1119,11 @@ export function processBatch(
         ? (legacyDurable['seq'] as number)
         : undefined);
     if (durableSeq !== undefined) {
-      state.cursor = Math.max(state.cursor, durableSeq);
+      // Reconnects intentionally overlap one durable event. Ignore that replay
+      // before processing its payload so text/reasoning/tool state stays
+      // idempotent while still allowing the next durable event through.
+      if (durableSeq <= state.cursor) continue;
+      state.cursor = durableSeq;
     }
 
     if (evt.type?.includes('permission.v2.asked')) {
@@ -1409,7 +1418,12 @@ async function* streamParts(
 
       const eventsUrl = new URL(`${apiUrl}/api/session/${sessionId}/event`);
       if (state.cursor > 0) {
-        eventsUrl.searchParams.set('after', String(state.cursor));
+        eventsUrl.searchParams.set(
+          'after',
+          String(
+            openCodeEventAfterCursor(state.cursor, eventStreamFailureCount),
+          ),
+        );
       }
 
       let eventReader:
@@ -1483,9 +1497,12 @@ async function* streamParts(
       const candidate = parseAgentResult(resultText, runtime.sourceKind);
 
       if (runtime.sourceKind === 'brep') {
-        const diagnostic = boundedExternalBrepResultRepairDiagnostic(resultText, {
-          requireProject: !runtime.currentBrepProject,
-        });
+        const diagnostic = boundedExternalBrepResultRepairDiagnostic(
+          resultText,
+          {
+            requireProject: !runtime.currentBrepProject,
+          },
+        );
         if (!diagnostic) break;
 
         validationAttempts += 1;
