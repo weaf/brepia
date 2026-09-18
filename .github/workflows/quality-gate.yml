@@ -43,6 +43,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser smoke
+        run: npm run test:browser-smoke
+
       - name: Diff check
         shell: bash
         run: |
