@@ -28,10 +28,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
 
@@ -42,7 +42,7 @@ jobs:
         run: dotnet build grasshopper/Brepia.Grasshopper/Brepia.Grasshopper.csproj --configuration Release --no-restore --warnaserror
 
       - name: Upload plugin
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: brepia-grasshopper
           path: grasshopper/Brepia.Grasshopper/bin/Release/net8.0/Brepia.Grasshopper.gha
@@ -60,10 +60,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
 
