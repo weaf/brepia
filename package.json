@@ -18,7 +18,8 @@
     "prepare": "husky",
     "test:b9": "playwright test -c playwright.config.ts",
     "test": "vitest run",
-    "test:browser-smoke": "playwright test -c playwright.smoke.config.ts"
+    "test:browser-smoke": "playwright test -c playwright.smoke.config.ts",
+    "test:brep-gap-audit": "playwright test -c playwright.brep-product-gap.config.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.78",
