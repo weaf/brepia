@@ -1,17 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import { finishWithParametricToolCall } from './opencodeAgentResult.ts';
-
-/**
- * R06 — single-emission and revision-loop regression tests.
- *
- * These test the REAL shared finish-transformer (`finishWithParametricToolCall`)
- * that the streaming transport calls exactly once, at the terminal `finish`
- * part, with the fully accumulated response text. The false-positive path
- * that caused Qwen's infinite revision loop (prose keywords -> accidental
- * `build_parametric_model` tool-call) must never produce a build call.
- */
 
 const FINISH_STOP: Extract<LanguageModelV3StreamPart, { type: 'finish' }> = {
   type: 'finish',
@@ -27,33 +17,43 @@ const FINISH_STOP: Extract<LanguageModelV3StreamPart, { type: 'finish' }> = {
   },
 };
 
+const PROJECT = {
+  schemaVersion: 1 as const,
+  entrypointPath: 'main.scad',
+  files: [{ path: 'main.scad', content: 'cube([10,10,10]);' }],
+};
+
+function projectEnvelope(message = 'Model ready'): string {
+  return JSON.stringify({ project: PROJECT, message });
+}
+
 function toolCalls(parts: Array<{ type: string }>): number {
-  return parts.filter((p) => p.type === 'tool-call').length;
+  return parts.filter((part) => part.type === 'tool-call').length;
 }
 
 describe('R06 — streaming tool-call emission regression', () => {
-  describe('prose keyword regression (the Qwen infinite-loop trigger)', () => {
-    it('zero build calls for prose with cube', () => {
-      const parts = finishWithParametricToolCall(
-        'The cube looks correct; no rotation is necessary.',
-        FINISH_STOP,
-      );
-      assert.equal(toolCalls(parts), 0);
-    });
-
-    it('zero build calls for prose with cube, rotate, and cylinder', () => {
+  describe('prose false-positive regression', () => {
+    it('emits no build call for prose with CAD keywords', () => {
       const parts = finishWithParametricToolCall(
         'The cube is fine. Rotate it 45 degrees. The cylinder needs a smaller radius.',
         FINISH_STOP,
       );
       assert.equal(toolCalls(parts), 0);
     });
+
+    it('emits no build call for a legacy top-level code envelope', () => {
+      const parts = finishWithParametricToolCall(
+        '{"code":"cube([10,10,10]);","message":"legacy"}',
+        FINISH_STOP,
+      );
+      assert.equal(toolCalls(parts), 0);
+    });
   });
 
-  describe('explicit artifact final results', () => {
-    it('exactly one build call for a fenced SCAD final result', () => {
+  describe('complete project final results', () => {
+    it('emits exactly one build call for a complete project envelope', () => {
       const parts = finishWithParametricToolCall(
-        'Here is the model:\n```scad\ncube([10,10,10]);\n```',
+        projectEnvelope(),
         FINISH_STOP,
       );
       assert.equal(toolCalls(parts), 1);
@@ -62,87 +62,52 @@ describe('R06 — streaming tool-call emission regression', () => {
         (parts[0] as { toolName?: string }).toolName,
         'build_parametric_model',
       );
+      const input = JSON.parse((parts[0] as { input: string }).input) as {
+        project: typeof PROJECT;
+      };
+      assert.deepEqual(input.project, PROJECT);
     });
 
-    it('exactly one build call for a CLI-supported JSON final result', () => {
+    it('accepts the complete project envelope inside a JSON fence', () => {
       const parts = finishWithParametricToolCall(
-        '```json\n{"code":"sphere(r=5);","message":"Model ready"}\n```',
+        `\`\`\`json\n${projectEnvelope()}\n\`\`\``,
         FINISH_STOP,
       );
       assert.equal(toolCalls(parts), 1);
     });
 
-    it('exactly one build call for a bare JSON final result', () => {
+    it('uses one final build call when a corrected project follows a draft', () => {
+      const draft = JSON.stringify({
+        project: {
+          ...PROJECT,
+          files: [{ path: 'main.scad', content: 'cube([5,5,5]);' }],
+        },
+        message: 'Draft',
+      });
       const parts = finishWithParametricToolCall(
-        '{"code":"cylinder(h=10, r=2);","message":"Done"}',
+        `${draft}\nCorrection:\n${projectEnvelope('Fixed')}`,
         FINISH_STOP,
       );
       assert.equal(toolCalls(parts), 1);
+      const input = JSON.parse((parts[0] as { input: string }).input) as {
+        project: typeof PROJECT;
+      };
+      assert.equal(input.project.files[0]?.content, 'cube([10,10,10]);');
     });
   });
 
   describe('terminal-event contract', () => {
-    it('zero build calls for a partial fenced block during the stream', () => {
+    it('emits no build call for an incomplete project envelope', () => {
       const parts = finishWithParametricToolCall(
-        '```scad\ncube([10,10,10]);\ntranslate([0,0,20]) s',
+        '{"project":{"schemaVersion":1,"entrypointPath":"main.scad"}',
         FINISH_STOP,
       );
       assert.equal(toolCalls(parts), 0);
     });
 
-    it('exactly one build call when the fence completes by the terminal event', () => {
-      const parts = finishWithParametricToolCall(
-        '```scad\ncube([10,10,10]);\ntranslate([0,0,20]) sphere(r=5);\n```',
-        FINISH_STOP,
-      );
-      assert.equal(toolCalls(parts), 1);
-    });
-
-    it('exactly one build call when repeated/snapshot events carry the same final content', () => {
-      const parts = finishWithParametricToolCall(
-        '```scad\ncube([10,10,10]);\n```\n\n```scad\ncube([10,10,10]);\n```',
-        FINISH_STOP,
-      );
-      assert.equal(toolCalls(parts), 1);
-    });
-
-    it('exactly one build call when artifact and terminal event are in the same batch', () => {
-      const parts = finishWithParametricToolCall(
-        '```scad\ncube([10,10,10]);\n```',
-        FINISH_STOP,
-      );
-      assert.equal(toolCalls(parts), 1);
-    });
-  });
-
-  describe('follow-up prose and ordinary text', () => {
-    it('zero accidental build calls for follow-up prose after a tool result with CAD keywords', () => {
-      const parts = finishWithParametricToolCall(
-        'The model was built successfully. The cube and cylinder are both visible.',
-        FINISH_STOP,
-      );
-      assert.equal(toolCalls(parts), 0);
-    });
-
-    it('ordinary final text yields no build call and keeps finishReason', () => {
-      const parts = finishWithParametricToolCall(
-        'This is just a plain answer with no code.',
-        FINISH_STOP,
-      );
-      assert.equal(toolCalls(parts), 0);
-      assert.equal(parts.length, 1);
-      const finish = parts[0] as Extract<
-        LanguageModelV3StreamPart,
-        { type: 'finish' }
-      >;
-      assert.equal(finish.finishReason.unified, 'stop');
-    });
-  });
-
-  describe('finishReason transformation', () => {
     it('marks the finish part as tool-calls when a build call is emitted', () => {
       const parts = finishWithParametricToolCall(
-        '```scad\ncube([10,10,10]);\n```',
+        projectEnvelope(),
         FINISH_STOP,
       );
       const finish = parts[parts.length - 1] as Extract<

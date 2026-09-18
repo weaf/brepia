@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   conversationAgentDir,
   conversationAgentEventsLogPath,
@@ -47,7 +47,7 @@ async function withWorkspaceRoot(
   }
 }
 
-describe('conversation workspace', { concurrency: false }, () => {
+describe('conversation workspace', { concurrent: false }, () => {
   it('keeps all paths inside the configured UUID-owned root', async () => {
     await withWorkspaceRoot(async (configuredRoot) => {
       assert.equal(conversationWorkspaceRoot(), configuredRoot);

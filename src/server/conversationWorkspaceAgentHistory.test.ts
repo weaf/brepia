@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   conversationAgentEventsLogPath,
   conversationAgentSessionPath,
@@ -112,7 +112,7 @@ function request() {
   });
 }
 
-describe('conversation workspace agent history', { concurrency: false }, () => {
+describe('conversation workspace agent history', { concurrent: false }, () => {
   it('collects only active-branch streaming OpenCode turns and tracks reuse', () => {
     const turns = collectConversationAgentTurns(
       CONVERSATION_ID,

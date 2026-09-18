@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.ts', 'src/server/**/*.test.ts'],
     exclude: ['tests/b9_acceptance.test.ts', '**/node_modules/**'],
   },
 });

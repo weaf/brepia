@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { handleMeshRequest } from './mesh.ts';
 
 const CONVERSATION_ID = '11111111-2222-4333-8444-555555555555';
@@ -24,7 +24,7 @@ describe('local Creative mesh edit routing', () => {
     assert.deepEqual(await response.json(), {
       error: {
         message:
-          'Follow-up editing of locally generated Creative meshes is not enabled yet. Create a new local mesh generation instead.',
+          'Follow-up editing is not supported by this Creative mesh backend. Create a new generation instead.',
       },
     });
   });

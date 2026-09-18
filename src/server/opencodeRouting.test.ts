@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 
 // --- Copied from src/server/cliAgents.ts for isolated unit testing ---
 // See opencodeEvents.test.ts for the same pattern (extensionless source

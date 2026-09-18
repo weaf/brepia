@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { initializeConversationWorkspace } from './conversationWorkspace.ts';
 import {
   conversationGeneratedMeshPath,
@@ -38,7 +38,7 @@ function request() {
 
 describe(
   'conversation workspace generated mesh mirroring',
-  { concurrency: false },
+  { concurrent: false },
   () => {
     it('builds generated mesh paths under models/generated and rejects unsafe IDs/extensions', () => {
       assert.equal(

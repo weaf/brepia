@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { buildCliAgentInstruction } from './cliAgents.ts';
 import { buildAgentOutputContract } from './opencodeAgentResult.ts';
 import { formatPrompt } from './opencode.ts';
@@ -7,7 +7,7 @@ import { formatPrompt } from './opencode.ts';
 const CADAM_CONTEXT = 'You are CADAM. Build useful parametric OpenSCAD models.';
 
 describe('R3 semantic parity', () => {
-  it('appends the canonical output contract to both OpenCode transports', () => {
+  it('appends the canonical output contract to OpenCode CLI and Streaming', () => {
     const contract = buildAgentOutputContract();
     assert.ok(
       buildCliAgentInstruction('opencode', 'User: make a box').endsWith(
@@ -21,12 +21,11 @@ describe('R3 semantic parity', () => {
     );
   });
 
-  it('keeps Codex CLI instruction independent of the OpenCode contract', () => {
-    assert.ok(
-      !buildCliAgentInstruction('codex', 'User: make a box').includes(
-        'Final result format —',
-      ),
-    );
+  it('uses the same canonical project envelope for Codex CLI', () => {
+    const codex = buildCliAgentInstruction('codex', 'User: make a box');
+    assert.ok(codex.endsWith(buildAgentOutputContract()));
+    assert.match(codex, /COMPLETE normalized OpenSCAD project snapshot/);
+    assert.match(codex, /Do not return a legacy top-level code field/);
   });
 
   it('preserves CADAM system context and conversation history', () => {
@@ -55,24 +54,30 @@ describe('R3 semantic parity', () => {
     );
   });
 
-  it('retains the OpenCode own-tool prohibition and pCAD artifact bridge', () => {
+  it('retains the OpenCode bounded-tool guidance and artifact bridge', () => {
     const formatted = formatPrompt([
       { role: 'user', content: [{ type: 'text', text: 'Create a box.' }] },
     ]);
     assert.match(
       formatted,
-      /Do NOT use OpenCode filesystem, shell, network, web, or external tools/,
+      /Do not use unrelated filesystem, shell, network, web, or external tools/,
     );
-    assert.match(formatted, /pCAD.*build_parametric_model/);
-    assert.match(formatted, /pCAD-only workflow/);
+    assert.match(
+      formatted,
+      /converts the completed structured artifact into its build_parametric_model call/,
+    );
+    assert.match(
+      formatted,
+      /Brepia converts project into build_parametric_model itself/,
+    );
   });
 
-  it('requires a terminal JSON response instead of reasoning-only completion', () => {
+  it('requires a terminal structured JSON result', () => {
     assert.match(
       formatPrompt([
         { role: 'user', content: [{ type: 'text', text: 'Create a box.' }] },
       ]),
-      /Never finish after reasoning without/,
+      /Final result format — return ONLY one valid JSON object/,
     );
   });
 });

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, describe, it } from 'node:test';
+import { afterAll, describe, it } from 'vitest';
 
 /** Replicate the env-priority URL resolution logic for testing. */
 function resolveOpenCodeUrl(): string {
@@ -11,7 +11,7 @@ function resolveOpenCodeUrl(): string {
 }
 
 describe('openCode URL resolution', () => {
-  after(() => {
+  afterAll(() => {
     delete process.env.OPENCODE_BASE_URL;
     delete process.env.OPENCODE_PORT;
   });

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { extractText, parseSSE, type SSEEvent } from './opencode.ts';
 
 describe('extractText — opencode event shapes', () => {

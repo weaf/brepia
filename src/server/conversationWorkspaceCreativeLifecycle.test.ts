@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { it } from 'node:test';
+import { it } from 'vitest';
 import { syncConversationWorkspaceForChatRequest } from './conversationWorkspaceLifecycle.ts';
 
 const CONVERSATION_ID = '11111111-2222-4333-8444-555555555555';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   conversationAgentEventsLogPath,
   conversationAgentSessionPath,
@@ -32,7 +32,7 @@ async function withWorkspaceRoot(fn: () => Promise<void>): Promise<void> {
 
 describe(
   'conversation workspace agent diagnostics',
-  { concurrency: false },
+  { concurrent: false },
   () => {
     it('stores current session metadata and only logs actual changes', async () => {
       await withWorkspaceRoot(async () => {
