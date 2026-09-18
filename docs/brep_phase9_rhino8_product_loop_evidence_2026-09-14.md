@@ -6,9 +6,13 @@ Date: 2026-09-14
 
 Repository: `weaf/brepia`
 
-Branch: `feature/brep-grasshopper-gh-packaging`
+Current repository authority: `master`
 
-PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
+Release integration: `v1.5.0` at `e648879f5eade3729451596dcee38b5e7b9c007b`
+
+Historical acceptance branch: `feature/brep-grasshopper-gh-packaging`
+
+PR #36 was later merged into `master` for the v1.5.0 release. The former stacked feature branches have been removed; the branch references below are retained only where they identify historical acceptance evidence.
 
 ## Scope
 
@@ -205,4 +209,4 @@ The complete current-product loop has now been observed across the actual produc
 
 The remaining Playwright retry/revision-identification issue is a separate harness-hardening backlog item and is not an open Phase 9 product acceptance gap.
 
-PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
+PR #36 and its stacked Phase 7 dependency are now integrated into `master` through the v1.5.0 release; this document remains the historical installed-host acceptance record.

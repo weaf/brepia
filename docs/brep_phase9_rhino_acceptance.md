@@ -6,9 +6,13 @@ Date: 2026-09-14
 
 Repository: `weaf/brepia`
 
-Branch: `feature/brep-grasshopper-gh-packaging`
+Current repository authority: `master`
 
-PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
+Release integration: `v1.5.0` at `e648879f5eade3729451596dcee38b5e7b9c007b`
+
+Historical acceptance branch: `feature/brep-grasshopper-gh-packaging`
+
+PR #36 was later merged into `master` for the v1.5.0 release. The former stacked feature branches have been removed; the branch references below are retained only where they identify historical acceptance evidence.
 
 ## Purpose
 
@@ -70,20 +74,20 @@ Phase 9 is now closed because the missing continuous product loop has been compl
 
 ## Accepted 12-step matrix
 
-| Step | Requirement | Final Phase 9 result |
-| --- | --- | --- |
-| 1 | create supported canonical model + native preview | ACCEPTED — one-box canonical Phase 9 project created and rendered natively |
-| 2 | export GHX from saved immutable Brepia revision | ACCEPTED — current-product `phase9-source.ghx` exported |
-| 3 | open generated GHX in installed Rhino 8 / Grasshopper | ACCEPTED — exact current-product export opened without repair |
-| 4 | standard controls + built-in Python 3 carrier load without Brepia GHA | ACCEPTED |
-| 5 | solve expected native Rhino Brep geometry | ACCEPTED — ordinary single box Brep |
-| 6 | change at least two published parameters | ACCEPTED — Width `1200 -> 1500`, Height `2100 -> 2300` |
-| 7 | save -> close -> reopen -> solve | ACCEPTED — values and geometry persisted |
-| 8 | return Rhino-saved GHX to Brepia | ACCEPTED through product UI |
-| 9 | deterministic compatibility validation + parameter recovery | ACCEPTED — supported Width/Height return only |
-| 10 | activate imported immutable revision + native preview | ACCEPTED — imported revision initially inactive, then explicitly activated and rendered |
-| 11 | continue editing canonical model with Brepia AI | ACCEPTED — only literal depth changed `600 -> 700` while Width/Height were preserved |
-| 12 | export fresh GHX and reopen/solve in installed Rhino 8 / Grasshopper | ACCEPTED — final box `1500 x 700 x 2300` solved in installed Rhino 8 / Grasshopper |
+| Step | Requirement                                                           | Final Phase 9 result                                                                    |
+| ---- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 1    | create supported canonical model + native preview                     | ACCEPTED — one-box canonical Phase 9 project created and rendered natively              |
+| 2    | export GHX from saved immutable Brepia revision                       | ACCEPTED — current-product `phase9-source.ghx` exported                                 |
+| 3    | open generated GHX in installed Rhino 8 / Grasshopper                 | ACCEPTED — exact current-product export opened without repair                           |
+| 4    | standard controls + built-in Python 3 carrier load without Brepia GHA | ACCEPTED                                                                                |
+| 5    | solve expected native Rhino Brep geometry                             | ACCEPTED — ordinary single box Brep                                                     |
+| 6    | change at least two published parameters                              | ACCEPTED — Width `1200 -> 1500`, Height `2100 -> 2300`                                  |
+| 7    | save -> close -> reopen -> solve                                      | ACCEPTED — values and geometry persisted                                                |
+| 8    | return Rhino-saved GHX to Brepia                                      | ACCEPTED through product UI                                                             |
+| 9    | deterministic compatibility validation + parameter recovery           | ACCEPTED — supported Width/Height return only                                           |
+| 10   | activate imported immutable revision + native preview                 | ACCEPTED — imported revision initially inactive, then explicitly activated and rendered |
+| 11   | continue editing canonical model with Brepia AI                       | ACCEPTED — only literal depth changed `600 -> 700` while Width/Height were preserved    |
+| 12   | export fresh GHX and reopen/solve in installed Rhino 8 / Grasshopper  | ACCEPTED — final box `1500 x 700 x 2300` solved in installed Rhino 8 / Grasshopper      |
 
 ## Final accepted model and perturbations
 
@@ -215,4 +219,4 @@ current Brepia product export
 
 No new geometry/modeling slice should be started until the post-Phase-9 / post-multi-loop scope decision is recorded separately.
 
-PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
+PR #36 and its stacked Phase 7 dependency are now integrated into `master` through the v1.5.0 release; this document remains the historical installed-host acceptance record.
