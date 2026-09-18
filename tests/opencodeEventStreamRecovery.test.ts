@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
-import { isRecoverableOpenCodeEventStreamError } from '../src/server/opencode';
+import {
+  isRecoverableOpenCodeEventStreamError,
+  openCodeEventAfterCursor,
+} from '../src/server/opencode';
 
 describe('OpenCode durable event stream recovery', () => {
   it('retries Undici body timeouts instead of terminating the agent turn', () => {
@@ -18,6 +21,13 @@ describe('OpenCode durable event stream recovery', () => {
     });
 
     assert.equal(isRecoverableOpenCodeEventStreamError(error), true);
+  });
+
+  it('overlaps one durable event only after a stream failure', () => {
+    assert.equal(openCodeEventAfterCursor(0, 0), 0);
+    assert.equal(openCodeEventAfterCursor(53, 0), 53);
+    assert.equal(openCodeEventAfterCursor(53, 1), 52);
+    assert.equal(openCodeEventAfterCursor(1, 3), 0);
   });
 
   it('does not hide ordinary non-transport OpenCode failures', () => {

@@ -302,7 +302,11 @@ describe('S01 — stream lifecycle: no text-end before terminal', () => {
 
 // --- S02 — Direct processBatch() lifecycle tests ---
 
-import { processBatch, parseSSE } from '../server/opencode.js';
+import {
+  openCodeEventAfterCursor,
+  processBatch,
+  parseSSE,
+} from '../server/opencode.js';
 
 // ---- helpers ----
 function makeBatch(events: Record<string, unknown>[]) {
@@ -485,6 +489,34 @@ describe('S02 — processBatch() direct', () => {
       ]),
     );
     assert.strictEqual(state.cursor, 8, 'cursor advanced to 8');
+  });
+
+  it('reconnect overlaps one durable event and deduplicates the replay', () => {
+    assert.strictEqual(openCodeEventAfterCursor(53, 0), 53);
+    assert.strictEqual(openCodeEventAfterCursor(53, 1), 52);
+
+    const state = makeState();
+    state.cursor = 53;
+    const { newParts } = processBatch(
+      state,
+      makeBatch([
+        {
+          type: 'session.next.text.ended',
+          durable: { seq: 53 },
+          data: { text: 'must-not-repeat' },
+        },
+        {
+          type: 'session.next.step.ended',
+          durable: { seq: 54 },
+          data: { finish: 'stop', tokens: { input: 10, output: 5 } },
+        },
+      ]),
+    );
+
+    assert.strictEqual(state.cursor, 54);
+    assert.ok(state.isTerminal);
+    assert.strictEqual(state.totalText, '');
+    assert.ok(!partTypes(newParts).includes('text-delta'));
   });
 
   it('step.failed sets isErrored and yields error part', () => {
