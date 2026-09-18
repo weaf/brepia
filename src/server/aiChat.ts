@@ -75,14 +75,12 @@ import { getAnonSupabaseClient } from './supabaseClient';
 import { resolveConversationSystemPrompt } from './promptProfiles';
 import { resolveCreativeAgentModel } from './creativeAgentModel';
 import { createUserAiRuntimeContext } from './aiInstructionRuntime';
-import {
-  beginActiveGeneration,
-  cancelActiveGenerationWithRunId,
-} from './activeGeneration';
+import { beginActiveGeneration } from './activeGeneration';
 import {
   AiGenerationRunLifecycle,
   cancelDurableGenerationRun,
 } from './aiGenerationRunLifecycle';
+import { cancelConversationGeneration } from './generationCancellation';
 import { generationRunKindForConversation } from './generationRunPersistence';
 import { resolveAiTurnProvenance } from './aiTurnProvenance';
 import { modelSupportsDirectVision, withVisionFallback } from './vision';
@@ -192,11 +190,7 @@ function collectAuthoritativeOpenScadAssets(
 }
 
 type ChatProvider =
-  | 'custom'
-  | 'local'
-  | 'opencode'
-  | 'cli-agent'
-  | 'unsupported';
+  'custom' | 'local' | 'opencode' | 'cli-agent' | 'unsupported';
 
 function providerFor(modelId: string): ChatProvider {
   if (isCustomProviderModel(modelId)) return 'custom';
@@ -662,18 +656,11 @@ export async function handleAiChatRequest(req: Request) {
   }
 
   if (parsedBody.kind === 'cancel') {
-    const cancellation = cancelActiveGenerationWithRunId(
+    const canceled = await cancelConversationGeneration(
       user.id,
       conversation.id,
     );
-    if (cancellation.durableRunId) {
-      await cancelDurableGenerationRun(
-        cancellation.durableRunId,
-        user.id,
-        conversation.id,
-      );
-    }
-    return jsonResponse({ canceled: cancellation.cancelled }, 200);
+    return jsonResponse({ canceled }, 200);
   }
 
   const rawBody = parsedBody.body;
@@ -1127,9 +1114,7 @@ export async function handleAiChatRequest(req: Request) {
   });
   const turnMetadata: AppUIMessage['metadata'] = {
     model: rawBody.model,
-    ...(conversation.type === 'creative'
-      ? { agentModel: actualModelId }
-      : {}),
+    ...(conversation.type === 'creative' ? { agentModel: actualModelId } : {}),
     ...turnProvenance,
   };
   let generationRun: AiGenerationRunLifecycle;
@@ -1424,9 +1409,7 @@ export async function handleAiChatRequest(req: Request) {
       const stepPolicy = forceInitialBuild
         ? {
             activeTools: [buildToolName],
-            toolChoice: forceBuildToolChoice
-              ? `tool:${buildToolName}`
-              : 'auto',
+            toolChoice: forceBuildToolChoice ? `tool:${buildToolName}` : 'auto',
             maxOutputTokens: stepBudget.effectiveMaxOutputTokens,
           }
         : {
@@ -1479,7 +1462,8 @@ export async function handleAiChatRequest(req: Request) {
             ? context.modelMessageBytes - previousContext.modelMessageBytes
             : 0,
           brepToolPayloadGrowthBytes: previousContext
-            ? context.brepToolPayloadBytes - previousContext.brepToolPayloadBytes
+            ? context.brepToolPayloadBytes -
+              previousContext.brepToolPayloadBytes
             : 0,
         },
       });
@@ -1703,7 +1687,9 @@ export async function handleAiChatRequest(req: Request) {
           onFinish: async ({ responseMessage, isContinuation }) => {
             if (modelStreamFailed) {
               if (modelStreamFailure !== undefined) throw modelStreamFailure;
-              throw new Error('Model stream failed before response finalization.');
+              throw new Error(
+                'Model stream failed before response finalization.',
+              );
             }
             await generationRun.validatingArtifact(responseMessage.id);
 
