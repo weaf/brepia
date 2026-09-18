@@ -1,10 +1,10 @@
-# Brepia v1.0.0 Release Status
+# Brepia v1.0.0 Release Status — historical
 
 ## Status
 
-Brepia v1.0.0 is ready for release review and merge to `master`.
+**ARCHIVED / COMPLETED.** Brepia v1.0.0 was released on 2026-08-31 from `master` at tag commit `1677eea669e930bca24d22bd05b449ceb34c87e2`. This file preserves the pre-release closeout state; it is not the current release plan. The later current release baseline is v1.5.0.
 
-Release branch:
+Historical release branch:
 
 - `feature/v1-hardening`
 
@@ -42,10 +42,10 @@ The final formatted working tree has passed:
 
 Any future functional development should be performed after the v1.0.0 release on a new branch from updated `master`.
 
-## Remaining release steps
+## Historical release steps — completed
 
-1. Commit and push the final release-preparation changes.
-2. Open and review the pull request from `feature/v1-hardening` to `master`.
-3. Merge when the release review is clean.
-4. Tag the merged `master` commit as `v1.0.0`.
-5. Publish the GitHub Release for Brepia v1.0.0.
+1. [x] Commit and push the final release-preparation changes.
+2. [x] Open and review the pull request from `feature/v1-hardening` to `master`.
+3. [x] Merge when the release review is clean.
+4. [x] Tag the merged `master` commit as `v1.0.0`.
+5. [x] Publish the GitHub Release for Brepia v1.0.0.

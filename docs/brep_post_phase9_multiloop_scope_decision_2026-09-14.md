@@ -4,13 +4,17 @@ Status: **DECIDED — Phase 9 and bounded multi-loop profile extrusion are close
 
 Repository: `weaf/brepia`
 
-Branch: `feature/brep-grasshopper-gh-packaging`
+Current repository authority: `master`
 
-PR #36 remains intentionally open, draft, stacked on `feature/brep-grasshopper-smart-component` and unmerged.
+Release integration: `v1.5.0` at `e648879f5eade3729451596dcee38b5e7b9c007b`
+
+Historical decision branch: `feature/brep-grasshopper-gh-packaging`
+
+PR #36 was later merged into `master` for the v1.5.0 release. The former stacked feature branches have been removed. This decision remains current until the bounded product-gap audit selects a new modeling slice.
 
 ## Decision basis
 
-This decision reconciles the current branch after two independent closeouts:
+This decision reconciled the repository state at the time after two independent closeouts:
 
 1. bounded multi-loop profile extrusion is complete across repository/CI, pinned native build123d/OCCT runtime and installed Rhino 8 / Grasshopper;
 2. Phase 9 current-product round-trip acceptance is complete through real installed Rhino 8 / Grasshopper and the Brepia product UI.
