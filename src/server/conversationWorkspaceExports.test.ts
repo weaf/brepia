@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   conversationExportRevisionMetadataPath,
   conversationExportRevisionPath,
@@ -25,7 +25,7 @@ async function withWorkspaceRoot(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-describe('conversation workspace exports', { concurrency: false }, () => {
+describe('conversation workspace exports', { concurrent: false }, () => {
   it('writes canonical revision exports with metadata and is idempotent', async () => {
     await withWorkspaceRoot(async () => {
       await initializeConversationWorkspace({

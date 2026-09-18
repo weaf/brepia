@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   conversationInputArtifactPath,
   initializeConversationWorkspace,
@@ -42,7 +42,7 @@ function request() {
 
 describe(
   'conversation workspace input mirroring',
-  { concurrency: false },
+  { concurrent: false },
   () => {
     it('recognizes only explicit user-upload input records', () => {
       assert.equal(

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   conversationRenderArtifactPath,
   initializeConversationWorkspace,
@@ -53,7 +53,7 @@ function request() {
 
 describe(
   'conversation workspace render mirroring',
-  { concurrency: false },
+  { concurrent: false },
   () => {
     it('mirrors each tool call render only onto its first build revision', async () => {
       await withWorkspaceRoot(async () => {
@@ -147,10 +147,7 @@ describe(
           CONVERSATION_ID,
           {
             listRevisions: async () => [
-              revision(
-                1,
-                'tool_import_cccccccc-3333-4333-8333-333333333333',
-              ),
+              revision(1, 'tool_import_cccccccc-3333-4333-8333-333333333333'),
             ],
             downloadRender: async () => {
               downloadCalls += 1;

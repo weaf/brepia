@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   deleteConversationArtifacts,
   deleteOwnedConversations,
@@ -52,7 +52,7 @@ function storageOnlyClient(
   } as unknown as SupabaseClient;
 }
 
-describe('conversation teardown', { concurrency: false }, () => {
+describe('conversation teardown', { concurrent: false }, () => {
   it('removes all managed storage buckets and the local workspace', async () => {
     await withWorkspaceRoot(async (root) => {
       const workspace = join(root, CONVERSATION_A);

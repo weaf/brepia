@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { syncConversationWorkspaceForChatRequest } from './conversationWorkspaceLifecycle.ts';
 
 const CONVERSATION_ID = '11111111-2222-4333-8444-555555555555';
@@ -52,7 +52,12 @@ describe('conversation workspace verified render owner', () => {
         revisionsCreated: 0,
         currentRevision: null,
       }),
-      syncRenders: async (_request, _conversationId, _dependencies, ownerUserId) => {
+      syncRenders: async (
+        _request,
+        _conversationId,
+        _dependencies,
+        ownerUserId,
+      ) => {
         receivedOwnerUserId = ownerUserId;
         return { discovered: 0, copied: 0, existing: 0, failed: 0 };
       },

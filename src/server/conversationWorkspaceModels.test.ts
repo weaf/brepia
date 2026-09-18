@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import type { OpenScadProject } from '@shared/openScadProject';
 import {
   conversationCurrentModelDir,
@@ -29,7 +29,8 @@ const USER_2 = 'cccccccc-3333-4333-8333-333333333333';
 const ASSISTANT_2 = 'dddddddd-4444-4444-8444-444444444444';
 const SIBLING = 'eeeeeeee-5555-4555-8555-555555555555';
 
-const CODE_1 = 'cube_size = 20;\ninclude <lib/shape.scad>;\nshape(cube_size);\n';
+const CODE_1 =
+  'cube_size = 20;\ninclude <lib/shape.scad>;\nshape(cube_size);\n';
 const CODE_1_EDITED =
   'cube_size = 35;\ninclude <lib/shape.scad>;\nshape(cube_size);\n';
 const SUPPORT_1 = 'module shape(size) { cube([size, size, size]); }\n';
@@ -144,7 +145,7 @@ async function snapshotProject(path: string): Promise<OpenScadProject> {
 
 describe(
   'conversation workspace OpenSCAD project revisions',
-  { concurrency: false },
+  { concurrent: false },
   () => {
     it('collects complete successful projects only from the active branch', () => {
       const builds = collectSuccessfulParametricBuilds(rows(), ASSISTANT_2);
@@ -455,10 +456,7 @@ describe(
         );
         assert.equal(
           await readFile(
-            conversationCurrentModelFilePath(
-              CONVERSATION_ID,
-              'src/model.scad',
-            ),
+            conversationCurrentModelFilePath(CONVERSATION_ID, 'src/model.scad'),
             'utf8',
           ),
           'cube(5);\n',
@@ -484,7 +482,11 @@ describe(
             ? {
                 ...row,
                 parts: [
-                  buildPart('tool-call-1', 'Cube', project('cube(10);\n', null)),
+                  buildPart(
+                    'tool-call-1',
+                    'Cube',
+                    project('cube(10);\n', null),
+                  ),
                 ],
               }
             : row,
@@ -522,10 +524,11 @@ describe(
           { loadMessages: async () => rows() },
         );
         assert.deepEqual((await readdir(revisionDir)).sort(), ['001']);
-        assert.deepEqual(
-          (await readdir(modelDir)).sort(),
-          ['current', 'generated', 'revisions'],
-        );
+        assert.deepEqual((await readdir(modelDir)).sort(), [
+          'current',
+          'generated',
+          'revisions',
+        ]);
       });
     });
 

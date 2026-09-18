@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import {
   CONVERSATION_WORKSPACE_ACTION_HEADER,
   PERSIST_EXPORT_ACTION,
