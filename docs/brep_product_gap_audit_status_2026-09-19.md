@@ -193,4 +193,32 @@ Manual authoring review notes two non-blocking semantic choices: the model also 
 
 Classification: **representable and reasonable at the canonical geometry level**. The target demonstrates that multi-loop extrusion, circular pattern and Boolean subtraction cover the functional flange/plate requirement. The optional 5 mm fillet can be omitted without compromising the requested authoritative geometry, so this evidence does not justify a new finishing/topology slice.
 
-Targets D–E remain pending and should be executed one at a time through the same isolated real-runtime evidence path.
+### Target D — architectural / cabinet layout
+
+Status: **captured — the current AI product path fails semantically, but no canonical representation gap is demonstrated**.
+
+The authenticated generation completed in about 12.9 minutes using `local/qwen3.6-35b-heretic-mtp-128k` in OpenCode `cli` mode and persisted conversation `15f0ef16-7548-4d87-ae0f-dee63bcd3410`.
+
+Evidence capture saved:
+
+- `d-canonical.brepia-brep.json`;
+- `manifest.json`;
+- `d-evaluation-failed.png`.
+
+Canonical/evaluator evidence:
+
+- 19 reachable nodes: 7 `box`, 9 `transform`, 2 `union`, 1 `subtract`;
+- all five requested parameters are effective;
+- no orphan nodes, orphan-only parameters or unused parameters;
+- native evaluation returns HTTP 400 with `unsupported_result_cardinality: BRep union carcassFrame produced 3 solids; exactly one is required`;
+- the graph contains no `linearPattern`, `rectangularPattern` or `circularPattern` node.
+
+Manual semantic inspection shows two independent authoring failures. First, the generated `carcassFrame` attempts to union the two sides, top, bottom and back into one authoritative body but places them such that the native union yields three disconnected solids. Second, the three shelves are represented by three manual `transform` nodes over one shelf box rather than the explicitly requested supported pattern operation.
+
+Classification: **not faithfully completed by the current AI product path, but not a demonstrated canonical cabinet/orthogonal-construction gap**. The accepted language already provides scalar-derived dimensions, transforms, Boolean composition and `linearPattern`; the failed run did not use that surface correctly. The exact-one-body union failure is therefore product-path authoring evidence rather than proof that a new geometry operation is required.
+
+### Target E — bent path-based object
+
+Status: **pending**.
+
+Target E should be executed through the same isolated real-runtime evidence path. A truthful terminal/no-project outcome remains allowed for E because smooth path/sweep modeling is the hypothesis under test.
