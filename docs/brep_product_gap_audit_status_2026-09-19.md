@@ -167,4 +167,30 @@ However, manual semantic inspection finds that the generated revolve profile vio
 
 Classification: **not faithfully completed by the current AI product path, but not a demonstrated canonical revolve-representation gap**. Full revolve plus Boolean composition remains capable of expressing the target under the locked `u = axial`, `v = radial` contract; this run instead exposes an authoring/semantic-correctness gap in how the product path constructs that canonical profile. It therefore does not justify partial revolve, multi-loop revolve or arbitrary-axis revolve as the next geometry slice.
 
-Targets C–E remain pending and should be executed one at a time through the same isolated real-runtime evidence path.
+### Target C — fabricated mounting plate / flange
+
+Status: **captured — representable with the accepted modeling surface; finishing is not a blocker**.
+
+The authenticated generation completed in about 3.1 minutes using `local/qwen3.6-35b-heretic-mtp-128k` in OpenCode `cli` mode and persisted conversation `99fb45c3-8b0c-450e-9b63-80d997ecadb5`. The first candidate was correctly rejected for an unused `boltCircleDiameter`; the second candidate passed graph-integrity validation.
+
+Evidence capture saved:
+
+- `c-canonical.brepia-brep.json`;
+- `manifest.json`;
+- `c-perturbed.png`.
+
+Canonical/evaluator evidence:
+
+- 5 reachable nodes: one multi-loop `extrude`, one `cylinder`, one `transform`, one `circularPattern`, one `subtract`;
+- the plate extrusion contains a central circular hole loop;
+- six bolt cutters are produced by one true circular pattern and subtracted from the plate;
+- no fillet node was added, consistent with the prompt's instruction to omit finishing if the current semantic selector could not express it safely;
+- all published parameters are effective and there are no orphan nodes, orphan-only parameters or unused parameters;
+- native evaluation returns HTTP 200, `success`, `resultKind: single`, with nominal bounds approximately `240 x 160 x 12 mm` and no warnings;
+- Bolt Circle Diameter perturbation 140 -> 160 evaluates successfully and is saved as a new immutable revision.
+
+Manual authoring review notes two non-blocking semantic choices: the model also published Plate Depth and Plate Thickness beyond the three explicitly requested controls, and it derived the unspecified central-opening radius as `boltCircleDiameter / 4`, so the BCD control also changes that opening. These are product-authoring quality considerations rather than missing geometry capabilities.
+
+Classification: **representable and reasonable at the canonical geometry level**. The target demonstrates that multi-loop extrusion, circular pattern and Boolean subtraction cover the functional flange/plate requirement. The optional 5 mm fillet can be omitted without compromising the requested authoritative geometry, so this evidence does not justify a new finishing/topology slice.
+
+Targets D–E remain pending and should be executed one at a time through the same isolated real-runtime evidence path.
