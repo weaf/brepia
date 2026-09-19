@@ -107,4 +107,40 @@ Only after all five targets have evidence should the separate implementation-bou
 
 ## Current evidence state
 
-No A–E model result is claimed by this status document yet. The harness is infrastructure for producing that evidence through the real product path; the first actual target run is the next bounded step after repository verification.
+### Target A — hollow enclosure with openings and lid interface
+
+Status: **captured — current product path demonstrates a capability gap**.
+
+The original authenticated Native BRep generation used `local/qwen3.6-35b-heretic-mtp-128k` and persisted the accepted canonical artifact in conversation `b3ca926f-c31d-4c16-a1e2-7c0a89485e01`. The accepted project is `Product Gap A Hollow Enclosure` with five published parameters.
+
+The resumed evidence capture was rerun from a dedicated Git worktree at PR #48 checkpoint `0d4db896cb4670a8b0ce56f1e0e366c4b961c525`, with isolated build output and a separate stable-runtime port. The resume completed in about 9 seconds and saved:
+
+- `a-canonical.brepia-brep.json`;
+- `manifest.json`;
+- `a-evaluation-failed.png`.
+
+Canonical evidence:
+
+- project id: `gap-a-hollow-enclosure`;
+- result node: `result`;
+- node count: 10;
+- node histogram: 4 `box`, 3 `transform`, 2 `subtract`, 1 `union`;
+- published parameters: Depth, Height, Opening Width, Wall Thickness and Width;
+- all five parameters classify as effective;
+- no orphan nodes;
+- no orphan-only parameters;
+- no unused parameters.
+
+The authoritative native evaluation fails with:
+
+```text
+unsupported_result_cardinality: BRep union mergedBody produced 2 solids; exactly one is required
+```
+
+The captured `/api/brep/evaluate` response is HTTP 400. Because authoritative evaluation fails before a valid result body exists, the normal parameter perturbation/save-revision step is intentionally not attempted for this target.
+
+Classification: **capability gap / not faithfully completed by the current product path**. The graph is canonical and internally reachable, but the requested enclosure plus lid-interface construction does not produce the required single authoritative solid under the accepted exact-one-body union semantics. This is product/capability evidence, not a browser-test failure. It does not by itself select shell/thickness or any other new opcode; candidate selection remains deferred until targets B–E are also captured and compared under the post-Phase-9 decision rule.
+
+Operational finding: long-lived acceptance runtimes must not share a working tree whose `.output` can be replaced by unrelated builds. Use a dedicated Git worktree or otherwise isolated build output for every long-running product-gap capture.
+
+Targets B–E remain pending and should be executed one at a time through the same isolated real-runtime evidence path.
