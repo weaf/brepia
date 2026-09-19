@@ -219,6 +219,39 @@ Classification: **not faithfully completed by the current AI product path, but n
 
 ### Target E — bent path-based object
 
-Status: **pending**.
+Status: **captured — concrete path/sweep representational gap demonstrated**.
 
-Target E should be executed through the same isolated real-runtime evidence path. A truthful terminal/no-project outcome remains allowed for E because smooth path/sweep modeling is the hypothesis under test.
+The authenticated generation completed in about 4.4 minutes using `local/qwen3.6-35b-heretic-mtp-128k` in OpenCode `cli` mode and persisted conversation `de6b5f85-556f-4c9c-a30b-8f18c7416573`. The first candidate was correctly rejected because both published parameters were unused; the second candidate passed graph-integrity validation.
+
+Evidence capture saved:
+
+- `e-canonical.brepia-brep.json`;
+- `manifest.json`;
+- `e-perturbed.png`.
+
+Canonical/evaluator evidence:
+
+- 5 reachable nodes: 2 `box`, 1 `cylinder`, 2 `union`;
+- both published parameters classify as effective and there are no orphan nodes or unused parameters;
+- native evaluation returns HTTP 200, `success`, `resultKind: single`, with no warnings;
+- Bend Radius perturbation 150 -> 180 evaluates successfully and is saved as a new immutable revision.
+
+The successful native evaluation is not semantic acceptance. Manual inspection of the canonical graph shows that `first_leg` and `second_leg` are square-section boxes, `bend` is a straight cylinder whose radius is driven directly by `bendRadius`, and there are no transforms that make the two legs perpendicular. The graph contains no path or sweep representation and no true tangent 90-degree centerline bend. It therefore violates the target's explicit requirement for a constant circular section following true defining path geometry, as well as the prohibition on box/cylinder approximation.
+
+The nominal evaluation bounds are approximately `300 x 300 x 1000 mm`; changing Bend Radius to 180 changes them to approximately `360 x 360 x 1000 mm`. That proves the parameter is mechanically effective in the accepted graph, but it changes the radius of the fabricated straight cylinder rather than the requested centerline bend radius.
+
+Classification: **not faithfully representable by the current accepted canonical surface under this target boundary**. The product path produced a graph that is structurally valid but semantically substitutes unrelated primitives for the requested smooth path-defined object. This is the concrete representational failure the audit was designed to detect.
+
+## Audit closeout
+
+All five approved targets A–E now have real authenticated product-path evidence captured through the isolated acceptance runtime.
+
+The evidence does not justify shell/thickness, partial or arbitrary-axis revolve, richer finishing/topology, or a new cabinet/assembly primitive:
+
+- A exposes an exact-one-body/authoring failure for the generated enclosure graph but does not by itself prove that shell/thickness is required;
+- B exposes incorrect revolve profile semantics in AI authoring while the accepted full-revolve surface remains sufficient;
+- C is representable and reasonable with the existing multi-loop, pattern and Boolean surface;
+- D exposes incorrect cabinet placement/composition plus failure to use the existing pattern operation;
+- E is the concrete representational failure: the current canonical language has no faithful path/sweep representation for the requested smooth tangent bent constant-section object.
+
+Under the post-Phase-9 scope decision, this audit therefore establishes **path/sweep modeling as the candidate for the next bounded implementation-boundary decision**. No new canonical opcode is activated by this status document itself; the next step is a separate decision that defines the minimum path grammar, frame/twist semantics, self-intersection rules and native/Rhino parity boundary before implementation begins.
