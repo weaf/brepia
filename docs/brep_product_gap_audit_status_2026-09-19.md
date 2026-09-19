@@ -143,4 +143,28 @@ Classification: **capability gap / not faithfully completed by the current produ
 
 Operational finding: long-lived acceptance runtimes must not share a working tree whose `.output` can be replaced by unrelated builds. Use a dedicated Git worktree or otherwise isolated build output for every long-running product-gap capture.
 
-Targets B–E remain pending and should be executed one at a time through the same isolated real-runtime evidence path.
+### Target B — turned mechanical part
+
+Status: **captured — native evaluation succeeds, but the generated product is semantically wrong**.
+
+The authenticated generation completed in about 5.3 minutes using `local/qwen3.6-35b-heretic-mtp-128k` in OpenCode `cli` mode and persisted conversation `3be31faa-f560-4274-8a1e-1c9e748cf89d`.
+
+Evidence capture saved:
+
+- `b-canonical.brepia-brep.json`;
+- `manifest.json`;
+- `b-perturbed.png`.
+
+Canonical/evaluator evidence:
+
+- 4 reachable nodes: one `revolve`, one `cylinder`, one `transform`, one `subtract`;
+- all three published parameters are effective;
+- no orphan nodes, orphan-only parameters or unused parameters;
+- native evaluation returns HTTP 200, `success`, `resultKind: single`, with no warnings;
+- Outer Diameter perturbation 80 -> 90 evaluates successfully and is saved as a new immutable revision.
+
+However, manual semantic inspection finds that the generated revolve profile violates the already locked profile-frame meaning. The accepted revolve contract defines profile `u` as axial and `v` as radial. The generated profile instead places `outerDiameter / 2` in `u` and the full `length` in `v`. The resulting nominal native bounds are therefore approximately `240 x 240 x 40 mm`; after changing Outer Diameter to 90 they become `240 x 240 x 45 mm`. For the requested nominal 120 mm long, 80 mm maximum-diameter shaft, this demonstrates that the named parameters affect geometry but not with their requested physical meaning.
+
+Classification: **not faithfully completed by the current AI product path, but not a demonstrated canonical revolve-representation gap**. Full revolve plus Boolean composition remains capable of expressing the target under the locked `u = axial`, `v = radial` contract; this run instead exposes an authoring/semantic-correctness gap in how the product path constructs that canonical profile. It therefore does not justify partial revolve, multi-loop revolve or arbitrary-axis revolve as the next geometry slice.
+
+Targets C–E remain pending and should be executed one at a time through the same isolated real-runtime evidence path.
