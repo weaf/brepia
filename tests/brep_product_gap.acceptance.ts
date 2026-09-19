@@ -297,7 +297,7 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     .locator('[aria-label="Native BRep generation status"]')
     .first();
   const generationStatusText = await generationStatus
-    .textContent()
+    .textContent({ timeout: 2_000 })
     .then((value) => value?.replace(/\s+/g, ' ').trim() || null)
     .catch(() => null);
   const conversationUrl = page.url();
