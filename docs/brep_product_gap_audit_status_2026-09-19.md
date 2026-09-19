@@ -4,7 +4,9 @@ Date: 2026-09-19
 
 Repository authority: `master`
 
-Decision authority: `docs/brep_post_phase9_multiloop_scope_decision_2026-09-14.md`
+Original audit authority: `docs/brep_post_phase9_multiloop_scope_decision_2026-09-14.md`
+
+Post-audit scope decision: `docs/brep_post_product_gap_scope_decision_2026-09-19.md`
 
 ## Scope
 
@@ -20,7 +22,7 @@ No shell/thickness, sweep, partial revolve, arbitrary-plane, reusable-sketch, ch
 
 ## 7A — repeatable product-path evidence harness
 
-Status: implemented on the bounded audit branch; repository verification pending PR/CI.
+Status: **complete and merged to `master` through PR #48 (`6d15a723a270022ada536219ec65f7fa0f7af0cf`)**.
 
 The audit harness is intentionally separate from ordinary CI because it exercises the real configured Native BRep AI product path and therefore needs an authenticated local account plus a running Brepia/OpenCode/local-model stack.
 

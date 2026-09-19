@@ -12,7 +12,8 @@ Use these as current references where relevant:
 - `docs/brepia_branding.md` for naming and compatibility boundaries;
 - `docs/grasshopper_roundtrip_architecture.md` for the current Grasshopper/GHX product loop, validation boundary and round-trip compatibility contract;
 - `docs/brep_phase9_rhino_acceptance.md` and `docs/brep_phase9_rhino8_product_loop_evidence_2026-09-14.md` for the closed installed Rhino 8 / Grasshopper product-loop acceptance boundary;
-- `docs/brep_post_phase9_multiloop_scope_decision_2026-09-14.md` for the current post-Phase-9/post-multi-loop modeling scope: no new canonical geometry operation is active until a bounded product-gap audit demonstrates a concrete representational failure;
+- `docs/brep_post_product_gap_scope_decision_2026-09-19.md` for the current post-audit modeling scope: target E demonstrated the bounded path/sweep gap, and only the separately locked planar 90-degree circular sweep slice may proceed;
+- `docs/brep_sweep_implementation_boundary_2026-09-19.md` and `docs/brep_sweep_implementation_plan.md` for the exact first-slice sweep contract, stop conditions and separate repository/native/Rhino/product-path evidence gates;
 - `docs/references/rhino8_mcneel_sources.md` for the permanent Rhino 8 / Grasshopper upstream-source policy, pinned McNeel branch-8 reference and evidence hierarchy;
 - `docs/local_supabase_lifecycle.md` and `.cursor/rules/database-workflow.mdc` for database lifecycle;
 - `docs/INTEGRATION.md` for the current OpenCode integration;
