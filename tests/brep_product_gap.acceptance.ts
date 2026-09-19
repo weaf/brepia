@@ -65,6 +65,10 @@ type AuditManifest = {
   conversationId: string | null;
   generationOutcome: 'ready' | 'terminal';
   generationStatusText: string | null;
+  authoritativeEvaluation?: {
+    outcome: 'success' | 'failed';
+    message: string | null;
+  };
   transportRequest: {
     model?: string;
     openCodeExecutionMode?: string;
@@ -336,9 +340,16 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     return;
   }
 
-  await expect(page.locator('canvas').first()).toBeVisible({
-    timeout: 120_000,
-  });
+  const canvas = page.locator('canvas').first();
+  const evaluationFailure = page.getByText(/BRep evaluation failed:/).first();
+  const authoritativeEvaluationOutcome = await Promise.race([
+    canvas
+      .waitFor({ state: 'visible', timeout: 120_000 })
+      .then(() => 'success' as const),
+    evaluationFailure
+      .waitFor({ state: 'visible', timeout: 120_000 })
+      .then(() => 'failed' as const),
+  ]);
   const exported = await exportCanonicalProject(page);
   const packageValue = parseBrepProjectPackageJson(exported.text);
   const project = packageValue.source.source;
@@ -366,9 +377,36 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     integrity,
   };
 
+  manifest.authoritativeEvaluation = {
+    outcome: authoritativeEvaluationOutcome,
+    message:
+      authoritativeEvaluationOutcome === 'failed'
+        ? (await evaluationFailure.textContent())
+            ?.replace(/\s+/g, ' ')
+            .trim() || null
+        : null,
+  };
+
   expect(integrity.orphanOnlyParameterIds).toEqual([]);
   expect(integrity.unusedParameterIds).toEqual([]);
   expect(integrity.orphanNodeIds).toEqual([]);
+
+  if (authoritativeEvaluationOutcome === 'failed') {
+    manifest.evaluations = evaluations;
+    await page.screenshot({
+      path: path.join(
+        OUTPUT_DIR,
+        `${TARGET.id.toLowerCase()}-evaluation-failed.png`,
+      ),
+      fullPage: false,
+    });
+    await writeFile(
+      path.join(OUTPUT_DIR, 'manifest.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      'utf8',
+    );
+    return;
+  }
 
   const input = page.getByLabel(`${TARGET.perturbation.label} value`, {
     exact: true,
