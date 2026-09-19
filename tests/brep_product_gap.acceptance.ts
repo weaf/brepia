@@ -24,6 +24,14 @@ const PASSWORD =
   process.env.BREP_GHX_PASSWORD ??
   process.env.B9_PASSWORD;
 const TARGET = brepProductGapTarget(process.env.BREPIA_BREP_GAP_TARGET);
+const EXISTING_CONVERSATION_ID =
+  process.env.BREPIA_GAP_CONVERSATION_ID?.trim() || null;
+const RESUME_MODEL = process.env.BREPIA_GAP_MODEL?.trim() || undefined;
+const RESUME_EXECUTION_MODE =
+  process.env.BREPIA_GAP_EXECUTION_MODE?.trim() || undefined;
+const GENERATION_TIMEOUT_MS = Number(
+  process.env.BREPIA_GAP_GENERATION_TIMEOUT_MS ?? 15 * 60_000,
+);
 const OUTPUT_ROOT = path.resolve(
   process.env.BREPIA_GAP_DIR ?? 'test-results/brep-product-gap',
 );
@@ -57,6 +65,10 @@ type AuditManifest = {
   conversationId: string | null;
   generationOutcome: 'ready' | 'terminal';
   generationStatusText: string | null;
+  authoritativeEvaluation?: {
+    outcome: 'success' | 'failed';
+    message: string | null;
+  };
   transportRequest: {
     model?: string;
     openCodeExecutionMode?: string;
@@ -207,11 +219,14 @@ function nodeTypeHistogram(
 test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
   page,
 }) => {
-  test.setTimeout(8 * 60_000);
+  test.setTimeout(GENERATION_TIMEOUT_MS + 3 * 60_000);
   await mkdir(OUTPUT_DIR, { recursive: true });
 
   const evaluations: EvaluationSnapshot[] = [];
-  let transportRequest: AuditManifest['transportRequest'] = null;
+  let transportRequest: AuditManifest['transportRequest'] =
+    EXISTING_CONVERSATION_ID
+      ? { model: RESUME_MODEL, openCodeExecutionMode: RESUME_EXECUTION_MODE }
+      : null;
   page.on('request', (request) => {
     if (
       request.method() !== 'POST' ||
@@ -246,20 +261,24 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
   });
 
   await signIn(page);
-  await page.goto(`${ORIGIN}/`);
+  if (EXISTING_CONVERSATION_ID) {
+    await page.goto(`${ORIGIN}/brep/${EXISTING_CONVERSATION_ID}`);
+  } else {
+    await page.goto(`${ORIGIN}/`);
 
-  const nativeBrepButton = page.getByRole('button', {
-    name: 'Native BRep',
-    exact: true,
-  });
-  await expect(nativeBrepButton).toBeVisible();
-  await nativeBrepButton.click();
-  await expect(nativeBrepButton).toHaveAttribute('aria-pressed', 'true');
-  await waitForConfiguredParametricModel(page);
+    const nativeBrepButton = page.getByRole('button', {
+      name: 'Native BRep',
+      exact: true,
+    });
+    await expect(nativeBrepButton).toBeVisible();
+    await nativeBrepButton.click();
+    await expect(nativeBrepButton).toHaveAttribute('aria-pressed', 'true');
+    await waitForConfiguredParametricModel(page);
 
-  const promptInput = page.locator('textarea').first();
-  await promptInput.fill(TARGET.prompt);
-  await promptInput.press('Enter');
+    const promptInput = page.locator('textarea').first();
+    await promptInput.fill(TARGET.prompt);
+    await promptInput.press('Enter');
+  }
 
   const parameters = page.getByText('Parameters', { exact: true });
   const terminalCreation = page
@@ -267,10 +286,10 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     .first();
   const outcome = await Promise.race([
     parameters
-      .waitFor({ state: 'visible', timeout: 300_000 })
+      .waitFor({ state: 'visible', timeout: GENERATION_TIMEOUT_MS })
       .then(() => 'ready' as const),
     terminalCreation
-      .waitFor({ state: 'visible', timeout: 300_000 })
+      .waitFor({ state: 'visible', timeout: GENERATION_TIMEOUT_MS })
       .then(() => 'terminal' as const),
   ]);
 
@@ -278,7 +297,7 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     .locator('[aria-label="Native BRep generation status"]')
     .first();
   const generationStatusText = await generationStatus
-    .textContent()
+    .textContent({ timeout: 2_000 })
     .then((value) => value?.replace(/\s+/g, ' ').trim() || null)
     .catch(() => null);
   const conversationUrl = page.url();
@@ -321,9 +340,16 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     return;
   }
 
-  await expect(page.locator('canvas').first()).toBeVisible({
-    timeout: 120_000,
-  });
+  const canvas = page.locator('canvas').first();
+  const evaluationFailure = page.getByText(/BRep evaluation failed:/).first();
+  const authoritativeEvaluationOutcome = await Promise.race([
+    canvas
+      .waitFor({ state: 'visible', timeout: 120_000 })
+      .then(() => 'success' as const),
+    evaluationFailure
+      .waitFor({ state: 'visible', timeout: 120_000 })
+      .then(() => 'failed' as const),
+  ]);
   const exported = await exportCanonicalProject(page);
   const packageValue = parseBrepProjectPackageJson(exported.text);
   const project = packageValue.source.source;
@@ -351,9 +377,36 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     integrity,
   };
 
+  manifest.authoritativeEvaluation = {
+    outcome: authoritativeEvaluationOutcome,
+    message:
+      authoritativeEvaluationOutcome === 'failed'
+        ? (await evaluationFailure.textContent())
+            ?.replace(/\s+/g, ' ')
+            .trim() || null
+        : null,
+  };
+
   expect(integrity.orphanOnlyParameterIds).toEqual([]);
   expect(integrity.unusedParameterIds).toEqual([]);
   expect(integrity.orphanNodeIds).toEqual([]);
+
+  if (authoritativeEvaluationOutcome === 'failed') {
+    manifest.evaluations = evaluations;
+    await page.screenshot({
+      path: path.join(
+        OUTPUT_DIR,
+        `${TARGET.id.toLowerCase()}-evaluation-failed.png`,
+      ),
+      fullPage: false,
+    });
+    await writeFile(
+      path.join(OUTPUT_DIR, 'manifest.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      'utf8',
+    );
+    return;
+  }
 
   const input = page.getByLabel(`${TARGET.perturbation.label} value`, {
     exact: true,
