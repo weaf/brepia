@@ -14,12 +14,18 @@ const featureEditorSource = [
     'utf8',
   ),
   fs.readFileSync(
-    new URL('../src/components/brep/BrepFeatureEditorLegacy.tsx', import.meta.url),
+    new URL(
+      '../src/components/brep/BrepFeatureEditorLegacy.tsx',
+      import.meta.url,
+    ),
     'utf8',
   ),
 ].join('\n');
 const buildInstruction = fs.readFileSync(
-  new URL('../config/ai/instructions/tool-build-brep-project.md', import.meta.url),
+  new URL(
+    '../config/ai/instructions/tool-build-brep-project.md',
+    import.meta.url,
+  ),
   'utf8',
 );
 
@@ -71,7 +77,8 @@ describe('bounded revolve provider and structural authoring surface', () => {
   it('exposes only the bounded canonical revolve fields through the provider schema', async () => {
     expect(BREP_AI_PROVIDER_EXPRESSION_MAX_DEPTH).toBe(2);
     expect(
-      brepAiProviderBuildInputZodSchema.safeParse(providerRevolveInput()).success,
+      brepAiProviderBuildInputZodSchema.safeParse(providerRevolveInput())
+        .success,
     ).toBe(true);
 
     const withAngle = structuredClone(providerRevolveInput());
@@ -89,9 +96,15 @@ describe('bounded revolve provider and structural authoring surface', () => {
   it('gives the model the locked axial/radial full-revolve contract', () => {
     assert.match(buildInstruction, /full 360 degrees is implicit/i);
     assert.match(buildInstruction, /profile `u` is the axial coordinate/i);
-    assert.match(buildInstruction, /profile `v` is non-negative radial distance/i);
+    assert.match(
+      buildInstruction,
+      /profile `v` is non-negative radial distance/i,
+    );
     assert.match(buildInstruction, /must keep `v >= 0`/i);
-    assert.match(buildInstruction, /no angle, start-angle or partial-sweep field/i);
+    assert.match(
+      buildInstruction,
+      /no angle, start-angle or partial-sweep field/i,
+    );
   });
 
   it('creates a valid closed-polyline revolve draft and exposes the exact X/Y/Z frame labels', () => {
@@ -103,6 +116,6 @@ describe('bounded revolve provider and structural authoring surface', () => {
     assert.match(featureEditorSource, /Y axis · U=Y axial, V=Z radial/);
     assert.match(featureEditorSource, /Z axis · U=Z axial, V=X radial/);
     assert.match(featureEditorSource, /full 360° single-solid operation/);
-    assert.match(featureEditorSource, /V is non-negative radial/);
+    assert.match(featureEditorSource, /V is non-negative\s+radial/);
   });
 });

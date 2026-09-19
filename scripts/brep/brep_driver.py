@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import rhino3dm
-from build123d import Axis, Box, Circle, Compound, Cylinder, Face, Location, Plane, Polygon, Rectangle, export_step, extrude, revolve
+from build123d import Axis, Box, Circle, Compound, Cylinder, Face, JernArc, Line, Location, Plane, Polygon, Rectangle, Wire, export_step, extrude, revolve, sweep
 
 PROVIDER = {"id": "build123d-occt", "providerVersion": "0.3.0", "kernelVersion": "build123d-0.11.1/OCCT-7.9.3.1"}
 THREEDM_VERSION = 8
@@ -288,6 +288,66 @@ def revolve_profile_shape(node, parameters):
     return require_single_positive_volume_solid(part, "revolve", node_id)
 
 
+def sweep_shape(node, parameters):
+    node_id = node["id"]
+    path = node["path"]
+    if node["profile"]["type"] != "circle":
+        raise ValueError(
+            f"unsupported_operation: BRep sweep {node_id} requires a circle profile"
+        )
+    if path["type"] != "planarElbow90":
+        raise ValueError(
+            f"unsupported_operation: BRep sweep {node_id} requires planarElbow90 path"
+        )
+
+    profile_radius = positive_scalar(
+        node["profile"]["radius"], parameters, f"BRep sweep {node_id} profile radius"
+    )
+    first_leg = positive_scalar(
+        path["firstLegLength"], parameters, f"BRep sweep {node_id} firstLegLength"
+    )
+    second_leg = positive_scalar(
+        path["secondLegLength"], parameters, f"BRep sweep {node_id} secondLegLength"
+    )
+    bend_radius = positive_scalar(
+        path["bendRadius"], parameters, f"BRep sweep {node_id} bendRadius"
+    )
+    if profile_radius >= bend_radius:
+        raise ValueError(
+            f"invalid_parameter_value: BRep sweep {node_id} profile radius must resolve smaller than bendRadius"
+        )
+
+    first = Line((0.0, 0.0), (first_leg, 0.0))
+    bend = JernArc(
+        (first_leg, 0.0),
+        (1.0, 0.0),
+        bend_radius,
+        90.0,
+    )
+    second_start = (first_leg + bend_radius, bend_radius)
+    second = Line(
+        second_start,
+        (second_start[0], second_start[1] + second_leg),
+    )
+    local_path = Wire([first.edges()[0], bend.edges()[0], second.edges()[0]])
+
+    plane_normal_axis = path["planeNormalAxis"]
+    path_plane = {
+        "x": Plane.YZ,
+        "y": Plane.ZX,
+        "z": Plane.XY,
+    }[plane_normal_axis]
+    section_plane = {
+        "x": Plane.ZX,
+        "y": Plane.XY,
+        "z": Plane.YZ,
+    }[plane_normal_axis]
+    rail = path_plane * local_path
+    section = section_plane * Circle(profile_radius)
+    part = sweep(section, path=rail)
+    return require_single_positive_volume_solid(part, "sweep", node_id)
+
+
 def compact_json(value):
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
@@ -503,6 +563,7 @@ def evaluate(request):
         elif kind == "cylinder": shape = Cylinder(scalar(node["radius"], parameters), scalar(node["height"], parameters))
         elif kind == "extrude": shape = extrude_profile_shape(node, parameters)
         elif kind == "revolve": shape = revolve_profile_shape(node, parameters)
+        elif kind == "sweep": shape = sweep_shape(node, parameters)
         elif kind == "transform":
             shape = evaluate_node(node["input"])
             translation = vector(node.get("translate", [0, 0, 0]), parameters)

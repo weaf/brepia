@@ -21,6 +21,7 @@ export function brepNodeDependencies(node: BrepNode): string[] {
     case 'cylinder':
     case 'extrude':
     case 'revolve':
+    case 'sweep':
       return [];
     case 'transform':
     case 'mirror':
@@ -51,7 +52,8 @@ export function brepProjectObjectNodeRoles(
   nodeId: string,
 ): string[] {
   const roles: string[] = [];
-  if (project.projectObject?.footprintNodeId === nodeId) roles.push('footprint');
+  if (project.projectObject?.footprintNodeId === nodeId)
+    roles.push('footprint');
   if (project.projectObject?.clearanceEnvelopeNodeId === nodeId)
     roles.push('clearance envelope');
   if (project.projectObject?.maintenanceEnvelopeNodeId === nodeId)
@@ -224,10 +226,34 @@ export function brepProjectParameterUsages(
       case 'extrude':
         if (brepScalarReferencesParameter(node.depth, parameterId))
           usages.push(`${node.id}.depth`);
-        appendProfileParameterUsages(usages, node.profile, parameterId, node.id);
+        appendProfileParameterUsages(
+          usages,
+          node.profile,
+          parameterId,
+          node.id,
+        );
         break;
       case 'revolve':
-        appendProfileParameterUsages(usages, node.profile, parameterId, node.id);
+        appendProfileParameterUsages(
+          usages,
+          node.profile,
+          parameterId,
+          node.id,
+        );
+        break;
+      case 'sweep':
+        if (brepScalarReferencesParameter(node.profile.radius, parameterId))
+          usages.push(`${node.id}.profile.radius`);
+        if (
+          brepScalarReferencesParameter(node.path.firstLegLength, parameterId)
+        )
+          usages.push(`${node.id}.path.firstLegLength`);
+        if (
+          brepScalarReferencesParameter(node.path.secondLegLength, parameterId)
+        )
+          usages.push(`${node.id}.path.secondLegLength`);
+        if (brepScalarReferencesParameter(node.path.bendRadius, parameterId))
+          usages.push(`${node.id}.path.bendRadius`);
         break;
       case 'transform':
         appendVectorParameterUsages(
@@ -300,7 +326,10 @@ export function replaceBrepProjectDefinition(
     parameters: definition.parameters,
   });
   const defaultValues = Object.fromEntries(
-    nextProject.parameters.map((parameter) => [parameter.id, parameter.default]),
+    nextProject.parameters.map((parameter) => [
+      parameter.id,
+      parameter.default,
+    ]),
   );
   resolveBrepProjectPlacement(nextProject.placement, defaultValues);
   return nextProject;
@@ -337,7 +366,9 @@ export function replaceExistingBrepProjectNode(
 ): BrepProject {
   const currentNode = project.nodes.find((node) => node.id === nodeId);
   if (!currentNode) {
-    throw new Error(`BRep node ${nodeId} does not exist in the current project.`);
+    throw new Error(
+      `BRep node ${nodeId} does not exist in the current project.`,
+    );
   }
   if (nextNode.id !== nodeId) {
     throw new Error('Existing BRep node IDs are stable and cannot be renamed.');
@@ -348,9 +379,7 @@ export function replaceExistingBrepProjectNode(
 
   return normalizeBrepProject({
     ...project,
-    nodes: project.nodes.map((node) =>
-      node.id === nodeId ? nextNode : node,
-    ),
+    nodes: project.nodes.map((node) => (node.id === nodeId ? nextNode : node)),
   });
 }
 
@@ -383,7 +412,9 @@ export function deleteBrepProjectNode(
   nodeId: string,
 ): BrepProject {
   if (!project.nodes.some((node) => node.id === nodeId)) {
-    throw new Error(`BRep node ${nodeId} does not exist in the current project.`);
+    throw new Error(
+      `BRep node ${nodeId} does not exist in the current project.`,
+    );
   }
   const objectRoles = brepProjectObjectNodeRoles(project, nodeId);
   if (objectRoles.length > 0) {

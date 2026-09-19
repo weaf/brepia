@@ -39,10 +39,7 @@ import {
   setBrepProjectResultNode,
   suggestBrepNodeId,
 } from '@shared/brepProjectEditing';
-import {
-  formatBrepScalar,
-  isBrepParameterReference,
-} from '@shared/brepScalar';
+import { formatBrepScalar, isBrepParameterReference } from '@shared/brepScalar';
 
 const LITERAL_VALUE = '__literal__';
 const EXPRESSION_VALUE = '__expression__';
@@ -53,6 +50,7 @@ const NODE_TYPES: BrepNode['type'][] = [
   'cylinder',
   'extrude',
   'revolve',
+  'sweep',
   'transform',
   'mirror',
   'linearPattern',
@@ -78,6 +76,8 @@ function nodeTypeLabel(type: BrepNode['type']): string {
       return 'Extrude';
     case 'revolve':
       return 'Revolve';
+    case 'sweep':
+      return '90° circular sweep';
     case 'transform':
       return 'Transform';
     case 'mirror':
@@ -208,6 +208,19 @@ function createNodeDraft(
         profile: defaultRevolveProfile(),
         axis: 'z',
       };
+    case 'sweep':
+      return {
+        id,
+        type,
+        profile: { type: 'circle', radius: 20 },
+        path: {
+          type: 'planarElbow90',
+          planeNormalAxis: 'z',
+          firstLegLength: 1000,
+          secondLegLength: 700,
+          bendRadius: 150,
+        },
+      };
     case 'transform': {
       const input = preferredInputNodeId(project, selectedNodeId);
       return { id, type, input, translate: [0, 0, 0] };
@@ -330,7 +343,8 @@ function ScalarField({
               if (typeof value === 'number') return;
               const parameter = parameterReference
                 ? project.parameters.find(
-                    (candidate) => candidate.id === parameterReference.parameter,
+                    (candidate) =>
+                      candidate.id === parameterReference.parameter,
                   )
                 : undefined;
               onChange(parameter?.default ?? 0);
@@ -530,7 +544,10 @@ function OrderedNodeReferencesField({
                 className="h-9 px-2 text-[10px]"
                 onClick={() => {
                   const next = [...values];
-                  [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                  [next[index - 1], next[index]] = [
+                    next[index],
+                    next[index - 1],
+                  ];
                   onChange(next);
                 }}
               >
@@ -545,7 +562,10 @@ function OrderedNodeReferencesField({
                 className="h-9 px-2 text-[10px]"
                 onClick={() => {
                   const next = [...values];
-                  [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                  [next[index], next[index + 1]] = [
+                    next[index + 1],
+                    next[index],
+                  ];
                   onChange(next);
                 }}
               >
@@ -559,9 +579,7 @@ function OrderedNodeReferencesField({
                 disabled={disabled || values.length <= 2}
                 className="h-9 px-2 text-[10px]"
                 onClick={() =>
-                  onChange(
-                    values.filter((_, itemIndex) => itemIndex !== index),
-                  )
+                  onChange(values.filter((_, itemIndex) => itemIndex !== index))
                 }
               >
                 Remove
@@ -707,8 +725,11 @@ function ExtrudeProfileFields({
                     project={project}
                     disabled={disabled}
                     onChange={(u) => {
-                      const points = profile.points.map((candidate, pointIndex) =>
-                        pointIndex === index ? { ...candidate, u } : candidate,
+                      const points = profile.points.map(
+                        (candidate, pointIndex) =>
+                          pointIndex === index
+                            ? { ...candidate, u }
+                            : candidate,
                       );
                       onChange({ ...profile, points });
                     }}
@@ -720,8 +741,11 @@ function ExtrudeProfileFields({
                     project={project}
                     disabled={disabled}
                     onChange={(v) => {
-                      const points = profile.points.map((candidate, pointIndex) =>
-                        pointIndex === index ? { ...candidate, v } : candidate,
+                      const points = profile.points.map(
+                        (candidate, pointIndex) =>
+                          pointIndex === index
+                            ? { ...candidate, v }
+                            : candidate,
                       );
                       onChange({ ...profile, points });
                     }}
@@ -877,11 +901,84 @@ function NodeEditorFields({
           </label>
           <p className="text-[10px] leading-4 text-adam-neutral-500">
             Revolve is a full 360° single-solid operation around the selected
-            canonical axis through the local origin. For the bounded first slice,
-            use a closed polyline: U is axial and V is non-negative radial
-            distance. Profiles may touch V=0 only along a real boundary segment;
-            centered rectangle/circle profiles cross the axis and are rejected by
-            canonical validation.
+            canonical axis through the local origin. For the bounded first
+            slice, use a closed polyline: U is axial and V is non-negative
+            radial distance. Profiles may touch V=0 only along a real boundary
+            segment; centered rectangle/circle profiles cross the axis and are
+            rejected by canonical validation.
+          </p>
+        </div>
+      );
+
+    case 'sweep':
+      return (
+        <div className="grid gap-4">
+          <ScalarField
+            label="Circular profile radius"
+            value={node.profile.radius}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(radius) =>
+              onChange({ ...node, profile: { ...node.profile, radius } })
+            }
+          />
+          <label className="grid gap-1.5 text-xs text-adam-neutral-300">
+            <span>Path plane normal axis</span>
+            <select
+              className={fieldClass}
+              value={node.path.planeNormalAxis}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  path: {
+                    ...node.path,
+                    planeNormalAxis: event.target.value as 'x' | 'y' | 'z',
+                  },
+                })
+              }
+            >
+              <option value="x">X normal · U=Y, V=Z</option>
+              <option value="y">Y normal · U=Z, V=X</option>
+              <option value="z">Z normal · U=X, V=Y</option>
+            </select>
+          </label>
+          <ScalarField
+            label="First straight leg length"
+            value={node.path.firstLegLength}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(firstLegLength) =>
+              onChange({ ...node, path: { ...node.path, firstLegLength } })
+            }
+          />
+          <ScalarField
+            label="Second straight leg length"
+            value={node.path.secondLegLength}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(secondLegLength) =>
+              onChange({ ...node, path: { ...node.path, secondLegLength } })
+            }
+          />
+          <ScalarField
+            label="Bend centerline radius"
+            value={node.path.bendRadius}
+            unit="mm"
+            project={project}
+            disabled={disabled}
+            onChange={(bendRadius) =>
+              onChange({ ...node, path: { ...node.path, bendRadius } })
+            }
+          />
+          <p className="text-[10px] leading-4 text-adam-neutral-500">
+            Bounded sweep: one constant circular section follows a straight leg,
+            one tangent +90° centerline bend, then a second straight leg.
+            Profile radius must remain smaller than bend radius. No arbitrary
+            paths or twist controls are supported.
           </p>
         </div>
       );
@@ -994,8 +1091,8 @@ function NodeEditorFields({
             onChange={(offset) => onChange({ ...node, offset })}
           />
           <p className="text-[10px] leading-4 text-adam-neutral-500">
-            Mirror returns only the reflected input. It does not keep the original
-            or create a multi-instance result.
+            Mirror returns only the reflected input. It does not keep the
+            original or create a multi-instance result.
           </p>
         </div>
       );
@@ -1161,8 +1258,8 @@ function NodeEditorFields({
             onChange={(spacingB) => onChange({ ...node, spacingB })}
           />
           <p className="text-[10px] leading-4 text-adam-neutral-500">
-            Axes A and B must be different. Both counts are literal integers from
-            2 to {BREP_PROJECT_MAX_PATTERN_COUNT}, with at most{' '}
+            Axes A and B must be different. Both counts are literal integers
+            from 2 to {BREP_PROJECT_MAX_PATTERN_COUNT}, with at most{' '}
             {BREP_PROJECT_MAX_RECTANGULAR_PATTERN_INSTANCES} total instances.
             Both spacings must resolve to non-zero values. Instances are ordered
             row-major with A outer, B inner and index = a × countB + b.
@@ -1233,10 +1330,11 @@ function NodeEditorFields({
           />
           <p className="text-[10px] leading-4 text-adam-neutral-500">
             Instance 0 is the unchanged input. Later instances apply one rigid
-            right-hand rotation by index × angle step around the selected canonical
-            axis through the pattern center. Angle step must resolve non-zero and
-            absolute angle step × count must not exceed 360°. Instances remain
-            separate ordered bodies unless consumed as subtract tools.
+            right-hand rotation by index × angle step around the selected
+            canonical axis through the pattern center. Angle step must resolve
+            non-zero and absolute angle step × count must not exceed 360°.
+            Instances remain separate ordered bodies unless consumed as subtract
+            tools.
           </p>
         </div>
       );
@@ -1289,8 +1387,8 @@ function NodeEditorFields({
             </div>
             <p className="text-[10px] leading-4 text-adam-neutral-500">
               The base must be a single shape. Tool entries may be single shapes
-              or a pattern instance set; pattern instances are applied in canonical
-              index order.
+              or a pattern instance set; pattern instances are applied in
+              canonical index order.
             </p>
           </div>
         </div>
@@ -1595,8 +1693,8 @@ export function BrepFeatureEditor({
               </span>
             </button>
             <p className="mt-1 px-2 text-[10px] leading-4 text-adam-neutral-500">
-              Graph opens beside Chat in the main workspace so feature topology is
-              not constrained by the Parameters panel width.
+              Graph opens beside Chat in the main workspace so feature topology
+              is not constrained by the Parameters panel width.
             </p>
           </div>
 
@@ -1638,7 +1736,7 @@ export function BrepFeatureEditor({
                         </span>
                       ) : null}
                       {isResult ? (
-                        <span className="shrink-0 rounded-full border border-adam-blue-dark/60 bg-adam-blue-dark/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-adam-blue-light">
+                        <span className="text-adam-blue-light shrink-0 rounded-full border border-adam-blue-dark/60 bg-adam-blue-dark/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide">
                           Result
                         </span>
                       ) : null}
@@ -1646,7 +1744,7 @@ export function BrepFeatureEditor({
                     <span className="mt-1 block truncate text-[10px] text-adam-neutral-500">
                       {dependencies.length > 0
                         ? `Depends on ${dependencies.join(', ')}`
-                        : `${node.type === 'extrude' ? 'Profile extrusion' : node.type === 'revolve' ? 'Full profile revolve' : 'Primitive'} · node ${index + 1}`}
+                        : `${node.type === 'extrude' ? 'Profile extrusion' : node.type === 'revolve' ? 'Full profile revolve' : node.type === 'sweep' ? 'Planar 90° circular sweep' : 'Primitive'} · node ${index + 1}`}
                     </span>
                   </span>
                   <Pencil
@@ -1669,7 +1767,9 @@ export function BrepFeatureEditor({
         </CollapsibleContent>
       </Collapsible>
 
-      {view === 'graph' && graphTarget ? createPortal(graph, graphTarget) : null}
+      {view === 'graph' && graphTarget
+        ? createPortal(graph, graphTarget)
+        : null}
 
       <Dialog
         open={createDialogOpen}
@@ -1691,9 +1791,10 @@ export function BrepFeatureEditor({
                   Add BRep feature
                 </DialogTitle>
                 <DialogDescription className="text-adam-neutral-400">
-                  Choose a stable ID and feature type. Save validates the complete
-                  canonical project and creates one immutable source revision. The
-                  current result node is preserved until you explicitly change it.
+                  Choose a stable ID and feature type. Save validates the
+                  complete canonical project and creates one immutable source
+                  revision. The current result node is preserved until you
+                  explicitly change it.
                 </DialogDescription>
               </DialogHeader>
 
@@ -1706,7 +1807,10 @@ export function BrepFeatureEditor({
                       value={createDraft.id}
                       disabled={saving}
                       onChange={(event) =>
-                        setCreateDraft({ ...createDraft, id: event.target.value })
+                        setCreateDraft({
+                          ...createDraft,
+                          id: event.target.value,
+                        })
                       }
                     />
                   </label>
@@ -1837,7 +1941,9 @@ export function BrepFeatureEditor({
                   disabled={saving}
                   onClick={() => void save()}
                 >
-                  {saving ? 'Saving feature revision…' : 'Save feature revision'}
+                  {saving
+                    ? 'Saving feature revision…'
+                    : 'Save feature revision'}
                 </Button>
               </div>
             </>

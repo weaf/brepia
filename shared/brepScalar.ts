@@ -13,9 +13,7 @@ export const BREP_SCALAR_EXPRESSION_MAX_DEPTH = 12;
 export const BREP_SCALAR_EXPRESSION_MAX_NODES = 64;
 
 export type BrepScalarValidationErrorCode =
-  | 'invalid_scalar'
-  | 'invalid_parameter'
-  | 'invalid_reference';
+  'invalid_scalar' | 'invalid_parameter' | 'invalid_reference';
 
 export class BrepScalarValidationError extends Error {
   constructor(
@@ -165,7 +163,8 @@ function normalizeScalarTree(
   depth: number,
   state: { nodes: number },
 ): BrepScalar {
-  if (typeof value === 'number') return options.normalizeNumber(value, options.field);
+  if (typeof value === 'number')
+    return options.normalizeNumber(value, options.field);
   if (!isRecord(value)) {
     throw new BrepScalarValidationError(
       'invalid_scalar',
@@ -233,7 +232,9 @@ export function brepScalarParameterReferences(value: BrepScalar): string[] {
     scalar.args.forEach(visit);
   };
   visit(value);
-  return [...references].sort((left, right) => left.localeCompare(right, 'en-US'));
+  return [...references].sort((left, right) =>
+    left.localeCompare(right, 'en-US'),
+  );
 }
 
 export function brepScalarReferencesParameter(
@@ -262,9 +263,12 @@ export function resolveBrepScalar(
         `Scalar expression exceeds maximum depth ${BREP_SCALAR_EXPRESSION_MAX_DEPTH}.`,
       );
     }
-    if (typeof scalar === 'number') return checkedResolvedNumber(scalar, 'Scalar literal');
+    if (typeof scalar === 'number')
+      return checkedResolvedNumber(scalar, 'Scalar literal');
     if (isBrepParameterReference(scalar)) {
-      if (!Object.prototype.hasOwnProperty.call(parameterValues, scalar.parameter)) {
+      if (
+        !Object.prototype.hasOwnProperty.call(parameterValues, scalar.parameter)
+      ) {
         throw new BrepScalarEvaluationError(
           `Missing scalar parameter value ${scalar.parameter}.`,
         );
@@ -291,7 +295,10 @@ export function resolveBrepScalar(
           result = left * right;
           break;
         case 'div':
-          if (right === 0) throw new BrepScalarEvaluationError('Scalar expression divides by zero.');
+          if (right === 0)
+            throw new BrepScalarEvaluationError(
+              'Scalar expression divides by zero.',
+            );
           result = left / right;
           break;
       }
@@ -315,7 +322,9 @@ function appendVectorScalars(
   field: string,
 ): void {
   if (!vector) return;
-  vector.forEach((value, index) => scalars.push({ value, field: `${field}[${index}]` }));
+  vector.forEach((value, index) =>
+    scalars.push({ value, field: `${field}[${index}]` }),
+  );
 }
 
 function appendProfileLoopScalars(
@@ -359,14 +368,24 @@ function appendProfileScalars(
   });
 }
 
-function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field: string }> {
+function projectScalars(
+  project: BrepProject,
+): Array<{ value: BrepScalar; field: string }> {
   const scalars: Array<{ value: BrepScalar; field: string }> = [];
   appendVectorScalars(scalars, project.placement.origin, 'placement.origin');
   appendVectorScalars(scalars, project.placement.xAxis, 'placement.xAxis');
   appendVectorScalars(scalars, project.placement.yAxis, 'placement.yAxis');
   for (const point of project.projectObject?.points ?? []) {
-    appendVectorScalars(scalars, point.position, `projectObject.points.${point.id}.position`);
-    appendVectorScalars(scalars, point.direction, `projectObject.points.${point.id}.direction`);
+    appendVectorScalars(
+      scalars,
+      point.position,
+      `projectObject.points.${point.id}.position`,
+    );
+    appendVectorScalars(
+      scalars,
+      point.direction,
+      `projectObject.points.${point.id}.direction`,
+    );
   }
   for (const node of project.nodes) {
     switch (node.type) {
@@ -390,6 +409,20 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
       case 'revolve':
         appendProfileScalars(scalars, node);
         break;
+      case 'sweep':
+        scalars.push(
+          { value: node.profile.radius, field: `${node.id}.profile.radius` },
+          {
+            value: node.path.firstLegLength,
+            field: `${node.id}.path.firstLegLength`,
+          },
+          {
+            value: node.path.secondLegLength,
+            field: `${node.id}.path.secondLegLength`,
+          },
+          { value: node.path.bendRadius, field: `${node.id}.path.bendRadius` },
+        );
+        break;
       case 'transform':
         appendVectorScalars(scalars, node.translate, `${node.id}.translate`);
         appendVectorScalars(scalars, node.rotateDeg, `${node.id}.rotateDeg`);
@@ -408,7 +441,10 @@ function projectScalars(project: BrepProject): Array<{ value: BrepScalar; field:
         break;
       case 'circularPattern':
         appendVectorScalars(scalars, node.center, `${node.id}.center`);
-        scalars.push({ value: node.angleStepDeg, field: `${node.id}.angleStepDeg` });
+        scalars.push({
+          value: node.angleStepDeg,
+          field: `${node.id}.angleStepDeg`,
+        });
         break;
       case 'fillet':
         scalars.push({ value: node.radius, field: `${node.id}.radius` });
@@ -447,9 +483,11 @@ export function validateBrepProjectScalarDefaults(project: BrepProject): void {
 export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
   const references = new Set<string>();
   const append = (scalar: BrepScalar): void => {
-    for (const parameter of brepScalarParameterReferences(scalar)) references.add(parameter);
+    for (const parameter of brepScalarParameterReferences(scalar))
+      references.add(parameter);
   };
-  const appendVector = (vector: BrepVector3 | undefined): void => vector?.forEach(append);
+  const appendVector = (vector: BrepVector3 | undefined): void =>
+    vector?.forEach(append);
   const appendLoop = (loop: BrepProfileLoop): void => {
     switch (loop.type) {
       case 'rectangle':
@@ -494,6 +532,12 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
     case 'revolve':
       appendProfile(node);
       break;
+    case 'sweep':
+      append(node.profile.radius);
+      append(node.path.firstLegLength);
+      append(node.path.secondLegLength);
+      append(node.path.bendRadius);
+      break;
     case 'transform':
       appendVector(node.translate);
       appendVector(node.rotateDeg);
@@ -520,5 +564,7 @@ export function brepNodeScalarParameterReferences(node: BrepNode): string[] {
     case 'intersect':
       break;
   }
-  return [...references].sort((left, right) => left.localeCompare(right, 'en-US'));
+  return [...references].sort((left, right) =>
+    left.localeCompare(right, 'en-US'),
+  );
 }
