@@ -7,6 +7,7 @@ import {
   validateBrepLinearPatternSpacingValues,
   validateBrepRectangularPatternSpacingValues,
   validateBrepRevolveProfileValues,
+  validateBrepSweepValues,
   type BrepNodeValueKind,
   type BrepProject,
   type BrepProjectMetadata,
@@ -147,8 +148,7 @@ export type BrepEvaluationFailure = {
 };
 
 export type BrepEvaluationResult =
-  | BrepEvaluationSuccess
-  | BrepEvaluationFailure;
+  BrepEvaluationSuccess | BrepEvaluationFailure;
 
 /** This boundary is intentionally process-agnostic. Native implementations live behind a sandbox runner. */
 export interface BrepProvider {
@@ -162,9 +162,7 @@ export interface BrepProvider {
 export class BrepEvaluationRequestError extends Error {
   constructor(
     public readonly code:
-      | 'invalid_request'
-      | 'invalid_parameter_value'
-      | 'invalid_placement',
+      'invalid_request' | 'invalid_parameter_value' | 'invalid_placement',
     message: string,
   ) {
     super(message);
@@ -198,7 +196,10 @@ function resolveScalar(
     return resolveBrepScalar(value, parameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
-      throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
+      throw new BrepEvaluationRequestError(
+        'invalid_parameter_value',
+        error.message,
+      );
     }
     throw error;
   }
@@ -332,7 +333,10 @@ export function normalizeBrepEvaluationRequest(
 
   const parameterValues: BrepParameterValues = {};
   for (const parameter of project.parameters) {
-    const rawValue = Object.prototype.hasOwnProperty.call(overrides, parameter.id)
+    const rawValue = Object.prototype.hasOwnProperty.call(
+      overrides,
+      parameter.id,
+    )
       ? overrides[parameter.id]
       : parameter.default;
     const normalized = normalizeOverride(rawValue, parameter.id);
@@ -358,9 +362,13 @@ export function normalizeBrepEvaluationRequest(
     validateBrepCircularPatternAngleValues(project, parameterValues);
     validateBrepExtrudeProfileValues(project, parameterValues);
     validateBrepRevolveProfileValues(project, parameterValues);
+    validateBrepSweepValues(project, parameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
-      throw new BrepEvaluationRequestError('invalid_parameter_value', error.message);
+      throw new BrepEvaluationRequestError(
+        'invalid_parameter_value',
+        error.message,
+      );
     }
     throw error;
   }

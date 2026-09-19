@@ -48,8 +48,7 @@ export type BrepScalarNegateExpression = {
 };
 
 export type BrepScalarExpression =
-  | BrepScalarBinaryExpression
-  | BrepScalarNegateExpression;
+  BrepScalarBinaryExpression | BrepScalarNegateExpression;
 
 export type BrepScalar = number | BrepParameterReference | BrepScalarExpression;
 export type BrepVector3 = [BrepScalar, BrepScalar, BrepScalar];
@@ -148,9 +147,7 @@ export type BrepClosedPolylineProfile = {
 };
 
 export type BrepProfileLoop =
-  | BrepRectangleProfile
-  | BrepCircleProfile
-  | BrepClosedPolylineProfile;
+  BrepRectangleProfile | BrepCircleProfile | BrepClosedPolylineProfile;
 
 export type BrepProfileHole = {
   loop: BrepProfileLoop;
@@ -176,6 +173,21 @@ export type BrepRevolveNode = {
   type: 'revolve';
   profile: BrepProfile;
   axis: BrepAxis;
+};
+
+export type BrepPlanarElbow90Path = {
+  type: 'planarElbow90';
+  planeNormalAxis: BrepAxis;
+  firstLegLength: BrepScalar;
+  secondLegLength: BrepScalar;
+  bendRadius: BrepScalar;
+};
+
+export type BrepSweepNode = {
+  id: string;
+  type: 'sweep';
+  profile: BrepCircleProfile;
+  path: BrepPlanarElbow90Path;
 };
 
 export type BrepTransformNode = {
@@ -257,6 +269,7 @@ export type BrepNode =
   | BrepCylinderNode
   | BrepExtrudeNode
   | BrepRevolveNode
+  | BrepSweepNode
   | BrepTransformNode
   | BrepMirrorNode
   | BrepLinearPatternNode
@@ -1096,6 +1109,96 @@ function normalizeNode(
       };
     }
 
+    case 'sweep': {
+      if (!isRecord(value.profile) || value.profile.type !== 'circle') {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep sweep ${id} profile must be one circle profile.`,
+        );
+      }
+      if (!isRecord(value.path) || value.path.type !== 'planarElbow90') {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep sweep ${id} path must be planarElbow90.`,
+        );
+      }
+      if (
+        typeof value.path.planeNormalAxis !== 'string' ||
+        !AXES.has(value.path.planeNormalAxis as BrepAxis)
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep sweep ${id} planeNormalAxis must be x, y, or z.`,
+        );
+      }
+      if (
+        Object.keys(value.profile).some(
+          (key) => !['type', 'radius'].includes(key),
+        )
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep sweep ${id} circle profile contains unsupported fields.`,
+        );
+      }
+      if (
+        Object.keys(value.path).some(
+          (key) =>
+            ![
+              'type',
+              'planeNormalAxis',
+              'firstLegLength',
+              'secondLegLength',
+              'bendRadius',
+            ].includes(key),
+        )
+      ) {
+        throw new BrepProjectError(
+          'invalid_node',
+          `BRep sweep ${id} planarElbow90 path contains unsupported fields.`,
+        );
+      }
+      return {
+        id,
+        type: 'sweep',
+        profile: {
+          type: 'circle',
+          radius: normalizeScalar(
+            value.profile.radius,
+            `BRep sweep ${id} profile radius`,
+            parameterIds,
+            parameterUnits,
+            ['mm'],
+          ),
+        },
+        path: {
+          type: 'planarElbow90',
+          planeNormalAxis: value.path.planeNormalAxis as BrepAxis,
+          firstLegLength: normalizeScalar(
+            value.path.firstLegLength,
+            `BRep sweep ${id} firstLegLength`,
+            parameterIds,
+            parameterUnits,
+            ['mm'],
+          ),
+          secondLegLength: normalizeScalar(
+            value.path.secondLegLength,
+            `BRep sweep ${id} secondLegLength`,
+            parameterIds,
+            parameterUnits,
+            ['mm'],
+          ),
+          bendRadius: normalizeScalar(
+            value.path.bendRadius,
+            `BRep sweep ${id} bendRadius`,
+            parameterIds,
+            parameterUnits,
+            ['mm'],
+          ),
+        },
+      };
+    }
+
     case 'transform': {
       if (value.translate == null && value.rotateDeg == null) {
         throw new BrepProjectError(
@@ -1385,6 +1488,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'cylinder':
     case 'extrude':
     case 'revolve':
+    case 'sweep':
       return [];
     case 'transform':
     case 'mirror':
@@ -1427,7 +1531,8 @@ function validateNodeReferencesAndCycles(nodes: BrepNode[]): void {
     }
 
     state.set(nodeId, 'visiting');
-    for (const dependency of nodeDependencies(byId.get(nodeId)!)) visit(dependency);
+    for (const dependency of nodeDependencies(byId.get(nodeId)!))
+      visit(dependency);
     state.set(nodeId, 'done');
   };
 
@@ -1439,7 +1544,11 @@ function validateNodeValueCompatibility(
   projectObject: BrepProjectObjectDefinition | undefined,
 ): void {
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const requireSingle = (owner: BrepNode, dependencyId: string, field: string) => {
+  const requireSingle = (
+    owner: BrepNode,
+    dependencyId: string,
+    field: string,
+  ) => {
     const dependency = byId.get(dependencyId)!;
     if (brepNodeValueKind(dependency) !== 'single') {
       throw new BrepProjectError(
@@ -1455,6 +1564,7 @@ function validateNodeValueCompatibility(
       case 'cylinder':
       case 'extrude':
       case 'revolve':
+      case 'sweep':
         break;
       case 'transform':
       case 'mirror':
@@ -1550,7 +1660,9 @@ export function validateBrepCircularPatternAngleValues(
 
 function requirePositiveExtrudeValue(value: number, field: string): void {
   if (value <= 0) {
-    throw new BrepScalarEvaluationError(`${field} must resolve to a positive millimetre value.`);
+    throw new BrepScalarEvaluationError(
+      `${field} must resolve to a positive millimetre value.`,
+    );
   }
 }
 
@@ -1691,6 +1803,48 @@ export function validateBrepRevolveProfileValues(
   }
 }
 
+export function validateBrepSweepValues(
+  project: BrepProject,
+  parameterValues: Readonly<Record<string, number>>,
+): void {
+  for (const node of project.nodes) {
+    if (node.type !== 'sweep') continue;
+
+    const profileRadius = resolveBrepScalar(
+      node.profile.radius,
+      parameterValues,
+    );
+    const firstLegLength = resolveBrepScalar(
+      node.path.firstLegLength,
+      parameterValues,
+    );
+    const secondLegLength = resolveBrepScalar(
+      node.path.secondLegLength,
+      parameterValues,
+    );
+    const bendRadius = resolveBrepScalar(node.path.bendRadius, parameterValues);
+
+    for (const [field, value] of [
+      ['profile radius', profileRadius],
+      ['firstLegLength', firstLegLength],
+      ['secondLegLength', secondLegLength],
+      ['bendRadius', bendRadius],
+    ] as const) {
+      if (value <= 0) {
+        throw new BrepScalarEvaluationError(
+          `BRep sweep ${node.id} ${field} must resolve to a positive millimetre value.`,
+        );
+      }
+    }
+
+    if (profileRadius >= bendRadius) {
+      throw new BrepScalarEvaluationError(
+        `BRep sweep ${node.id} profile radius must resolve smaller than bendRadius.`,
+      );
+    }
+  }
+}
+
 export function normalizeBrepProject(project: unknown): BrepProject {
   if (
     !isRecord(project) ||
@@ -1711,7 +1865,10 @@ export function normalizeBrepProject(project: unknown): BrepProject {
       `BRep project exceeds ${BREP_PROJECT_MAX_PARAMETERS} published parameters.`,
     );
   }
-  if (project.nodes.length === 0 || project.nodes.length > BREP_PROJECT_MAX_NODES) {
+  if (
+    project.nodes.length === 0 ||
+    project.nodes.length > BREP_PROJECT_MAX_NODES
+  ) {
     throw new BrepProjectError(
       'too_many_nodes',
       `BRep project must contain between 1 and ${BREP_PROJECT_MAX_NODES} nodes.`,
@@ -1739,7 +1896,11 @@ export function normalizeBrepProject(project: unknown): BrepProject {
     parameterUnits.set(parameter.id, parameter.unit);
   }
 
-  const placement = normalizePlacement(project.placement, parameterIds, parameterUnits);
+  const placement = normalizePlacement(
+    project.placement,
+    parameterIds,
+    parameterUnits,
+  );
   const metadata = normalizeMetadata(project.metadata);
   const nodes = project.nodes.map((node) =>
     normalizeNode(node, parameterIds, parameterUnits),
@@ -1792,13 +1953,20 @@ export function normalizeBrepProject(project: unknown): BrepProject {
   try {
     validateBrepProjectScalarDefaults(normalized);
     const defaultParameterValues = Object.fromEntries(
-      normalized.parameters.map((parameter) => [parameter.id, parameter.default]),
+      normalized.parameters.map((parameter) => [
+        parameter.id,
+        parameter.default,
+      ]),
     );
     validateBrepLinearPatternSpacingValues(normalized, defaultParameterValues);
-    validateBrepRectangularPatternSpacingValues(normalized, defaultParameterValues);
+    validateBrepRectangularPatternSpacingValues(
+      normalized,
+      defaultParameterValues,
+    );
     validateBrepCircularPatternAngleValues(normalized, defaultParameterValues);
     validateBrepExtrudeProfileValues(normalized, defaultParameterValues);
     validateBrepRevolveProfileValues(normalized, defaultParameterValues);
+    validateBrepSweepValues(normalized, defaultParameterValues);
   } catch (error) {
     if (error instanceof BrepScalarEvaluationError) {
       throw new BrepProjectError('invalid_parameter', error.message);

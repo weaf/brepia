@@ -11,17 +11,16 @@ import {
 } from './brepScalar.ts';
 
 export type BrepParameterEffectiveness =
-  | 'effective'
-  | 'semantic-only'
-  | 'orphan-only'
-  | 'unused';
+  'effective' | 'semantic-only' | 'orphan-only' | 'unused';
 
 export type BrepProjectIntegrityAnalysis = {
   resultReachableNodeIds: string[];
   roleReachableNodeIds: string[];
   authoritativeReachableNodeIds: string[];
   orphanNodeIds: string[];
-  parameterClassifications: Readonly<Record<string, BrepParameterEffectiveness>>;
+  parameterClassifications: Readonly<
+    Record<string, BrepParameterEffectiveness>
+  >;
   effectiveParameterIds: string[];
   semanticOnlyParameterIds: string[];
   orphanOnlyParameterIds: string[];
@@ -40,6 +39,7 @@ function nodeDependencies(node: BrepNode): string[] {
     case 'cylinder':
     case 'extrude':
     case 'revolve':
+    case 'sweep':
       return [];
     case 'transform':
     case 'mirror':
@@ -148,7 +148,8 @@ export function analyzeBrepProjectIntegrity(
   const orphanParameters = parameterReferencesForNodes(project, orphanNodes);
   const semanticParameters = semanticParameterReferences(project);
 
-  const parameterClassifications: Record<string, BrepParameterEffectiveness> = {};
+  const parameterClassifications: Record<string, BrepParameterEffectiveness> =
+    {};
   const effectiveParameterIds: string[] = [];
   const semanticOnlyParameterIds: string[] = [];
   const orphanOnlyParameterIds: string[] = [];
