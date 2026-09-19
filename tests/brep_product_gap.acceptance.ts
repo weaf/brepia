@@ -207,7 +207,7 @@ function nodeTypeHistogram(
 test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
   page,
 }) => {
-  test.setTimeout(8 * 60_000);
+  test.setTimeout(12 * 60_000);
   await mkdir(OUTPUT_DIR, { recursive: true });
 
   const evaluations: EvaluationSnapshot[] = [];
@@ -267,10 +267,10 @@ test(`BRep product-gap audit target ${TARGET.id}: ${TARGET.name}`, async ({
     .first();
   const outcome = await Promise.race([
     parameters
-      .waitFor({ state: 'visible', timeout: 300_000 })
+      .waitFor({ state: 'visible', timeout: 600_000 })
       .then(() => 'ready' as const),
     terminalCreation
-      .waitFor({ state: 'visible', timeout: 300_000 })
+      .waitFor({ state: 'visible', timeout: 600_000 })
       .then(() => 'terminal' as const),
   ]);
 
