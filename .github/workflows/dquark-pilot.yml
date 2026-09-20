@@ -1,0 +1,60 @@
+name: Dquark Brepia pilot
+
+on:
+  push:
+    branches:
+      - ops/dquark-runner
+    paths:
+      - .dquark/request.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dquark-brepia-pilot
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: [self-hosted, Linux, X64, dquark, brepia]
+    timeout-minutes: 90
+    steps:
+      - name: Checkout control branch
+        uses: actions/checkout@v4
+        with:
+          ref: ops/dquark-runner
+          path: control
+          clean: true
+
+      - name: Validate request
+        id: request
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          req = json.loads(Path("control/.dquark/request.json").read_text())
+          operation = req.get("operation")
+          ref = req.get("ref")
+          request_id = req.get("request_id", "unknown")
+          if operation not in {"reconcile", "quality", "gap-audit"}:
+              raise SystemExit(f"unsupported operation: {operation!r}")
+          if ref not in {"master", "feature/brep-planar-elbow-sweep"}:
+              raise SystemExit(f"unsupported ref: {ref!r}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"operation={operation}\nref={ref}\nrequest_id={request_id}\n")
+          PY
+
+      - name: Checkout target ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.request.outputs.ref }}
+          path: target
+          fetch-depth: 0
+          clean: true
+
+      - name: Run approved operation
+        shell: bash
+        run: |
+          echo "request_id=${{ steps.request.outputs.request_id }}"
+          bash control/.github/scripts/dquark-dispatch.sh "${{ steps.request.outputs.operation }}" "$GITHUB_WORKSPACE/target"
