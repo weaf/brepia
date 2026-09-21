@@ -81,7 +81,8 @@ const brepMetadataSchema = z
         z.string().min(1).max(BREP_PROJECT_MAX_DESCRIPTION_CHARS),
       )
       .refine(
-        (value) => Object.keys(value).length <= BREP_PROJECT_MAX_METADATA_PROPERTIES,
+        (value) =>
+          Object.keys(value).length <= BREP_PROJECT_MAX_METADATA_PROPERTIES,
         `BRep metadata may contain at most ${BREP_PROJECT_MAX_METADATA_PROPERTIES} properties.`,
       )
       .optional(),
@@ -173,7 +174,10 @@ function createBrepProfileLoopSchema(scalarSchema: z.ZodTypeAny) {
     z
       .object({
         type: z.literal('closedPolyline'),
-        points: z.array(pointSchema).min(3).max(BREP_PROJECT_MAX_PROFILE_POINTS),
+        points: z
+          .array(pointSchema)
+          .min(3)
+          .max(BREP_PROJECT_MAX_PROFILE_POINTS),
       })
       .strict(),
   ]);
@@ -189,7 +193,10 @@ function createBrepExtrudeProfileSchema(scalarSchema: z.ZodTypeAny) {
       offsetV: scalarSchema,
     })
     .strict();
-  const holesSchema = z.array(holeSchema).max(BREP_PROJECT_MAX_PROFILE_HOLES).optional();
+  const holesSchema = z
+    .array(holeSchema)
+    .max(BREP_PROJECT_MAX_PROFILE_HOLES)
+    .optional();
 
   return z
     .discriminatedUnion('type', [
@@ -211,7 +218,10 @@ function createBrepExtrudeProfileSchema(scalarSchema: z.ZodTypeAny) {
       z
         .object({
           type: z.literal('closedPolyline'),
-          points: z.array(pointSchema).min(3).max(BREP_PROJECT_MAX_PROFILE_POINTS),
+          points: z
+            .array(pointSchema)
+            .min(3)
+            .max(BREP_PROJECT_MAX_PROFILE_POINTS),
           holes: holesSchema,
         })
         .strict(),
@@ -235,7 +245,8 @@ function createBrepExtrudeProfileSchema(scalarSchema: z.ZodTypeAny) {
     });
 }
 
-const brepExtrudeProfileSchema = createBrepExtrudeProfileSchema(brepScalarSchema);
+const brepExtrudeProfileSchema =
+  createBrepExtrudeProfileSchema(brepScalarSchema);
 const brepRevolveProfileSchema = createBrepProfileLoopSchema(brepScalarSchema);
 
 const brepExtrudeNodeSchema = z
@@ -254,6 +265,28 @@ const brepRevolveNodeSchema = z
     type: z.literal('revolve'),
     profile: brepRevolveProfileSchema,
     axis: z.enum(['x', 'y', 'z']),
+  })
+  .strict();
+
+const brepSweepNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('sweep'),
+    profile: z
+      .object({
+        type: z.literal('circle'),
+        radius: brepScalarSchema,
+      })
+      .strict(),
+    path: z
+      .object({
+        type: z.literal('planarElbow90'),
+        planeNormalAxis: z.enum(['x', 'y', 'z']),
+        firstLegLength: brepScalarSchema,
+        secondLegLength: brepScalarSchema,
+        bendRadius: brepScalarSchema,
+      })
+      .strict(),
   })
   .strict();
 
@@ -354,6 +387,7 @@ const brepNodeSchema = z.discriminatedUnion('type', [
   brepCylinderNodeSchema,
   brepExtrudeNodeSchema,
   brepRevolveNodeSchema,
+  brepSweepNodeSchema,
   brepTransformNodeSchema,
   brepMirrorNodeSchema,
   brepLinearPatternNodeSchema,
@@ -515,6 +549,27 @@ const brepProviderRevolveNodeSchema = z
     axis: z.enum(['x', 'y', 'z']),
   })
   .strict();
+const brepProviderSweepNodeSchema = z
+  .object({
+    id: brepIdSchema,
+    type: z.literal('sweep'),
+    profile: z
+      .object({
+        type: z.literal('circle'),
+        radius: brepProviderScalarSchema,
+      })
+      .strict(),
+    path: z
+      .object({
+        type: z.literal('planarElbow90'),
+        planeNormalAxis: z.enum(['x', 'y', 'z']),
+        firstLegLength: brepProviderScalarSchema,
+        secondLegLength: brepProviderScalarSchema,
+        bendRadius: brepProviderScalarSchema,
+      })
+      .strict(),
+  })
+  .strict();
 const brepProviderTransformNodeSchema = z
   .object({
     id: brepIdSchema,
@@ -581,6 +636,7 @@ const brepProviderNodeSchema = z.discriminatedUnion('type', [
   brepProviderCylinderNodeSchema,
   brepProviderExtrudeNodeSchema,
   brepProviderRevolveNodeSchema,
+  brepProviderSweepNodeSchema,
   brepProviderTransformNodeSchema,
   brepProviderMirrorNodeSchema,
   brepProviderLinearPatternNodeSchema,

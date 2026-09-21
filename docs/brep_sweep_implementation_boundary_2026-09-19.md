@@ -1,10 +1,10 @@
 # Bounded planar 90-degree circular sweep implementation boundary — 2026-09-19
 
-Status: **LOCKED FOR REVIEW — implementation not started**
+Status: **IMPLEMENTED AND ACCEPTED — Gates A/B/C/D complete; boundary remains locked with no scope broadening**
 
 Repository: `weaf/brepia`
 
-Planning branch: `plan/brep-sweep-boundary`
+Planning branch: `plan/brep-sweep-boundary` (historical)\n\nImplementation branch: `feature/brep-planar-elbow-sweep`
 
 Parent authority:
 
@@ -391,4 +391,4 @@ The path is two positive straight portions joined by one positive-radius tangent
 
 General paths, multiple bends, arbitrary angles, non-circular sections and twist/frame authoring remain explicitly deferred.
 
-Implementation may begin only after this planning boundary is accepted.
+This boundary was accepted, implemented and verified without broadening. Closeout evidence is recorded in `docs/brep_sweep_status_2026-09-21.md`; post-sweep work is paused by `docs/brep_post_sweep_pause_decision_2026-09-21.md`.

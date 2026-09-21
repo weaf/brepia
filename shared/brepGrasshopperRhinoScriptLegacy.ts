@@ -84,9 +84,9 @@ export class BrepGrasshopperRhinoScriptError extends Error {
 }
 
 function formatUuid(bytes: Uint8Array): string {
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  );
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
   return [
     hex.slice(0, 8),
     hex.slice(8, 12),
@@ -131,7 +131,9 @@ async function sha256Hex(value: string): Promise<string> {
   const digest = new Uint8Array(
     await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)),
   );
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
 }
 
 function pythonNumber(value: number): string {
@@ -171,7 +173,9 @@ function pythonPortName(
   return candidate;
 }
 
-function parameterVariables(contract: BrepGrasshopperContract): Map<string, string> {
+function parameterVariables(
+  contract: BrepGrasshopperContract,
+): Map<string, string> {
   const used = new Set(PYTHON_RESERVED_PORT_NAMES);
   return new Map(
     contract.source.parameters.map((parameter, index) => [
@@ -219,7 +223,11 @@ function pythonString(value: string): string {
 }
 
 function stableJson(value: unknown): string {
-  if (value == null || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    value == null ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
     return JSON.stringify(value);
   }
   if (typeof value === 'string') return JSON.stringify(value);
@@ -324,6 +332,53 @@ function revolveFrameExpressions(axis: 'x' | 'y' | 'z'): {
     xAxis: 'rg.Vector3d(0, 0, 1)',
     yAxis: 'rg.Vector3d(1, 0, 0)',
     axisVector: 'rg.Vector3d(0, 0, 1)',
+  };
+}
+
+function sweepFrameExpressions(
+  axis: 'x' | 'y' | 'z',
+  firstLeg: string,
+  secondLeg: string,
+  bendRadius: string,
+): {
+  p0: string;
+  p1: string;
+  p2: string;
+  p3: string;
+  tangent: string;
+  sectionXAxis: string;
+  sectionYAxis: string;
+} {
+  if (axis === 'x') {
+    return {
+      p0: 'rg.Point3d(0, 0, 0)',
+      p1: `rg.Point3d(0, ${firstLeg}, 0)`,
+      p2: `rg.Point3d(0, ${firstLeg} + ${bendRadius}, ${bendRadius})`,
+      p3: `rg.Point3d(0, ${firstLeg} + ${bendRadius}, ${bendRadius} + ${secondLeg})`,
+      tangent: 'rg.Vector3d(0, 1, 0)',
+      sectionXAxis: 'rg.Vector3d(0, 0, 1)',
+      sectionYAxis: 'rg.Vector3d(1, 0, 0)',
+    };
+  }
+  if (axis === 'y') {
+    return {
+      p0: 'rg.Point3d(0, 0, 0)',
+      p1: `rg.Point3d(0, 0, ${firstLeg})`,
+      p2: `rg.Point3d(${bendRadius}, 0, ${firstLeg} + ${bendRadius})`,
+      p3: `rg.Point3d(${bendRadius} + ${secondLeg}, 0, ${firstLeg} + ${bendRadius})`,
+      tangent: 'rg.Vector3d(0, 0, 1)',
+      sectionXAxis: 'rg.Vector3d(1, 0, 0)',
+      sectionYAxis: 'rg.Vector3d(0, 1, 0)',
+    };
+  }
+  return {
+    p0: 'rg.Point3d(0, 0, 0)',
+    p1: `rg.Point3d(${firstLeg}, 0, 0)`,
+    p2: `rg.Point3d(${firstLeg} + ${bendRadius}, ${bendRadius}, 0)`,
+    p3: `rg.Point3d(${firstLeg} + ${bendRadius}, ${bendRadius} + ${secondLeg}, 0)`,
+    tangent: 'rg.Vector3d(1, 0, 0)',
+    sectionXAxis: 'rg.Vector3d(0, 1, 0)',
+    sectionYAxis: 'rg.Vector3d(0, 0, 1)',
   };
 }
 
@@ -496,9 +551,15 @@ function buildGraphSource(
           (point) =>
             `${variable}Plane.PointAt(float(${scalarExpression(point.u, variables)}), float(${scalarExpression(point.v, variables)}))`,
         );
-        lines.push(`${variable}ProfilePoints = [${pointExpressions.join(', ')}]`);
-        lines.push(`${variable}ProfilePoints.append(${variable}ProfilePoints[0])`);
-        lines.push(`${variable}Profile = rg.PolylineCurve(${variable}ProfilePoints)`);
+        lines.push(
+          `${variable}ProfilePoints = [${pointExpressions.join(', ')}]`,
+        );
+        lines.push(
+          `${variable}ProfilePoints.append(${variable}ProfilePoints[0])`,
+        );
+        lines.push(
+          `${variable}Profile = rg.PolylineCurve(${variable}ProfilePoints)`,
+        );
       }
 
       lines.push(
@@ -554,8 +615,12 @@ function buildGraphSource(
       lines.push(
         `${variable}ProfilePoints = [${variable}Plane.PointAt(item[0], item[1]) for item in ${variable}ProfileUV]`,
       );
-      lines.push(`${variable}ProfilePoints.append(${variable}ProfilePoints[0])`);
-      lines.push(`${variable}Profile = rg.PolylineCurve(${variable}ProfilePoints)`);
+      lines.push(
+        `${variable}ProfilePoints.append(${variable}ProfilePoints[0])`,
+      );
+      lines.push(
+        `${variable}Profile = rg.PolylineCurve(${variable}ProfilePoints)`,
+      );
       lines.push(
         `if ${variable}Profile is None or not ${variable}Profile.IsValid or not ${variable}Profile.IsClosed:`,
       );
@@ -565,7 +630,9 @@ function buildGraphSource(
       lines.push(
         `${variable}Axis = rg.Line(rg.Point3d(0, 0, 0), rg.Point3d(${frame.axisVector}.X, ${frame.axisVector}.Y, ${frame.axisVector}.Z))`,
       );
-      lines.push(`${variable}RevSurface = rg.RevSurface.Create(${variable}Profile, ${variable}Axis)`);
+      lines.push(
+        `${variable}RevSurface = rg.RevSurface.Create(${variable}Profile, ${variable}Axis)`,
+      );
       lines.push(`if ${variable}RevSurface is None:`);
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino could not create a full revolution surface for Brepia node ${node.id}.`)})`,
@@ -576,6 +643,79 @@ function buildGraphSource(
       lines.push(`if ${variable} is None or not ${variable}.IsSolid:`);
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino revolve for Brepia node ${node.id} did not produce one closed solid Brep.`)})`,
+      );
+    } else if (node.type === 'sweep') {
+      const profileRadius = scalarExpression(node.profile.radius, variables);
+      const firstLeg = scalarExpression(node.path.firstLegLength, variables);
+      const secondLeg = scalarExpression(node.path.secondLegLength, variables);
+      const bendRadius = scalarExpression(node.path.bendRadius, variables);
+      const profileRadiusVariable = `${variable}ProfileRadius`;
+      const firstLegVariable = `${variable}FirstLegLength`;
+      const secondLegVariable = `${variable}SecondLegLength`;
+      const bendRadiusVariable = `${variable}BendRadius`;
+      const frame = sweepFrameExpressions(
+        node.path.planeNormalAxis,
+        firstLegVariable,
+        secondLegVariable,
+        bendRadiusVariable,
+      );
+      lines.push(`${profileRadiusVariable} = float(${profileRadius})`);
+      lines.push(`${firstLegVariable} = float(${firstLeg})`);
+      lines.push(`${secondLegVariable} = float(${secondLeg})`);
+      lines.push(`${bendRadiusVariable} = float(${bendRadius})`);
+      lines.push(
+        `if ${profileRadiusVariable} <= 0.0 or ${firstLegVariable} <= 0.0 or ${secondLegVariable} <= 0.0 or ${bendRadiusVariable} <= 0.0:`,
+      );
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia sweep node ${node.id} dimensions must be greater than zero.`)})`,
+      );
+      lines.push(`if ${profileRadiusVariable} >= ${bendRadiusVariable}:`);
+      lines.push(
+        `    raise ValueError(${pythonString(`Brepia sweep node ${node.id} profile radius must be smaller than bend radius.`)})`,
+      );
+      lines.push(`${variable}P0 = ${frame.p0}`);
+      lines.push(`${variable}P1 = ${frame.p1}`);
+      lines.push(`${variable}P2 = ${frame.p2}`);
+      lines.push(`${variable}P3 = ${frame.p3}`);
+      lines.push(
+        `${variable}Arc = rg.Arc(${variable}P1, ${frame.tangent}, ${variable}P2)`,
+      );
+      lines.push(`if not ${variable}Arc.IsValid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct the tangent 90 degree elbow arc for Brepia sweep node ${node.id}.`)})`,
+      );
+      lines.push(`${variable}Rail = rg.PolyCurve()`);
+      lines.push(
+        `if not ${variable}Rail.Append(rg.Line(${variable}P0, ${variable}P1)) or not ${variable}Rail.Append(${variable}Arc) or not ${variable}Rail.Append(rg.Line(${variable}P2, ${variable}P3)):`,
+      );
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct the canonical rail for Brepia sweep node ${node.id}.`)})`,
+      );
+      lines.push(
+        `${variable}SectionPlane = rg.Plane(${variable}P0, ${frame.sectionXAxis}, ${frame.sectionYAxis})`,
+      );
+      lines.push(`if not ${variable}SectionPlane.IsValid:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino could not construct the canonical section plane for Brepia sweep node ${node.id}.`)})`,
+      );
+      lines.push(
+        `${variable}Profile = rg.Circle(${variable}SectionPlane, ${profileRadiusVariable}).ToNurbsCurve()`,
+      );
+      lines.push(
+        `${variable}Parts = rg.Brep.CreateFromSweep(${variable}Rail, ${variable}Profile, False, brepiaTolerance)`,
+      );
+      lines.push(`if ${variable}Parts is None or len(${variable}Parts) != 1:`);
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino sweep for Brepia node ${node.id} did not produce exactly one Brep.`)})`,
+      );
+      lines.push(
+        `${variable} = ${variable}Parts[0].CapPlanarHoles(brepiaTolerance)`,
+      );
+      lines.push(
+        `if ${variable} is None or not ${variable}.IsValid or not ${variable}.IsSolid:`,
+      );
+      lines.push(
+        `    raise RuntimeError(${pythonString(`Rhino sweep for Brepia node ${node.id} did not produce one closed solid Brep.`)})`,
       );
     } else if (node.type === 'transform') {
       const input = emitNode(node.input);
@@ -603,7 +743,9 @@ function buildGraphSource(
       lines.push(
         `${variable}Rotation = ${variable}RotationX * ${variable}RotationY * ${variable}RotationZ`,
       );
-      lines.push(`${variable}Translation = rg.Transform.Translation(${translate})`);
+      lines.push(
+        `${variable}Translation = rg.Transform.Translation(${translate})`,
+      );
       lines.push(
         `${variable}Transform = ${variable}Translation * ${variable}Rotation`,
       );
@@ -617,13 +759,15 @@ function buildGraphSource(
       const offset = scalarExpression(node.offset, variables);
       const plane = mirrorPlaneExpressions(node.normalAxis, offset);
       lines.push(`${variable} = ${input}.DuplicateBrep()`);
-      lines.push(`${variable}MirrorPlane = rg.Plane(${plane.origin}, ${plane.normal})`);
+      lines.push(
+        `${variable}MirrorPlane = rg.Plane(${plane.origin}, ${plane.normal})`,
+      );
       lines.push(`if not ${variable}MirrorPlane.IsValid:`);
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino could not construct mirror plane for Brepia node ${node.id}.`)})`,
       );
       lines.push(
-        `if not ${variable}.Transform(rg.Transform.Mirror(${variable}MirrorPlane)):`
+        `if not ${variable}.Transform(rg.Transform.Mirror(${variable}MirrorPlane)):`,
       );
       lines.push(
         `    raise RuntimeError(${pythonString(`Rhino could not mirror Brepia node ${node.id}.`)})`,
@@ -644,7 +788,7 @@ function buildGraphSource(
       lines.push(`for ${indexVariable} in range(${node.count}):`);
       lines.push(`    ${itemVariable} = ${input}.DuplicateBrep()`);
       lines.push(
-        `    if not ${itemVariable}.Transform(rg.Transform.Translation(${translation})):`
+        `    if not ${itemVariable}.Transform(rg.Transform.Translation(${translation})):`,
       );
       lines.push(
         `        raise RuntimeError(${pythonString(`Rhino could not place an instance for Brepia linearPattern ${node.id}.`)})`,
@@ -663,7 +807,9 @@ function buildGraphSource(
       const vectorB = linearPatternVectorExpression(node.axisB, distanceB);
       lines.push(`${variable}SpacingA = float(${spacingA})`);
       lines.push(`${variable}SpacingB = float(${spacingB})`);
-      lines.push(`if ${variable}SpacingA == 0.0 or ${variable}SpacingB == 0.0:`);
+      lines.push(
+        `if ${variable}SpacingA == 0.0 or ${variable}SpacingB == 0.0:`,
+      );
       lines.push(
         `    raise ValueError(${pythonString(`Brepia rectangularPattern ${node.id} spacings must resolve non-zero.`)})`,
       );
@@ -674,7 +820,9 @@ function buildGraphSource(
       lines.push(
         `        ${variable}Translation = rg.Transform.Translation(${vectorA} + ${vectorB})`,
       );
-      lines.push(`        if not ${itemVariable}.Transform(${variable}Translation):`);
+      lines.push(
+        `        if not ${itemVariable}.Transform(${variable}Translation):`,
+      );
       lines.push(
         `            raise RuntimeError(${pythonString(`Rhino could not place an instance for Brepia rectangularPattern ${node.id}.`)})`,
       );
@@ -804,7 +952,9 @@ function buildGraphSource(
         `    raise ValueError(${pythonString(`Brepia fillet node ${node.id} radius must be greater than zero.`)})`,
       );
       lines.push(`${variable}EdgeIndices = []`);
-      lines.push(`${variable}Axis = ${filletAxisExpression(node.selector.axis)}`);
+      lines.push(
+        `${variable}Axis = ${filletAxisExpression(node.selector.axis)}`,
+      );
       lines.push(`for ${edge} in ${variable}Input.Edges:`);
       lines.push(`    ${edgeParameter} = ${edge}.Domain.ParameterAt(0.5)`);
       lines.push(`    ${edgeDirection} = ${edge}.TangentAt(${edgeParameter})`);
@@ -819,9 +969,7 @@ function buildGraphSource(
       lines.push(
         `    raise ValueError(${pythonString(`Brepia fillet selector for node ${node.id} matched no edges.`)})`,
       );
-      lines.push(
-        `${variable}EdgeArray = Array[Int32](${variable}EdgeIndices)`,
-      );
+      lines.push(`${variable}EdgeArray = Array[Int32](${variable}EdgeIndices)`);
       lines.push(
         `${variable}Radii = Array[Double]([${variable}Radius] * len(${variable}EdgeIndices))`,
       );
@@ -890,7 +1038,10 @@ function buildSource(
   const defaultXAxis = vectorExpression(placement.xAxis, variables, 'vector');
   const defaultYAxis = vectorExpression(placement.yAxis, variables, 'vector');
   const definition = contract.source.projectObject;
-  const footprint = roleExpression(definition?.footprintNodeId, graph.nodeVariables);
+  const footprint = roleExpression(
+    definition?.footprintNodeId,
+    graph.nodeVariables,
+  );
   const clearance = roleExpression(
     definition?.clearanceEnvelopeNodeId,
     graph.nodeVariables,
@@ -928,29 +1079,31 @@ export async function createBrepGrasshopperRhinoScriptPlan(
   const variables = parameterVariables(contract);
 
   const numberInputs = await Promise.all(
-    packagePlan.controls.map(async (control): Promise<BrepGrasshopperRhinoScriptInput> => {
-      const variableName = variables.get(control.inputId);
-      if (!variableName) {
-        throw new BrepGrasshopperRhinoScriptError(
-          'invalid_model',
-          `Published Grasshopper input ${control.inputId} has no canonical Python variable.`,
-        );
-      }
-      return {
-        inputId: control.inputId,
-        variableName,
-        nickname: variableName,
-        kind: 'number',
-        instanceGuid: await stableGuid([
-          contract.model.projectId,
-          'script-input',
-          control.inputId,
-        ]),
-        sourceObjectGuid: control.instanceGuid,
-        converterType: 'System.Double',
-        typeHintGuid: BREP_GRASSHOPPER_SCRIPT_DOUBLE_HINT_GUID,
-      };
-    }),
+    packagePlan.controls.map(
+      async (control): Promise<BrepGrasshopperRhinoScriptInput> => {
+        const variableName = variables.get(control.inputId);
+        if (!variableName) {
+          throw new BrepGrasshopperRhinoScriptError(
+            'invalid_model',
+            `Published Grasshopper input ${control.inputId} has no canonical Python variable.`,
+          );
+        }
+        return {
+          inputId: control.inputId,
+          variableName,
+          nickname: variableName,
+          kind: 'number',
+          instanceGuid: await stableGuid([
+            contract.model.projectId,
+            'script-input',
+            control.inputId,
+          ]),
+          sourceObjectGuid: control.instanceGuid,
+          converterType: 'System.Double',
+          typeHintGuid: BREP_GRASSHOPPER_SCRIPT_DOUBLE_HINT_GUID,
+        };
+      },
+    ),
   );
 
   const outputDefinitions = [
