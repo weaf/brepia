@@ -898,6 +898,43 @@ the newer leaf remains unchanged. Include two-tab/browser evidence for one repre
 
 ---
 
+### A-SEC-004 — Core RLS ownership rules lack executable regression tests
+
+**Area:** Supabase RLS / authorization verification
+
+**Finding:** Core ownership/public-read policies for conversations, messages, custom providers and durable
+generation state are defined in schema/migrations, but the repository has no Supabase/pgTAP-style executable
+policy test suite and no package script that exercises authenticated/anonymous/service-role policy boundaries
+against the local database.
+
+**Evidence:**
+
+- policy definitions are present and reviewable in `supabase/schemas/*.sql`;
+- searches for the concrete policy names find only schemas/migrations, not tests;
+- `package.json` has no database/RLS test script;
+- browser code directly accesses Supabase for conversation/message operations, making RLS a real security
+  boundary rather than a defense-in-depth-only layer.
+
+**Impact:** A future migration can accidentally broaden or break ownership access while TypeScript/unit/browser
+tests remain green.
+
+**Risk:** Medium-high because authorization regressions are high impact even when likelihood is low.
+
+**Recommended action:** Add a small local-DB authorization matrix for the highest-value policies: owner vs
+other authenticated user vs anon vs service role, including public/private conversation reads and
+generation-run write denial. Keep it focused; a full database testing framework is not required.
+
+**Priority:** P2
+
+**Scope/size:** Small-medium
+
+**Required verification:** local Supabase test identities/claims prove allow/deny behavior for the selected
+tables and RPCs; include the gate in foundation verification when schema/RLS files change.
+
+**Disposition:** **must fix before templates**
+
+---
+
 ## Positive maturity observations
 
 The review should preserve positive evidence, not only defects:
