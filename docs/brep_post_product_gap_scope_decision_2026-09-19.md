@@ -1,6 +1,6 @@
 # Post-product-gap modeling scope decision — 2026-09-19
 
-Status: **DECIDED FOR PLANNING — the A–E product-gap audit is closed; the next candidate modeling slice is a bounded planar 90-degree circular sweep. Implementation has not started.**
+Status: **HISTORICAL SCOPE DECISION — the selected bounded planar 90-degree circular sweep was subsequently implemented and accepted; no further slice is selected.**
 
 Repository: `weaf/brepia`
 
@@ -132,3 +132,17 @@ Gate D is required because the selected capability came from a product-path fail
 The A–E audit is closed. The only selected next candidate is the bounded planar 90-degree circular sweep defined by the separate implementation boundary.
 
 No production implementation should begin until the boundary and plan are reviewed and committed. Any discovery requiring a broader path grammar must return to scope decision rather than broadening the slice implicitly.
+
+
+## Post-implementation closeout
+
+The bounded sweep selected by this decision was later implemented and accepted across repository/CI, pinned native runtime, installed Rhino 8 / Grasshopper and authenticated product-path gates.
+
+Current closeout authority:
+
+```text
+docs/brep_sweep_status_2026-09-21.md
+docs/brep_post_sweep_pause_decision_2026-09-21.md
+```
+
+The project is intentionally paused after sweep closeout. This historical scope decision must not be read as authorization to select another modeling slice automatically.
