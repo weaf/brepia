@@ -499,6 +499,193 @@ items; do not mix them into Phase B unless a failing fixture demonstrates curren
 
 **Disposition:** **safe to fix later**
 
+### A-AI-003 — Product path can accept structurally valid but semantically wrong canonical geometry
+
+**Area:** AI authoring / semantic quality
+
+**Finding:** The canonical validator is intentionally structural and geometric, not a full natural-language
+intent verifier. Real product-gap runs B and D show that an AI candidate can satisfy schema/integrity rules
+while still mapping named dimensions or spatial intent incorrectly.
+
+**Evidence:**
+
+- Target B evaluated successfully as one valid native solid, but the generated revolve profile swapped the
+  requested physical meaning of the locked U-axial/V-radial frame.
+- Target D produced a structurally valid reachable graph but misplaced cabinet members, created disconnected
+  union inputs and manually duplicated shelves instead of using the already-supported pattern surface.
+- The current `tool-build-brep-project.md` already contains explicit U=axial/V=radial, centered-half-extent,
+  Boolean-overlap and pattern sanity instructions.
+
+**Impact:** Simply lengthening the prompt is unlikely to close the remaining semantic-quality gap reliably.
+A model can acknowledge the correct rules yet still produce a valid-but-wrong product.
+
+**Risk:** Medium-high for reusable product templates, because templates will make semantic correctness more
+visible and repeatable.
+
+**Recommended action:** Phase B should investigate bounded machine-verifiable semantic evidence rather than
+new geometry opcodes or substantially longer prompts. Candidate directions include expected envelope/dimension
+checks for product fixtures, deterministic spatial sanity helpers and product-specific acceptance assertions.
+Do not make natural-language intent a new canonical geometry authority.
+
+**Priority:** P1/P2 depending the first template acceptance design
+
+**Scope/size:** Medium
+
+**Required verification:** replay representative turned-part and cabinet fixtures and prove that the specific
+wrong-frame/disconnected-placement failures are detected before being presented as successful product output.
+
+**Disposition:** **must fix before templates** at the acceptance/quality layer; **do not change** canonical
+geometry semantics solely for this finding.
+
+---
+
+### A-AI-004 — Restart-safe cancellation omits `waiting_for_preview`
+
+**Area:** durable generation / restart recovery
+
+**Finding:** The restart fallback used by Stop only looks for durable runs with status `queued` or
+`running`. `waiting_for_preview` is also a valid nonterminal generation status and can transition to
+`cancelled`, but it is excluded from `cancelLatestInFlightGenerationRun()`.
+
+**Evidence:**
+
+- `GENERATION_RUN_STATUSES` includes `waiting_for_preview`.
+- the transition table explicitly permits `waiting_for_preview -> cancelled`.
+- `AiGenerationRunLifecycle.persisted(..., true)` writes `status: waiting_for_preview` at
+  `phase: revision_saved`.
+- `cancelLatestInFlightGenerationRun()` queries only `.in('status', ['queued', 'running'])`.
+- restart-safe cancellation delegates to that function when the in-memory AbortController no longer exists.
+
+**Impact:** After a server restart in the revision-saved/native-preview handoff, the browser can retain a
+nonterminal durable run that the restart fallback Stop path does not find.
+
+**Risk:** Medium. The source revision is already durable at this point, so data integrity is not the concern;
+truthful terminal lifecycle and recoverability are.
+
+**Recommended action:** Include every cancellable nonterminal durable status in the restart-safe lookup, or
+derive the lookup from the shared terminal-status contract so future nonterminal states cannot drift.
+
+**Priority:** P1
+
+**Scope/size:** Small
+
+**Required verification:** focused persistence/cancellation test for a `waiting_for_preview` run after
+in-memory state loss, plus browser/server-restart acceptance around the preview handoff.
+
+**Disposition:** **must fix before templates**
+
+---
+
+### A-UX-001 — Some composer controls lack a robust keyboard/accessibility contract
+
+**Area:** frontend accessibility
+
+**Finding:** Several custom composer buttons bypass the otherwise good shared Radix/shadcn accessibility
+patterns.
+
+**Evidence:**
+
+- the quad-topology button sets `focus-visible:ring-0` and `focus-visible:outline-none`;
+- its visible text is omitted/hidden on compact layouts and the button has no explicit `aria-label`;
+- the polygon-count custom button uses the same removed focus-ring pattern;
+- Stop and Send are icon-only buttons whose accessible naming currently relies on surrounding tooltip
+  behavior rather than an explicit button name;
+- the repository otherwise contains strong use of labels, `aria-pressed`, focus-visible styles and
+  reduced-motion handling.
+
+**Impact:** Keyboard users can lose a visible focus cue, and compact/icon-only controls can be ambiguous to
+assistive technology.
+
+**Risk:** Medium, localized.
+
+**Recommended action:** restore a visible focus treatment and give icon-only/compact controls explicit
+accessible names. Add one lightweight automated accessibility smoke check for the primary composer surface;
+do not introduce a broad accessibility rewrite.
+
+**Priority:** P2
+
+**Scope/size:** Small
+
+**Required verification:** keyboard tab/focus pass at desktop and narrow viewport, accessible-name assertions
+for the affected buttons, and a focused browser accessibility smoke if adopted.
+
+**Disposition:** **must fix before templates**
+
+---
+
+### A-TEST-001 — Test count overstates executable behavior coverage
+
+**Area:** test architecture / coverage observability
+
+**Finding:** The repository has a large and valuable deterministic suite, but a material subset verifies source
+shape or generated text by reading files directly. There is no configured Vitest coverage report/gate.
+
+**Evidence:**
+
+- accepted CI: 242 test files / 1372 passing tests;
+- at least 67 test/harness files contain `fs.readFileSync`-based source/artifact inspection;
+- examples cover UI source patterns, Python/native driver source, packaging scripts and generated Rhino/GHX
+  artifacts;
+- `vitest.config.ts` defines include/exclude patterns but no coverage provider or thresholds.
+
+**Impact:** Raw passing-test count cannot be used as a proxy for exercised runtime behavior. Source-shape tests
+are appropriate for some packaging/contracts, but critical user/runtime paths can still lack executable
+coverage.
+
+**Risk:** Medium as the product moves from capability expansion into reusable product templates.
+
+**Recommended action:** Keep contract/source-shape tests where they protect generated artifacts, but identify a
+small set of critical runtime boundaries and add executable tests there. First produce a coverage snapshot;
+do not impose an arbitrary repository-wide percentage target.
+
+**Priority:** P2
+
+**Scope/size:** Medium
+
+**Required verification:** coverage report used diagnostically; explicit executable coverage for selected
+Phase B boundaries; no removal of useful packaging/contract tests without replacement.
+
+**Disposition:** **safe to fix later** as a broad program, but Phase B fixes should add executable regression
+tests for every touched critical boundary.
+
+---
+
+### A-TEST-002 — Some historical acceptance harnesses remain intentionally non-canonical or brittle
+
+**Area:** acceptance architecture
+
+**Finding:** The repository retains several valuable historical/manual acceptance harnesses with different
+origins, ports and assumptions. Phase 9 documentation explicitly records that its automated `finalize`
+stage is not accepted as fully green evidence because revision-history positional assumptions became
+non-deterministic across retries.
+
+**Evidence:**
+
+- `playwright.config.ts` still uses fixed `http://localhost:3002/cadam`;
+- GHX, Phase 9 and product-gap harnesses have separate configuration/origin conventions;
+- Phase 9 closeout states installed-host acceptance is closed, but the automated finalize harness has retry
+  robustness limitations around identifying the revision created by the current import attempt.
+
+**Impact:** Historical harnesses are useful evidence, but they are not one coherent repeatable verification
+layer and should not be mistaken for such.
+
+**Risk:** Medium-low today; increases if new templates copy these patterns ad hoc.
+
+**Recommended action:** In Phase B, define the modern acceptance harness contract together with A-RUN-002.
+Leave historical fixtures as evidence unless a current product boundary depends on them. Where Phase 9 is
+rerun, identify revisions by stable identity/correlation rather than newest/first position.
+
+**Priority:** P2
+
+**Scope/size:** Medium
+
+**Required verification:** deterministic rerun after prior failed/retried state; configurable origin; explicit
+artifact/run identity.
+
+**Disposition:** **safe to fix later** except shared port/origin infrastructure in A-RUN-002.
+
+---
+
 ## Positive maturity observations
 
 The review should preserve positive evidence, not only defects:
