@@ -12,8 +12,10 @@ Use these as current references where relevant:
 - `docs/brepia_branding.md` for naming and compatibility boundaries;
 - `docs/grasshopper_roundtrip_architecture.md` for the current Grasshopper/GHX product loop, validation boundary and round-trip compatibility contract;
 - `docs/brep_phase9_rhino_acceptance.md` and `docs/brep_phase9_rhino8_product_loop_evidence_2026-09-14.md` for the closed installed Rhino 8 / Grasshopper product-loop acceptance boundary;
-- `docs/brep_post_product_gap_scope_decision_2026-09-19.md` for the current post-audit modeling scope: target E demonstrated the bounded path/sweep gap, and only the separately locked planar 90-degree circular sweep slice may proceed;
-- `docs/brep_sweep_implementation_boundary_2026-09-19.md` and `docs/brep_sweep_implementation_plan.md` for the exact first-slice sweep contract, stop conditions and separate repository/native/Rhino/product-path evidence gates;
+- `docs/brep_post_product_gap_scope_decision_2026-09-19.md` for the historical decision that selected the now-completed bounded planar elbow sweep;
+- `docs/brep_sweep_status_2026-09-21.md` for the accepted sweep closeout across repository/native/Rhino/product-path gates;
+- `docs/brepia_maturity_productization_roadmap_2026-09-21.md` for the current next-phase authority: Phase A Maturity & Stability Review is the only active next activity and is analysis-only;
+- `docs/brepia_deferred_capability_inventory_2026-09-21.md` for the reconciled list of completed, deferred, candidate and product/authoring-gap work;
 - `docs/references/rhino8_mcneel_sources.md` for the permanent Rhino 8 / Grasshopper upstream-source policy, pinned McNeel branch-8 reference and evidence hierarchy;
 - `docs/local_supabase_lifecycle.md` and `.cursor/rules/database-workflow.mdc` for database lifecycle;
 - `docs/INTEGRATION.md` for the current OpenCode integration;
@@ -21,7 +23,7 @@ Use these as current references where relevant:
 - `docs/step_export.md` for STEP conversion architecture;
 - `docs/billing_free_architecture.md` for the billing-free runtime contract.
 
-Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files. In particular, after the bounded sweep merge, do not begin another modeling slice without a fresh explicit resume/scope decision.
+Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files. Planning has now explicitly resumed after the bounded sweep pause, but only for the Maturity & Stability Review recorded in the current roadmap. Do not begin Phase B hardening, template implementation, product-pack implementation or another modeling slice until the relevant preceding decision is accepted.
 
 ## Rhino 8 / Grasshopper upstream references
 
