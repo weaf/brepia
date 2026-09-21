@@ -686,6 +686,174 @@ artifact/run identity.
 
 ---
 
+### A-DATA-002 — Startup verifies Supabase health but not repository migration currency
+
+**Area:** local runtime / database lifecycle
+
+**Finding:** `start.sh` treats an already-running local Supabase stack as ready after
+`npx supabase status`. It does not verify pending migrations or apply them before starting the app.
+
+**Evidence:**
+
+- running stack path is `supabase status -> "Supabase: up"`;
+- `supabase migration up` or an equivalent pending-migration check is absent from `start.sh`;
+- a one-time read-only local check during this review shows the current Dquark Brepia database is in fact
+  fully aligned through migration `20260916071100`, so this is a lifecycle-design gap rather than current
+  schema drift.
+
+**Impact:** After a future fast-forward/update, a healthy long-lived local DB can remain older than the code
+that starts against it.
+
+**Risk:** Medium-high because failures can appear far from startup and look like product/runtime regressions.
+
+**Recommended action:** Phase B should add a deterministic schema-currency preflight. Whether startup should
+auto-apply migrations or fail closed with a clear operator command should be an explicit policy decision;
+avoid destructive reset/push shortcuts.
+
+**Priority:** P1
+
+**Scope/size:** Small-medium
+
+**Required verification:** start from a database one migration behind; launcher must either safely apply the
+pending migration or refuse startup with an exact remediation; current database/data must remain intact.
+
+**Disposition:** **must fix before templates**
+
+---
+
+### A-RUN-004 — Stable runtime depends on a documented Nitro 3 beta workaround
+
+**Area:** runtime/toolchain maturity
+
+**Finding:** The stable launcher intentionally serves the built TanStack/Nitro application through
+`vite preview` instead of the direct Nitro node-server entrypoint because the checked-in Nitro 3 beta can
+silently exit on Node versions without the expected `import.meta.main` behavior.
+
+**Evidence:**
+
+- `package.json` pins the Nitro 3 beta line;
+- `scripts/stable-runtime-proxy.mjs` documents the direct node-server failure mode and explicitly chooses
+  Vite preview as the workaround;
+- accepted CI and local use show the workaround is functional.
+
+**Impact:** The canonical stable runtime currently depends on a compatibility workaround around a beta server
+runtime. This is maintainable today but is not an ideal long-term maturity baseline.
+
+**Risk:** Medium.
+
+**Recommended action:** Run a narrowly scoped runtime-toolchain evaluation in Phase B: determine whether a
+newer compatible Nitro/TanStack combination removes the workaround without changing application semantics.
+Do not combine this with blanket dependency upgrades.
+
+**Priority:** P2
+
+**Scope/size:** Medium if upgraded; small if the conclusion is to retain/document the workaround
+
+**Required verification:** production build; direct server/preview start-stop; auth proxy; Supabase realtime;
+long AI request; clean SIGINT/SIGTERM; no HMR/dev-client behavior in stable mode.
+
+**Disposition:** **needs product evidence**
+
+---
+
+### A-SEC-003 — Public temp-multiview storage policy appears legacy and its cleanup contract is unclear
+
+**Area:** storage security / compatibility debt
+
+**Finding:** Supabase still grants public SELECT on the `temp-multiview` bucket for external Tripo download,
+while current repository source contains no direct `temp-multiview` upload/read path. The schema says
+service-role deletion is available for manual cleanup, while an old fal webhook comment says multiview images
+auto-expire.
+
+**Evidence:**
+
+- `supabase/schemas/storage_policies.sql`: service-role insert/delete and public SELECT for
+  `temp-multiview`;
+- code search finds the bucket name only in schema/migration files;
+- `src/server/falWebhook.ts` contains the historical comment "No manual cleanup needed - multiview images
+  auto-expire".
+
+**Impact:** If the bucket is still populated by an external/legacy path, temporary user imagery may remain
+public longer than intended. If it is unused, the policy is unnecessary public attack surface and confusing
+compatibility debt.
+
+**Risk:** Unknown until live bucket/workflow evidence is checked.
+
+**Recommended action:** Verify whether the live bucket exists, whether any current provider path still writes
+to it, and what actual retention mechanism exists. Remove the policy/bucket only through an explicit migration
+if proven obsolete.
+
+**Priority:** P2
+
+**Scope/size:** Small-medium
+
+**Required verification:** live storage inventory and one current Creative/Tripo path if still supported;
+confirm signed/public download requirements and cleanup/retention.
+
+**Disposition:** **needs product evidence**
+
+---
+
+### A-BREP-002 — Native geometry execution sandbox is a mature security boundary
+
+**Area:** canonical BRep / native execution security
+
+**Finding:** Native BRep evaluation and OpenSCAD STEP conversion are both isolated outside the application
+server with hardened rootless Podman runners.
+
+**Evidence:** Both repository-owned runners use network isolation, read-only root filesystem,
+`no-new-privileges`, `cap-drop=all`, bounded PIDs/memory/CPU, noexec tmpfs, read-only inputs/drivers,
+bounded writable output and process timeout/cleanup.
+
+**Impact:** User-controlled/AI-authored geometry does not execute arbitrary native geometry code in the
+TanStack/Nitro host process.
+
+**Risk:** Low under the current boundary.
+
+**Recommended action:** Preserve this model. Future product templates or BRep features must use the existing
+sandbox boundary rather than adding direct Python/build123d/OpenSCAD execution to the app server.
+
+**Priority:** P3
+
+**Scope/size:** None
+
+**Required verification:** retain sandbox contract tests and real native smoke tests when runner/image flags
+or native dependencies change.
+
+**Disposition:** **do not change**
+
+---
+
+### A-HYG-002 — Files named “Legacy” are still active compatibility layers, not dead code
+
+**Area:** dead-code review / compatibility
+
+**Finding:** Several conspicuously named legacy modules remain in the active implementation path.
+
+**Evidence:**
+
+- `BrepFeatureEditor.tsx` wraps and invokes `BrepFeatureEditorLegacy.tsx`;
+- `brepGrasshopperRhinoScript.ts` imports/exports and extends
+  `brepGrasshopperRhinoScriptLegacy.ts`;
+- `/cadam` is explicitly documented and browser-tested as a compatibility redirect.
+
+**Impact:** Mechanical cleanup based on filenames would remove live behavior or compatibility guarantees.
+
+**Risk:** High if treated as dead code; low if left intact.
+
+**Recommended action:** Do not delete/rename these during generic cleanup. Any decomposition/rename requires a
+separate behavior-preserving migration with consumers/tests identified first.
+
+**Priority:** P3
+
+**Scope/size:** None now
+
+**Required verification:** existing UI, GHX/Rhino compiler and legacy-route tests if a future migration occurs.
+
+**Disposition:** **do not change**
+
+---
+
 ## Positive maturity observations
 
 The review should preserve positive evidence, not only defects:
