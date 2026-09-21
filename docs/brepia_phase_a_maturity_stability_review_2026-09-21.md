@@ -75,7 +75,7 @@ A0-A5 and parts of A6-A8 have evidence below. Priorities remain provisional unti
 
 - **Area:** tests / local isolation
 - **Concrete finding:** `playwright.smoke.config.ts` hard-codes `4173` and locally enables `reuseExistingServer`.
-- **Evidence:** `const port = 4173`, `--strictPort`, and `reuseExistingServer: !process.env.CI`.
+- **Evidence:** `playwright.smoke.config.ts` declares `const port = 4173`, uses `--strictPort`, and locally reuses an existing server. `vite.config.ts` also keeps preview port `4173` as the generic default, although the stable proxy can override its internal preview port.
 - **Impact:** port collisions and possible accidental targeting of a stale/wrong local service.
 - **Risk:** P1
 - **Recommended action:** env-configurable or isolated allocated test port plus explicit target ownership. During this review use **4174** where the port is externally configurable; do not permanently solve this by merely hard-coding 4174.
@@ -175,17 +175,17 @@ A0-A5 and parts of A6-A8 have evidence below. Priorities remain provisional unti
 - **Verification:** before/after bundle report and representative browser measurements.
 - **Classification:** **needs product evidence**
 
-## PA-010 — Browser reload durability exists; server-process restart durability does not
+## PA-010 — Full AI execution survival across server restart is not implemented
 
 - **Area:** AI lifecycle / reliability
-- **Concrete finding:** durable generation state supports reload/reopen but an in-process generation is not designed to survive Brepia server death/restart.
+- **Concrete finding:** browser navigation/reload durability is implemented, but Brepia does not provide a durable queued executor that resumes an in-process model operation after server-process death.
 - **Evidence:** accepted ROBUST-1 closeout explicitly separates durable `generation_runs` status from a true queued worker.
-- **Impact:** long jobs can retain status/history but cannot resume execution after server-process death.
-- **Risk:** P2/P1 depending deployment expectations
-- **Recommended action:** do not add a queue speculatively. Decide whether process-restart execution durability is a product requirement; otherwise focus on stale-run reconciliation and clear UX.
+- **Impact:** whether execution itself must survive process restart is a product/deployment requirement, not something Phase A should assume.
+- **Risk:** P2 unless deployment requirements make restart-surviving execution mandatory
+- **Recommended action:** do not add a queue speculatively. Keep this separate from the concrete orphaned-run defect in PA-016.
 - **Priority:** P2 provisional
-- **Scope/size:** large for a real queue; small-medium for stale-run handling
-- **Verification:** reload plus controlled server termination/restart/stale-run scenarios.
+- **Scope/size:** large if a real queue is required
+- **Verification:** deployment/product requirement plus controlled server-restart acceptance.
 - **Classification:** **needs product evidence**
 
 ## PA-011 — AI context budgeting is mature; rolling summary remains unjustified
@@ -240,6 +240,112 @@ A0-A5 and parts of A6-A8 have evidence below. Priorities remain provisional unti
 - **Verification:** focused affected tests.
 - **Classification:** **safe to fix later**
 
+
+## PA-015 — Real native CAD runtime is not part of the required merge gate
+
+- **Area:** CI / native BRep verification
+- **Concrete finding:** the repository contains real build123d/OCCT smoke harnesses that execute the sandbox, export exact STEP/3DM and independently re-import STEP, but normal Quality Gate does not execute them. Several Vitest tests instead assert that the harness/driver source contains expected logic.
+- **Evidence:** Quality Gate runs `npm test`, typecheck, lint, build and browser smoke only. No workflow/package gate invokes `scripts/brep/smoke-test.sh`, `revolve-smoke.sh`, `sweep-smoke.sh` or `multiloop-extrude-smoke.sh`. During Phase A, Dquark `herdr-job-run` executed all four relevant native gates on current master: core smoke PASS, revolve PASS, sweep PASS, multi-loop PASS, all with `run_rc=0`; specialized exact-STEP checks reported build123d `0.11.1` and cadquery-ocp-novtk `7.9.3.1.1`.
+- **Impact:** a change can pass required CI while breaking actual kernel/runtime translation or exact export behavior that static/source-level tests cannot prove.
+- **Risk:** P1
+- **Recommended action:** define one canonical finite native-runtime regression command and make its successful execution an explicit foundation/release gate. Decide whether it belongs in ordinary CI or in an auditable Dquark/self-hosted required gate based on runtime cost/image availability. Do not remove the fast structural tests; supplement them.
+- **Priority:** P1
+- **Scope/size:** medium
+- **Verification:** intentionally break a native translation and prove the gate fails; restore and prove the aggregate native gate covers current core + revolve + multi-loop + sweep surfaces.
+- **Classification:** **must fix before templates**
+
+## PA-016 — Orphaned non-terminal generation runs can survive server death indefinitely
+
+- **Area:** application reliability / durable AI lifecycle
+- **Concrete finding:** `generation_runs` rows in `queued` or `running` status have no server-restart/orphan reconciliation. Client polling continues for every non-terminal run, while BRep source editing stays locked when the durable phase is an AI-editing phase.
+- **Evidence:** `shouldPollGenerationRun()` returns true until terminal status; `isGenerationRunAiEditing()` treats request/model/generation/validation/save phases as edit-lock owners; persistence supports transition/cancel races but has no heartbeat, lease, process epoch or age-based orphan transition. The 10-minute session-storage attempt cursor does not terminalize the durable row.
+- **Impact:** after Brepia server-process death during AI generation, reopening the project can poll forever and keep source/parameter editing disabled even though no worker exists that can finish the run.
+- **Risk:** P1
+- **Recommended action:** add explicit orphan/restart reconciliation without pretending jobs are resumable. A server-instance/lease or equivalent authoritative ownership model is preferable to an arbitrary short age timeout because legitimate local-model requests can take many minutes.
+- **Priority:** P1
+- **Scope/size:** medium
+- **Verification:** kill/restart the server during queued/running BRep generation, reopen the project, prove the old run becomes a bounded terminal/recoverable state and editing is not permanently locked; verify normal long-running jobs are not falsely killed.
+- **Classification:** **must fix before templates**
+
+## PA-017 — No automated rendered accessibility gate
+
+- **Area:** frontend / accessibility / UX verification
+- **Concrete finding:** BRep UI contains many explicit labels/ARIA attributes and Radix primitives, but the repository has no `eslint-plugin-jsx-a11y`, axe integration or rendered DOM/component-test framework. Vitest runs in Node, and many UI tests assert source structure rather than rendered interaction.
+- **Evidence:** no axe/jsx-a11y/testing-library dependency or test usage; `vitest.config.ts` uses `environment: 'node'`; BRep source contains explicit `aria-label`, labels and keyboard-focusable controls, so this finding is about missing regression evidence rather than a claim that the UI is inaccessible.
+- **Impact:** focus order, keyboard-only behavior, dialog semantics, actual accessible names and mobile interaction regressions can pass current automated gates.
+- **Risk:** P2
+- **Recommended action:** add a small high-value rendered/browser accessibility layer when productization warrants it, starting with sign-in, model/template selection, BRep parameter editing and dialogs rather than attempting blanket retrofitting.
+- **Priority:** P2
+- **Scope/size:** medium
+- **Verification:** keyboard traversal plus automated accessibility assertions on selected critical journeys.
+- **Classification:** **safe to fix later**
+
+## PA-018 — BRep frontend has concentrated maintenance hotspots
+
+- **Area:** frontend maintainability / state ownership
+- **Concrete finding:** several active BRep UI modules are large and state-dense. `BrepFeatureEditorLegacy.tsx` is still the active main feature editor through a wrapper despite its legacy name.
+- **Evidence:** current master measurements: `BrepFeatureEditorLegacy.tsx` ~1,956 lines / 64 kB; `BrepProjectEditor.tsx` ~1,273 lines / 44 kB with 17 `useState` occurrences; `BrepProjectView.tsx` ~841 lines / 28 kB; `BrepChatSession.tsx` ~624 lines / 21 kB.
+- **Impact:** broad edits in these modules have elevated regression/review cost; the legacy naming also obscures current ownership.
+- **Risk:** P2
+- **Recommended action:** do not refactor for aesthetics before templates. When an approved feature touches these areas, extract state machines/domain hooks or bounded editors along existing semantic boundaries. Rename legacy ownership only as part of a safe bounded extraction.
+- **Priority:** P2
+- **Scope/size:** medium-large if done broadly
+- **Verification:** unchanged UI/product behavior plus focused source/interaction tests for extracted boundaries.
+- **Classification:** **safe to fix later**
+
+## PA-019 — Historical B9 acceptance harness is brittle and its closeout text overstates hardening
+
+- **Area:** test hygiene / documentation drift
+- **Concrete finding:** the manual Settings B9 Playwright harness remains timing-heavy and contains conditional visibility branches, while historical reconciliation text states that silent conditional passes were removed.
+- **Evidence:** current `tests/b9_acceptance.test.ts` contains 37 `waitForTimeout` calls and 10 conditional `isVisible(...).catch(() => false)` branches. `vitest.config.ts` explicitly excludes this file; `package.json` exposes it only through manual `test:b9`.
+- **Impact:** the harness can be slower/flakier and can overstate behavior coverage if treated as a canonical product gate; historical documentation can mislead future reviewers.
+- **Risk:** P2
+- **Recommended action:** label B9 clearly as historical/manual, or harden/replace only the scenarios still valuable. Do not count its historical 24/24 claim as current merge evidence.
+- **Priority:** P2
+- **Scope/size:** small-medium
+- **Verification:** required assertions fail when target controls are absent; replace fixed sleeps with state/request/event waits for retained tests.
+- **Classification:** **safe to fix later**
+
+## PA-020 — Master build identity is materially ahead of the latest release tag
+
+- **Area:** release / traceability
+- **Concrete finding:** latest release is `v1.5.0` at `e648879`, while current master is 47 commits ahead at `8d17e8c`; `package.json` still reports version `1.5.0`.
+- **Evidence:** GitHub compare `v1.5.0...master` reports `ahead_by: 47`; package version is `1.5.0`.
+- **Impact:** an artifact built from master can identify with the same package version as the older tagged release despite materially different BRep capability and runtime behavior.
+- **Risk:** P2
+- **Recommended action:** keep release versioning deliberate, but expose build/revision identity for non-tagged stable runtimes and ensure the next release bumps/tags exact accepted foundation state. Do not bump package version merely to make Phase A look clean.
+- **Priority:** P2
+- **Scope/size:** small
+- **Verification:** runtime/build metadata can identify exact Git SHA/release; release tag and declared version agree at release closeout.
+- **Classification:** **safe to fix later**
+
+## PA-021 — Obsolete-looking public temp-multiview storage policy needs ownership confirmation
+
+- **Area:** Supabase storage / repository hygiene
+- **Concrete finding:** declarative storage policy retains public read access for bucket `temp-multiview`, but current repository source has no code reference to that bucket; only schema/migration references remain.
+- **Evidence:** repository search finds `temp-multiview` only in `supabase/schemas/storage_policies.sql` and one historical migration.
+- **Impact:** if the bucket still exists and receives data through an external/manual path, its objects are intentionally public; if the path is dead, a public policy remains without an active product reason.
+- **Risk:** P2 pending runtime/product ownership confirmation
+- **Recommended action:** confirm whether the bucket exists and whether any supported mesh-provider flow still requires it. Remove only if proven obsolete; otherwise document retention/object-name/privacy contract.
+- **Priority:** P2
+- **Scope/size:** small
+- **Verification:** storage bucket/policy inventory plus retained provider-flow test if still active.
+- **Classification:** **needs product evidence**
+
+## PA-022 — Provider-model RLS does not enforce parent-provider ownership on direct table writes
+
+- **Area:** Supabase / data integrity / security hardening
+- **Concrete finding:** `ai_provider_models` insert/update RLS checks only `auth.uid() = user_id`; the foreign key validates provider existence but not that `provider_id` belongs to the same user.
+- **Evidence:** `ai_provider_models.sql` policies use only row `user_id`; application service methods correctly re-check provider/user ownership, but authenticated clients have table grants and RLS remains the database-side authority for direct access.
+- **Impact:** an authenticated user who learns another provider UUID could create/update an own-user model row referencing that provider, violating ownership invariants and potentially causing unique-key interference.
+- **Risk:** P1/P2 hardening; exploitability is limited by provider UUID confidentiality, but the invariant is structurally incomplete.
+- **Recommended action:** enforce same-owner parent relationship in RLS/check/FK design, not only service code.
+- **Priority:** P1
+- **Scope/size:** small
+- **Verification:** cross-user negative SQL/RLS tests for insert and provider_id update, plus normal CRUD tests.
+- **Classification:** **must fix before templates**
+
+
 ---
 
 # Positive findings / accepted foundations
@@ -278,3 +384,33 @@ Brepia does not currently appear to require an architectural restart or broad ca
 The emerging Phase B shape is targeted foundation hardening around runtime artifact ownership, local/test isolation, verification architecture, schema/type parity and provider network/security boundaries, followed only by evidence-backed maintenance.
 
 This remains provisional until Phase A is complete.
+
+
+# Phase A verification matrix — current checkpoint
+
+| Gate / evidence | What it proves | What it does not prove |
+| --- | --- | --- |
+| Quality Gate / `quality` | npm audit, Vitest, typecheck, zero-warning lint, production build, signed-out browser smoke, diff check | real build123d/OCCT execution, authenticated BRep product path, installed Rhino |
+| Grasshopper Build | Windows .NET plugin compile plus Linux/Windows packager build | installed Rhino solve/runtime; currently not required by branch protection |
+| Dquark core native smoke | actual sandboxed build123d/OCCT core geometry, STEP/3DM, Booleans, patterns, transforms and project-object roles | Rhino or authenticated browser |
+| Dquark revolve smoke | real full-revolve native semantics and independent exact STEP import | installed Rhino/product path |
+| Dquark multi-loop smoke | real multi-loop native extrusion and independent exact STEP import | installed Rhino/product path |
+| Dquark sweep smoke | real bounded elbow sweep, X/Y/Z parity, parameter perturbation and independent exact STEP import | installed Rhino/product path |
+| Phase 9 installed-host evidence | end-to-end Brepia -> GHX -> Rhino save/reopen -> Brepia import/activate -> AI continuation -> fresh Rhino solve | automatic per-commit regression |
+| Product-gap / sweep Gate D evidence | authenticated real AI/BRep product-path behavior | deterministic fast merge gate |
+| B9 Settings harness | historical/manual signed-in Settings scenarios | current reliable CI gate; harness still contains timing/conditional debt |
+
+# Dependency/toolchain decision — current checkpoint
+
+| Family | Decision | Rationale |
+| --- | --- | --- |
+| Node 22 CI / package engine compatibility | do not change | accepted gate is green; no runtime incompatibility found |
+| TypeScript 5.8.3 | do not change | pinned and green; major TS 7 migration has no current justification |
+| Vite 8.x / ESLint 10.x / Prettier 3.x current majors | optional patch/minor only | no warnings/blockers; upgrade only in bounded maintenance |
+| Playwright 1.62 -> 1.63 | optional | no defect requires it; test-architecture fixes matter more than version churn |
+| Supabase JS/CLI 2.x patch/minor | optional | no audit/runtime blocker; schema/type parity is the actual finding |
+| AI SDK 6 -> 7 and provider major jumps | defer | high orchestration regression surface with no demonstrated need |
+| Tailwind 3 -> 4 | defer | broad UI migration unrelated to Phase B findings |
+| Three 0.160 -> 0.186 / React Three changes | defer | viewer risk and no concrete bug requiring migration |
+| Zod 3 -> 4, Sentry 9 -> 10, other major jumps | defer | no security/correctness evidence requiring change |
+| build123d 0.11.1 / cadquery-ocp-novtk 7.9.3.1.1 | do not change in generic maintenance | current canonical/native evidence is pinned and green; CAD runtime upgrades require dedicated parity acceptance |
