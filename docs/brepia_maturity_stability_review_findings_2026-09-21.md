@@ -854,6 +854,50 @@ separate behavior-preserving migration with consumers/tests identified first.
 
 ---
 
+### A-STATE-001 — Generic conversation updates can overwrite a newer active leaf
+
+**Area:** frontend state / persistence integrity
+
+**Finding:** Generic conversation mutations send the complete cached `Conversation` row back to Supabase even
+when the user is changing only one metadata/settings field. That full row includes
+`current_message_leaf_id`, which is separately advanced by message inserts and protected by explicit CAS in
+critical BRep/import paths.
+
+**Evidence:**
+
+- `EditorView`, `BrepProjectView` and `conversationService` use
+  `.from('conversations').update(conversation)`;
+- callers such as `useModelChange`, `ModelSelector` and `ChatTitle` construct the payload with
+  `{ ...conversation, settings/title/privacy: ... }`;
+- the messages AFTER INSERT trigger independently advances `current_message_leaf_id`;
+- BRep AI and GHX/import persistence already use explicit locking/CAS because stale leaf writes are known to
+  be unsafe;
+- no equivalent CAS/column-scoped guard protects these generic metadata mutations.
+
+**Impact:** A stale cached conversation used for a title/privacy/model-setting change can write an older
+`current_message_leaf_id` after a newer message/revision has already advanced the active branch. This can
+select the wrong branch after reload and undermine otherwise strong stale-generation protections.
+
+**Risk:** High for concurrent generation, multiple tabs, background/mobile recovery and future template
+workflows.
+
+**Recommended action:** Replace full-row generic conversation writes with column-scoped patch mutations.
+Treat `current_message_leaf_id` as a dedicated authority that is changed only by message/revision lifecycle
+operations with the existing trigger/CAS semantics. Settings updates should also merge the intended key
+without rewriting unrelated authoritative fields.
+
+**Priority:** P1
+
+**Scope/size:** Medium
+
+**Required verification:** deterministic race tests where a newer message advances the leaf while title,
+privacy and model/settings mutations use an older cached conversation; the metadata change must succeed while
+the newer leaf remains unchanged. Include two-tab/browser evidence for one representative case.
+
+**Disposition:** **must fix before templates**
+
+---
+
 ## Positive maturity observations
 
 The review should preserve positive evidence, not only defects:
