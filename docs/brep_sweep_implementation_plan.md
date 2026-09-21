@@ -1,12 +1,12 @@
 # Bounded planar 90-degree circular sweep implementation plan
 
-Status: **PLANNED — implementation not started**
+Status: **COMPLETE — implementation and Gates A/B/C/D accepted; final closeout verification/merge pending**
 
 Date: 2026-09-19
 
 Repository: `weaf/brepia`
 
-Planning branch: `plan/brep-sweep-boundary`
+Planning branch: `plan/brep-sweep-boundary` (historical)\n\nImplementation branch: `feature/brep-planar-elbow-sweep`
 
 Parent checkpoint:
 
