@@ -935,6 +935,71 @@ tables and RPCs; include the gate in foundation verification when schema/RLS fil
 
 ---
 
+### A-DOC-001 — Root-level provider plan is stale enough to misdirect future work
+
+**Area:** documentation authority / agent safety
+
+**Finding:** `PLAN_llm_providers.md` remains highly visible in the repository root but describes a historical
+pCAD/provider architecture and proposes work that no longer matches current Brepia implementation.
+
+**Evidence:**
+
+- the document is titled as a plan to implement auto-trader-ai's provider architecture in "pCAD";
+- it describes missing LLM settings/custom-provider functionality that current Brepia already implements;
+- it proposes a different provider/router/DB shape than the accepted current settings, custom-provider,
+  OpenCode/Codex and model-routing architecture;
+- the 2026-09-21 maturity roadmap explicitly states that older plans are evidence, not active work.
+
+**Impact:** A new human or coding agent can reasonably discover this root-level file before the newer roadmap
+and implement obsolete architecture or duplicate existing functionality.
+
+**Risk:** Medium for maintainability and agent-driven development.
+
+**Recommended action:** During Phase B documentation hardening, either move clearly obsolete plans into a
+historical/archive location or add an unmistakable superseded banner that points at the current authority.
+Preserve useful historical rationale; do not silently delete evidence.
+
+**Priority:** P2
+
+**Scope/size:** Small
+
+**Required verification:** repository entry points (`README.md`, `AGENTS.md`, roadmap/index) identify one
+current architecture authority; a search for active-looking root plans does not present superseded work as the
+next implementation path.
+
+**Disposition:** **must fix before templates**
+
+---
+
+### A-DOC-002 — One runtime setting description understates its Native BRep scope
+
+**Area:** runtime configuration documentation
+
+**Finding:** `transport.openCodeValidationAttempts` is used for both OpenSCAD and Native BRep external-agent
+validation/repair, but its runtime description says it is the maximum automatic **OpenSCAD** repair attempts.
+
+**Evidence:** `aiChat.ts` passes the same setting into OpenCode runtime configuration for either
+`sourceKind: 'brep'` or `'openscad'`; OpenCode and CLI BRep repair paths consume the bounded validation
+attempt count.
+
+**Impact:** Operators can misinterpret a live runtime control while tuning Native BRep reliability.
+
+**Risk:** Low.
+
+**Recommended action:** Rename only the human-readable label/description to describe the shared
+parametric/native validation boundary. Avoid changing the persisted key unless there is a separate migration
+reason.
+
+**Priority:** P3
+
+**Scope/size:** Trivial
+
+**Required verification:** config/catalog tests and settings UI text.
+
+**Disposition:** **safe to fix later**
+
+---
+
 ## Positive maturity observations
 
 The review should preserve positive evidence, not only defects:
