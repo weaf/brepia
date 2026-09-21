@@ -21,7 +21,7 @@ Use these as current references where relevant:
 - `docs/step_export.md` for STEP conversion architecture;
 - `docs/billing_free_architecture.md` for the billing-free runtime contract.
 
-Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files.
+Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files. In particular, after the bounded sweep merge, do not begin another modeling slice without a fresh explicit resume/scope decision.
 
 ## Rhino 8 / Grasshopper upstream references
 
