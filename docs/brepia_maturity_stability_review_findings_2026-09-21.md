@@ -1,6 +1,6 @@
 # Brepia Phase A — Maturity & Stability Review Findings
 
-Status: **IN PROGRESS — analysis only**
+Status: **COMPLETE — Phase A review closed; no product implementation performed**
 
 Date: 2026-09-21
 
@@ -999,6 +999,86 @@ reason.
 **Disposition:** **safe to fix later**
 
 ---
+
+## Phase A closeout
+
+The technical review is complete across A0-A8. It produced **27 evidence-backed findings/observations**:
+
+- **13** are currently classified `must fix before templates`;
+- **5** require product/deployment evidence before implementation is justified;
+- **5** are safe to fix later;
+- **4** are explicit `do not change` invariants.
+
+No P0 condition was found. The strongest P1-class risks are foundation/lifecycle integrity rather than missing
+geometry capability.
+
+### Recommended Phase B implementation order
+
+The order below is dependency-aware and intentionally does not start product templates.
+
+#### B1 — State and durable lifecycle integrity
+
+1. `A-STATE-001` — replace generic full-row conversation mutations with column-scoped/CAS-safe updates;
+2. `A-AI-004` — include `waiting_for_preview` in restart-safe nonterminal cancellation/reconciliation;
+3. `A-DATA-001` — regenerate Supabase types and remove the generation-event `unknown` cast;
+4. `A-DATA-002` — add database migration-currency startup/preflight policy.
+
+Reason: these protect persisted authority and recovery semantics before we touch runtime packaging or add
+template-owned state.
+
+#### B2 — Local runtime and verification isolation
+
+1. `A-RUN-001` — make stable runtime build output immutable/isolated;
+2. `A-RUN-002` — replace hard-coded/reused browser ports with owned configurable origins;
+3. `A-RUN-003` — isolate/discover local Supabase ports;
+4. `A-CI-001` — introduce an always-present interop/Grasshopper merge gate.
+
+For the current review and subsequent bounded local browser verification, use **4174** rather than the
+historical hard-coded 4173. The permanent solution must remain configurable rather than hard-coding 4174.
+
+#### B3 — Security verification and provider network boundary
+
+1. `A-SEC-002` — correct IPv6/private-range classification;
+2. `A-SEC-004` — add focused executable RLS allow/deny regression tests;
+3. resolve the deployment/trust-model question in `A-SEC-001` before changing custom-provider routing;
+4. investigate `A-SEC-003` live storage usage/retention before removing any compatibility policy.
+
+Reason: local llama-swap/private-network provider support is intentional, so network hardening must distinguish
+trusted operator-local endpoints from untrusted user-configured destinations.
+
+#### B4 — Template-readiness quality layer
+
+1. `A-AI-003` — add bounded machine-verifiable semantic acceptance for representative product geometry;
+2. `A-UX-001` — repair keyboard focus and accessible names on primary composer controls;
+3. use executable behavioral regressions for each B1-B4 fix per `A-TEST-001`;
+4. mark/archive the stale root provider plan per `A-DOC-001`.
+
+Only after B1-B4 are accepted should **Phase C — Product Template Foundation** begin.
+
+### Explicit non-goals for Phase B
+
+Do not use foundation hardening as a pretext to:
+
+- add new canonical BRep geometry operations;
+- implement deferred shell/thickness, finishing, broader revolve, arbitrary sweep, reusable sketch/path graphs,
+  arbitrary workplanes, nested collection algebra or spline/NURBS constraints;
+- add C4 image projection or an AI-generated rolling summary without new measured evidence;
+- rewrite the accepted Rhino/GHX parameter-only return contract;
+- move native geometry execution into the application process;
+- blanket-upgrade dependencies;
+- remove active compatibility layers merely because their filenames contain `Legacy`.
+
+### Native-runtime closeout evidence
+
+Current local native regression evidence is green:
+
+- core BRep smoke — `run_rc=0`;
+- sweep smoke — `run_rc=0`, exact STEP, one solid;
+- revolve smoke — `run_rc=0`, expected single result and exact STEP;
+- multi-loop extrusion smoke — `run_rc=0`, expected single result and exact STEP.
+
+The final local worktree check used during this review showed clean `master` at the accepted baseline
+`8d17e8c6...`.
 
 ## Positive maturity observations
 
