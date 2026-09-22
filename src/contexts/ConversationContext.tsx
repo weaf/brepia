@@ -1,4 +1,8 @@
-import { Conversation } from '@shared/types';
+import type { Conversation } from '@shared/types';
+import type {
+  ConversationLeafRequest,
+  ConversationPatchRequest,
+} from '@/services/conversationMutations';
 import {
   UseMutateAsyncFunction,
   UseMutateFunction,
@@ -7,11 +11,20 @@ import { createContext, useContext } from 'react';
 
 type ConversationContextType = {
   conversation: Conversation;
-  updateConversation?: UseMutateFunction<Conversation, Error, Conversation>;
-  updateConversationAsync?: UseMutateAsyncFunction<
-    Conversation,
+  updateConversation?: UseMutateFunction<
+    unknown,
     Error,
-    Conversation
+    ConversationPatchRequest
+  >;
+  updateConversationAsync?: UseMutateAsyncFunction<
+    unknown,
+    Error,
+    ConversationPatchRequest
+  >;
+  setConversationLeafAsync?: UseMutateAsyncFunction<
+    unknown,
+    Error,
+    ConversationLeafRequest
   >;
 };
 
@@ -29,6 +42,7 @@ export const ConversationContext = createContext<ConversationContextType>({
   },
   updateConversation: undefined,
   updateConversationAsync: undefined,
+  setConversationLeafAsync: undefined,
 });
 
 export const useConversation = () => {

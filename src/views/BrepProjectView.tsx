@@ -9,7 +9,10 @@ import { BrepFeatureWorkspaceProvider } from '@/components/brep/BrepFeatureWorks
 import { BrepProjectWorkspacePanel } from '@/components/brep/BrepProjectWorkspacePanel';
 import { ActivityIndicator } from '@/components/brand';
 import { Button } from '@/components/ui/button';
-import { ConversationContext, useConversation } from '@/contexts/ConversationContext';
+import {
+  ConversationContext,
+  useConversation,
+} from '@/contexts/ConversationContext';
 import { SelectedItemsContext } from '@/contexts/SelectedItemsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -30,6 +33,7 @@ import {
   useChangeRatingMutation,
   useMessagesQuery,
 } from '@/services/messageService';
+import { useConversationMutations } from '@/services/conversationMutations';
 import {
   hiddenBrepRevisionIds,
   persistBrepProjectParameterRevision,
@@ -53,7 +57,7 @@ import {
 } from '@shared/generationRun';
 import Tree from '@shared/Tree';
 import type { Conversation, Message, Model } from '@shared/types';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Box } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -89,7 +93,6 @@ type BrepGenerationAttempt = {
 export default function BrepProjectView() {
   const { id } = useParams({ from: '/_layout/_auth/brep/$id' });
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [images, setImages] = useState<MessageItem[]>([]);
   const [mesh, setMesh] = useState<MessageItem | null>(null);
 
@@ -116,45 +119,11 @@ export default function BrepProjectView() {
     },
   });
 
-  const { mutate: updateConversation, mutateAsync: updateConversationAsync } =
-    useMutation({
-      mutationFn: async (nextConversation: Conversation) => {
-        const { data, error: updateError } = await supabase
-          .from('conversations')
-          .update(nextConversation)
-          .eq('id', nextConversation.id)
-          .eq('user_id', user?.id ?? '')
-          .select()
-          .single()
-          .overrideTypes<Conversation>();
-        if (updateError) throw updateError;
-        return data;
-      },
-      onMutate(nextConversation) {
-        const oldConversation = queryClient.getQueryData<Conversation>([
-          'conversation',
-          nextConversation.id,
-        ]);
-        queryClient.setQueryData(
-          ['conversation', nextConversation.id],
-          nextConversation,
-        );
-        return { oldConversation };
-      },
-      onSuccess(nextConversation) {
-        queryClient.setQueryData(
-          ['conversation', nextConversation.id],
-          nextConversation,
-        );
-        queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      },
-      onError(_error, nextConversation, context) {
-        queryClient.setQueryData(
-          ['conversation', nextConversation.id],
-          context?.oldConversation,
-        );
-      },
-    });
+  const {
+    updateConversation,
+    updateConversationAsync,
+    setConversationLeafAsync,
+  } = useConversationMutations();
 
   if (isLoading) {
     return (
@@ -174,9 +143,16 @@ export default function BrepProjectView() {
 
   return (
     <ConversationContext.Provider
-      value={{ conversation, updateConversation, updateConversationAsync }}
+      value={{
+        conversation,
+        updateConversation,
+        updateConversationAsync,
+        setConversationLeafAsync,
+      }}
     >
-      <SelectedItemsContext.Provider value={{ images, setImages, mesh, setMesh }}>
+      <SelectedItemsContext.Provider
+        value={{ images, setImages, mesh, setMesh }}
+      >
         <BrepProjectWorkspace key={conversation.id} />
       </SelectedItemsContext.Provider>
     </ConversationContext.Provider>
@@ -184,7 +160,7 @@ export default function BrepProjectView() {
 }
 
 function BrepProjectWorkspace() {
-  const { conversation, updateConversation, updateConversationAsync } =
+  const { conversation, updateConversation, setConversationLeafAsync } =
     useConversation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -231,8 +207,7 @@ function BrepProjectWorkspace() {
   const leafPresentInMessages =
     !leafId || dbMessages.some((message) => message.id === leafId);
   const initialBranch = useMemo(
-    () =>
-      leafId && leafPresentInMessages ? branchForLeaf(leafId) : [],
+    () => (leafId && leafPresentInMessages ? branchForLeaf(leafId) : []),
     [branchForLeaf, leafId, leafPresentInMessages],
   );
 
@@ -299,8 +274,8 @@ function BrepProjectWorkspace() {
   }, [activeSource, revisions, viewedRevisionId]);
   const viewingHistorical = Boolean(
     activeSource &&
-      displayedSource &&
-      displayedSource.messageId !== activeSource.messageId,
+    displayedSource &&
+    displayedSource.messageId !== activeSource.messageId,
   );
   const displayedRevisionLabel = useMemo(
     () =>
@@ -349,13 +324,8 @@ function BrepProjectWorkspace() {
     (nextModel: Model) => {
       setModel(nextModel);
       updateConversation?.({
-        ...conversation,
-        settings: {
-          ...(conversation.settings && typeof conversation.settings === 'object'
-            ? conversation.settings
-            : {}),
-          model: nextModel,
-        },
+        id: conversation.id,
+        patch: { settings: { model: nextModel } },
       });
     },
     [conversation, updateConversation],
@@ -365,13 +335,8 @@ function BrepProjectWorkspace() {
     (nextMode: 'cli' | 'streaming') => {
       setExecutionMode(nextMode);
       updateConversation?.({
-        ...conversation,
-        settings: {
-          ...(conversation.settings && typeof conversation.settings === 'object'
-            ? conversation.settings
-            : {}),
-          openCodeExecutionMode: nextMode,
-        },
+        id: conversation.id,
+        patch: { settings: { openCodeExecutionMode: nextMode } },
       });
     },
     [conversation, updateConversation],
@@ -415,13 +380,13 @@ function BrepProjectWorkspace() {
     async (assistant: ChatMessage) => {
       const parentId = assistant.parent_message_id;
       if (!parentId) return;
-      await updateConversationAsync?.({
-        ...conversation,
-        current_message_leaf_id: parentId,
+      await setConversationLeafAsync?.({
+        id: conversation.id,
+        leafId: parentId,
       });
       await prepareGenerationAttempt(parentId);
     },
-    [conversation, prepareGenerationAttempt, updateConversationAsync],
+    [conversation.id, prepareGenerationAttempt, setConversationLeafAsync],
   );
 
   const handleEdit = useCallback(
@@ -505,12 +470,12 @@ function BrepProjectWorkspace() {
 
   const handleSelectLeaf = useCallback(
     async (messageId: string) => {
-      await updateConversationAsync?.({
-        ...conversation,
-        current_message_leaf_id: messageId,
+      await setConversationLeafAsync?.({
+        id: conversation.id,
+        leafId: messageId,
       });
     },
-    [conversation, updateConversationAsync],
+    [conversation.id, setConversationLeafAsync],
   );
 
   const { mutate: changeRating } = useChangeRatingMutation({
@@ -527,20 +492,18 @@ function BrepProjectWorkspace() {
     conversation,
     dbMessages,
   );
-  const {
-    data: generationRun,
-    isFetched: isGenerationRunFetched,
-  } = useLatestBrepGenerationRun({
-    conversationId: conversation.id,
-    enabled: Boolean(user?.id),
-    pollWhenMissing: pendingBrepCreation || Boolean(generationAttempt),
-    ...(generationAttempt
-      ? {
-          requestMessageId: generationAttempt.requestMessageId,
-          baselineRunId: generationAttempt.baselineRunId,
-        }
-      : {}),
-  });
+  const { data: generationRun, isFetched: isGenerationRunFetched } =
+    useLatestBrepGenerationRun({
+      conversationId: conversation.id,
+      enabled: Boolean(user?.id),
+      pollWhenMissing: pendingBrepCreation || Boolean(generationAttempt),
+      ...(generationAttempt
+        ? {
+            requestMessageId: generationAttempt.requestMessageId,
+            baselineRunId: generationAttempt.baselineRunId,
+          }
+        : {}),
+    });
   const generationHandoffPending = Boolean(generationAttempt && !generationRun);
   const durableAiEditing = Boolean(
     generationRun && isGenerationRunAiEditing(generationRun),
@@ -565,12 +528,12 @@ function BrepProjectWorkspace() {
       generationRunLookupPending);
   const showActiveGenerationProgress = Boolean(
     activeSource &&
-      (generationHandoffPending ||
-        (!generationAttempt && isChatStreaming) ||
-        (generationRun &&
-          (!isGenerationRunTerminal(generationRun.status) ||
-            (Boolean(generationAttempt) &&
-              generationRun.status !== 'completed')))),
+    (generationHandoffPending ||
+      (!generationAttempt && isChatStreaming) ||
+      (generationRun &&
+        (!isGenerationRunTerminal(generationRun.status) ||
+          (Boolean(generationAttempt) &&
+            generationRun.status !== 'completed')))),
   );
 
   if (!areMessagesFetched || !leafPresentInMessages) {
@@ -639,8 +602,8 @@ function BrepProjectWorkspace() {
                   showLabel
                 />
                 <p className="mt-3 text-sm leading-5 text-adam-text-secondary">
-                  The 3D workspace will appear here after the canonical source is
-                  validated and the first immutable revision is saved.
+                  The 3D workspace will appear here after the canonical source
+                  is validated and the first immutable revision is saved.
                 </p>
               </div>
             </div>
@@ -668,9 +631,7 @@ function BrepProjectWorkspace() {
       activeRevisionId={activeSource.messageId}
       revisions={editorRevisions}
       sourceEditingDisabled={projectEditingDisabled}
-      onParameterValuesCommit={async (
-        parameterValues: BrepParameterValues,
-      ) => {
+      onParameterValuesCommit={async (parameterValues: BrepParameterValues) => {
         if (viewingHistorical) {
           throw new Error(
             'Restore this historical BRep revision before editing its parameters.',
@@ -760,8 +721,11 @@ function BrepProjectWorkspace() {
                       onClick={returnToActiveRevision}
                       className="hidden text-xs text-adam-neutral-300 sm:inline-flex"
                     >
-                      {displayedRevisionLabel ?? 'Historical revision'} · read only
-                      <span className="ml-2 text-adam-blue">Back to active</span>
+                      {displayedRevisionLabel ?? 'Historical revision'} · read
+                      only
+                      <span className="ml-2 text-adam-blue">
+                        Back to active
+                      </span>
                     </Button>
                   ) : null}
                   <Button
@@ -819,7 +783,9 @@ function BrepProjectWorkspace() {
               />
             </>
           }
-          previewSlot={<BrepProjectWorkspacePanel readOnly={viewingHistorical} />}
+          previewSlot={
+            <BrepProjectWorkspacePanel readOnly={viewingHistorical} />
+          }
           parametersSlot={
             <fieldset disabled={projectEditingDisabled} className="contents">
               <BrepProjectParametersPanel />
