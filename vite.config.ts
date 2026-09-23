@@ -11,6 +11,7 @@ const appBase = '/';
 const legacyAppBase = '/cadam';
 const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim();
+const stableArtifactDir = process.env.PCAD_STABLE_ARTIFACT_DIR?.trim();
 
 function legacyBaseRedirectPlugin(): Plugin {
   return {
@@ -226,6 +227,9 @@ export default defineConfig({
     nitro({
       baseURL: appBase,
       inlineDynamicImports: true,
+      output: stableArtifactDir
+        ? { dir: path.join(stableArtifactDir, 'nitro') }
+        : undefined,
     }),
     react(),
     sentryAuthToken

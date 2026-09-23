@@ -185,6 +185,8 @@ server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, () => {
 NODE
 }
 
+STABLE_ARTIFACT_DIR=""
+
 cleanup_opencode() {
   if [ -n "${OPENCODE_CHILD_PID:-}" ] && kill -0 "${OPENCODE_CHILD_PID}" 2>/dev/null; then
     echo "Stopping pCAD OpenCode server (pid ${OPENCODE_CHILD_PID})..."
@@ -192,7 +194,14 @@ cleanup_opencode() {
     wait "${OPENCODE_CHILD_PID}" 2>/dev/null || true
   fi
 }
-trap cleanup_opencode EXIT
+cleanup_launcher() {
+  cleanup_opencode
+  if [ -n "${STABLE_ARTIFACT_DIR:-}" ] && [ -d "${STABLE_ARTIFACT_DIR}" ]; then
+    rm -rf -- "${STABLE_ARTIFACT_DIR}"
+  fi
+}
+
+trap cleanup_launcher EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -276,6 +285,9 @@ if [ "${PCAD_ENABLE_HMR:-0}" = "1" ]; then
 else
   echo "=== Building production-like stable runtime ==="
   export VITE_ENABLE_LIFECYCLE_DEBUG="${VITE_ENABLE_LIFECYCLE_DEBUG:-1}"
+  STABLE_ARTIFACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/brepia-stable-artifact.XXXXXX")"
+  export PCAD_STABLE_ARTIFACT_DIR="${STABLE_ARTIFACT_DIR}"
+  echo "Stable runtime artifact: isolated"
   npm run build
 
   if [ -z "${PCAD_STABLE_APP_PORT:-}" ]; then

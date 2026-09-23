@@ -34,5 +34,12 @@ describe('BRep Podman sandbox contract', () => {
       launcher.indexOf('node scripts/stable-runtime-proxy.mjs'),
     );
     expect(stableRuntimeProxy).toContain('env: process.env');
+    expect(launcher).toContain(
+      'export PCAD_STABLE_ARTIFACT_DIR="${STABLE_ARTIFACT_DIR}"',
+    );
+    expect(launcher.indexOf('export PCAD_STABLE_ARTIFACT_DIR=')).toBeLessThan(
+      launcher.indexOf('npm run build'),
+    );
+    expect(launcher).toContain('rm -rf -- "${STABLE_ARTIFACT_DIR}"');
   });
 });
