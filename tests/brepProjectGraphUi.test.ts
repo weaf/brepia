@@ -12,12 +12,18 @@ const featureEditorSource = [
     'utf8',
   ),
   fs.readFileSync(
-    new URL('../src/components/brep/BrepFeatureEditorLegacy.tsx', import.meta.url),
+    new URL(
+      '../src/components/brep/BrepFeatureEditorLegacy.tsx',
+      import.meta.url,
+    ),
     'utf8',
   ),
 ].join('\n');
 const workspaceSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
+  new URL(
+    '../src/components/brep/BrepProjectWorkspacePanel.tsx',
+    import.meta.url,
+  ),
   'utf8',
 );
 const projectViewSource = fs.readFileSync(
@@ -42,7 +48,10 @@ describe('BRep graph/editor UI boundary', () => {
     assert.match(featureEditorSource, /selectedNodeId/);
     assert.match(featureEditorSource, /<BrepDependencyGraph/);
     assert.match(featureEditorSource, /onSelectNode=\{setSelectedNodeId\}/);
-    assert.match(featureEditorSource, /editingDisabled=\{disabled \|\| saving\}/);
+    assert.match(
+      featureEditorSource,
+      /editingDisabled=\{disabled \|\| saving\}/,
+    );
     assert.match(featureEditorSource, /setSelectedNodeId\(node\.id\)/);
     assert.match(
       featureEditorSource,
@@ -58,7 +67,7 @@ describe('BRep graph/editor UI boundary', () => {
     assert.match(projectViewSource, /<BrepFeatureWorkspaceProvider>/);
     assert.match(
       projectViewSource,
-      /previewSlot=\{<BrepProjectWorkspacePanel readOnly=\{viewingHistorical\} \/>\}/,
+      /previewSlot=\{\s*<BrepProjectWorkspacePanel readOnly=\{viewingHistorical\} \/>\s*\}/,
     );
     assert.match(
       projectViewSource,
@@ -67,7 +76,10 @@ describe('BRep graph/editor UI boundary', () => {
 
     assert.match(featureEditorSource, /createPortal\(graph, graphTarget\)/);
     assert.match(featureEditorSource, /Open BRep dependency graph/);
-    assert.match(featureEditorSource, /not constrained by the Parameters panel width/);
+    assert.match(
+      featureEditorSource,
+      /not constrained by the Parameters panel width/,
+    );
     assert.match(graphSource, /fillAvailable/);
     assert.doesNotMatch(graphSource, /ResizeObserver/);
     assert.doesNotMatch(graphSource, /useIsMobile/);
