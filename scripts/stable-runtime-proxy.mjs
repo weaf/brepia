@@ -7,8 +7,16 @@ const publicHost = process.env.PCAD_STABLE_HOST || '0.0.0.0';
 const publicPort = Number(process.env.PCAD_STABLE_PORT || 3000);
 const appHost = process.env.PCAD_STABLE_APP_HOST || '127.0.0.1';
 const appPort = Number(process.env.PCAD_STABLE_APP_PORT || 3001);
-const supabaseHost = process.env.PCAD_STABLE_SUPABASE_HOST || '127.0.0.1';
-const supabasePort = Number(process.env.PCAD_STABLE_SUPABASE_PORT || 54321);
+const supabaseUrlRaw = process.env.VITE_SUPABASE_URL?.trim();
+if (!supabaseUrlRaw) {
+  throw new Error('VITE_SUPABASE_URL is required for the stable runtime proxy');
+}
+const supabaseUrl = new URL(supabaseUrlRaw);
+if (supabaseUrl.protocol !== 'http:') {
+  throw new Error('Stable local Supabase proxy requires an http:// VITE_SUPABASE_URL');
+}
+const supabaseHost = process.env.PCAD_STABLE_SUPABASE_HOST || supabaseUrl.hostname;
+const supabasePort = Number(process.env.PCAD_STABLE_SUPABASE_PORT || supabaseUrl.port || 80);
 
 const supabasePrefixes = [
   '/auth',

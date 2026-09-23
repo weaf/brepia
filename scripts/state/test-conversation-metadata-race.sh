@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT}/scripts/supabase-local.sh"
+
 if [[ -z "${DB_URL:-}" ]]; then
-  status_env="$(npx supabase status -o env 2>/dev/null || true)"
+  status_env="$(brepia_supabase_status_env 2>/dev/null || true)"
   if [[ -n "$status_env" ]]; then
     eval "$status_env"
   fi

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ -z "${DB_URL:-}" ]]; then
-  echo "DB_URL is required. Load it from: npx supabase status -o env" >&2
+  echo "DB_URL is required. Load it from: ./scripts/supabase-local.sh status -o env" >&2
   exit 1
 fi
 

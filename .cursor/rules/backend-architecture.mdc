@@ -48,7 +48,7 @@ Supabase remains authoritative for data and storage it owns.
 
 - Runtime/development configuration is read from the repository's existing environment helpers and `.env.local` flow.
 - `./start.sh` is the canonical local launcher. It configures rootless Podman, local Supabase, llama-swap/OpenCode integration and the stable runtime.
-- Use `npx supabase ...`; do not assume a global Supabase CLI.
+- Use `./scripts/supabase-local.sh ...`; do not assume a global Supabase CLI.
 - Do not use `supabase functions serve` as the normal Brepia application-server workflow.
 
 ## Billing

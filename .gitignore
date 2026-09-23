@@ -13,6 +13,7 @@ dist-ssr
 .output
 ,output
 *.local
+/.brepia/
 
 # Local per-conversation runtime workspaces
 conversations/

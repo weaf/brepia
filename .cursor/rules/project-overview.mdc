@@ -77,5 +77,5 @@ brepia/
 
 - Runtime/development configuration uses `.env.local` and existing environment helpers.
 - `./start.sh` is the canonical local launcher.
-- Local Supabase uses the repository CLI through `npx supabase` and rootless Podman.
+- Local Supabase uses the repository CLI through `./scripts/supabase-local.sh` and rootless Podman.
 - Follow `AGENTS.md` for current documentation precedence, compatibility boundaries and validation gates.

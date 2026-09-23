@@ -27,7 +27,7 @@ Files named `*_plan.md`, `*_status.md`, handovers and checkpoints are historical
 5. **Compatibility** — Preserve `/cadam`, `CADAM Original`, Sentry `adamcad`, `PCAD_*`, compatibility-sensitive `pcad_*`/`pcad.invalid`, existing `pcad-*` integration identifiers and `adam-*` design tokens unless the task includes an explicit migration.
 6. **Stable runtime** — Do not weaken background/recovery behavior or change Parametric/Creative semantics as incidental cleanup.
 7. **Generated files** — Never hand-edit `src/routeTree.gen.ts` or `shared/database.ts`.
-8. **Database workflow** — Schema changes start in `supabase/schemas/`, use repository-local `npx supabase`, generate/review/apply migrations locally and regenerate database types.
+8. **Database workflow** — Schema changes start in `supabase/schemas/`, use repository-local `./scripts/supabase-local.sh`, generate/review/apply migrations locally and regenerate database types.
 9. **No routine remote mutation** — Do not mutate remote Supabase/deployment state unless the current task explicitly requests it and the target is clear.
 10. **No automatic merge unless requested** — A normal implementation may commit/push when the task requires it, but merging to the target branch must be part of the explicit workflow/request.
 

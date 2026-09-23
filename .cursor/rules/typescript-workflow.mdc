@@ -23,10 +23,10 @@ The current repository has no `supabase/functions/` TypeScript/Deno application 
 For schema changes, follow the repository's schema-first workflow:
 
 1. edit the declarative source under `supabase/schemas/`;
-2. generate a migration with `npx supabase db diff -f <name>`;
+2. generate a migration with `./scripts/supabase-local.sh db diff -f <name>`;
 3. review the generated SQL;
-4. apply pending migrations locally with `npx supabase migration up`;
-5. regenerate types with `npx supabase gen types typescript --local > shared/database.ts`;
+4. apply pending migrations locally with `./scripts/supabase-local.sh migration up`;
+5. regenerate types with `./scripts/supabase-local.sh gen types typescript --local > shared/database.ts`;
 6. run `npm run typecheck` and the remaining relevant repository gates.
 
 Never hand-edit `shared/database.ts`. See `.cursor/rules/database-workflow.mdc` and `AGENTS.md` for the complete database lifecycle.

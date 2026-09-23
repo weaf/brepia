@@ -4,6 +4,43 @@
 # working directory name when running `supabase init`.
 project_id = "brepia"
 
+# Host-facing ports are allocated per checkout by scripts/supabase-local.sh.
+[api]
+port = "env(BREPIA_SUPABASE_API_PORT)"
+
+[db]
+port = "env(BREPIA_SUPABASE_DB_PORT)"
+shadow_port = "env(BREPIA_SUPABASE_SHADOW_PORT)"
+
+[db.pooler]
+port = "env(BREPIA_SUPABASE_POOLER_PORT)"
+
+[realtime]
+# CLI 2.114.0 maps this setting to Realtime's Erlang network family. The
+# repo-owned Podman shim separately pins the Brepia Realtime DB connection to
+# the running database container's numeric IPv4 and injects DB_IP_VERSION=ipv4.
+ip_version = "IPv4"
+
+[edge_runtime]
+# Brepia currently has no local Edge Functions. Keep the service disabled so
+# the local stack only owns services the product actually uses.
+enabled = false
+inspector_port = "env(BREPIA_SUPABASE_EDGE_INSPECTOR_PORT)"
+
+[studio]
+port = "env(BREPIA_SUPABASE_STUDIO_PORT)"
+
+[local_smtp]
+port = "env(BREPIA_SUPABASE_LOCAL_SMTP_PORT)"
+smtp_port = "env(BREPIA_SUPABASE_SMTP_PORT)"
+pop3_port = "env(BREPIA_SUPABASE_POP3_PORT)"
+
+[analytics]
+# Brepia does not depend on the local Logs Explorer/Logflare service. Keep it
+# disabled so the rootless local stack only starts product-required services.
+enabled = false
+port = "env(BREPIA_SUPABASE_ANALYTICS_PORT)"
+
 [auth.email]
 enable_signup = true
 
