@@ -628,6 +628,7 @@ function BrepProjectWorkspace() {
       project={displayedSource.artifact.source.source}
       conversationId={viewingHistorical ? undefined : conversation.id}
       packageTitle={displayedSource.artifact.title}
+      packageProvenance={displayedSource.artifact.provenance}
       activeRevisionId={activeSource.messageId}
       revisions={editorRevisions}
       sourceEditingDisabled={projectEditingDisabled}
