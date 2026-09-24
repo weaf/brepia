@@ -13,6 +13,14 @@ const artifact = createBrepProjectArtifact({
   source: { kind: 'brep', source: phaseOneCabinetProject },
 });
 
+const provenance = {
+  kind: 'template',
+  templateId: 'c1-test-fixture',
+  templateVersion: 1,
+  source: 'builtin',
+  definitionDigest: 'fnv1a64:0123456789abcdef',
+};
+
 describe('BRep project message baseline', () => {
   it('stores only the normalized canonical BRep source on the assistant leaf', () => {
     const [user, assistant] = buildBrepProjectBaselineMessages({
@@ -27,6 +35,26 @@ describe('BRep project message baseline', () => {
     expect(getBrepProjectArtifact(assistant.parts)).toEqual(artifact);
     expect(JSON.stringify(assistant.parts)).not.toContain('viewerMesh');
     expect(JSON.stringify(assistant.parts)).not.toContain('STEP');
+  });
+
+  it('stores normalized template provenance outside canonical geometry authority', () => {
+    const templated = createBrepProjectArtifact({
+      title: 'Cabinet',
+      version: 'v1',
+      source: { kind: 'brep', source: phaseOneCabinetProject },
+      provenance,
+    });
+
+    expect(templated.provenance).toEqual(provenance);
+    expect(templated.source.source).not.toHaveProperty('provenance');
+    expect(() =>
+      createBrepProjectArtifact({
+        title: 'Cabinet',
+        version: 'v1',
+        source: { kind: 'brep', source: phaseOneCabinetProject },
+        provenance: { ...provenance, definitionDigest: 'invalid' },
+      }),
+    ).toThrow(/provenance/i);
   });
 
   it('fails closed rather than accepting a non-BRep source', () => {
