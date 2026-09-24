@@ -209,3 +209,104 @@ describe('C1.1C built-in BRep template registry', () => {
     expect(builtinBrepTemplates.list()).toEqual([]);
   });
 });
+
+
+describe('C1.2 independent template instantiation', () => {
+  it('creates a new canonical project identity from one exact immutable template version', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(1),
+      templateDefinition(2),
+    ]);
+
+    const project = registry.instantiate(
+      { id: 'c1-test-fixture', version: 1 },
+      { projectIdFactory: () => 'project_instance_one' },
+    );
+
+    expect(project.id).toBe('project_instance_one');
+    expect(project.id).not.toBe(
+      registry.resolve({ id: 'c1-test-fixture', version: 1 }).source.id,
+    );
+    expect(project.schemaVersion).toBe(1);
+  });
+
+  it('preserves node and parameter identities while producing independent nested project state', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(1),
+    ]);
+    const definition = registry.resolve({
+      id: 'c1-test-fixture',
+      version: 1,
+    });
+    const project = registry.instantiate(
+      { id: 'c1-test-fixture', version: 1 },
+      { projectIdFactory: () => 'project_instance_two' },
+    );
+
+    expect(project.parameters.map((parameter) => parameter.id)).toEqual(
+      definition.source.parameters.map((parameter) => parameter.id),
+    );
+    expect(project.nodes.map((node) => node.id)).toEqual(
+      definition.source.nodes.map((node) => node.id),
+    );
+    expect(project.parameters).not.toBe(definition.source.parameters);
+    expect(project.nodes).not.toBe(definition.source.nodes);
+    expect(project.placement).not.toBe(definition.source.placement);
+  });
+
+  it('does not allow instance mutation to flow back into immutable template state', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(1),
+    ]);
+    const definition = registry.resolve({
+      id: 'c1-test-fixture',
+      version: 1,
+    });
+    const project = registry.instantiate(
+      { id: 'c1-test-fixture', version: 1 },
+      { projectIdFactory: () => 'project_instance_three' },
+    );
+
+    project.parameters[0].default = 250;
+    project.nodes[0].id = 'instanceBody';
+
+    expect(definition.source.parameters[0].default).toBe(100);
+    expect(definition.source.nodes[0].id).toBe('body');
+  });
+
+  it('creates distinct project identities across repeated instantiations', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(1),
+    ]);
+    let counter = 0;
+    const projectIdFactory = () => {
+      counter += 1;
+      return `project_instance_${counter}`;
+    };
+
+    const first = registry.instantiate(
+      { id: 'c1-test-fixture', version: 1 },
+      { projectIdFactory },
+    );
+    const second = registry.instantiate(
+      { id: 'c1-test-fixture', version: 1 },
+      { projectIdFactory },
+    );
+
+    expect(first.id).not.toBe(second.id);
+    expect(first).toEqual({ ...second, id: first.id });
+  });
+
+  it('fails closed when an injected identity reuses the template source project id', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(1),
+    ]);
+
+    expect(() =>
+      registry.instantiate(
+        { id: 'c1-test-fixture', version: 1 },
+        { projectIdFactory: () => 'c1TemplateSource' },
+      ),
+    ).toThrow(/must differ from the template source project id/i);
+  });
+});
