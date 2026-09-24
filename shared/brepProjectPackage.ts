@@ -1,5 +1,9 @@
 import { BREP_PROJECT_MAX_NAME_CHARS } from './brepProject.ts';
 import {
+  normalizeBrepTemplateProvenance,
+  type BrepTemplateProvenance,
+} from './brepTemplate.ts';
+import {
   normalizeParametricProjectSource,
   type ParametricProjectSource,
 } from './parametricProjectSource.ts';
@@ -13,6 +17,7 @@ export type BrepProjectPackage = {
   schemaVersion: typeof BREP_PROJECT_PACKAGE_SCHEMA_VERSION;
   title: string;
   source: Extract<ParametricProjectSource, { kind: 'brep' }>;
+  provenance?: BrepTemplateProvenance;
 };
 
 export type BrepProjectPackageErrorCode =
@@ -99,23 +104,31 @@ export function normalizeBrepProjectPackage(
     );
   }
 
+  const provenance =
+    value.provenance == null
+      ? undefined
+      : normalizeBrepTemplateProvenance(value.provenance);
+
   return {
     kind: BREP_PROJECT_PACKAGE_KIND,
     schemaVersion: BREP_PROJECT_PACKAGE_SCHEMA_VERSION,
     title,
     source,
+    ...(provenance ? { provenance } : {}),
   };
 }
 
 export function createBrepProjectPackage({
   title,
   source,
-}: Pick<BrepProjectPackage, 'title' | 'source'>): BrepProjectPackage {
+  provenance,
+}: Pick<BrepProjectPackage, 'title' | 'source' | 'provenance'>): BrepProjectPackage {
   return normalizeBrepProjectPackage({
     kind: BREP_PROJECT_PACKAGE_KIND,
     schemaVersion: BREP_PROJECT_PACKAGE_SCHEMA_VERSION,
     title,
     source,
+    ...(provenance ? { provenance } : {}),
   });
 }
 
