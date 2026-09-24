@@ -42,11 +42,18 @@ describe('built-in product template contract', () => {
       step: 'ISO-10303-21',
     });
 
-    expect(template).toEqual(cabinetTemplate());
-    expect(template.source.source.parameters.map((parameter) => parameter.id)).toEqual([
-      'height',
-      'width',
-    ]);
+    expect(template).toMatchObject({
+      id: 'builtin:electrical-cabinet',
+      version: 1,
+      name: 'Electrical Cabinet',
+      category: 'Electrical',
+      description: 'Reusable cabinet foundation fixture.',
+      source: { kind: 'brep' },
+      presentation: cabinetTemplate().presentation,
+    });
+    expect(
+      template.source.source.parameters.map((parameter) => parameter.id),
+    ).toEqual(['height', 'width']);
     expect(Object.isFrozen(template)).toBe(true);
     expect(Object.isFrozen(template.source.source)).toBe(true);
     expect('viewerMesh' in template).toBe(false);
