@@ -26,6 +26,13 @@ const artifact = createBrepProjectArtifact({
   title: 'Cabinet',
   version: 'v1',
   source: { kind: 'brep', source: phaseOneCabinetProject },
+  provenance: {
+  kind: 'template',
+  templateId: 'c1-test-fixture',
+  templateVersion: 1,
+  source: 'builtin',
+  definitionDigest: 'fnv1a64:0123456789abcdef',
+},
 });
 
 function revisionLookupResult(
@@ -161,6 +168,14 @@ describe('BRep project revision service boundaries', () => {
       role: 'assistant',
       parent_message_id: parentMessageId,
     });
+    expect(insertedRows[0]).toMatchObject({
+      parts: [
+        {
+          type: 'data-brep-project',
+          data: { provenance: artifact.provenance },
+        },
+      ],
+    });
     expect(sourceRow.parts).toEqual(originalSnapshot);
     expect(conversationUpdate.update).toHaveBeenCalledWith({
       current_message_leaf_id: restoredId,
@@ -248,6 +263,7 @@ describe('BRep project revision service boundaries', () => {
       role: 'assistant',
       parent_message_id: sourceMessageId,
     });
+    expect(result.artifact.provenance).toEqual(artifact.provenance);
     expect(result.artifact.source.source.id).toBe(artifact.source.source.id);
     expect(result.artifact.source.source.resultNodeId).toBe(
       artifact.source.source.resultNodeId,
