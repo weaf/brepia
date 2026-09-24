@@ -396,7 +396,11 @@ describe('C1.4 template project creation integration', () => {
           source?: { nodes?: Array<{ id: string }> };
         }
       )?.source?.nodes?.map((node) => node.id),
-    ).toEqual(phaseOneCabinetProject.nodes.map((node) => node.id));
+    ).toEqual(
+      phaseOneCabinetProject.nodes
+        .map((node) => node.id)
+        .sort((left, right) => left.localeCompare(right, 'en-US')),
+    );
     expect(leafUpdate.update).toHaveBeenCalledWith({
       current_message_leaf_id:
         '22222222-2222-4222-8222-222222222222',
