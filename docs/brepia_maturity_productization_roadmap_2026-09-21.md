@@ -505,7 +505,7 @@ The closeout should explicitly record any known warnings/debt intentionally reta
 
 # Phase C — Product Template Foundation
 
-Status: PLANNED AFTER FOUNDATION REVIEW/HARDENING.
+Status: IN PROGRESS. C1 COMPLETE; C2 NEXT.
 
 ## Objective
 
@@ -517,7 +517,9 @@ A project is an independently revisioned product instance created from a templat
 
 ## C1 — template identity and versioning
 
-Define a versioned template identity with candidate concerns:
+Status: COMPLETE. See `docs/brepia_phase_c1_template_identity_versioning_closeout_2026-09-24.md`.
+
+Implemented a versioned template identity covering:
 
 - id;
 - version;

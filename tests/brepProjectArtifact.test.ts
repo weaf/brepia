@@ -29,6 +29,28 @@ describe('BRep project message baseline', () => {
     expect(JSON.stringify(assistant.parts)).not.toContain('STEP');
   });
 
+  it('persists creation provenance only as baseline message metadata', () => {
+    const projectCreation = {
+      kind: 'template' as const,
+      catalog: 'builtin' as const,
+      templateId: 'builtin:test-cabinet',
+      templateVersion: 2,
+      sourceDigest:
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    };
+    const [, assistant] = buildBrepProjectBaselineMessages({
+      conversationId: '11111111-2222-4333-8444-555555555555',
+      userMessageId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      assistantMessageId: 'bbbbbbbb-2222-4222-8222-222222222222',
+      artifact,
+      projectCreation,
+    });
+
+    expect(assistant.metadata).toEqual({ projectCreation });
+    expect(getBrepProjectArtifact(assistant.parts)).toEqual(artifact);
+    expect(JSON.stringify(assistant.parts)).not.toContain('projectCreation');
+  });
+
   it('fails closed rather than accepting a non-BRep source', () => {
     expect(() =>
       createBrepProjectArtifact({

@@ -11,6 +11,7 @@ import { importBrepProjectConversation } from '@/services/brepProjectService';
 import { downloadSTEPFile } from '@/utils/downloadUtils';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import type { BrepProject } from '@shared/brepProject';
+import { SCRATCH_PROJECT_ORIGIN } from '@shared/projectOrigin';
 import {
   BREP_PROJECT_PACKAGE_MAX_BYTES,
   createBrepProjectPackage,
@@ -333,6 +334,7 @@ export function BrepProjectPreview({
                   userId: user.id,
                   title: project.name,
                   project,
+                  projectOrigin: SCRATCH_PROJECT_ORIGIN,
                 });
                 window.location.assign(`/brep/${conversationId}`);
               } catch (reason) {

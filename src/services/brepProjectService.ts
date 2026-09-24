@@ -8,15 +8,23 @@ import {
 import type { BrepProjectArtifactData } from '@shared/chatAi';
 import type { BrepProject } from '@shared/brepProject';
 import type { BrepProjectPackage } from '@shared/brepProjectPackage';
+import {
+  builtinProductTemplateCatalog,
+  type BuiltinProductTemplateCatalog,
+} from '@shared/productTemplateCatalog';
+import { materializeBuiltinProductTemplate } from '@shared/productTemplateProjectCreation';
+import type { ProjectOrigin } from '@shared/projectOrigin';
 
 export async function createBrepProjectConversation({
   userId,
   title,
   project,
+  projectOrigin,
 }: {
   userId: string;
   title: string;
   project: BrepProject;
+  projectOrigin?: ProjectOrigin;
 }): Promise<string> {
   const conversationId = crypto.randomUUID();
   const artifact = createBrepProjectArtifact({
@@ -31,7 +39,10 @@ export async function createBrepProjectConversation({
       user_id: userId,
       title: artifact.title,
       type: 'parametric',
-      settings: { parametricSourceKind: 'brep' },
+      settings: {
+        parametricSourceKind: 'brep',
+        ...(projectOrigin ? { projectOrigin } : {}),
+      },
     });
   if (conversationError) throw conversationError;
 
@@ -41,6 +52,7 @@ export async function createBrepProjectConversation({
     userMessageId: crypto.randomUUID(),
     assistantMessageId,
     artifact,
+    projectCreation: projectOrigin,
   });
   const { error: messagesError } = await supabase.from('messages').insert(
     rows.map((row) => ({
@@ -65,6 +77,30 @@ export async function createBrepProjectConversation({
     .eq('user_id', userId);
   if (leafError) throw leafError;
   return conversationId;
+}
+
+export async function createBrepProjectConversationFromTemplate({
+  userId,
+  templateId,
+  templateVersion,
+  catalog = builtinProductTemplateCatalog,
+}: {
+  userId: string;
+  templateId: string;
+  templateVersion: number;
+  catalog?: BuiltinProductTemplateCatalog;
+}): Promise<string> {
+  const template = catalog.requireExact({
+    id: templateId,
+    version: templateVersion,
+  });
+  const materialized = await materializeBuiltinProductTemplate(template);
+  return createBrepProjectConversation({
+    userId,
+    title: materialized.title,
+    project: materialized.project,
+    projectOrigin: materialized.projectOrigin,
+  });
 }
 
 export async function importBrepProjectConversation({
