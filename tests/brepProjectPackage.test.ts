@@ -9,7 +9,15 @@ import {
 import { withBrepProjectParameterValues } from '@shared/brepProjectArtifact';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 
-function cabinetPackage() {
+const templateProvenance = {
+  kind: 'template' as const,
+  templateId: 'c1-package-fixture',
+  templateVersion: 3,
+  source: 'builtin' as const,
+  definitionDigest: 'fnv1a64:0123456789abcdef',
+};
+
+function cabinetPackage(provenance = false) {
   const project = withBrepProjectParameterValues(phaseOneCabinetProject, {
     width: 1450,
     height: 2100,
@@ -17,6 +25,7 @@ function cabinetPackage() {
   return createBrepProjectPackage({
     title: 'Railway cabinet',
     source: { kind: 'brep', source: project },
+    ...(provenance ? { provenance: templateProvenance } : {}),
   });
 }
 
@@ -45,6 +54,39 @@ describe('canonical BRep project package', () => {
         (parameter) => parameter.id === 'height',
       )?.default,
     ).toBe(2100);
+  });
+
+  it('round-trips optional template provenance outside canonical project authority', () => {
+    const packageValue = cabinetPackage(true);
+    const parsed = parseBrepProjectPackageJson(
+      serializeBrepProjectPackage(packageValue),
+    );
+
+    expect(parsed.provenance).toEqual(templateProvenance);
+    expect(parsed.source.source).not.toHaveProperty('provenance');
+  });
+
+  it('keeps legacy and scratch packages valid without provenance', () => {
+    const packageValue = cabinetPackage();
+    const parsed = parseBrepProjectPackageJson(
+      serializeBrepProjectPackage(packageValue),
+    );
+
+    expect(parsed.provenance).toBeUndefined();
+  });
+
+  it('rejects malformed template provenance instead of silently carrying it', () => {
+    const packageValue = cabinetPackage();
+
+    expect(() =>
+      normalizeBrepProjectPackage({
+        ...packageValue,
+        provenance: {
+          ...templateProvenance,
+          definitionDigest: 'not-a-valid-digest',
+        },
+      }),
+    ).toThrow(/provenance/i);
   });
 
   it('drops derived or unrelated payloads instead of making them source authority', () => {
