@@ -1,3 +1,4 @@
+import { normalizeBrepProject, type BrepProject } from './brepProject.ts';
 import {
   normalizeBrepTemplateDefinition,
   normalizeBrepTemplateRef,
@@ -16,8 +17,37 @@ function templateKey(ref: BrepTemplateRef): string {
   return `${ref.id}@${ref.version}`;
 }
 
+export type BrepTemplateInstantiationOptions = Readonly<{
+  projectIdFactory?: () => string;
+}>;
+
+function defaultProjectIdFactory(): string {
+  return `project_${crypto.randomUUID().replaceAll('-', '_')}`;
+}
+
+export function instantiateBrepTemplateDefinition(
+  definition: Readonly<BrepTemplateDefinition>,
+  options: BrepTemplateInstantiationOptions = {},
+): BrepProject {
+  const projectId = (options.projectIdFactory ?? defaultProjectIdFactory)();
+  if (projectId === definition.source.id) {
+    throw new BrepTemplateRegistryError(
+      'Instantiated BRep project id must differ from the template source project id.',
+    );
+  }
+
+  return normalizeBrepProject({
+    ...definition.source,
+    id: projectId,
+  });
+}
+
 export type BuiltinBrepTemplateRegistry = Readonly<{
   resolve(ref: BrepTemplateRef): Readonly<BrepTemplateDefinition>;
+  instantiate(
+    ref: BrepTemplateRef,
+    options?: BrepTemplateInstantiationOptions,
+  ): BrepProject;
   list(): readonly Readonly<BrepTemplateDefinition>[];
 }>;
 
@@ -56,6 +86,20 @@ export function createBuiltinBrepTemplateRegistry(
       }
       return definition;
     },
+    instantiate(
+      ref: BrepTemplateRef,
+      options: BrepTemplateInstantiationOptions = {},
+    ) {
+      const normalized = normalizeBrepTemplateRef(ref);
+      const key = templateKey(normalized);
+      const definition = byKey.get(key);
+      if (!definition) {
+        throw new BrepTemplateRegistryError(
+          `Built-in BRep template version not found: ${key}.`,
+        );
+      }
+      return instantiateBrepTemplateDefinition(definition, options);
+    },
     list() {
       return ordered;
     },
@@ -63,7 +107,7 @@ export function createBuiltinBrepTemplateRegistry(
 }
 
 /**
- * C1.1 establishes the immutable registry contract only.
+ * C1 establishes the immutable repository-owned template foundation only.
  * Product Pack phases add reviewed built-in product definitions later.
  */
 export const builtinBrepTemplates = createBuiltinBrepTemplateRegistry([]);
