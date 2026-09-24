@@ -45,6 +45,13 @@ describe('BRep Phase 8G GHX lifecycle integration', () => {
       title: 'Cabinet A42',
       version: 'v1',
       source: { kind: 'brep', source: fixture.source },
+      provenance: {
+  kind: 'template',
+  templateId: 'c1-test-fixture',
+  templateVersion: 1,
+  source: 'builtin',
+  definitionDigest: 'fnv1a64:0123456789abcdef',
+},
     });
 
     const imported = buildBrepGrasshopperImportedArtifact(artifact, {
@@ -52,6 +59,7 @@ describe('BRep Phase 8G GHX lifecycle integration', () => {
       width: 1500,
     });
 
+    assert.deepEqual(imported.provenance, artifact.provenance);
     assert.equal(imported.source.source.id, fixture.source.id);
     assert.deepEqual(
       Object.fromEntries(
