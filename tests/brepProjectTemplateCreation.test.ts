@@ -99,7 +99,11 @@ describe('BRep template project persistence', () => {
         title: 'Creation fixture',
         source: {
           kind: 'brep',
-          source: phaseOneCabinetProject,
+          source: {
+            schemaVersion: phaseOneCabinetProject.schemaVersion,
+            id: phaseOneCabinetProject.id,
+            resultNodeId: phaseOneCabinetProject.resultNodeId,
+          },
         },
       },
     });
