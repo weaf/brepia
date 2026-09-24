@@ -505,7 +505,7 @@ The closeout should explicitly record any known warnings/debt intentionally reta
 
 # Phase C — Product Template Foundation
 
-Status: IN PROGRESS. C1 COMPLETE; C2 NEXT.
+Status: IN PROGRESS. C1–C2 COMPLETE; C3 NEXT.
 
 ## Objective
 
@@ -548,6 +548,8 @@ Default preference:
 Creating from a template produces an independent project/revision lineage. Later template changes do not silently mutate existing projects.
 
 ## C2 — parameter presentation metadata
+
+Status: COMPLETE. See `docs/brepia_phase_c2_parameter_presentation_2026-09-24.md`.
 
 Canonical geometry parameters and product UX are related but not identical.
 
