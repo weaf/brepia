@@ -1,6 +1,7 @@
 import {
   BREP_PROJECT_MAX_DESCRIPTION_CHARS,
   BREP_PROJECT_MAX_NAME_CHARS,
+  type BrepParameterUnit,
 } from './brepProject.ts';
 import {
   normalizeParametricProjectSource,
@@ -12,15 +13,30 @@ export const BUILTIN_PRODUCT_TEMPLATE_ID_PATTERN =
 export const PRODUCT_TEMPLATE_MAX_CATEGORY_CHARS = 120;
 export const PRODUCT_TEMPLATE_MAX_GROUPS = 32;
 export const PRODUCT_TEMPLATE_MAX_PREVIEW_ASSET_ID_CHARS = 256;
+export const PRODUCT_TEMPLATE_MAX_UNIT_LABEL_CHARS = 48;
+
+export type ProductTemplatePresentationTier = 'basic' | 'advanced';
+export type ProductTemplateParameterVisibility = 'visible' | 'hidden';
+
+export type ProductTemplateParameterPresentation = Readonly<{
+  label?: string;
+  description?: string;
+  unitLabel?: string;
+  visibility?: ProductTemplateParameterVisibility;
+  tier?: ProductTemplatePresentationTier;
+}>;
 
 export type ProductTemplatePresentationGroup = Readonly<{
   id: string;
   label: string;
+  description?: string;
+  tier?: ProductTemplatePresentationTier;
   parameterIds: readonly string[];
 }>;
 
 export type ProductTemplatePresentation = Readonly<{
   parameterOrder?: readonly string[];
+  parameters?: Readonly<Record<string, ProductTemplateParameterPresentation>>;
   groups?: readonly ProductTemplatePresentationGroup[];
   preview?: Readonly<{
     kind: 'bundled';
@@ -36,6 +52,26 @@ export type BuiltinProductTemplate = Readonly<{
   description?: string;
   source: Extract<ParametricProjectSource, { kind: 'brep' }>;
   presentation?: ProductTemplatePresentation;
+}>;
+
+export type ResolvedProductTemplateParameterPresentation = Readonly<{
+  id: string;
+  label: string;
+  description?: string;
+  unit: BrepParameterUnit;
+  unitLabel?: string;
+  default: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  visibility: ProductTemplateParameterVisibility;
+  tier: ProductTemplatePresentationTier;
+  group?: Readonly<{
+    id: string;
+    label: string;
+    description?: string;
+    tier: ProductTemplatePresentationTier;
+  }>;
 }>;
 
 export type ProductTemplateErrorCode =
@@ -124,6 +160,99 @@ function normalizeParameterReferences(
   return normalized;
 }
 
+function normalizeTier(
+  value: unknown,
+  field: string,
+): ProductTemplatePresentationTier | undefined {
+  if (value == null) return undefined;
+  if (value !== 'basic' && value !== 'advanced') {
+    throw new ProductTemplateError(
+      'invalid_presentation',
+      `${field} must be basic or advanced.`,
+    );
+  }
+  return value;
+}
+
+function normalizeVisibility(
+  value: unknown,
+  field: string,
+): ProductTemplateParameterVisibility | undefined {
+  if (value == null) return undefined;
+  if (value !== 'visible' && value !== 'hidden') {
+    throw new ProductTemplateError(
+      'invalid_presentation',
+      `${field} must be visible or hidden.`,
+    );
+  }
+  return value;
+}
+
+const GEOMETRY_AUTHORITY_PRESENTATION_KEYS = new Set([
+  'default',
+  'min',
+  'max',
+  'step',
+  'unit',
+  'type',
+]);
+
+function normalizeParameterPresentation(
+  value: unknown,
+  parameterId: string,
+): ProductTemplateParameterPresentation {
+  if (!isRecord(value)) {
+    throw new ProductTemplateError(
+      'invalid_presentation',
+      `Product template presentation for parameter ${parameterId} must be an object.`,
+    );
+  }
+
+  for (const key of GEOMETRY_AUTHORITY_PRESENTATION_KEYS) {
+    if (key in value) {
+      throw new ProductTemplateError(
+        'invalid_presentation',
+        `Product template presentation for parameter ${parameterId} cannot define canonical geometry field ${key}.`,
+      );
+    }
+  }
+
+  const label = normalizeText(
+    value.label,
+    `Product template parameter ${parameterId} display label`,
+    BREP_PROJECT_MAX_NAME_CHARS,
+    false,
+  );
+  const description = normalizeText(
+    value.description,
+    `Product template parameter ${parameterId} help`,
+    BREP_PROJECT_MAX_DESCRIPTION_CHARS,
+    false,
+  );
+  const unitLabel = normalizeText(
+    value.unitLabel,
+    `Product template parameter ${parameterId} unitLabel`,
+    PRODUCT_TEMPLATE_MAX_UNIT_LABEL_CHARS,
+    false,
+  );
+  const visibility = normalizeVisibility(
+    value.visibility,
+    `Product template parameter ${parameterId} visibility`,
+  );
+  const tier = normalizeTier(
+    value.tier,
+    `Product template parameter ${parameterId} tier`,
+  );
+
+  return {
+    ...(label ? { label } : {}),
+    ...(description ? { description } : {}),
+    ...(unitLabel ? { unitLabel } : {}),
+    ...(visibility ? { visibility } : {}),
+    ...(tier ? { tier } : {}),
+  };
+}
+
 function normalizePresentation(
   value: unknown,
   parameterIds: ReadonlySet<string>,
@@ -145,6 +274,38 @@ function normalizePresentation(
           parameterIds,
         );
 
+  let parameters:
+    | Readonly<Record<string, ProductTemplateParameterPresentation>>
+    | undefined;
+  if (value.parameters != null) {
+    if (!isRecord(value.parameters)) {
+      throw new ProductTemplateError(
+        'invalid_presentation',
+        'Product template presentation parameters must be an object keyed by published parameter ID.',
+      );
+    }
+
+    const normalizedParameters: Record<
+      string,
+      ProductTemplateParameterPresentation
+    > = {};
+    for (const [parameterId, parameterPresentation] of Object.entries(
+      value.parameters,
+    ).sort(([left], [right]) => left.localeCompare(right, 'en-US'))) {
+      if (!parameterIds.has(parameterId)) {
+        throw new ProductTemplateError(
+          'invalid_presentation',
+          `Product template presentation references unknown published parameter ${parameterId}.`,
+        );
+      }
+      normalizedParameters[parameterId] = normalizeParameterPresentation(
+        parameterPresentation,
+        parameterId,
+      );
+    }
+    parameters = normalizedParameters;
+  }
+
   let groups: readonly ProductTemplatePresentationGroup[] | undefined;
   if (value.groups != null) {
     if (!Array.isArray(value.groups)) {
@@ -161,6 +322,7 @@ function normalizePresentation(
     }
 
     const groupIds = new Set<string>();
+    const groupedParameterIds = new Set<string>();
     groups = value.groups.map((group, index) => {
       if (!isRecord(group)) {
         throw new ProductTemplateError(
@@ -192,15 +354,36 @@ function normalizePresentation(
         `Product template presentation group ${id} label`,
         BREP_PROJECT_MAX_NAME_CHARS,
       )!;
+      const description = normalizeText(
+        group.description,
+        `Product template presentation group ${id} description`,
+        BREP_PROJECT_MAX_DESCRIPTION_CHARS,
+        false,
+      );
+      const tier = normalizeTier(
+        group.tier,
+        `Product template presentation group ${id} tier`,
+      );
       const parameterIdsForGroup = normalizeParameterReferences(
         group.parameterIds,
         `Product template presentation group ${id} parameterIds`,
         parameterIds,
       );
+      for (const parameterId of parameterIdsForGroup) {
+        if (groupedParameterIds.has(parameterId)) {
+          throw new ProductTemplateError(
+            'invalid_presentation',
+            `Published parameter ${parameterId} cannot belong to more than one presentation group.`,
+          );
+        }
+        groupedParameterIds.add(parameterId);
+      }
 
       return {
         id,
         label,
+        ...(description ? { description } : {}),
+        ...(tier ? { tier } : {}),
         parameterIds: parameterIdsForGroup,
       };
     });
@@ -224,6 +407,7 @@ function normalizePresentation(
 
   const normalized: ProductTemplatePresentation = {
     ...(parameterOrder ? { parameterOrder } : {}),
+    ...(parameters ? { parameters } : {}),
     ...(groups ? { groups } : {}),
     ...(preview ? { preview } : {}),
   };
@@ -313,6 +497,76 @@ export function normalizeBuiltinProductTemplate(
     source,
     ...(presentation ? { presentation } : {}),
   });
+}
+
+export function resolveBuiltinProductTemplateParameterPresentation(
+  value: BuiltinProductTemplate,
+): readonly ResolvedProductTemplateParameterPresentation[] {
+  const template = normalizeBuiltinProductTemplate(value);
+  const presentation = template.presentation;
+  const byId = new Map(
+    template.source.source.parameters.map((parameter) => [parameter.id, parameter]),
+  );
+  const explicitOrder = presentation?.parameterOrder ?? [];
+  const explicitIds = new Set(explicitOrder);
+  const orderedIds = [
+    ...explicitOrder,
+    ...template.source.source.parameters
+      .map((parameter) => parameter.id)
+      .filter((parameterId) => !explicitIds.has(parameterId)),
+  ];
+
+  const groupByParameterId = new Map<
+    string,
+    ProductTemplatePresentationGroup
+  >();
+  for (const group of presentation?.groups ?? []) {
+    for (const parameterId of group.parameterIds) {
+      groupByParameterId.set(parameterId, group);
+    }
+  }
+
+  return deepFreeze(
+    orderedIds.map((parameterId) => {
+      const parameter = byId.get(parameterId)!;
+      const parameterPresentation = presentation?.parameters?.[parameterId];
+      const group = groupByParameterId.get(parameterId);
+      const groupTier = group?.tier ?? 'basic';
+
+      return {
+        id: parameter.id,
+        label: parameterPresentation?.label ?? parameter.label,
+        ...(parameterPresentation?.description ?? parameter.description
+          ? {
+              description:
+                parameterPresentation?.description ?? parameter.description,
+            }
+          : {}),
+        unit: parameter.unit,
+        ...(parameterPresentation?.unitLabel
+          ? { unitLabel: parameterPresentation.unitLabel }
+          : {}),
+        default: parameter.default,
+        ...(parameter.min != null ? { min: parameter.min } : {}),
+        ...(parameter.max != null ? { max: parameter.max } : {}),
+        ...(parameter.step != null ? { step: parameter.step } : {}),
+        visibility: parameterPresentation?.visibility ?? 'visible',
+        tier: parameterPresentation?.tier ?? groupTier,
+        ...(group
+          ? {
+              group: {
+                id: group.id,
+                label: group.label,
+                ...(group.description
+                  ? { description: group.description }
+                  : {}),
+                tier: groupTier,
+              },
+            }
+          : {}),
+      };
+    }),
+  );
 }
 
 export function normalizeBuiltinProductTemplateCatalog(
