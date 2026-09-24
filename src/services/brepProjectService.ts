@@ -117,6 +117,9 @@ export async function importBrepProjectConversation({
     userId,
     title: projectPackage.title,
     project: projectPackage.source.source,
+    ...(projectPackage.provenance
+      ? { provenance: projectPackage.provenance }
+      : {}),
   });
 }
 
