@@ -22,6 +22,13 @@ const artifact = createBrepProjectArtifact({
   title: 'Cabinet',
   version: 'v1',
   source: { kind: 'brep', source: phaseOneCabinetProject },
+  provenance: {
+  kind: 'template',
+  templateId: 'c1-test-fixture',
+  templateVersion: 1,
+  source: 'builtin',
+  definitionDigest: 'fnv1a64:0123456789abcdef',
+},
 });
 
 function conversationLeafUpdateResult(data: Array<{ id: string }> = []) {
@@ -89,6 +96,7 @@ describe('BRep direct source revision persistence', () => {
       parent_message_id: parentMessageId,
       metadata: {},
     });
+    expect(result.artifact.provenance).toEqual(artifact.provenance);
     expect(result.artifact.source.source.id).toBe(phaseOneCabinetProject.id);
     expect(result.artifact.source.source.resultNodeId).toBe(
       phaseOneCabinetProject.resultNodeId,
