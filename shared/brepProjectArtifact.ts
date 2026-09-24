@@ -1,6 +1,7 @@
 import type { AppUIMessage, BrepProjectArtifactData } from './chatAi.ts';
 import { normalizeBrepProject, type BrepProject } from './brepProject.ts';
 import { normalizeParametricProjectSource } from './parametricProjectSource.ts';
+import { normalizeBrepTemplateProvenance } from './brepTemplate.ts';
 
 export type BrepProjectBaselineMessageRow = {
   id: string;
@@ -28,10 +29,15 @@ function normalizeBrepArtifactData(value: unknown): BrepProjectArtifactData {
   if (source.kind !== 'brep') {
     throw new Error('BRep project artifact source must have kind brep.');
   }
+  const provenance =
+    artifact.provenance == null
+      ? undefined
+      : normalizeBrepTemplateProvenance(artifact.provenance);
   return {
     title: artifact.title.trim(),
     version: artifact.version.trim(),
     source,
+    ...(provenance ? { provenance } : {}),
   };
 }
 
