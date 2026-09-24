@@ -6,6 +6,10 @@ import {
   normalizeBrepTemplateDefinitionBody,
   normalizeBrepTemplateRef,
 } from '@shared/brepTemplate';
+import {
+  builtinBrepTemplates,
+  createBuiltinBrepTemplateRegistry,
+} from '@shared/brepTemplates';
 
 function templateBody(version = 1) {
   return {
@@ -161,5 +165,47 @@ describe('C1.1B BRep template digest and immutability', () => {
         nativeStepPath: '/tmp/not-authority.step',
       }),
     ).toBe(computeBrepTemplateDefinitionDigest(body));
+  });
+});
+
+
+describe('C1.1C built-in BRep template registry', () => {
+  it('resolves only the exact requested id/version pair', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(2),
+      templateDefinition(1),
+    ]);
+
+    expect(registry.resolve({ id: 'c1-test-fixture', version: 1 }).version).toBe(1);
+    expect(registry.resolve({ id: 'c1-test-fixture', version: 2 }).version).toBe(2);
+    expect(() =>
+      registry.resolve({ id: 'c1-test-fixture', version: 3 }),
+    ).toThrow(/not found/i);
+  });
+
+  it('lists immutable versions deterministically without selecting a latest version', () => {
+    const registry = createBuiltinBrepTemplateRegistry([
+      templateDefinition(2),
+      templateDefinition(1),
+    ]);
+
+    expect(registry.list().map(({ id, version }) => ({ id, version }))).toEqual([
+      { id: 'c1-test-fixture', version: 1 },
+      { id: 'c1-test-fixture', version: 2 },
+    ]);
+    expect(Object.isFrozen(registry)).toBe(true);
+    expect(Object.isFrozen(registry.list())).toBe(true);
+  });
+
+  it('fails closed on duplicate id/version definitions', () => {
+    const definition = templateDefinition();
+
+    expect(() =>
+      createBuiltinBrepTemplateRegistry([definition, definition]),
+    ).toThrow(/duplicate.*template version/i);
+  });
+
+  it('publishes no product template during C1.1', () => {
+    expect(builtinBrepTemplates.list()).toEqual([]);
   });
 });
