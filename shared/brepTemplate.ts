@@ -8,6 +8,7 @@ import {
 } from './brepProject.ts';
 
 export const BREP_TEMPLATE_SCHEMA_VERSION = 1 as const;
+export const BREP_TEMPLATE_DIGEST_ALGORITHM = 'fnv1a64' as const;
 
 const TEMPLATE_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
@@ -40,7 +41,8 @@ export type BrepTemplateErrorCode =
   | 'unsupported_template_schema'
   | 'invalid_template_id'
   | 'invalid_template_version'
-  | 'incompatible_brep_schema';
+  | 'incompatible_brep_schema'
+  | 'invalid_definition_digest';
 
 export class BrepTemplateError extends Error {
   constructor(
@@ -182,4 +184,78 @@ export function normalizeBrepTemplateDefinitionBody(
       brepSchemaVersion: BREP_PROJECT_SCHEMA_VERSION,
     },
   };
+}
+
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableJson(entry)).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort((left, right) =>
+    left.localeCompare(right, 'en-US'),
+  );
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(',')}}`;
+}
+
+function fnv1a64(text: string): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  const bytes = new TextEncoder().encode(text);
+  for (const byte of bytes) {
+    hash ^= BigInt(byte);
+    hash = (hash * prime) & mask;
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
+export function computeBrepTemplateDefinitionDigest(
+  value: unknown,
+): string {
+  const body = normalizeBrepTemplateDefinitionBody(value);
+  return `${BREP_TEMPLATE_DIGEST_ALGORITHM}:${fnv1a64(stableJson(body))}`;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      deepFreeze(nested);
+    }
+  }
+  return value;
+}
+
+export function normalizeBrepTemplateDefinition(
+  value: unknown,
+): Readonly<BrepTemplateDefinition> {
+  if (!isRecord(value)) {
+    throw new BrepTemplateError(
+      'invalid_template',
+      'BRep template definition must be an object.',
+    );
+  }
+
+  const body = normalizeBrepTemplateDefinitionBody(value);
+  const expectedDigest = computeBrepTemplateDefinitionDigest(body);
+  if (
+    typeof value.definitionDigest !== 'string' ||
+    value.definitionDigest !== expectedDigest
+  ) {
+    throw new BrepTemplateError(
+      'invalid_definition_digest',
+      `BRep template ${body.id}@${body.version} definitionDigest does not match normalized content.`,
+    );
+  }
+
+  return deepFreeze({
+    ...body,
+    definitionDigest: expectedDigest,
+  });
 }
