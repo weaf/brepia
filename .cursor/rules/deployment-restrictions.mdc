@@ -16,11 +16,11 @@ Do not assume that production infrastructure is absent; simply treat remote muta
 Use the repository-local CLI and the rootless Podman environment described in `AGENTS.md` and `.cursor/rules/database-workflow.mdc`:
 
 ```bash
-npx supabase start
-npx supabase status
-npx supabase db diff -f <migration_name>
-npx supabase migration up
-npx supabase gen types typescript --local > shared/database.ts
+./scripts/supabase-local.sh start
+./scripts/supabase-local.sh status
+./scripts/supabase-local.sh db diff -f <migration_name>
+./scripts/supabase-local.sh migration up
+./scripts/supabase-local.sh gen types typescript --local > shared/database.ts
 ```
 
 `./start.sh` configures the expected local environment automatically for normal application startup.
@@ -30,8 +30,8 @@ npx supabase gen types typescript --local > shared/database.ts
 Do not run these as part of the normal local workflow:
 
 ```bash
-npx supabase db push
-npx supabase db pull
+./scripts/supabase-local.sh db push
+./scripts/supabase-local.sh db pull
 supabase db push
 supabase db pull
 ```

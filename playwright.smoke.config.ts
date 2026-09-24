@@ -1,7 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = 4173;
+const port = Number(process.env.BREPIA_ACCEPTANCE_PORT ?? 4174);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error(
+    `Invalid BREPIA_ACCEPTANCE_PORT: ${process.env.BREPIA_ACCEPTANCE_PORT}`,
+  );
+}
 const baseURL = `http://127.0.0.1:${port}`;
+const smokeSupabaseUrl =
+  process.env.BREPIA_BROWSER_SMOKE_SUPABASE_URL ?? 'http://127.0.0.1:1';
 
 export default defineConfig({
   testDir: './tests',
@@ -25,11 +32,12 @@ export default defineConfig({
   reporter: [['list']],
   webServer: {
     command:
-      `VITE_SUPABASE_URL=http://127.0.0.1:54321 ` +
+      `VITE_SUPABASE_URL=${smokeSupabaseUrl} ` +
       `VITE_SUPABASE_ANON_KEY=browser-smoke-anon-key ` +
       `PCAD_DISABLE_HMR=1 npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
     url: `${baseURL}/signin`,
-    reuseExistingServer: !process.env.CI,
+    // Fail closed if the requested port is already owned by another process.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

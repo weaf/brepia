@@ -19,7 +19,8 @@
     "test:b9": "playwright test -c playwright.config.ts",
     "test": "vitest run",
     "test:browser-smoke": "playwright test -c playwright.smoke.config.ts",
-    "test:brep-gap-audit": "playwright test -c playwright.brep-product-gap.config.ts"
+    "test:brep-gap-audit": "playwright test -c playwright.brep-product-gap.config.ts",
+    "test:rls": "bash scripts/security/test-core-rls.sh"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.78",
@@ -129,7 +130,7 @@
     "postcss": "^8.5.26",
     "prettier": "^3.5.2",
     "prettier-plugin-tailwindcss": "^0.6.11",
-    "supabase": "^2.114.0",
+    "supabase": "2.114.0",
     "tailwindcss": "^3.4.19",
     "typescript": "5.8.3",
     "typescript-eslint": "^8.68.0",

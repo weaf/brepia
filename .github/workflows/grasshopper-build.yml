@@ -2,29 +2,62 @@ name: Grasshopper Build
 
 on:
   pull_request:
-    paths:
-      - 'grasshopper/**'
-      - 'shared/brepGrasshopperPackagePlan.ts'
-      - 'tests/brepGrasshopperPlugin.test.ts'
-      - 'tests/brepGrasshopperPackaging.test.ts'
-      - 'tests/brepGrasshopperPackagePlan.test.ts'
-      - '.github/workflows/grasshopper-build.yml'
   push:
     branches:
       - master
-    paths:
-      - 'grasshopper/**'
-      - 'shared/brepGrasshopperPackagePlan.ts'
-      - 'tests/brepGrasshopperPlugin.test.ts'
-      - 'tests/brepGrasshopperPackaging.test.ts'
-      - 'tests/brepGrasshopperPackagePlan.test.ts'
-      - '.github/workflows/grasshopper-build.yml'
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Grasshopper change detection
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect interoperability changes
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            mapfile -t changed_files < <(git diff --name-only "$base...$head")
+          else
+            before="${{ github.event.before }}"
+            head="${{ github.sha }}"
+            if [[ "$before" =~ ^0+$ ]]; then
+              mapfile -t changed_files < <(git diff-tree --no-commit-id --name-only -r "$head")
+            else
+              mapfile -t changed_files < <(git diff --name-only "$before..$head")
+            fi
+          fi
+
+          relevant=false
+          for path in "${changed_files[@]}"; do
+            case "$path" in
+              grasshopper/*|shared/brepGrasshopperPackagePlan.ts|tests/brepGrasshopperPlugin.test.ts|tests/brepGrasshopperPackaging.test.ts|tests/brepGrasshopperPackagePlan.test.ts|.github/workflows/grasshopper-build.yml)
+                relevant=true
+                break
+                ;;
+            esac
+          done
+
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
+          echo "Grasshopper/interoperability changes: $relevant"
+
   build:
+    name: Plugin build
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -51,6 +84,8 @@ jobs:
 
   package-build:
     name: Package build (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -72,3 +107,41 @@ jobs:
 
       - name: Build packager
         run: dotnet build grasshopper/Brepia.Grasshopper.Packager/Brepia.Grasshopper.Packager.csproj --configuration Release --no-restore --warnaserror
+
+  interoperability:
+    name: grasshopper-interoperability
+    needs:
+      - changes
+      - build
+      - package-build
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify interoperability gate
+        shell: bash
+        env:
+          RELEVANT: ${{ needs.changes.outputs.relevant }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PACKAGE_BUILD_RESULT: ${{ needs.package-build.result }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Grasshopper change detection failed: $CHANGES_RESULT" >&2
+            exit 1
+          fi
+
+          if [[ "$RELEVANT" != "true" ]]; then
+            echo "No Grasshopper/interoperability changes; expensive build jobs were skipped."
+            exit 0
+          fi
+
+          if [[ "$BUILD_RESULT" != "success" || "$PACKAGE_BUILD_RESULT" != "success" ]]; then
+            echo "Grasshopper/interoperability verification failed." >&2
+            echo "Plugin build: $BUILD_RESULT" >&2
+            echo "Package build: $PACKAGE_BUILD_RESULT" >&2
+            exit 1
+          fi
+
+          echo "Grasshopper/interoperability verification passed."

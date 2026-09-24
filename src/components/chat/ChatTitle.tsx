@@ -75,8 +75,8 @@ export function ChatTitle({
 
     updateConversation?.(
       {
-        ...conversation,
-        title: titleInput.trim(),
+        id: conversation.id,
+        patch: { title: titleInput.trim() },
       },
       {
         onSettled() {
@@ -106,8 +106,8 @@ export function ChatTitle({
 
   const handlePrivacyChange = (privacy: 'public' | 'private') => {
     updateConversation?.({
-      ...conversation,
-      privacy,
+      id: conversation.id,
+      patch: { privacy },
     });
   };
 

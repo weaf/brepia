@@ -11,6 +11,7 @@ const appBase = '/';
 const legacyAppBase = '/cadam';
 const disableHmr = process.env.PCAD_DISABLE_HMR === '1';
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim();
+const stableArtifactDir = process.env.PCAD_STABLE_ARTIFACT_DIR?.trim();
 
 function legacyBaseRedirectPlugin(): Plugin {
   return {
@@ -58,6 +59,13 @@ function supabaseProxyPlugin(): Plugin {
   return {
     name: 'supabase-proxy',
     configureServer(server) {
+      const rawTarget = process.env.VITE_SUPABASE_URL?.trim();
+      const target = rawTarget ? new URL(rawTarget) : null;
+      if (target && target.protocol !== 'http:') {
+        throw new Error(
+          'Local Supabase proxy requires an http:// VITE_SUPABASE_URL',
+        );
+      }
       const agent = new http.Agent({ keepAlive: true });
       server.middlewares.use((req, res, next) => {
         if (!req.url) return next();
@@ -75,13 +83,13 @@ function supabaseProxyPlugin(): Plugin {
         req.on('end', () => {
           const body = Buffer.concat(bodyChunks);
           const options = {
-            hostname: 'localhost',
-            port: 54321,
+            hostname: target?.hostname ?? '127.0.0.1',
+            port: Number(target?.port || 80),
             path: targetPath,
             method: req.method,
             headers: {
               ...req.headers,
-              host: 'localhost:54321',
+              host: target?.host ?? '127.0.0.1',
               connection: 'keep-alive',
             },
             agent,
@@ -226,6 +234,9 @@ export default defineConfig({
     nitro({
       baseURL: appBase,
       inlineDynamicImports: true,
+      output: stableArtifactDir
+        ? { dir: path.join(stableArtifactDir, 'nitro') }
+        : undefined,
     }),
     react(),
     sentryAuthToken

@@ -22,20 +22,20 @@ Do not use historical settings plans as schema authority when the live schema di
 3. Generate the migration with:
 
    ```bash
-   npx supabase db diff -f <migration_name>
+   ./scripts/supabase-local.sh db diff -f <migration_name>
    ```
 
 4. Review the generated migration carefully. It should reflect the intended schema delta only.
 5. Apply pending migrations locally:
 
    ```bash
-   npx supabase migration up
+   ./scripts/supabase-local.sh migration up
    ```
 
 6. Regenerate database types:
 
    ```bash
-   npx supabase gen types typescript --local > shared/database.ts
+   ./scripts/supabase-local.sh gen types typescript --local > shared/database.ts
    ```
 
 7. Run the relevant tests plus typecheck/lint/build.

@@ -40,3 +40,28 @@ CREATE OR REPLACE FUNCTION public.set_conversation_suggestions(
   )
   WHERE id = p_conversation_id;
 $$;
+
+
+-- Atomic metadata/settings patch used by generic conversation UI mutations.
+-- current_message_leaf_id is deliberately not accepted here: leaf authority
+-- belongs to message/revision lifecycle operations.
+CREATE OR REPLACE FUNCTION public.patch_conversation_metadata(
+  p_conversation_id uuid,
+  p_title text DEFAULT NULL,
+  p_privacy public.privacy_type DEFAULT NULL,
+  p_settings_patch jsonb DEFAULT '{}'::jsonb
+) RETURNS SETOF public.conversations
+LANGUAGE sql
+VOLATILE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  UPDATE public.conversations
+  SET
+    title = COALESCE(p_title, title),
+    privacy = COALESCE(p_privacy, privacy),
+    settings = COALESCE(settings, '{}'::jsonb) ||
+      COALESCE(p_settings_patch, '{}'::jsonb)
+  WHERE id = p_conversation_id
+  RETURNING *;
+$$;

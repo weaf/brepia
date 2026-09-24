@@ -190,12 +190,7 @@ export const useMessagesQuery = () => {
       if (shouldPollForPendingAssistant(query.state.data)) {
         return PENDING_ASSISTANT_POLL_MS;
       }
-      if (
-        isRecentPendingBrepCreation(
-          conversation,
-          query.state.data ?? [],
-        )
-      ) {
+      if (isRecentPendingBrepCreation(conversation, query.state.data ?? [])) {
         return PENDING_ASSISTANT_POLL_MS;
       }
       return false;
@@ -311,10 +306,8 @@ export function useChangeRatingMutation({
  */
 export function useRestoreMessageMutation({
   conversation,
-  updateConversationAsync,
 }: {
   conversation: Conversation;
-  updateConversationAsync?: (conversation: Conversation) => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -338,13 +331,6 @@ export function useRestoreMessageMutation({
         rating: 0,
       });
       if (error) throw error;
-
-      if (updateConversationAsync) {
-        await updateConversationAsync({
-          ...conversation,
-          current_message_leaf_id: newId,
-        });
-      }
 
       // Pull the freshly inserted row into the messages query so the
       // tree merge sees it as a sibling immediately.

@@ -31,11 +31,17 @@ const brepProjectServiceSource = fs.readFileSync(
   'utf8',
 );
 const brepWorkspaceSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepProjectWorkspacePanel.tsx', import.meta.url),
+  new URL(
+    '../src/components/brep/BrepProjectWorkspacePanel.tsx',
+    import.meta.url,
+  ),
   'utf8',
 );
 const brepGhxImportSource = fs.readFileSync(
-  new URL('../src/components/brep/BrepGrasshopperImportButton.tsx', import.meta.url),
+  new URL(
+    '../src/components/brep/BrepGrasshopperImportButton.tsx',
+    import.meta.url,
+  ),
   'utf8',
 );
 const brepViewSource = fs.readFileSync(
@@ -54,7 +60,7 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /<ConversationView/);
     assert.match(
       brepViewSource,
-      /previewSlot={<BrepProjectWorkspacePanel readOnly={viewingHistorical} \/>}/,
+      /previewSlot=\{\s*<BrepProjectWorkspacePanel readOnly=\{viewingHistorical\} \/>\s*\}/,
     );
     assert.match(
       brepViewSource,
@@ -93,10 +99,7 @@ describe('BRep product chat client boundary', () => {
       brepViewSource,
       /messageId === activeSource\?\.messageId \? null : messageId/,
     );
-    assert.match(
-      brepViewSource,
-      /onViewRevision={handleViewRevision}/,
-    );
+    assert.match(brepViewSource, /onViewRevision={handleViewRevision}/);
     assert.match(
       brepViewSource,
       /mobilePreviewKey={`brep:\$\{displayedSource\.messageId\}`}/,
@@ -241,10 +244,7 @@ describe('BRep product chat client boundary', () => {
     assert.match(brepViewSource, /hiddenBrepRevisionIds/);
     assert.match(brepViewSource, /removeBrepProjectRevisionFromHistory/);
     assert.match(brepProjectServiceSource, /brepHiddenRevisionIds/);
-    assert.match(
-      brepProjectServiceSource,
-      /not a physical message DELETE/,
-    );
+    assert.match(brepProjectServiceSource, /not a physical message DELETE/);
     assert.doesNotMatch(
       brepProjectServiceSource,
       /from\('messages'\)\s*\.delete\(/,

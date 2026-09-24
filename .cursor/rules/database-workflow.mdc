@@ -23,11 +23,11 @@ version: 1.2.0
 
 The Brepia local stack is managed by the repository-local Supabase CLI through `npx`.
 
-A previous note incorrectly referred to `NOx`; workstation inspection found no such lifecycle manager. The active containers are the normal Supabase CLI/Compose project `cadam`.
+A previous note incorrectly referred to `NOx`; workstation inspection found no such lifecycle manager. The canonical local Supabase CLI/Compose project id is `brepia`, with checkout-local host ports owned by `scripts/supabase-local.sh`.
 
 - Do NOT assume a globally installed `supabase` binary exists.
-- Use `npx supabase ...` from the repository.
-- `./start.sh` configures the rootless Podman socket/shim and automatically runs `npx supabase start` if the local stack is not already running.
+- Use `./scripts/supabase-local.sh ...` from the repository.
+- `./start.sh` configures the rootless Podman socket/shim and automatically runs `./scripts/supabase-local.sh start` if the local stack is not already running.
 - Explicit `start`, `status`, and `stop` commands must use the same rootless Podman environment/shim as `start.sh` on this workstation.
 
 ## Migration Generation Process
@@ -39,7 +39,7 @@ For normal Brepia startup:
 ./start.sh
 ```
 
-`start.sh` starts the local Supabase stack through `npx supabase start` when needed.
+`start.sh` starts the local Supabase stack through `./scripts/supabase-local.sh start` when needed.
 
 For explicit CLI lifecycle work, configure the same Podman environment first:
 
@@ -48,9 +48,9 @@ systemctl --user enable podman.socket --now
 export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
 export PATH="$PWD/scripts/podman:$PATH"
 
-npx supabase status
-# npx supabase start
-# npx supabase stop
+./scripts/supabase-local.sh status
+# ./scripts/supabase-local.sh start
+# ./scripts/supabase-local.sh stop
 ```
 
 ### Step 2: Edit the declarative schema
@@ -58,7 +58,7 @@ Modify `supabase/schemas/` only.
 
 ### Step 3: Generate the migration
 ```bash
-npx supabase db diff -f <migration_name>
+./scripts/supabase-local.sh db diff -f <migration_name>
 ```
 
 - Replace `<migration_name>` with a descriptive name, for example `add_user_preferences` or `create_new_table`.
@@ -66,12 +66,12 @@ npx supabase db diff -f <migration_name>
 
 ### Step 4: Apply pending local migrations
 ```bash
-npx supabase migration up
+./scripts/supabase-local.sh migration up
 ```
 
 ### Step 5: Regenerate database types
 ```bash
-npx supabase gen types typescript --local > shared/database.ts
+./scripts/supabase-local.sh gen types typescript --local > shared/database.ts
 ```
 
 Never hand-edit `shared/database.ts`.
@@ -79,35 +79,35 @@ Never hand-edit `shared/database.ts`.
 ## Local Development Only
 
 ### CRITICAL: Never Push or Pull the Remote Database in the Normal Workflow
-- NEVER use `supabase db push` / `npx supabase db push`.
-- NEVER use `supabase db pull` / `npx supabase db pull`.
+- NEVER use `supabase db push` / `./scripts/supabase-local.sh db push`.
+- NEVER use `supabase db pull` / `./scripts/supabase-local.sh db pull`.
 - Test migrations against the local stack.
 - Remote database changes require an explicit, separately approved deployment workflow.
 
 ## Workflow Summary
 
-1. **Lifecycle**: ensure the rootless Podman socket is available and the local `cadam` stack is running; `./start.sh` handles this for normal app startup.
+1. **Lifecycle**: ensure the rootless Podman socket is available and the local `brepia` stack is running; `./start.sh` handles this for normal app startup.
 2. **Edit Schema**: modify `supabase/schemas/`.
-3. **Generate Migration**: `npx supabase db diff -f <name>`.
+3. **Generate Migration**: `./scripts/supabase-local.sh db diff -f <name>`.
 4. **Review Migration**: inspect the generated SQL.
-5. **Apply Migration**: `npx supabase migration up`.
-6. **Update Types**: `npx supabase gen types typescript --local > shared/database.ts`.
+5. **Apply Migration**: `./scripts/supabase-local.sh migration up`.
+6. **Update Types**: `./scripts/supabase-local.sh gen types typescript --local > shared/database.ts`.
 7. **Regression Gate**: run the relevant tests/typecheck/lint/build before declaring the database change complete.
 
 ## Common Commands Reference
 
 ```bash
 # Repository-local Supabase CLI
-npx supabase start
-npx supabase status
-npx supabase stop
-npx supabase db diff -f <migration_name>
-npx supabase migration up
-npx supabase gen types typescript --local > shared/database.ts
+./scripts/supabase-local.sh start
+./scripts/supabase-local.sh status
+./scripts/supabase-local.sh stop
+./scripts/supabase-local.sh db diff -f <migration_name>
+./scripts/supabase-local.sh migration up
+./scripts/supabase-local.sh gen types typescript --local > shared/database.ts
 
 # NEVER use these in the normal local workflow:
-# npx supabase db push
-# npx supabase db pull
+# ./scripts/supabase-local.sh db push
+# ./scripts/supabase-local.sh db pull
 ```
 
 On the current rootless Podman workstation, lifecycle/status commands need the `DOCKER_HOST` and `scripts/podman` compatibility environment shown above. `./start.sh` configures that environment automatically.

@@ -195,4 +195,4 @@ fi
 
 section "Interpretation"
 echo "This helper is read-only. It does not start/stop Supabase or Podman and does not print Supabase credential values."
-echo "Canonical lifecycle: repository-local npx supabase with the rootless Podman environment configured by ./start.sh."
+echo "Canonical lifecycle: checkout-aware ./scripts/supabase-local.sh with the rootless Podman environment configured by ./start.sh."

@@ -54,12 +54,12 @@ The local Brepia Supabase stack is owned by the repository-local Supabase CLI, i
 
 Current workflow:
 
-- a globally installed `supabase` binary is not expected; use `npx supabase ...` from the repository;
-- `./start.sh` enables the rootless Podman socket, configures the repository Podman compatibility shim, checks the local stack and runs `npx supabase start` automatically when the stack is not already running;
-- explicit lifecycle commands are `npx supabase start`, `npx supabase status`, and `npx supabase stop` after configuring the same rootless Podman environment used by `start.sh`;
-- database changes are schema-first: edit `supabase/schemas/`, generate a migration with `npx supabase db diff -f <migration_name>`, review it, apply it locally, then regenerate types;
-- regenerate database types with `npx supabase gen types typescript --local > shared/database.ts`;
-- never use `supabase db push` / `npx supabase db push` or `supabase db pull` / `npx supabase db pull` for the normal local workflow;
+- a globally installed `supabase` binary is not expected; use `./scripts/supabase-local.sh ...` from the repository;
+- `./start.sh` enables the rootless Podman socket, configures the repository Podman compatibility shim, checks the local stack and runs `./scripts/supabase-local.sh start` automatically when the stack is not already running;
+- explicit lifecycle commands are `./scripts/supabase-local.sh start`, `./scripts/supabase-local.sh status`, and `./scripts/supabase-local.sh stop` after configuring the same rootless Podman environment used by `start.sh`;
+- database changes are schema-first: edit `supabase/schemas/`, generate a migration with `./scripts/supabase-local.sh db diff -f <migration_name>`, review it, apply it locally, then regenerate types;
+- regenerate database types with `./scripts/supabase-local.sh gen types typescript --local > shared/database.ts`;
+- never use `supabase db push` / `./scripts/supabase-local.sh db push` or `supabase db pull` / `./scripts/supabase-local.sh db pull` for the normal local workflow;
 - never hand-edit `shared/database.ts`.
 
 `docs/local_supabase_lifecycle.md` is the canonical local-operation reference. `scripts/inspect-local-supabase-lifecycle.sh` is a read-only troubleshooting inventory.

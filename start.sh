@@ -4,6 +4,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Hydrate checkout-local Supabase host ports before any CLI command reads config.toml.
+source "${SCRIPT_DIR}/scripts/supabase-local.sh"
+
 # Raise file descriptor limit (Vite watcher needs it in explicit HMR mode)
 ulimit -n 65536 2>/dev/null || true
 
@@ -46,26 +49,30 @@ curl -sf -m 2 "${LLAMA_HEALTH}" > /dev/null 2>&1 && echo "llama-swap: up" || ech
 export PATH="${SCRIPT_DIR}/scripts/podman:${PATH}"
 
 echo "=== Checking Supabase ==="
-if npx supabase status > /dev/null 2>&1; then
+brepia_ensure_supabase_ports
+if [ "${BREPIA_SUPABASE_PORT_LAYOUT_CREATED:-0}" = "1" ]; then
+  brepia_migrate_legacy_port_layout
+fi
+if brepia_supabase status > /dev/null 2>&1; then
   echo "Supabase: up"
 else
-  echo "Supabase: local stack is not running - starting via repository-local CLI"
-  if ! npx supabase start; then
-    echo "Supabase: ERROR - npx supabase start failed"
+  echo "Supabase: local stack is not running - starting on checkout-local ports"
+  if ! brepia_supabase start; then
+    echo "Supabase: ERROR - local start failed"
     exit 1
   fi
-  if ! npx supabase status > /dev/null 2>&1; then
+  if ! brepia_supabase status > /dev/null 2>&1; then
     echo "Supabase: ERROR - local stack did not become available after start"
     exit 1
   fi
-  echo "Supabase: up (started via npx)"
+  echo "Supabase: up (checkout-local ports)"
 fi
 
 # Make the running local Supabase credentials available to the TanStack/Vite
 # server process. Recent Supabase CLI pretty output shows publishable/secret
 # keys, while `status -o env` still provides the legacy ANON_KEY and
 # SERVICE_ROLE_KEY names used by this app. Never print these values here.
-SUPABASE_STATUS_ENV="$(npx supabase status -o env 2>/dev/null || true)"
+SUPABASE_STATUS_ENV="$(brepia_supabase_status_env 2>/dev/null || true)"
 supabase_env_value() {
   printf '%s\n' "${SUPABASE_STATUS_ENV}" | awk -F= -v wanted="$1" '
     $1 == wanted {
@@ -185,6 +192,8 @@ server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, () => {
 NODE
 }
 
+STABLE_ARTIFACT_DIR=""
+
 cleanup_opencode() {
   if [ -n "${OPENCODE_CHILD_PID:-}" ] && kill -0 "${OPENCODE_CHILD_PID}" 2>/dev/null; then
     echo "Stopping pCAD OpenCode server (pid ${OPENCODE_CHILD_PID})..."
@@ -192,7 +201,14 @@ cleanup_opencode() {
     wait "${OPENCODE_CHILD_PID}" 2>/dev/null || true
   fi
 }
-trap cleanup_opencode EXIT
+cleanup_launcher() {
+  cleanup_opencode
+  if [ -n "${STABLE_ARTIFACT_DIR:-}" ] && [ -d "${STABLE_ARTIFACT_DIR}" ]; then
+    rm -rf -- "${STABLE_ARTIFACT_DIR}"
+  fi
+}
+
+trap cleanup_launcher EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -276,6 +292,9 @@ if [ "${PCAD_ENABLE_HMR:-0}" = "1" ]; then
 else
   echo "=== Building production-like stable runtime ==="
   export VITE_ENABLE_LIFECYCLE_DEBUG="${VITE_ENABLE_LIFECYCLE_DEBUG:-1}"
+  STABLE_ARTIFACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/brepia-stable-artifact.XXXXXX")"
+  export PCAD_STABLE_ARTIFACT_DIR="${STABLE_ARTIFACT_DIR}"
+  echo "Stable runtime artifact: isolated"
   npm run build
 
   if [ -z "${PCAD_STABLE_APP_PORT:-}" ]; then

@@ -340,14 +340,8 @@ function CreativeAgentSelector({
     // do not depend on catalog ordering.
     if (conversation.id && updateConversation) {
       updateConversation({
-        ...conversation,
-        settings: {
-          ...(typeof conversation.settings === 'object' &&
-          conversation.settings !== null
-            ? conversation.settings
-            : {}),
-          creativeAgentModel: preferred,
-        },
+        id: conversation.id,
+        patch: { settings: { creativeAgentModel: preferred } },
       });
     }
   }, [agentModels, conversation, pinnedAgentModel, updateConversation]);
@@ -358,14 +352,8 @@ function CreativeAgentSelector({
 
     if (!conversation.id || !updateConversation) return;
     updateConversation({
-      ...conversation,
-      settings: {
-        ...(typeof conversation.settings === 'object' &&
-        conversation.settings !== null
-          ? conversation.settings
-          : {}),
-        creativeAgentModel: modelId,
-      },
+      id: conversation.id,
+      patch: { settings: { creativeAgentModel: modelId } },
     });
   };
 

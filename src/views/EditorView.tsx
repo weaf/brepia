@@ -36,6 +36,7 @@ import {
   useChangeRatingMutation,
   useMessagesQuery,
 } from '@/services/messageService';
+import { useConversationMutations } from '@/services/conversationMutations';
 import type { DxfExporter } from '@/utils/downloadUtils';
 import type { AppUIMessage } from '@shared/chatAi';
 import {
@@ -52,7 +53,7 @@ import type {
   Parameter,
   ParametricArtifact,
 } from '@shared/types';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { Share } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -71,7 +72,6 @@ export default function EditorView() {
     from: '/_layout/_auth/editor/$id',
   });
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [images, setImages] = useState<MessageItem[]>([]);
   const [mesh, setMesh] = useState<MessageItem | null>(null);
@@ -93,43 +93,11 @@ export default function EditorView() {
     },
   });
 
-  const { mutate: updateConversation, mutateAsync: updateConversationAsync } =
-    useMutation({
-      mutationFn: async (conversation: Conversation) => {
-        const { data, error } = await supabase
-          .from('conversations')
-          .update(conversation)
-          .eq('id', conversation.id)
-          .select()
-          .single()
-          .overrideTypes<Conversation>();
-        if (error) throw error;
-        return data;
-      },
-      onMutate(conversation) {
-        const oldConversation = queryClient.getQueryData<Conversation>([
-          'conversation',
-          conversation.id,
-        ]);
-        queryClient.setQueryData(
-          ['conversation', conversation.id],
-          conversation,
-        );
-        return { oldConversation };
-      },
-      onSuccess() {
-        queryClient.invalidateQueries({
-          queryKey: ['conversation', conversationId],
-        });
-        queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      },
-      onError(_error, conversation, context) {
-        queryClient.setQueryData(
-          ['conversation', conversation.id],
-          context?.oldConversation,
-        );
-      },
-    });
+  const {
+    updateConversation,
+    updateConversationAsync,
+    setConversationLeafAsync,
+  } = useConversationMutations();
 
   useEffect(() => {
     if (!conversationId) navigate({ to: '/' });
@@ -154,7 +122,12 @@ export default function EditorView() {
 
   return (
     <ConversationContext.Provider
-      value={{ conversation, updateConversation, updateConversationAsync }}
+      value={{
+        conversation,
+        updateConversation,
+        updateConversationAsync,
+        setConversationLeafAsync,
+      }}
     >
       <SelectedItemsContext.Provider
         value={{ images, setImages, mesh, setMesh }}
@@ -187,7 +160,7 @@ type ActivePreview =
  * DB-vs-SDK ordering explicit: parent persists, then child streams.
  */
 function ConversationEditor() {
-  const { conversation, updateConversation, updateConversationAsync } =
+  const { conversation, updateConversation, setConversationLeafAsync } =
     useConversation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -209,14 +182,8 @@ function ConversationEditor() {
     (newMode: 'cli' | 'streaming') => {
       setExecutionMode(newMode);
       updateConversation?.({
-        ...conversation,
-        settings: {
-          ...(typeof conversation.settings === 'object' &&
-          conversation.settings !== null
-            ? conversation.settings
-            : {}),
-          openCodeExecutionMode: newMode,
-        },
+        id: conversation.id,
+        patch: { settings: { openCodeExecutionMode: newMode } },
       });
     },
     [conversation, updateConversation],
@@ -282,13 +249,8 @@ function ConversationEditor() {
     (nextModel: Model) => {
       setModel(nextModel);
       updateConversation?.({
-        ...conversation,
-        settings: {
-          ...(typeof conversation.settings === 'object'
-            ? conversation.settings
-            : {}),
-          model: nextModel,
-        },
+        id: conversation.id,
+        patch: { settings: { model: nextModel } },
       });
     },
     [conversation, updateConversation],
@@ -329,12 +291,12 @@ function ConversationEditor() {
     async (assistant: ChatMessage) => {
       const parentId = assistant.parent_message_id;
       if (!parentId) return;
-      await updateConversationAsync?.({
-        ...conversation,
-        current_message_leaf_id: parentId,
+      await setConversationLeafAsync?.({
+        id: conversation.id,
+        leafId: parentId,
       });
     },
-    [conversation, updateConversationAsync],
+    [conversation.id, setConversationLeafAsync],
   );
 
   const handleEdit = useCallback(
@@ -425,12 +387,12 @@ function ConversationEditor() {
 
   const handleSelectLeaf = useCallback(
     async (messageId: string) => {
-      await updateConversationAsync?.({
-        ...conversation,
-        current_message_leaf_id: messageId,
+      await setConversationLeafAsync?.({
+        id: conversation.id,
+        leafId: messageId,
       });
     },
-    [conversation, updateConversationAsync],
+    [conversation.id, setConversationLeafAsync],
   );
 
   const handleToolOutput = useCallback(
@@ -714,7 +676,10 @@ function ConversationEditor() {
 
   const updatePrivacy = useCallback(
     (privacy: 'public' | 'private') => {
-      updateConversation?.({ ...conversation, privacy });
+      updateConversation?.({
+        id: conversation.id,
+        patch: { privacy },
+      });
     },
     [conversation, updateConversation],
   );

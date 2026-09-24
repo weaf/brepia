@@ -7,13 +7,8 @@ export function useModelChange() {
   const handleModelChange = (model: Model) => {
     if (!updateConversation) return;
     updateConversation({
-      ...conversation,
-      settings: {
-        ...(typeof conversation.settings === 'object'
-          ? conversation.settings
-          : {}),
-        model: model,
-      },
+      id: conversation.id,
+      patch: { settings: { model } },
     });
   };
 
