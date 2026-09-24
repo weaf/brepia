@@ -1,6 +1,7 @@
 import type { AppUIMessage, BrepProjectArtifactData } from './chatAi.ts';
 import { normalizeBrepProject, type BrepProject } from './brepProject.ts';
 import { normalizeParametricProjectSource } from './parametricProjectSource.ts';
+import type { ProjectOrigin } from './projectOrigin.ts';
 
 export type BrepProjectBaselineMessageRow = {
   id: string;
@@ -98,11 +99,13 @@ export function buildBrepProjectBaselineMessages({
   userMessageId,
   assistantMessageId,
   artifact,
+  projectCreation,
 }: {
   conversationId: string;
   userMessageId: string;
   assistantMessageId: string;
   artifact: BrepProjectArtifactData;
+  projectCreation?: ProjectOrigin;
 }): [BrepProjectBaselineMessageRow, BrepProjectBaselineMessageRow] {
   return [
     {
@@ -123,7 +126,7 @@ export function buildBrepProjectBaselineMessages({
       conversation_id: conversationId,
       role: 'assistant',
       parts: [{ type: 'data-brep-project', data: artifact }],
-      metadata: {},
+      metadata: projectCreation ? { projectCreation } : {},
       parent_message_id: userMessageId,
     },
   ];
