@@ -8,21 +8,35 @@ import {
 import type { BrepProjectArtifactData } from '@shared/chatAi';
 import type { BrepProject } from '@shared/brepProject';
 import type { BrepProjectPackage } from '@shared/brepProjectPackage';
+import {
+  createBrepTemplateProvenance,
+  type BrepTemplateProvenance,
+  type BrepTemplateRef,
+} from '@shared/brepTemplate';
+import {
+  builtinBrepTemplates,
+  instantiateBrepTemplateDefinition,
+  type BuiltinBrepTemplateRegistry,
+  type BrepTemplateInstantiationOptions,
+} from '@shared/brepTemplates';
 
 export async function createBrepProjectConversation({
   userId,
   title,
   project,
+  provenance,
 }: {
   userId: string;
   title: string;
   project: BrepProject;
+  provenance?: BrepTemplateProvenance;
 }): Promise<string> {
   const conversationId = crypto.randomUUID();
   const artifact = createBrepProjectArtifact({
     title,
     version: 'v1',
     source: { kind: 'brep', source: project },
+    ...(provenance ? { provenance } : {}),
   });
   const { error: conversationError } = await supabase
     .from('conversations')
@@ -65,6 +79,31 @@ export async function createBrepProjectConversation({
     .eq('user_id', userId);
   if (leafError) throw leafError;
   return conversationId;
+}
+
+
+export async function createBrepProjectConversationFromTemplate({
+  userId,
+  templateRef,
+  registry = builtinBrepTemplates,
+  instantiationOptions,
+}: {
+  userId: string;
+  templateRef: BrepTemplateRef;
+  registry?: BuiltinBrepTemplateRegistry;
+  instantiationOptions?: BrepTemplateInstantiationOptions;
+}): Promise<string> {
+  const definition = registry.resolve(templateRef);
+  const project = instantiateBrepTemplateDefinition(
+    definition,
+    instantiationOptions,
+  );
+  return createBrepProjectConversation({
+    userId,
+    title: definition.name,
+    project,
+    provenance: createBrepTemplateProvenance(definition),
+  });
 }
 
 export async function importBrepProjectConversation({
