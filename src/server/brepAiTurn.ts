@@ -216,6 +216,10 @@ export function finalizeBrepAiAssistantParts({
     title: finalInput.title,
     version: finalInput.version,
     source: { kind: 'brep', source: project },
+    ...(!isBrepAiCreationRoute(activeBrepSource) &&
+    activeBrepSource.artifact.provenance
+      ? { provenance: activeBrepSource.artifact.provenance }
+      : {}),
   });
   const withoutPriorBrepData = parts.filter(
     (part) => part.type !== 'data-brep-project',
