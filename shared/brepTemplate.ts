@@ -36,13 +36,22 @@ export type BrepTemplateDefinition = BrepTemplateDefinitionBody & {
   definitionDigest: string;
 };
 
+export type BrepTemplateProvenance = {
+  kind: 'template';
+  templateId: string;
+  templateVersion: number;
+  source: 'builtin';
+  definitionDigest: string;
+};
+
 export type BrepTemplateErrorCode =
   | 'invalid_template'
   | 'unsupported_template_schema'
   | 'invalid_template_id'
   | 'invalid_template_version'
   | 'incompatible_brep_schema'
-  | 'invalid_definition_digest';
+  | 'invalid_definition_digest'
+  | 'invalid_template_provenance';
 
 export class BrepTemplateError extends Error {
   constructor(
@@ -112,6 +121,51 @@ export function normalizeBrepTemplateRef(value: unknown): BrepTemplateRef {
     id: normalizeTemplateId(value.id),
     version: normalizeTemplateVersion(value.version),
   };
+}
+
+export function normalizeBrepTemplateProvenance(
+  value: unknown,
+): BrepTemplateProvenance {
+  if (!isRecord(value) || value.kind !== 'template' || value.source !== 'builtin') {
+    throw new BrepTemplateError(
+      'invalid_template_provenance',
+      'BRep template provenance must describe a built-in template.',
+    );
+  }
+
+  const ref = normalizeBrepTemplateRef({
+    id: value.templateId,
+    version: value.templateVersion,
+  });
+  if (
+    typeof value.definitionDigest !== 'string' ||
+    !/^fnv1a64:[a-f0-9]{16}$/.test(value.definitionDigest)
+  ) {
+    throw new BrepTemplateError(
+      'invalid_template_provenance',
+      'BRep template provenance requires a valid definition digest.',
+    );
+  }
+
+  return {
+    kind: 'template',
+    templateId: ref.id,
+    templateVersion: ref.version,
+    source: 'builtin',
+    definitionDigest: value.definitionDigest,
+  };
+}
+
+export function createBrepTemplateProvenance(
+  definition: Readonly<BrepTemplateDefinition>,
+): BrepTemplateProvenance {
+  return normalizeBrepTemplateProvenance({
+    kind: 'template',
+    templateId: definition.id,
+    templateVersion: definition.version,
+    source: 'builtin',
+    definitionDigest: definition.definitionDigest,
+  });
 }
 
 export function normalizeBrepTemplateDefinitionBody(
