@@ -2,7 +2,7 @@
 
 Date: 2026-09-24
 
-Status: DESIGN RECONCILED — NO IMPLEMENTATION YET
+Status: IMPLEMENTATION IN PROGRESS — C1.1 COMPLETE; C1.2 NEXT
 
 Repository: `weaf/brepia`
 
@@ -326,6 +326,8 @@ Do not turn `shared/brepSamples.ts` into the long-term product-template registry
 ## Recommended C1 implementation slices
 
 ### C1.1 — Template contract and immutable registry
+
+Status: COMPLETE. See `docs/brepia_c1_1_template_contract_registry_closeout_2026-09-24.md`.
 
 - add template envelope/types;
 - add normalization;
