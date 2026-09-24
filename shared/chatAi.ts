@@ -19,6 +19,7 @@ import {
   type ParametricProjectSource,
   type ParametricProjectSourceInput,
 } from './parametricProjectSource.ts';
+import type { ProjectOrigin } from './projectOrigin.ts';
 
 export const createMeshInputSchema = z.object({
   text: z.string().optional(),
@@ -246,6 +247,8 @@ export type AppUIMessage = UIMessage<
      * UI-only metadata: the complete project snapshot remains in the normal
      * build_parametric_model tool input and is not duplicated here. */
     artifactOrigin?: ImportedArtifactOrigin;
+    /** Immutable creation provenance for a BRep project baseline revision. */
+    projectCreation?: ProjectOrigin;
     // OpenSCAD entrypoint baseline used by parameter controls for Reset /
     // slider-home / auto-range semantics. It is captured lazily before the
     // first parameter-control edit and explicitly rebased whenever the user
