@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BREP_TEMPLATE_SCHEMA_VERSION,
+  computeBrepTemplateDefinitionDigest,
+  normalizeBrepTemplateDefinition,
   normalizeBrepTemplateDefinitionBody,
   normalizeBrepTemplateRef,
 } from '@shared/brepTemplate';
@@ -50,6 +52,14 @@ function templateBody(version = 1) {
       brepSchemaVersion: 1,
     },
   } as const;
+}
+
+function templateDefinition(version = 1) {
+  const body = templateBody(version);
+  return {
+    ...body,
+    definitionDigest: computeBrepTemplateDefinitionDigest(body),
+  };
 }
 
 describe('C1.1A BRep template contract', () => {
@@ -105,5 +115,51 @@ describe('C1.1A BRep template contract', () => {
 
     expect(normalized).not.toHaveProperty('previewMesh');
     expect(normalized).not.toHaveProperty('nativeStepPath');
+  });
+});
+
+describe('C1.1B BRep template digest and immutability', () => {
+  it('computes the digest from normalized template content', () => {
+    const body = templateBody();
+    const normalizedBody = normalizeBrepTemplateDefinitionBody(body);
+
+    expect(computeBrepTemplateDefinitionDigest(body)).toBe(
+      computeBrepTemplateDefinitionDigest(normalizedBody),
+    );
+    expect(computeBrepTemplateDefinitionDigest(body)).toMatch(
+      /^fnv1a64:[a-f0-9]{16}$/,
+    );
+  });
+
+  it('accepts a matching digest and deeply freezes the normalized definition', () => {
+    const definition = normalizeBrepTemplateDefinition(templateDefinition());
+
+    expect(Object.isFrozen(definition)).toBe(true);
+    expect(Object.isFrozen(definition.source)).toBe(true);
+    expect(Object.isFrozen(definition.source.parameters)).toBe(true);
+    expect(Object.isFrozen(definition.source.nodes)).toBe(true);
+  });
+
+  it('rejects content drift under an unchanged immutable version digest', () => {
+    const definition = templateDefinition();
+
+    expect(() =>
+      normalizeBrepTemplateDefinition({
+        ...definition,
+        description: 'Changed content under the same immutable template version.',
+      }),
+    ).toThrow(/definitionDigest does not match/i);
+  });
+
+  it('does not let unrelated non-authoritative fields change the digest', () => {
+    const body = templateBody();
+
+    expect(
+      computeBrepTemplateDefinitionDigest({
+        ...body,
+        previewMesh: { positions: [1, 2, 3] },
+        nativeStepPath: '/tmp/not-authority.step',
+      }),
+    ).toBe(computeBrepTemplateDefinitionDigest(body));
   });
 });
