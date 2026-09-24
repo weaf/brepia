@@ -66,6 +66,7 @@ import {
   downloadSTEPFile,
 } from '@/utils/downloadUtils';
 import type { BrepNode, BrepProject } from '@shared/brepProject';
+import type { BrepTemplateProvenance } from '@shared/brepTemplate';
 import { replaceExistingBrepProjectNode } from '@shared/brepProjectEditing';
 import {
   createBrepProjectPackage,
@@ -155,6 +156,7 @@ export function BrepProjectEditorProvider({
   project,
   conversationId,
   packageTitle,
+  packageProvenance,
   revisions,
   activeRevisionId,
   sourceEditingDisabled = false,
@@ -169,6 +171,7 @@ export function BrepProjectEditorProvider({
   project: BrepProject;
   conversationId?: string;
   packageTitle?: string;
+  packageProvenance?: BrepTemplateProvenance;
   revisions: BrepEditorRevision[];
   activeRevisionId?: string;
   sourceEditingDisabled?: boolean;
@@ -479,6 +482,7 @@ export function BrepProjectEditorProvider({
       createBrepProjectPackage({
         title,
         source: { kind: 'brep', source: project },
+        ...(packageProvenance ? { provenance: packageProvenance } : {}),
       }),
     );
     const url = URL.createObjectURL(
@@ -489,7 +493,7 @@ export function BrepProjectEditorProvider({
     anchor.download = `${title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'brep-project'}.brepia-brep.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [packageTitle, project]);
+  }, [packageProvenance, packageTitle, project]);
 
   const exportGrasshopperGhx = useCallback(async () => {
     if (!activeRevisionId) {
