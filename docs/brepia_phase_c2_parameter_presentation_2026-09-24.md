@@ -2,7 +2,7 @@
 
 Date: 2026-09-24
 
-Status: IMPLEMENTED; acceptance verification pending.
+Status: COMPLETE.
 
 Branch: `feature/phase-c2-parameter-presentation`
 
@@ -155,3 +155,34 @@ C2 is complete when tests prove:
 - unknown parameter references fail closed;
 - a parameter cannot be assigned to multiple groups;
 - existing C1 template/project semantics remain green under the full test suite.
+
+
+## Final verification and closeout
+
+Accepted implementation checkpoint before this closeout update:
+
+`2b8b6e9ed836175b660d7f566c95815d00e0483b`
+
+Dquark verification:
+
+- `diff-check` — PASS
+  - run `36048277145`
+- `typecheck + test` — PASS
+  - run `36048281872`
+- Vitest:
+  - 252 test files passed
+  - 1418 tests passed
+
+The C2 acceptance contract is therefore satisfied.
+
+## Closeout decision
+
+Phase C2 is complete.
+
+The accepted boundary is deliberately narrower than the roadmap's candidate list: presentation metadata does not carry recommended `min`, `max` or `default` values in this phase. Those fields remain canonical BRep parameter authority only.
+
+Proceed next to:
+
+**C3 — template preview and discovery**
+
+C3 may consume the normalized presentation view model introduced here but must not move geometry, validation, parameter-value or revision authority into the product-discovery layer.
