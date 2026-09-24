@@ -13,6 +13,7 @@ import {
   type OpenScadProject,
   type OpenScadProjectAsset,
 } from './openScadProject.ts';
+import type { BrepTemplateProvenance } from './brepTemplate.ts';
 import type { MeshFileType, Model } from './types.ts';
 import {
   normalizeParametricProjectSource,
@@ -202,6 +203,8 @@ export type BrepProjectArtifactData = {
   title: string;
   version: string;
   source: Extract<ParametricProjectSource, { kind: 'brep' }>;
+  /** Immutable creation provenance. Metadata only; never geometry authority. */
+  provenance?: BrepTemplateProvenance;
 };
 
 export const meshContextDataSchema = z.object({
