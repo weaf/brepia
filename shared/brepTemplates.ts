@@ -22,7 +22,7 @@ export type BrepTemplateInstantiationOptions = Readonly<{
 }>;
 
 function defaultProjectIdFactory(): string {
-  return `project_${crypto.randomUUID().replaceAll('-', '_')}`;
+  return `project_${crypto.randomUUID().split('-').join('_')}`;
 }
 
 export function instantiateBrepTemplateDefinition(
