@@ -19,6 +19,13 @@ function activeSource(): BrepAiPersistedSourceRevision {
     title: phaseOneCabinetProject.name,
     version: 'v1',
     source: { kind: 'brep', source: phaseOneCabinetProject },
+    provenance: {
+  kind: 'template',
+  templateId: 'c1-test-fixture',
+  templateVersion: 1,
+  source: 'builtin',
+  definitionDigest: 'fnv1a64:0123456789abcdef',
+},
   });
   return {
     kind: 'source',
@@ -178,6 +185,7 @@ describe('BRep AI build execution and finalization', () => {
     );
 
     expect(sourceParts).toHaveLength(1);
+    expect(result.artifact?.provenance).toEqual(activeSource().artifact.provenance);
     expect(result.artifact?.source.source.name).toBe('Final candidate');
     expect(result.diff?.summary).toContain('project field');
   });
@@ -193,6 +201,7 @@ describe('BRep AI build execution and finalization', () => {
       activeBrepSource: creationRoute(),
     });
 
+    expect(result.artifact?.provenance).toBeUndefined();
     expect(result.artifact?.source.source.id).toBe('freshProject');
     expect(result.diff).toBeUndefined();
     expect(
