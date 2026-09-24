@@ -20,6 +20,7 @@ vi.mock('@/lib/supabase', () => ({
 import {
   createBrepProjectConversation,
   createBrepProjectConversationFromTemplate,
+  importBrepProjectConversation,
   persistBrepProjectParameterRevision,
   restoreBrepProjectRevision,
   selectBrepProjectRevision,
@@ -441,5 +442,64 @@ describe('C1.4 template project creation integration', () => {
       (part) => part.type === 'data-brep-project',
     );
     expect(artifactPart?.data).not.toHaveProperty('provenance');
+  });
+});
+
+
+describe('C1.5 package provenance import boundary', () => {
+  it('restores optional package provenance onto the normal imported baseline artifact', async () => {
+    const conversationInsert = vi.fn().mockResolvedValue({ error: null });
+    const insertedMessageRows: Array<Record<string, unknown>> = [];
+    const messagesInsert = vi
+      .fn()
+      .mockImplementation(async (rows: Array<Record<string, unknown>>) => {
+        insertedMessageRows.push(...rows);
+        return { error: null };
+      });
+    const leafUpdate = conversationCreationUpdateResult();
+
+    mocks.from
+      .mockImplementationOnce(() => ({ insert: conversationInsert }))
+      .mockImplementationOnce(() => ({ insert: messagesInsert }))
+      .mockImplementationOnce(() => leafUpdate);
+
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('77777777-7777-4777-8777-777777777777')
+      .mockReturnValueOnce('88888888-8888-4888-8888-888888888888')
+      .mockReturnValueOnce('99999999-9999-4999-8999-999999999999');
+
+    await importBrepProjectConversation({
+      userId: 'user-import',
+      projectPackage: {
+        kind: 'brepia-brep-project',
+        schemaVersion: 1,
+        title: 'Imported templated project',
+        source: { kind: 'brep', source: phaseOneCabinetProject },
+        provenance: {
+          kind: 'template',
+          templateId: 'c1-package-fixture',
+          templateVersion: 3,
+          source: 'builtin',
+          definitionDigest: 'fnv1a64:0123456789abcdef',
+        },
+      },
+    });
+
+    const assistant = insertedMessageRows.find(
+      (row) => row.role === 'assistant',
+    ) as { parts?: Array<{ type?: string; data?: Record<string, unknown> }> };
+    const artifactPart = assistant.parts?.find(
+      (part) => part.type === 'data-brep-project',
+    );
+
+    expect(artifactPart?.data).toMatchObject({
+      provenance: {
+        kind: 'template',
+        templateId: 'c1-package-fixture',
+        templateVersion: 3,
+        source: 'builtin',
+        definitionDigest: 'fnv1a64:0123456789abcdef',
+      },
+    });
   });
 });
