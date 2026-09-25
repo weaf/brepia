@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { withBrepProjectParameterValues } from '@shared/brepProjectArtifact';
+import { normalizeBrepProject } from '@shared/brepProject';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import { createBuiltinProductTemplateCatalog } from '@shared/productTemplateCatalog';
 import { digestCanonicalBrepProjectSource } from '@shared/productTemplateProjectCreation';
@@ -111,7 +112,7 @@ describe('BRep template project persistence', () => {
     });
 
     const persistedProject = assistant?.parts[0]?.data?.source?.source;
-    expect(persistedProject).toEqual(phaseOneCabinetProject);
+    expect(persistedProject).toEqual(normalizeBrepProject(phaseOneCabinetProject));
     expect(
       persistedProject.parameters.find(
         (parameter: { id: string; default: number }) => parameter.id === 'width',
