@@ -9,6 +9,7 @@ import {
 function project(options?: {
   unused?: boolean;
   pattern?: boolean;
+  semanticOnly?: boolean;
 }): BrepProject {
   const parameters = [
     {
@@ -20,6 +21,17 @@ function project(options?: {
       min: 50,
       max: 200,
     },
+    ...(options?.semanticOnly
+      ? [
+          {
+            id: 'anchor',
+            label: 'Anchor',
+            type: 'number' as const,
+            unit: 'mm' as const,
+            default: 0,
+          },
+        ]
+      : []),
     ...(options?.unused
       ? [
           {
@@ -39,7 +51,7 @@ function project(options?: {
     name: 'Template validation fixture',
     units: 'mm',
     placement: {
-      origin: [0, 0, 0],
+      origin: options?.semanticOnly ? [{ parameter: 'anchor' }, 0, 0] : [0, 0, 0],
       xAxis: [1, 0, 0],
       yAxis: [0, 1, 0],
     },
@@ -108,6 +120,7 @@ describe('C5 static built-in product template validation', () => {
     expect(result.integrity.orphanOnlyParameterIds).toEqual([]);
     expect(result.integrity.unusedParameterIds).toEqual([]);
     expect(result.integrity.effectiveParameterIds).toEqual(['width']);
+    expect(result.publishedControlIds).toEqual(['width']);
     expect(result.expectedResultKind).toBe('single');
     expect(result.sourceDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(result.definitionDigest).toMatch(/^[a-f0-9]{64}$/);
@@ -128,6 +141,29 @@ describe('C5 static built-in product template validation', () => {
       name: 'ProductTemplateValidationError',
       code: 'm0_integrity',
     } satisfies Partial<ProductTemplateValidationError>);
+  });
+
+
+  it('requires every visible template control to affect authoritative geometry', async () => {
+    const semanticProject = project({ semanticOnly: true });
+
+    await expect(
+      validateBuiltinProductTemplateStatic(fixture(1, semanticProject)),
+    ).rejects.toMatchObject({
+      name: 'ProductTemplateValidationError',
+      code: 'ineffective_published_control',
+    } satisfies Partial<ProductTemplateValidationError>);
+
+    const hiddenSemanticControl = fixture(1, semanticProject);
+    hiddenSemanticControl.presentation.parameters.anchor = {
+      visibility: 'hidden',
+    };
+    const result = await validateBuiltinProductTemplateStatic(
+      hiddenSemanticControl,
+    );
+
+    expect(result.integrity.semanticOnlyParameterIds).toEqual(['anchor']);
+    expect(result.publishedControlIds).toEqual(['width']);
   });
 
   it('produces deterministic exact-version definition identity', async () => {
