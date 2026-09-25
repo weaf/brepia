@@ -28,15 +28,19 @@ describe('saved BRep model library product surface', () => {
     assert.match(librarySource, /New Creation/);
   });
 
-  it('adds template discovery without crossing into C4 project creation', () => {
+  it('creates from the exact discovered template version and guards duplicate submit', () => {
     assert.match(librarySource, /Built-in product templates/);
     assert.match(librarySource, /Product templates/);
     assert.match(librarySource, /builtInTemplateDiscovery/);
     assert.match(librarySource, /template\.previewUrl/);
     assert.match(librarySource, /Preview of/);
     assert.match(librarySource, /Supported use/);
-    assert.match(librarySource, /Discovery only · project creation arrives in C4/);
-    assert.doesNotMatch(librarySource, /createBrepProjectConversationFromTemplate/);
+    assert.match(librarySource, /createBrepProjectConversationFromTemplate/);
+    assert.match(librarySource, /templateId: template\.templateId/);
+    assert.match(librarySource, /templateVersion: template\.templateVersion/);
+    assert.match(librarySource, /templateCreationInFlightRef\.current/);
+    assert.match(librarySource, /Create project/);
+    assert.match(librarySource, /Creating…/);
   });
 
   it('keeps package import while removing the obsolete dedicated creation entry', () => {
