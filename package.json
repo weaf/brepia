@@ -20,7 +20,8 @@
     "test": "vitest run",
     "test:browser-smoke": "playwright test -c playwright.smoke.config.ts",
     "test:brep-gap-audit": "playwright test -c playwright.brep-product-gap.config.ts",
-    "test:rls": "bash scripts/security/test-core-rls.sh"
+    "test:rls": "bash scripts/security/test-core-rls.sh",
+    "test:c5-template-native-smoke": "bash ./scripts/brep/c5-template-validation-smoke.sh"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.78",

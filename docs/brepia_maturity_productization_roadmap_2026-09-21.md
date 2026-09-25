@@ -505,7 +505,7 @@ The closeout should explicitly record any known warnings/debt intentionally reta
 
 # Phase C — Product Template Foundation
 
-Status: IN PROGRESS. C1–C4 COMPLETE; C5 NEXT.
+Status: BUILT-IN FOUNDATION COMPLETE. C1–C5 COMPLETE; C6 DEFERRED; PHASE D NEXT.
 
 ## Objective
 
@@ -600,6 +600,8 @@ Template use must not create a second hidden geometry authority.
 
 ## C5 — template validation
 
+Status: COMPLETE. See `docs/brepia_phase_c5_template_validation_2026-09-25.md`.
+
 A built-in template should pass at least:
 
 - canonical normalization;
@@ -612,6 +614,8 @@ A built-in template should pass at least:
 
 ## C6 — user-created templates
 
+Status: DEFERRED. Not required for the accepted built-in template foundation or Phase D product pack.
+
 Not part of the first foundation unless Phase A/product needs strongly justify it.
 
 The first implementation may begin with repository-owned built-in templates only.
@@ -620,7 +624,7 @@ User-created/shared templates can be a later product feature after the core life
 
 # Phase D — First Product Pack
 
-Status: PLANNED AFTER TEMPLATE FOUNDATION.
+Status: NEXT. Phase C1–C5 built-in template foundation is complete; C6 remains deferred.
 
 The first product pack should exercise different parts of the existing platform rather than choosing products that all test the same geometry.
 
