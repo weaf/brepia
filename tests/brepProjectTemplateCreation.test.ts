@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { withBrepProjectParameterValues } from '@shared/brepProjectArtifact';
 import { phaseOneCabinetProject } from '@shared/brepSamples';
 import { createBuiltinProductTemplateCatalog } from '@shared/productTemplateCatalog';
+import { digestCanonicalBrepProjectSource } from '@shared/productTemplateProjectCreation';
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
@@ -19,11 +21,23 @@ function fixtureCatalog() {
     {
       id: 'builtin:creation-fixture',
       version: 1,
-      name: 'Creation fixture',
+      name: 'Creation fixture v1',
       category: 'Test fixtures',
       source: {
         kind: 'brep',
         source: phaseOneCabinetProject,
+      },
+    },
+    {
+      id: 'builtin:creation-fixture',
+      version: 2,
+      name: 'Creation fixture v2',
+      category: 'Test fixtures',
+      source: {
+        kind: 'brep',
+        source: withBrepProjectParameterValues(phaseOneCabinetProject, {
+          width: 1700,
+        }),
       },
     },
   ]);
@@ -34,7 +48,7 @@ describe('BRep template project persistence', () => {
     mocks.from.mockReset();
   });
 
-  it('copies the exact template source and persists matching project/baseline provenance', async () => {
+  it('copies the exact requested template snapshot and persists matching provenance/digest', async () => {
     const conversationInsert = vi.fn().mockResolvedValue({ error: null });
     const messageInsert = vi.fn().mockResolvedValue({ error: null });
     const leafUserEq = vi.fn().mockResolvedValue({ error: null });
@@ -68,7 +82,7 @@ describe('BRep template project persistence', () => {
     const conversationRow = conversationInsert.mock.calls[0]?.[0];
     expect(conversationRow).toMatchObject({
       id: conversationId,
-      title: 'Creation fixture',
+      title: 'Creation fixture v1',
       type: 'parametric',
       settings: {
         parametricSourceKind: 'brep',
@@ -80,33 +94,28 @@ describe('BRep template project persistence', () => {
         },
       },
     });
-    expect(conversationRow.settings.projectOrigin.sourceDigest).toMatch(
-      /^[a-f0-9]{64}$/,
-    );
 
     const rows = messageInsert.mock.calls[0]?.[0] as Array<{
       role: string;
-      parts: Array<{ type: string; data?: unknown }>;
+      parts: Array<{ type: string; data?: any }>;
       metadata: Record<string, unknown>;
     }>;
     const assistant = rows.find((row) => row.role === 'assistant');
     expect(assistant?.metadata).toEqual({
       projectCreation: conversationRow.settings.projectOrigin,
     });
-    expect(assistant?.parts[0]).toMatchObject({
-      type: 'data-brep-project',
-      data: {
-        title: 'Creation fixture',
-        source: {
-          kind: 'brep',
-          source: {
-            schemaVersion: phaseOneCabinetProject.schemaVersion,
-            id: phaseOneCabinetProject.id,
-            resultNodeId: phaseOneCabinetProject.resultNodeId,
-          },
-        },
-      },
-    });
+
+    const persistedProject = assistant?.parts[0]?.data?.source?.source;
+    expect(persistedProject).toEqual(phaseOneCabinetProject);
+    expect(
+      persistedProject.parameters.find(
+        (parameter: { id: string; default: number }) => parameter.id === 'width',
+      )?.default,
+    ).toBe(1200);
+
+    expect(conversationRow.settings.projectOrigin.sourceDigest).toBe(
+      await digestCanonicalBrepProjectSource(persistedProject),
+    );
   });
 
   it('fails before persistence when the exact immutable template version is absent', async () => {
@@ -114,10 +123,10 @@ describe('BRep template project persistence', () => {
       createBrepProjectConversationFromTemplate({
         userId: '11111111-2222-4333-8444-555555555555',
         templateId: 'builtin:creation-fixture',
-        templateVersion: 2,
+        templateVersion: 3,
         catalog: fixtureCatalog(),
       }),
-    ).rejects.toThrow(/not found.*creation-fixture@2/i);
+    ).rejects.toThrow(/not found.*creation-fixture@3/i);
 
     expect(mocks.from).not.toHaveBeenCalled();
   });
