@@ -60,6 +60,38 @@ describe('built-in product template contract', () => {
     expect('step' in template).toBe(false);
   });
 
+  it('accepts bounded supported-use copy and a safe bundled preview path', () => {
+    const template = normalizeBuiltinProductTemplate({
+      ...cabinetTemplate(),
+      supportedUse: 'Use for configurable electrical enclosures.',
+    });
+
+    expect(template.supportedUse).toBe(
+      'Use for configurable electrical enclosures.',
+    );
+    expect(template.presentation?.preview?.assetId).toBe(
+      'templates/electrical-cabinet-v1.webp',
+    );
+  });
+
+  it.each([
+    'https://example.com/template.webp',
+    '../template.webp',
+    'templates/../template.webp',
+    '/templates/template.webp',
+    'templates/template.exe',
+  ])('rejects unsafe bundled preview asset path %s', (assetId) => {
+    expect(() =>
+      normalizeBuiltinProductTemplate({
+        ...cabinetTemplate(),
+        presentation: {
+          ...cabinetTemplate().presentation,
+          preview: { kind: 'bundled', assetId },
+        },
+      }),
+    ).toThrow(/bundled templates/i);
+  });
+
   it('keeps template version independent from canonical BRep schemaVersion', () => {
     const template = normalizeBuiltinProductTemplate(cabinetTemplate(7));
 

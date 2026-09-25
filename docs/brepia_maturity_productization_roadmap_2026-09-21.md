@@ -505,7 +505,7 @@ The closeout should explicitly record any known warnings/debt intentionally reta
 
 # Phase C — Product Template Foundation
 
-Status: IN PROGRESS. C1–C2 COMPLETE; C3 NEXT.
+Status: IN PROGRESS. C1–C3 COMPLETE; C4 NEXT.
 
 ## Objective
 
@@ -568,7 +568,9 @@ Do not duplicate geometry authority or introduce decorative controls that violat
 
 ## C3 — template preview and discovery
 
-Define how built-in templates present:
+Status: COMPLETE. See `docs/brepia_phase_c3_template_preview_discovery_2026-09-25.md`.
+
+Built-in templates present:
 
 - thumbnail/preview;
 - category;
