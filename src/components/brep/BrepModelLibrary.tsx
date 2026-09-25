@@ -165,45 +165,68 @@ export function BrepModelLibrary() {
               {builtInTemplateDiscovery.map((template) => (
                 <article
                   key={template.templateId}
-                  className="flex min-h-48 flex-col rounded-xl border border-adam-neutral-700 bg-adam-bg-secondary-dark p-4"
+                  className="flex min-h-64 flex-col overflow-hidden rounded-xl border border-adam-neutral-700 bg-adam-bg-secondary-dark"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-xs font-medium text-adam-blue">
-                      {template.category}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wide text-adam-neutral-500">
-                      v{template.templateVersion}
-                    </span>
+                  <div className="aspect-[16/9] w-full overflow-hidden border-b border-adam-neutral-700 bg-adam-neutral-900">
+                    {template.previewUrl ? (
+                      <img
+                        src={template.previewUrl}
+                        alt={`Preview of ${template.name}`}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-adam-neutral-500">
+                        <ImageIcon className="h-8 w-8" aria-hidden="true" />
+                        <span className="sr-only">No preview image available</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-4 flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5 text-adam-neutral-500" />
-                    <h3 className="font-medium">{template.name}</h3>
-                  </div>
-                  {template.description ? (
-                    <p className="mt-2 text-sm text-adam-text-tertiary">
-                      {template.description}
-                    </p>
-                  ) : null}
-                  {template.importantParameters.length > 0 ? (
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {template.importantParameters.map((parameter) => (
-                        <span
-                          key={parameter.id}
-                          className="rounded-full border border-adam-neutral-700 px-2 py-1 text-[11px] text-adam-text-tertiary"
-                        >
-                          {parameter.label}
-                          {parameter.unitLabel ?? parameter.unit
-                            ? ` · ${parameter.unitLabel ?? parameter.unit}`
-                            : ''}
-                        </span>
-                      ))}
+                  <div className="flex flex-1 flex-col p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-xs font-medium text-adam-blue">
+                        {template.category}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wide text-adam-neutral-500">
+                        v{template.templateVersion}
+                      </span>
                     </div>
-                  ) : null}
-                  <p className="mt-auto pt-4 text-[11px] text-adam-neutral-500">
-                    {template.previewAssetId
-                      ? 'Preview asset available'
-                      : 'Preview coming with product pack'}
-                  </p>
+                    <h3 className="mt-3 font-medium">{template.name}</h3>
+                    {template.description ? (
+                      <p className="mt-2 text-sm text-adam-text-tertiary">
+                        {template.description}
+                      </p>
+                    ) : null}
+                    {template.supportedUse ? (
+                      <div className="mt-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-adam-neutral-500">
+                          Supported use
+                        </p>
+                        <p className="mt-1 text-xs text-adam-text-tertiary">
+                          {template.supportedUse}
+                        </p>
+                      </div>
+                    ) : null}
+                    {template.importantParameters.length > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-1.5">
+                        {template.importantParameters.map((parameter) => {
+                          const unit = parameter.unitLabel ?? parameter.unit;
+                          return (
+                            <span
+                              key={parameter.id}
+                              className="rounded-full border border-adam-neutral-700 px-2 py-1 text-[11px] text-adam-text-tertiary"
+                            >
+                              {parameter.label}
+                              {unit ? ` · ${unit}` : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    <p className="mt-auto pt-4 text-[11px] text-adam-neutral-500">
+                      Discovery only · project creation arrives in C4
+                    </p>
+                  </div>
                 </article>
               ))}
             </div>
