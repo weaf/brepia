@@ -2,7 +2,7 @@
 
 Date: 2026-09-25
 
-Status: **REVIEW IMPLEMENTATION IN PROGRESS — A-FINDINGS IDENTIFIED AND BOUNDED FIXES APPLIED ON REVIEW BRANCH**
+Status: **READY — PRE-PHASE-D TECHNICAL BASELINE ACCEPTED ON REVIEW BRANCH**
 
 Review branch:
 
@@ -65,13 +65,14 @@ The core architecture remains coherent after Phase B and C.
 
 The review did **not** find a second geometry authority or a template-specific project mode. A created template instance becomes an ordinary independently persisted BRep project. Native evaluation remains isolated behind build123d/OCCT. STEP remains the exact CAD export authority. Rhino/GHX remains an interoperability path. Raw kernel topology identities are not persisted as canonical source.
 
-Three concrete A-findings were identified:
+Two concrete A-findings were identified:
 
 1. the C5 repository catalog gate could remain green for a future real template without actually invoking the native evaluator for that shipped catalog entry;
-2. BRep project creation rolled back a failed message insert but did not roll back a failure during final leaf activation;
-3. the accepted `master` branch-protection policy had drifted so `quality` and `grasshopper-interoperability` still ran, but were no longer required merge checks.
+2. BRep project creation rolled back a failed message insert but did not roll back a failure during final leaf activation.
 
-A-001 and A-002 have bounded code fixes on the review branch and are green. A-003 is a repository-policy blocker: Phase D readiness cannot be declared until the required-check policy is restored and independently verified.
+Both have bounded code fixes on the review branch and are green.
+
+A later apparent branch-protection finding was invalidated: the original Dquark Maintenance probes used an invalid lock scope and failed before executing the GitHub query. Corrected Maintenance run `36192531214` verified the accepted `master` policy remains intact: strict status checking is enabled and both `quality` and `grasshopper-interoperability` are required GitHub Actions checks.
 
 No review evidence currently justifies a new BRep capability, schema migration, assembly engine, broad dependency upgrade or user-template system before Phase D.
 
@@ -231,48 +232,6 @@ Added regression coverage in:
 The test proves final leaf activation failure triggers the cleanup path.
 
 No schema change or lifecycle redesign was introduced.
-
----
-
-## A-003 — Accepted required merge checks have drifted out of branch protection
-
-Classification: **A — fix before Phase D**
-
-### Evidence
-
-The accepted Phase B hardening baseline explicitly records that `master` requires:
-
-- `quality`;
-- `grasshopper-interoperability`;
-
-with strict status checking and GitHub Actions app binding `15368`.
-
-During this review:
-
-- both checks continued to execute and pass on `master` and PR #59;
-- direct branch-protection reads through the ordinary GitHub App connector were denied because that connector lacks repository-administration access;
-- independent Dquark/Maintenance probes against the administrative branch-protection endpoint showed that `required_status_checks` was absent and that neither accepted context was currently required.
-
-This is configuration drift, not an application-code failure.
-
-A green CI run is not equivalent to an enforced merge gate. Without required checks, a future failing product PR could potentially be merged despite those workflows existing.
-
-### Repair status
-
-**OPEN / BLOCKING REVIEW CLOSEOUT.**
-
-Attempts to restore only the required-status-check subresource and then to preserve-and-reapply the full protection document did not produce a verified restored end state through the current Dquark maintenance credential.
-
-Because branch-protection mutations are administrative and a malformed full replacement could weaken unrelated protections, the review does not continue with speculative mutation attempts.
-
-Required target state remains the previously accepted A-CI-001 policy:
-
-- strict status checking: `true`;
-- required `quality`, GitHub Actions app id `15368`;
-- required `grasshopper-interoperability`, GitHub Actions app id `15368`;
-- all unrelated branch-protection settings preserved.
-
-The review remains **NOT READY** until this exact invariant is restored and verified.
 
 ---
 
@@ -620,7 +579,7 @@ Installed Rhino/GHX acceptance is needed only if D1 changes or makes a new claim
 
 Current review-branch status:
 
-**BLOCKED — application architecture is suitable for Phase D, but A-003 branch-protection drift must be repaired before the technical baseline is accepted.**
+**READY — Brepia has an accepted technical baseline for Phase D First Product Pack.**
 
 The platform does not need another general modeling phase before D1 based on current evidence.
 
@@ -632,6 +591,6 @@ when:
 
 - A-001 and A-002 pass final isolated repository quality — **PASS**;
 - PR #59 `quality` and `grasshopper-interoperability` pass on the exact review head — **PASS**;
-- A-003 is repaired so `master` once again requires both checks with strict status checking and the accepted GitHub Actions app binding — **OPEN**.
+- `master` branch protection requires both `quality` and `grasshopper-interoperability` with strict status checking — **PASS**, verified by Maintenance run `36192531214`.
 
 No B/C item above blocks that declaration.
