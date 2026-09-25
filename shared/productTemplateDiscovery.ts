@@ -17,7 +17,9 @@ export type ProductTemplateDiscoveryItem = Readonly<{
   name: string;
   category: string;
   description?: string;
+  supportedUse?: string;
   previewAssetId?: string;
+  previewUrl?: string;
   importantParameters: readonly ProductTemplateDiscoveryParameter[];
 }>;
 
@@ -70,8 +72,12 @@ export function listBuiltinProductTemplateDiscovery(
       name: template.name,
       category: template.category,
       ...(template.description ? { description: template.description } : {}),
+      ...(template.supportedUse ? { supportedUse: template.supportedUse } : {}),
       ...(template.presentation?.preview?.assetId
-        ? { previewAssetId: template.presentation.preview.assetId }
+        ? {
+            previewAssetId: template.presentation.preview.assetId,
+            previewUrl: `/${template.presentation.preview.assetId}`,
+          }
         : {}),
       importantParameters: importantParameters(parameters),
     });
