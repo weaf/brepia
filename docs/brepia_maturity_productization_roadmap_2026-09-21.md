@@ -505,7 +505,7 @@ The closeout should explicitly record any known warnings/debt intentionally reta
 
 # Phase C — Product Template Foundation
 
-Status: IN PROGRESS. C1–C3 COMPLETE; C4 NEXT.
+Status: IN PROGRESS. C1–C4 COMPLETE; C5 NEXT.
 
 ## Objective
 
@@ -583,6 +583,8 @@ Keep the first UI deliberately small.
 No marketplace or complex search system is required for the first slice.
 
 ## C4 — create-from-template flow
+
+Status: COMPLETE. See `docs/brepia_phase_c4_create_from_template_flow_2026-09-25.md`.
 
 Required product behavior:
 
