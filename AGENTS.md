@@ -14,7 +14,7 @@ Use these as current references where relevant:
 - `docs/brep_phase9_rhino_acceptance.md` and `docs/brep_phase9_rhino8_product_loop_evidence_2026-09-14.md` for the closed installed Rhino 8 / Grasshopper product-loop acceptance boundary;
 - `docs/brep_post_product_gap_scope_decision_2026-09-19.md` for the historical decision that selected the now-completed bounded planar elbow sweep;
 - `docs/brep_sweep_status_2026-09-21.md` for the accepted sweep closeout across repository/native/Rhino/product-path gates;
-- `docs/brepia_maturity_productization_roadmap_2026-09-21.md` for the current maturity/productization authority; Phase C1–C4 are complete and C5 template validation is next;
+- `docs/brepia_maturity_productization_roadmap_2026-09-21.md` for the current maturity/productization authority; Phase C1–C5 built-in template foundation is complete, C6 user-created templates are deferred, and Phase D First Product Pack is next;
 - `docs/brepia_deferred_capability_inventory_2026-09-21.md` for the reconciled list of completed, deferred, candidate and product/authoring-gap work;
 - `docs/references/rhino8_mcneel_sources.md` for the permanent Rhino 8 / Grasshopper upstream-source policy, pinned McNeel branch-8 reference and evidence hierarchy;
 - `docs/local_supabase_lifecycle.md` and `.cursor/rules/database-workflow.mdc` for database lifecycle;
@@ -23,7 +23,7 @@ Use these as current references where relevant:
 - `docs/step_export.md` for STEP conversion architecture;
 - `docs/billing_free_architecture.md` for the billing-free runtime contract.
 
-Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files. The roadmap has progressed through Phase B hardening and Phase C1–C4 template foundation work. Follow its current status and do not begin Phase D product-pack implementation or another modeling slice until the relevant preceding Phase C validation/decision is accepted.
+Files named `*_plan.md`, `*_status.md`, checkpoints, handovers and completed-phase notes are historical evidence unless the current task explicitly selects them. Do not infer a new task from an old `Next`, `Current Task`, branch name or checkpoint in those files. The roadmap has progressed through Phase B hardening and the accepted Phase C1–C5 built-in template foundation. C6 user-created/shared templates remain deferred. Phase D First Product Pack is the next productization phase; preserve the accepted template, canonical BRep and validation boundaries when starting it.
 
 ## Rhino 8 / Grasshopper upstream references
 
