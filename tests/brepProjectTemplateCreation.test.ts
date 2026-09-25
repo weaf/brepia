@@ -97,7 +97,12 @@ describe('BRep template project persistence', () => {
 
     const rows = messageInsert.mock.calls[0]?.[0] as Array<{
       role: string;
-      parts: Array<{ type: string; data?: any }>;
+      parts: Array<{
+        type: string;
+        data?: {
+          source?: { source?: typeof phaseOneCabinetProject };
+        };
+      }>;
       metadata: Record<string, unknown>;
     }>;
     const assistant = rows.find((row) => row.role === 'assistant');
