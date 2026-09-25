@@ -10,6 +10,7 @@ function fixture(version: number, name: string) {
     name,
     category: 'Electrical',
     description: 'Reusable enclosure foundation.',
+    supportedUse: 'Use for configurable electrical enclosures.',
     source: {
       kind: 'brep',
       source: phaseOneCabinetProject,
@@ -49,7 +50,9 @@ describe('Phase C3 built-in template discovery', () => {
         name: 'Current fixture',
         category: 'Electrical',
         description: 'Reusable enclosure foundation.',
+        supportedUse: 'Use for configurable electrical enclosures.',
         previewAssetId: 'templates/discovery-fixture.webp',
+        previewUrl: '/templates/discovery-fixture.webp',
         importantParameters: [
           {
             id: 'width',
