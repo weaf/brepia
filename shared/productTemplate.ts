@@ -14,6 +14,9 @@ export const PRODUCT_TEMPLATE_MAX_CATEGORY_CHARS = 120;
 export const PRODUCT_TEMPLATE_MAX_GROUPS = 32;
 export const PRODUCT_TEMPLATE_MAX_PREVIEW_ASSET_ID_CHARS = 256;
 export const PRODUCT_TEMPLATE_MAX_UNIT_LABEL_CHARS = 48;
+export const PRODUCT_TEMPLATE_MAX_SUPPORTED_USE_CHARS = 320;
+export const BUNDLED_PRODUCT_TEMPLATE_PREVIEW_ASSET_ID_PATTERN =
+  /^templates\/(?:[a-z0-9][a-z0-9_-]*\/)*[a-z0-9][a-z0-9_-]*\.(?:png|jpe?g|webp|avif|svg)$/;
 
 export type ProductTemplatePresentationTier = 'basic' | 'advanced';
 export type ProductTemplateParameterVisibility = 'visible' | 'hidden';
@@ -50,6 +53,7 @@ export type BuiltinProductTemplate = Readonly<{
   name: string;
   category: string;
   description?: string;
+  supportedUse?: string;
   source: Extract<ParametricProjectSource, { kind: 'brep' }>;
   presentation?: ProductTemplatePresentation;
 }>;
@@ -402,6 +406,12 @@ function normalizePresentation(
       'Product template preview assetId',
       PRODUCT_TEMPLATE_MAX_PREVIEW_ASSET_ID_CHARS,
     )!;
+    if (!BUNDLED_PRODUCT_TEMPLATE_PREVIEW_ASSET_ID_PATTERN.test(assetId)) {
+      throw new ProductTemplateError(
+        'invalid_presentation',
+        'Product template preview assetId must be a bundled templates/... image path.',
+      );
+    }
     preview = { kind: 'bundled', assetId };
   }
 
@@ -465,6 +475,12 @@ export function normalizeBuiltinProductTemplate(
     BREP_PROJECT_MAX_DESCRIPTION_CHARS,
     false,
   );
+  const supportedUse = normalizeText(
+    value.supportedUse,
+    'Product template supported use',
+    PRODUCT_TEMPLATE_MAX_SUPPORTED_USE_CHARS,
+    false,
+  );
 
   let source: ParametricProjectSource;
   try {
@@ -494,6 +510,7 @@ export function normalizeBuiltinProductTemplate(
     name,
     category,
     ...(description ? { description } : {}),
+    ...(supportedUse ? { supportedUse } : {}),
     source,
     ...(presentation ? { presentation } : {}),
   });
