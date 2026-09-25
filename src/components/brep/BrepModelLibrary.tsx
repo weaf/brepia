@@ -1,4 +1,4 @@
-import { Box, FileUp, Plus } from 'lucide-react';
+import { Box, FileUp, Image as ImageIcon, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -10,7 +10,13 @@ import {
   BREP_PROJECT_PACKAGE_MAX_BYTES,
   parseBrepProjectPackageJson,
 } from '@shared/brepProjectPackage';
+import { builtinProductTemplateCatalog } from '@shared/productTemplateCatalog';
+import { listBuiltinProductTemplateDiscovery } from '@shared/productTemplateDiscovery';
 import type { Conversation } from '@shared/types';
+
+const builtInTemplateDiscovery = listBuiltinProductTemplateDiscovery(
+  builtinProductTemplateCatalog,
+);
 
 function updatedLabel(conversation: Conversation): string {
   const value = conversation.updated_at ?? conversation.created_at;
@@ -87,9 +93,8 @@ export function BrepModelLibrary() {
               <h1 className="text-2xl font-semibold">BRep Models</h1>
             </div>
             <p className="mt-2 max-w-2xl text-sm text-adam-text-tertiary">
-              Open a saved native BRep model and continue from its existing
-              conversation and immutable revision history. Create brand-new
-              models from New Creation.
+              Discover built-in product templates or open a saved native BRep
+              model and continue from its immutable revision history.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -128,15 +133,93 @@ export function BrepModelLibrary() {
           </p>
         ) : null}
 
-        <section className="mt-8" aria-label="Saved BRep models">
+        <section className="mt-8" aria-label="Built-in product templates">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Product templates</h2>
+              <p className="mt-1 text-sm text-adam-text-tertiary">
+                Repository-owned product definitions. Template selection is
+                discovery-only until the create-from-template flow lands.
+              </p>
+            </div>
+          </div>
+
+          {builtInTemplateDiscovery.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-dashed border-adam-neutral-700 bg-adam-bg-secondary-dark/70 p-6">
+              <div className="flex items-start gap-3">
+                <ImageIcon className="mt-0.5 h-5 w-5 shrink-0 text-adam-neutral-500" />
+                <div>
+                  <h3 className="text-sm font-medium">
+                    No built-in product templates yet
+                  </h3>
+                  <p className="mt-1 max-w-2xl text-sm text-adam-text-tertiary">
+                    The template foundation and discovery surface are ready.
+                    Product packs will appear here when their canonical BRep
+                    definitions are accepted.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {builtInTemplateDiscovery.map((template) => (
+                <article
+                  key={template.templateId}
+                  className="flex min-h-48 flex-col rounded-xl border border-adam-neutral-700 bg-adam-bg-secondary-dark p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-xs font-medium text-adam-blue">
+                      {template.category}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wide text-adam-neutral-500">
+                      v{template.templateVersion}
+                    </span>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5 text-adam-neutral-500" />
+                    <h3 className="font-medium">{template.name}</h3>
+                  </div>
+                  {template.description ? (
+                    <p className="mt-2 text-sm text-adam-text-tertiary">
+                      {template.description}
+                    </p>
+                  ) : null}
+                  {template.importantParameters.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {template.importantParameters.map((parameter) => (
+                        <span
+                          key={parameter.id}
+                          className="rounded-full border border-adam-neutral-700 px-2 py-1 text-[11px] text-adam-text-tertiary"
+                        >
+                          {parameter.label}
+                          {parameter.unitLabel ?? parameter.unit
+                            ? ` · ${parameter.unitLabel ?? parameter.unit}`
+                            : ''}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p className="mt-auto pt-4 text-[11px] text-adam-neutral-500">
+                    {template.previewAssetId
+                      ? 'Preview asset available'
+                      : 'Preview coming with product pack'}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-10" aria-label="Saved BRep models">
+          <h2 className="text-lg font-semibold">Saved models</h2>
           {isLoading ? (
-            <div className="rounded-xl border border-adam-neutral-700 bg-adam-bg-secondary-dark p-6 text-sm text-adam-text-tertiary">
+            <div className="mt-4 rounded-xl border border-adam-neutral-700 bg-adam-bg-secondary-dark p-6 text-sm text-adam-text-tertiary">
               Loading saved BRep models…
             </div>
           ) : models.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-adam-neutral-700 bg-adam-bg-secondary-dark/70 p-8 text-center">
+            <div className="mt-4 rounded-xl border border-dashed border-adam-neutral-700 bg-adam-bg-secondary-dark/70 p-8 text-center">
               <Box className="mx-auto h-8 w-8 text-adam-neutral-500" />
-              <h2 className="mt-3 text-base font-medium">No saved BRep models yet</h2>
+              <h3 className="mt-3 text-base font-medium">No saved BRep models yet</h3>
               <p className="mx-auto mt-2 max-w-lg text-sm text-adam-text-tertiary">
                 Start a Native BRep creation from the home prompt, or import an
                 existing Brepia BRep package. The resulting model will appear
@@ -144,7 +227,7 @@ export function BrepModelLibrary() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {models.map((conversation) => (
                 <button
                   type="button"
