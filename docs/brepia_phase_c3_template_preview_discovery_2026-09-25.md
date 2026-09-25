@@ -2,7 +2,7 @@
 
 Date: 2026-09-25
 
-Status: IN PROGRESS — C3.1 discovery foundation implemented; verification pending.
+Status: COMPLETE.
 
 Branch: `feature/phase-c3-template-discovery`
 
@@ -53,17 +53,41 @@ It deliberately does not create a project or mutate template/project state. The 
 
 Because no product pack is shipped yet, the accepted empty state explains that the discovery foundation is ready and product templates will appear when their canonical definitions are accepted.
 
-## Preview boundary
+## C3.2 — preview asset contract and supported use
 
-C3.1 carries the existing bundled preview `assetId` into the discovery view model but does not yet render arbitrary asset paths.
+C3.2 completes the roadmap discovery metadata without broadening template authority.
 
-A later C3 slice should lock preview-asset path semantics before image rendering is enabled.
+Template metadata now supports bounded `supportedUse` copy for discovery.
 
-This avoids turning loosely validated asset metadata into a navigation/resource-loading boundary.
+Bundled preview assets are fail-closed and must match:
+
+`templates/<safe path>.<png|jpg|jpeg|webp|avif|svg>`
+
+The contract rejects:
+
+- external URLs;
+- absolute paths;
+- path traversal;
+- unsupported extensions.
+
+The discovery view model exposes the validated preview as a relative public URL. UI code therefore does not interpret arbitrary template resource locations.
+
+Template cards render:
+
+- preview thumbnail when available;
+- neutral placeholder otherwise;
+- category;
+- version;
+- name;
+- short description;
+- supported use;
+- important parameters.
+
+The card remains non-interactive for template creation. Project creation stays in Phase C4.
 
 ## Preserved authorities
 
-C3.1 does not change:
+C3 does not change:
 
 - canonical BRep geometry authority;
 - C2 parameter-value authority;
@@ -75,4 +99,35 @@ C3.1 does not change:
 - STEP;
 - Rhino/GHX.
 
-No real product template is introduced by C3.1.
+No real product template is introduced by C3.
+
+## Verification evidence
+
+C3.1:
+
+- Dquark `diff-check` — PASS
+  - run `36099517952`
+- Dquark `typecheck + test` — PASS
+  - run `36099519873`
+- 253 test files / 1421 tests PASS
+
+C3.2:
+
+- Dquark `diff-check` — PASS
+  - run `36099649168`
+- Dquark `typecheck + test` — PASS
+  - run `36099651833`
+- 253 test files / 1428 tests PASS
+- `git diff --check` — PASS
+
+## Closeout
+
+Phase C3 is complete.
+
+The shipped built-in template catalog remains empty by design. C3 proves the preview/discovery infrastructure without prematurely introducing a product definition.
+
+Next:
+
+**C4 — create-from-template flow**
+
+C4 may add the action that turns one exact discovered template version into an independent project/revision lineage, using the C1 creation semantics already established.
