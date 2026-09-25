@@ -75,7 +75,18 @@ export async function createBrepProjectConversation({
     .update({ current_message_leaf_id: assistantMessageId })
     .eq('id', conversationId)
     .eq('user_id', userId);
-  if (leafError) throw leafError;
+  if (leafError) {
+    // Project creation is one logical operation. Messages already exist at
+    // this point, so leaving the conversation behind while reporting failure
+    // would make a retry create a duplicate project. Deleting the conversation
+    // cascades to its baseline messages and keeps creation fail-closed.
+    await supabase
+      .from('conversations')
+      .delete()
+      .eq('id', conversationId)
+      .eq('user_id', userId);
+    throw leafError;
+  }
   return conversationId;
 }
 
