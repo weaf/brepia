@@ -9,6 +9,7 @@ import {
 } from './brepProjectIntegrity.ts';
 import {
   normalizeBuiltinProductTemplate,
+  resolveBuiltinProductTemplateParameterPresentation,
   type BuiltinProductTemplate,
 } from './productTemplate.ts';
 import { digestCanonicalBrepProjectSource } from './productTemplateProjectCreation.ts';
@@ -18,12 +19,13 @@ export type BuiltinProductTemplateStaticValidation = Readonly<{
   sourceDigest: string;
   definitionDigest: string;
   expectedResultKind: BrepNodeValueKind;
+  publishedControlIds: readonly string[];
   integrity: BrepProjectIntegrityAnalysis;
 }>;
 
 export class ProductTemplateValidationError extends Error {
   constructor(
-    public readonly code: 'm0_integrity',
+    public readonly code: 'm0_integrity' | 'ineffective_published_control',
     message: string,
   ) {
     super(message);
@@ -70,6 +72,22 @@ export async function validateBuiltinProductTemplateStatic(
     );
   }
 
+  const effectiveIds = new Set(integrity.effectiveParameterIds);
+  const publishedControlIds = resolveBuiltinProductTemplateParameterPresentation(
+    template,
+  )
+    .filter((parameter) => parameter.visibility === 'visible')
+    .map((parameter) => parameter.id);
+  const ineffectivePublishedControlIds = publishedControlIds.filter(
+    (parameterId) => !effectiveIds.has(parameterId),
+  );
+  if (ineffectivePublishedControlIds.length > 0) {
+    throw new ProductTemplateValidationError(
+      'ineffective_published_control',
+      `Built-in product template ${template.id}@${template.version} exposes controls that do not affect authoritative geometry: ${ineffectivePublishedControlIds.join(', ')}.`,
+    );
+  }
+
   const resultNode = project.nodes.find((node) => node.id === project.resultNodeId);
   if (!resultNode) {
     throw new Error(
@@ -82,6 +100,7 @@ export async function validateBuiltinProductTemplateStatic(
     sourceDigest: await digestCanonicalBrepProjectSource(project),
     definitionDigest: await digestBuiltinProductTemplateDefinition(template),
     expectedResultKind: brepNodeValueKind(resultNode),
+    publishedControlIds: Object.freeze([...publishedControlIds]),
     integrity,
   });
 }
