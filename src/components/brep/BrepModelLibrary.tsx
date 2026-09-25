@@ -5,13 +5,19 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { importBrepProjectConversation } from '@/services/brepProjectService';
+import {
+  createBrepProjectConversationFromTemplate,
+  importBrepProjectConversation,
+} from '@/services/brepProjectService';
 import {
   BREP_PROJECT_PACKAGE_MAX_BYTES,
   parseBrepProjectPackageJson,
 } from '@shared/brepProjectPackage';
 import { builtinProductTemplateCatalog } from '@shared/productTemplateCatalog';
-import { listBuiltinProductTemplateDiscovery } from '@shared/productTemplateDiscovery';
+import {
+  listBuiltinProductTemplateDiscovery,
+  type ProductTemplateDiscoveryItem,
+} from '@shared/productTemplateDiscovery';
 import type { Conversation } from '@shared/types';
 
 const builtInTemplateDiscovery = listBuiltinProductTemplateDiscovery(
@@ -33,8 +39,11 @@ export function BrepModelLibrary() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const templateCreationInFlightRef = useRef(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [creatingTemplateKey, setCreatingTemplateKey] = useState<string | null>(null);
+  const [templateCreationError, setTemplateCreationError] = useState<string | null>(null);
 
   const { data: models = [], isLoading } = useQuery<Conversation[]>({
     queryKey: ['brep-model-library', user?.id],
@@ -53,6 +62,32 @@ export function BrepModelLibrary() {
       );
     },
   });
+
+  const createFromTemplate = async (template: ProductTemplateDiscoveryItem) => {
+    if (!user?.id || templateCreationInFlightRef.current) return;
+
+    templateCreationInFlightRef.current = true;
+    const templateKey = `${template.templateId}@${template.templateVersion}`;
+    setCreatingTemplateKey(templateKey);
+    setTemplateCreationError(null);
+    try {
+      const conversationId = await createBrepProjectConversationFromTemplate({
+        userId: user.id,
+        templateId: template.templateId,
+        templateVersion: template.templateVersion,
+      });
+      await navigate({ to: '/brep/$id', params: { id: conversationId } });
+    } catch (reason) {
+      setTemplateCreationError(
+        reason instanceof Error
+          ? reason.message
+          : 'Could not create a BRep project from this template.',
+      );
+    } finally {
+      templateCreationInFlightRef.current = false;
+      setCreatingTemplateKey(null);
+    }
+  };
 
   const importPackage = async (file: File) => {
     if (!user?.id || importing) return;
@@ -138,11 +173,18 @@ export function BrepModelLibrary() {
             <div>
               <h2 className="text-lg font-semibold">Product templates</h2>
               <p className="mt-1 text-sm text-adam-text-tertiary">
-                Repository-owned product definitions. Template selection is
-                discovery-only until the create-from-template flow lands.
+                Repository-owned product definitions. Creating a project copies
+                the exact discovered template version into an independent BRep
+                revision lineage.
               </p>
             </div>
           </div>
+
+          {templateCreationError ? (
+            <p className="mt-4 rounded-lg border border-destructive p-3 text-sm text-destructive">
+              {templateCreationError}
+            </p>
+          ) : null}
 
           {builtInTemplateDiscovery.length === 0 ? (
             <div className="mt-4 rounded-xl border border-dashed border-adam-neutral-700 bg-adam-bg-secondary-dark/70 p-6">
@@ -223,9 +265,19 @@ export function BrepModelLibrary() {
                         })}
                       </div>
                     ) : null}
-                    <p className="mt-auto pt-4 text-[11px] text-adam-neutral-500">
-                      Discovery only · project creation arrives in C4
-                    </p>
+                    <div className="mt-auto pt-4">
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={Boolean(creatingTemplateKey) || !user?.id}
+                        onClick={() => void createFromTemplate(template)}
+                      >
+                        {creatingTemplateKey ===
+                        `${template.templateId}@${template.templateVersion}`
+                          ? 'Creating…'
+                          : 'Create project'}
+                      </Button>
+                    </div>
                   </div>
                 </article>
               ))}
