@@ -67,6 +67,7 @@ describe('local Supabase port ownership', () => {
     expect(launcher).toContain(
       'source "${SCRIPT_DIR}/scripts/supabase-local.sh"',
     );
+    expect(launcher).toContain('${!key-}');
     expect(launcher).toContain('brepia_supabase status');
     expect(vite).not.toContain('port: 54321');
     expect(vite).not.toContain("host: 'localhost:54321'");

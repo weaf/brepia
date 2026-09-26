@@ -157,7 +157,7 @@ echo "=== Starting OpenCode server ==="
 # Load ONLY OpenCode connection settings from Vite development env files so
 # pCAD and a managed OpenCode server inherit the same explicit configuration.
 for key in OPENCODE_BASE_URL OPENCODE_PORT OPENCODE_SERVER_USERNAME OPENCODE_SERVER_PASSWORD; do
-  if [ -z "${!key}" ]; then
+  if [ -z "${!key-}" ]; then
     value="$(vite_env_value "$key")"
     if [ -n "${value}" ]; then
       printf -v "$key" '%s' "$value"
