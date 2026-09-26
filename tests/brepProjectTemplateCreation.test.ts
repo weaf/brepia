@@ -124,6 +124,51 @@ describe('BRep template project persistence', () => {
     );
   });
 
+  it('rolls back the created conversation when final leaf activation fails', async () => {
+    const conversationInsert = vi.fn().mockResolvedValue({ error: null });
+    const messageInsert = vi.fn().mockResolvedValue({ error: null });
+    const leafError = new Error('leaf activation failed');
+    const leafUserEq = vi.fn().mockResolvedValue({ error: leafError });
+    const leafIdEq = vi.fn().mockReturnValue({ eq: leafUserEq });
+    const conversationUpdate = vi.fn().mockReturnValue({ eq: leafIdEq });
+    const deleteUserEq = vi.fn().mockResolvedValue({ error: null });
+    const deleteIdEq = vi.fn().mockReturnValue({ eq: deleteUserEq });
+    const conversationDelete = vi.fn().mockReturnValue({ eq: deleteIdEq });
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'conversations') {
+        return {
+          insert: conversationInsert,
+          update: conversationUpdate,
+          delete: conversationDelete,
+        };
+      }
+      if (table === 'messages') {
+        return { insert: messageInsert };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(
+      createBrepProjectConversationFromTemplate({
+        userId: '11111111-2222-4333-8444-555555555555',
+        templateId: 'builtin:creation-fixture',
+        templateVersion: 1,
+        catalog: fixtureCatalog(),
+      }),
+    ).rejects.toBe(leafError);
+
+    expect(conversationDelete).toHaveBeenCalledTimes(1);
+    expect(deleteIdEq).toHaveBeenCalledWith(
+      'id',
+      expect.stringMatching(/^[0-9a-f-]{36}$/i),
+    );
+    expect(deleteUserEq).toHaveBeenCalledWith(
+      'user_id',
+      '11111111-2222-4333-8444-555555555555',
+    );
+  });
+
   it('fails before persistence when the exact immutable template version is absent', async () => {
     await expect(
       createBrepProjectConversationFromTemplate({
