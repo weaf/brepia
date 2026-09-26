@@ -74,9 +74,17 @@ Required customer controls:
 4. Sheet thickness — nominal default 2 mm.
 5. Door opening angle — exact canonical id `doorOpenAngleDeg`, default 0°, range 0–120°.
 
-The exact canonical IDs and existing ranges/steps for Width, Height, Depth and Sheet thickness must be taken from the recovered accepted 39-node source. D1 must preserve those accepted IDs rather than rename or recreate them speculatively.
+The recovered accepted 39-node source fixes the canonical customer-control identities and geometry ranges:
 
-Other recovered published controls are internal-by-default for D1. They may be exposed only when product evidence shows that they are meaningful customer decisions, remain M0-effective and have a coherent presentation contract. D1 does not expose controls merely because the historical agent happened to publish them.
+- Width: \`W\`, default 800 mm, range 300–2000 mm, step 10 mm.
+- Height: \`H\`, default 1200 mm, range 400–2500 mm, step 10 mm.
+- Depth: \`D\`, default 300 mm, range 150–600 mm, step 10 mm.
+- Sheet thickness: \`sheet_t\`, default 2 mm, range 1–5 mm, step 0.5 mm.
+- Door opening angle: \`doorOpenAngleDeg\`, default 0°, range 0–120°, step 5°.
+
+D1 preserves these accepted IDs rather than renaming or recreating them.
+
+Other recovered published controls — \`door_clear\`, \`plate_margin\`, \`rail_inset\`, \`rail_spacing\` and \`vent_pitch\` — are internal-by-default for D1. They may be exposed only when product evidence shows that they are meaningful customer decisions, remain M0-effective and have a coherent presentation contract. D1 does not expose controls merely because the historical agent happened to publish them.
 
 ### Presentation
 

@@ -2,6 +2,7 @@ import {
   normalizeBuiltinProductTemplateCatalog,
   type BuiltinProductTemplate,
 } from './productTemplate.ts';
+import { electricalCabinetV1 } from './productTemplates/electricalCabinetV1.ts';
 
 export type BuiltinProductTemplateLookup = Readonly<{
   id: string;
@@ -77,7 +78,7 @@ export function createBuiltinProductTemplateCatalog(
  * authorized and accepted.
  */
 export const BUILTIN_PRODUCT_TEMPLATES =
-  normalizeBuiltinProductTemplateCatalog([]);
+  normalizeBuiltinProductTemplateCatalog([electricalCabinetV1]);
 
 export const builtinProductTemplateCatalog =
   createBuiltinProductTemplateCatalog(BUILTIN_PRODUCT_TEMPLATES);
