@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "48de7414d6edc2c487669eff03fff99800f94268",
+  "publicVersion": "2.0.0",
+  "selectedPathCount": 608,
+  "categories": {
+    "legal": 3,
+    "product": 17,
+    "runtime": 588
+  },
+  "findings": [],
+  "status": "ready"
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "publicVersion": "2.0.0",
+  "engineeringSourceRepository": "weaf/brepia-dev",
+  "engineeringSourceRevision": "48de7414d6edc2c487669eff03fff99800f94268",
+  "internalQualificationTag": "v1.8.0",
+  "exporter": "scripts/road-to-2.0/release-export/export.py",
+  "exporterRevision": "55a2fdee78df16d51d0da143cf9520ac2c3b0cfe"
+}
